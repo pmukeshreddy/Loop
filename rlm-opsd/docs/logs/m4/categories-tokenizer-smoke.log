@@ -1,0 +1,66 @@
+$ HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python - <<'PY'
+from rlm_opsd.prompts import PromptConfig, ChatRenderer
+from rlm_opsd.detectors.categories import classify_token_offsets
+import json
+config = PromptConfig.from_yaml()
+renderer = ChatRenderer(config)
+text = 'é🦉 hi\n```repl\nx = llm_query("é🦉") # comment\n```\nFINAL_VAR(x)'
+encoded = renderer.tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+offsets = encoded['offset_mapping']
+classified = classify_token_offsets(text, offsets)
+assert len(encoded['input_ids']) == len(offsets) == len(classified)
+assert {row['category'] for row in classified} == {'prose', 'code', 'comment', 'protocol'}
+assert any(offsets[index] == offsets[index - 1] for index in range(1, len(offsets)))
+assert text[0:1] == 'é' and text[1:2] == '🦉'
+for row in classified:
+    if text[row['start']:row['end']] in ['é', '🦉'] and row['start'] < 3:
+        assert row['category'] == 'prose'
+print('Standalone handcrafted fixture, tokenized once; no rollout suffix is re-tokenized.')
+print('No model weights, inference, logprob calls, or model KL run.')
+print(f'model={config.model_name} tokenizer_revision={config.revision}')
+print(f'tokenizer_sha256={config.tokenizer_sha256}')
+print(f'token_count={len(classified)}')
+for token_id, row in zip(encoded['input_ids'], classified, strict=True):
+    print(json.dumps(dict(token_id=token_id, **row, text=text[row['start']:row['end']]), ensure_ascii=False))
+print('All asserted categories, token counts, and duplicate Unicode intervals passed.')
+PY
+
+Standalone handcrafted fixture, tokenized once; no rollout suffix is re-tokenized.
+No model weights, inference, logprob calls, or model KL run.
+model=Qwen/Qwen3.5-27B tokenizer_revision=fc05daec18b0a78c049392ed2e771dde82bdf654
+tokenizer_sha256=5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42
+token_count=30
+{"token_id": 933, "token_index": 0, "start": 0, "end": 1, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": "é"}
+{"token_id": 9008, "token_index": 1, "start": 1, "end": 2, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": "🦉"}
+{"token_id": 99, "token_index": 2, "start": 1, "end": 2, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": "🦉"}
+{"token_id": 231, "token_index": 3, "start": 1, "end": 2, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": "🦉"}
+{"token_id": 15131, "token_index": 4, "start": 2, "end": 5, "category": "prose", "status": "ok", "category_chars": {"prose": 3}, "text": " hi"}
+{"token_id": 198, "token_index": 5, "start": 5, "end": 6, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": "\n"}
+{"token_id": 71093, "token_index": 6, "start": 6, "end": 9, "category": "protocol", "status": "ok", "category_chars": {"protocol": 3}, "text": "```"}
+{"token_id": 265, "token_index": 7, "start": 9, "end": 11, "category": "protocol", "status": "ok", "category_chars": {"protocol": 2}, "text": "re"}
+{"token_id": 490, "token_index": 8, "start": 11, "end": 13, "category": "protocol", "status": "ok", "category_chars": {"protocol": 2}, "text": "pl"}
+{"token_id": 198, "token_index": 9, "start": 13, "end": 14, "category": "protocol", "status": "ok", "category_chars": {"protocol": 1}, "text": "\n"}
+{"token_id": 87, "token_index": 10, "start": 14, "end": 15, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "x"}
+{"token_id": 283, "token_index": 11, "start": 15, "end": 17, "category": "code", "status": "ok", "category_chars": {"code": 2}, "text": " ="}
+{"token_id": 9046, "token_index": 12, "start": 17, "end": 20, "category": "protocol", "status": "boundary", "category_chars": {"code": 1, "protocol": 2}, "text": " ll"}
+{"token_id": 76, "token_index": 13, "start": 20, "end": 21, "category": "protocol", "status": "ok", "category_chars": {"protocol": 1}, "text": "m"}
+{"token_id": 5560, "token_index": 14, "start": 21, "end": 27, "category": "protocol", "status": "ok", "category_chars": {"protocol": 6}, "text": "_query"}
+{"token_id": 437, "token_index": 15, "start": 27, "end": 29, "category": "code", "status": "ok", "category_chars": {"code": 2}, "text": "(\""}
+{"token_id": 933, "token_index": 16, "start": 29, "end": 30, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "é"}
+{"token_id": 9008, "token_index": 17, "start": 30, "end": 31, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "🦉"}
+{"token_id": 99, "token_index": 18, "start": 30, "end": 31, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "🦉"}
+{"token_id": 231, "token_index": 19, "start": 30, "end": 31, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "🦉"}
+{"token_id": 871, "token_index": 20, "start": 31, "end": 33, "category": "code", "status": "ok", "category_chars": {"code": 2}, "text": "\")"}
+{"token_id": 653, "token_index": 21, "start": 33, "end": 35, "category": "comment", "status": "boundary", "category_chars": {"code": 1, "comment": 1}, "text": " #"}
+{"token_id": 3847, "token_index": 22, "start": 35, "end": 43, "category": "comment", "status": "ok", "category_chars": {"comment": 8}, "text": " comment"}
+{"token_id": 198, "token_index": 23, "start": 43, "end": 44, "category": "code", "status": "ok", "category_chars": {"code": 1}, "text": "\n"}
+{"token_id": 71093, "token_index": 24, "start": 44, "end": 47, "category": "protocol", "status": "ok", "category_chars": {"protocol": 3}, "text": "```"}
+{"token_id": 198, "token_index": 25, "start": 47, "end": 48, "category": "protocol", "status": "ok", "category_chars": {"protocol": 1}, "text": "\n"}
+{"token_id": 95429, "token_index": 26, "start": 48, "end": 53, "category": "protocol", "status": "ok", "category_chars": {"protocol": 5}, "text": "FINAL"}
+{"token_id": 24930, "token_index": 27, "start": 53, "end": 57, "category": "protocol", "status": "ok", "category_chars": {"protocol": 4}, "text": "_VAR"}
+{"token_id": 2007, "token_index": 28, "start": 57, "end": 59, "category": "prose", "status": "ok", "category_chars": {"prose": 2}, "text": "(x"}
+{"token_id": 8, "token_index": 29, "start": 59, "end": 60, "category": "prose", "status": "ok", "category_chars": {"prose": 1}, "text": ")"}
+All asserted categories, token counts, and duplicate Unicode intervals passed.
+[transformers] PyTorch was not found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
+
+exit_code=0

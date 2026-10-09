@@ -1,0 +1,73 @@
+M4 offline report validation regressions; fixtures only.
+Command: .venv/bin/python -m pytest tests/test_detector_reports.py -q
+.................................FFF                                     [100%]
+=================================== FAILURES ===================================
+_________________ test_inconsistent_prompt_maximum_is_rejected _________________
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-130/test_inconsistent_prompt_maxim0')
+
+    def test_inconsistent_prompt_maximum_is_rejected(tmp_path):
+        from rlm_opsd.detectors.reports import aggregate_behavior
+    
+        record = fixture_record(tmp_path)
+        record["analysis"]["counts"]["subcall_max_prompt_chars"] = 200
+>       with pytest.raises(ValueError, match="subcall"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_detector_reports.py:296: Failed
+__________ test_coverage_lower_bound_above_exact_coverage_is_rejected __________
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-130/test_coverage_lower_bound_abov0')
+
+    def test_coverage_lower_bound_above_exact_coverage_is_rejected(tmp_path):
+        from rlm_opsd.detectors.reports import aggregate_behavior
+    
+        record = fixture_record(tmp_path)
+        record["analysis"]["coverage_lower_bound"] = 0.9
+>       with pytest.raises(ValueError, match="coverage_lower_bound"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_detector_reports.py:305: Failed
+________ test_overwrite_rejects_binary_unrelated_files_with_no_changes _________
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-130/test_overwrite_rejects_binary_0')
+
+    def test_overwrite_rejects_binary_unrelated_files_with_no_changes(tmp_path):
+        from rlm_opsd.detectors.reports import write_behavior_report
+    
+        record = fixture_record(tmp_path)
+        destination = tmp_path / "reports"
+        destination.mkdir()
+        for filename in ("behavior.md", "behavior.csv"):
+            (destination / filename).write_bytes(b"\xff unrelated binary")
+        with pytest.raises(FileExistsError):
+>           write_behavior_report([record], destination, overwrite=True)
+
+tests/test_detector_reports.py:318: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rlm_opsd/detectors/reports.py:322: in write_behavior_report
+    _check_outputs(paths, overwrite, source_paths)
+rlm_opsd/detectors/reports.py:296: in _check_outputs
+    owned = paths["markdown"].read_text(encoding="utf-8").startswith(REPORT_MARKER + "\n")
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/pathlib.py:1028: in read_text
+    return f.read()
+           ^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <encodings.utf_8.IncrementalDecoder object at 0x108d6c1d0>
+input = b'\xff unrelated binary', final = True
+
+>   ???
+E   UnicodeDecodeError: 'utf-8' codec can't decode byte 0xff in position 0: invalid start byte
+
+<frozen codecs>:322: UnicodeDecodeError
+=========================== short test summary info ============================
+FAILED tests/test_detector_reports.py::test_inconsistent_prompt_maximum_is_rejected
+FAILED tests/test_detector_reports.py::test_coverage_lower_bound_above_exact_coverage_is_rejected
+FAILED tests/test_detector_reports.py::test_overwrite_rejects_binary_unrelated_files_with_no_changes
+3 failed, 33 passed in 0.09s
+
+Exit code: 1

@@ -1,0 +1,125 @@
+..................FF.FFFFF.                                              [100%]
+=================================== FAILURES ===================================
+___ test_episode_uses_authoritative_prompts_and_logs_actual_manual[student] ____
+tests/test_prompts.py:184: in test_episode_uses_authoritative_prompts_and_logs_actual_manual
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_prompts.py:178: in run
+    assert ep.messages == pair.messages(variant)
+E   AssertionError: assert [{'content': ...ole': 'user'}] == [{'content': ...ole': 'user'}]
+E     
+E     At index 0 diff: {'role': 'system', 'content': 'Use Python in ```repl blocks to examine context, a persistent str or\nlist[str]. llm_query(prompt: str) calls the frozen model; llm_query_batched(list[str])\nruns leaf calls concurrently. Finish outside code fences with FINAL(answer) or\nFINAL_VAR(name), where name is a REPL variable. Only metadata is provided initially.'} != {'role': 'system', 'content': 'You are answering a query using a Python REPL.\n\nThe REPL already contains:\n- `context`: the input for this query. It is a str with 14 total characters. It begins with...
+E     
+E     ...Full output truncated (2 lines hidden), use '-vv' to show
+___ test_episode_uses_authoritative_prompts_and_logs_actual_manual[teacher] ____
+tests/test_prompts.py:184: in test_episode_uses_authoritative_prompts_and_logs_actual_manual
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_prompts.py:178: in run
+    assert ep.messages == pair.messages(variant)
+E   AssertionError: assert [{'content': ...ole': 'user'}] == [{'content': ...ole': 'user'}]
+E     
+E     At index 0 diff: {'role': 'system', 'content': 'Use Python in ```repl blocks to examine context, a persistent str or\nlist[str]. llm_query(prompt: str) calls the frozen model; llm_query_batched(list[str])\nruns leaf calls concurrently. Finish outside code fences with FINAL(answer) or\nFINAL_VAR(name), where name is a REPL variable. Only metadata is provided initially.'} != {'role': 'system', 'content': 'You are answering a query using a Python REPL.\n\nThe REPL already contains:\n- `context`: the input for this query. It is a str with 14 total characters. It begins with...
+E     
+E     ...Full output truncated (2 lines hidden), use '-vv' to show
+_ test_custom_prompts_require_explicit_provenance_and_cannot_claim_registered_manual _
+tests/test_prompts.py:203: in test_custom_prompts_require_explicit_provenance_and_cannot_claim_registered_manual
+    Episode(**args, system_prompt='Custom API', manual_version=version)
+rlm_opsd/harness/episode.py:74: in __init__
+    self.trace = EpisodeTrace(**{k: info[k] for k in ("task_id", "family", "domain", "tags")},
+E   pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E   manual_version
+E     Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]
+E       For further information visit https://errors.pydantic.dev/2.13/v/string_type
+
+During handling of the above exception, another exception occurred:
+tests/test_prompts.py:202: in test_custom_prompts_require_explicit_provenance_and_cannot_claim_registered_manual
+    with pytest.raises(ValueError, match='custom'):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'custom'
+E     Actual message: '1 validation error for EpisodeTrace\nmanual_version\n  Input should be a valid string [type=string_type, input_value=None, input_type=NoneType]\n    For further information visit https://errors.pydantic.dev/2.13/v/string_type'
+_____ test_thinking_request_overrides_are_checked_and_do_not_mutate_input ______
+tests/test_prompts.py:215: in test_thinking_request_overrides_are_checked_and_do_not_mutate_input
+    result = cfg.sampling_args(supplied)
+             ^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: in __getattr__
+    raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E   AttributeError: 'PromptConfig' object has no attribute 'sampling_args'
+________ test_cli_checks_pinned_local_tokenizer_and_rejects_corruption _________
+tests/test_prompts.py:242: in test_cli_checks_pinned_local_tokenizer_and_rejects_corruption
+    assert run('prepare').returncode == 0
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/bin/python', '-m', 'rlm_opsd.prompts'.../python: No module named rlm_opsd.prompts.__main__; 'rlm_opsd.prompts' is a package and cannot be directly executed\n").returncode
+E    +    where CompletedProcess(args=['/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/bin/python', '-m', 'rlm_opsd.prompts'.../python: No module named rlm_opsd.prompts.__main__; 'rlm_opsd.prompts' is a package and cannot be directly executed\n") = <function test_cli_checks_pinned_local_tokenizer_and_rejects_corruption.<locals>.run at 0x113731760>('prepare')
+----------------------------- Captured stdout call -----------------------------
+
+
+
+_ test_real_verifiers_rollout_processes_last_turn_and_preserves_ids[None-trainer_ids0] _
+tests/test_verifiers_env.py:59: in test_real_verifiers_rollout_processes_last_turn_and_preserves_ids
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_verifiers_env.py:45: in run
+    assert request["sampling_args"]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'chat_template_kwargs'
+----------------------------- Captured stderr call -----------------------------
+Map:   0%|          | 0/1 [00:00<?, ? examples/s]Map: 100%|██████████| 1/1 [00:00<00:00, 172.39 examples/s]
+_ test_real_verifiers_rollout_processes_last_turn_and_preserves_ids[2-trainer_ids1] _
+tests/test_verifiers_env.py:59: in test_real_verifiers_rollout_processes_last_turn_and_preserves_ids
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_verifiers_env.py:45: in run
+    assert request["sampling_args"]["extra_body"]["chat_template_kwargs"]["enable_thinking"] is True
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 'chat_template_kwargs'
+----------------------------- Captured stderr call -----------------------------
+Map:   0%|          | 0/1 [00:00<?, ? examples/s]Map: 100%|██████████| 1/1 [00:00<00:00, 25.14 examples/s]
+=============================== warnings summary ===============================
+tests/test_verifiers_env.py::test_loader_http_frozen_client_and_multiturn_reasoning
+  /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/verifiers/v1/types.py:9: DeprecationWarning: 'importlib.abc.Traversable' is deprecated and slated for removal in Python 3.14
+    from importlib.abc import Traversable
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_prompts.py::test_episode_uses_authoritative_prompts_and_logs_actual_manual[student]
+FAILED tests/test_prompts.py::test_episode_uses_authoritative_prompts_and_logs_actual_manual[teacher]
+FAILED tests/test_prompts.py::test_custom_prompts_require_explicit_provenance_and_cannot_claim_registered_manual
+FAILED tests/test_prompts.py::test_thinking_request_overrides_are_checked_and_do_not_mutate_input
+FAILED tests/test_prompts.py::test_cli_checks_pinned_local_tokenizer_and_rejects_corruption
+FAILED tests/test_verifiers_env.py::test_real_verifiers_rollout_processes_last_turn_and_preserves_ids[None-trainer_ids0]
+FAILED tests/test_verifiers_env.py::test_real_verifiers_rollout_processes_last_turn_and_preserves_ids[2-trainer_ids1]
+7 failed, 20 passed, 1 warning in 6.96s

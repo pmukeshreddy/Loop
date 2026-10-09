@@ -1,0 +1,673 @@
+$ .venv/bin/python -m pytest tests/test_detector_trace_metadata.py -q
+FFFFFFFFFFFFFFFFFFFFFFFFFF....FFF                                        [100%]
+=================================== FAILURES ===================================
+_ test_legacy_trajectory_accepts_missing_geometry_without_inventing_zero_length _
+
+    def test_legacy_trajectory_accepts_missing_geometry_without_inventing_zero_length():
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        trace = EpisodeTrace.model_validate(legacy_trace())
+>       assert trace.context_metadata is None
+               ^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_detector_trace_metadata.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EpisodeTrace(task_id='fixture', family='sparse_retrieval', domain='test', tags=['sparse'], prompt_variant='student', m...e, 'max_subcall_chars': False, 'wall_time': False, 'memory': False, 'cpu_time': False, 'max_depth': False}, timings={})
+item = 'context_metadata'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'EpisodeTrace' object has no attribute 'context_metadata'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_____ test_valid_context_geometry_round_trips_as_metadata_only[metadata0] ______
+
+metadata = {'context_lengths': [], 'context_total_length': 11, 'context_type': 'str'}
+
+    @pytest.mark.parametrize('metadata', [
+        dict(context_type='str', context_total_length=11, context_lengths=[]),
+        dict(context_type='str', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=11, context_lengths=[4, 7]),
+        dict(context_type='list', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=3, context_lengths=[0, 3, 0]),
+    ])
+    def test_valid_context_geometry_round_trips_as_metadata_only(metadata):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        raw = {**legacy_trace(), 'context_metadata': metadata, 'size_bucket': 8192}
+>       trace = EpisodeTrace.model_validate(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for EpisodeTrace
+E       context_metadata
+E         Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'str', '..., 'context_lengths': []}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:30: ValidationError
+_____ test_valid_context_geometry_round_trips_as_metadata_only[metadata1] ______
+
+metadata = {'context_lengths': [], 'context_total_length': 0, 'context_type': 'str'}
+
+    @pytest.mark.parametrize('metadata', [
+        dict(context_type='str', context_total_length=11, context_lengths=[]),
+        dict(context_type='str', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=11, context_lengths=[4, 7]),
+        dict(context_type='list', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=3, context_lengths=[0, 3, 0]),
+    ])
+    def test_valid_context_geometry_round_trips_as_metadata_only(metadata):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        raw = {**legacy_trace(), 'context_metadata': metadata, 'size_bucket': 8192}
+>       trace = EpisodeTrace.model_validate(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for EpisodeTrace
+E       context_metadata
+E         Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'str', '..., 'context_lengths': []}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:30: ValidationError
+_____ test_valid_context_geometry_round_trips_as_metadata_only[metadata2] ______
+
+metadata = {'context_lengths': [4, 7], 'context_total_length': 11, 'context_type': 'list'}
+
+    @pytest.mark.parametrize('metadata', [
+        dict(context_type='str', context_total_length=11, context_lengths=[]),
+        dict(context_type='str', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=11, context_lengths=[4, 7]),
+        dict(context_type='list', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=3, context_lengths=[0, 3, 0]),
+    ])
+    def test_valid_context_geometry_round_trips_as_metadata_only(metadata):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        raw = {**legacy_trace(), 'context_metadata': metadata, 'size_bucket': 8192}
+>       trace = EpisodeTrace.model_validate(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for EpisodeTrace
+E       context_metadata
+E         Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ...ontext_lengths': [4, 7]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:30: ValidationError
+_____ test_valid_context_geometry_round_trips_as_metadata_only[metadata3] ______
+
+metadata = {'context_lengths': [], 'context_total_length': 0, 'context_type': 'list'}
+
+    @pytest.mark.parametrize('metadata', [
+        dict(context_type='str', context_total_length=11, context_lengths=[]),
+        dict(context_type='str', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=11, context_lengths=[4, 7]),
+        dict(context_type='list', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=3, context_lengths=[0, 3, 0]),
+    ])
+    def test_valid_context_geometry_round_trips_as_metadata_only(metadata):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        raw = {**legacy_trace(), 'context_metadata': metadata, 'size_bucket': 8192}
+>       trace = EpisodeTrace.model_validate(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for EpisodeTrace
+E       context_metadata
+E         Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ..., 'context_lengths': []}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:30: ValidationError
+_____ test_valid_context_geometry_round_trips_as_metadata_only[metadata4] ______
+
+metadata = {'context_lengths': [0, 3, 0], 'context_total_length': 3, 'context_type': 'list'}
+
+    @pytest.mark.parametrize('metadata', [
+        dict(context_type='str', context_total_length=11, context_lengths=[]),
+        dict(context_type='str', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=11, context_lengths=[4, 7]),
+        dict(context_type='list', context_total_length=0, context_lengths=[]),
+        dict(context_type='list', context_total_length=3, context_lengths=[0, 3, 0]),
+    ])
+    def test_valid_context_geometry_round_trips_as_metadata_only(metadata):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        raw = {**legacy_trace(), 'context_metadata': metadata, 'size_bucket': 8192}
+>       trace = EpisodeTrace.model_validate(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for EpisodeTrace
+E       context_metadata
+E         Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ...ext_lengths': [0, 3, 0]}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:30: ValidationError
+_ test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata0-sum] _
+
+metadata = {'context_lengths': [3, 4], 'context_total_length': 8, 'context_type': 'list'}
+reason = 'sum'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        with pytest.raises(ValueError, match=reason):
+>           EpisodeTrace.model_validate({**legacy_trace(), 'context_metadata': metadata})
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E           context_metadata
+E             Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ...ontext_lengths': [3, 4]}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:45: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+metadata = {'context_lengths': [3, 4], 'context_total_length': 8, 'context_type': 'list'}
+reason = 'sum'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       with pytest.raises(ValueError, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'sum'
+E         Actual message: "1 validation error for EpisodeTrace\ncontext_metadata\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ...ontext_lengths': [3, 4]}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+
+tests/test_detector_trace_metadata.py:44: AssertionError
+_ test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata1-sum] _
+
+metadata = {'context_lengths': [], 'context_total_length': 1, 'context_type': 'list'}
+reason = 'sum'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        with pytest.raises(ValueError, match=reason):
+>           EpisodeTrace.model_validate({**legacy_trace(), 'context_metadata': metadata})
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E           context_metadata
+E             Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ..., 'context_lengths': []}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:45: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+metadata = {'context_lengths': [], 'context_total_length': 1, 'context_type': 'list'}
+reason = 'sum'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       with pytest.raises(ValueError, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'sum'
+E         Actual message: "1 validation error for EpisodeTrace\ncontext_metadata\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'list', ..., 'context_lengths': []}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+
+tests/test_detector_trace_metadata.py:44: AssertionError
+_ test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata2-empty] _
+
+metadata = {'context_lengths': [8], 'context_total_length': 8, 'context_type': 'str'}
+reason = 'empty'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+        with pytest.raises(ValueError, match=reason):
+>           EpisodeTrace.model_validate({**legacy_trace(), 'context_metadata': metadata})
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E           context_metadata
+E             Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'str', '... 'context_lengths': [8]}, input_type=dict]
+E               For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:45: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+metadata = {'context_lengths': [8], 'context_total_length': 8, 'context_type': 'str'}
+reason = 'empty'
+
+    @pytest.mark.parametrize('metadata,reason', [
+        (dict(context_type='list', context_total_length=8, context_lengths=[3, 4]), 'sum'),
+        (dict(context_type='list', context_total_length=1, context_lengths=[]), 'sum'),
+        (dict(context_type='str', context_total_length=8, context_lengths=[8]), 'empty'),
+    ])
+    def test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator(metadata, reason):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       with pytest.raises(ValueError, match=reason):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'empty'
+E         Actual message: "1 validation error for EpisodeTrace\ncontext_metadata\n  Extra inputs are not permitted [type=extra_forbidden, input_value={'context_type': 'str', '... 'context_lengths': [8]}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden"
+
+tests/test_detector_trace_metadata.py:44: AssertionError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes0] _
+
+changes = {'context_type': 'tuple'}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes1] _
+
+changes = {'context_total_length': -1}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes2] _
+
+changes = {'context_total_length': True}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes3] _
+
+changes = {'context_total_length': 1.5}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes4] _
+
+changes = {'context_total_length': '4'}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes5] _
+
+changes = {'context_lengths': [-1, 5]}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes6] _
+
+changes = {'context_lengths': [True, 3]}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes7] _
+
+changes = {'context_lengths': [1.5, 2.5]}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes8] _
+
+changes = {'context_lengths': ['4']}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes9] _
+
+changes = {'context': 'PRIVATE'}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes10] _
+
+changes = {'context_prefix': 'PRIVATE'}
+
+    @pytest.mark.parametrize('changes', [
+        {'context_type': 'tuple'}, {'context_total_length': -1}, {'context_total_length': True},
+        {'context_total_length': 1.5}, {'context_total_length': '4'},
+        {'context_lengths': [-1, 5]}, {'context_lengths': [True, 3]},
+        {'context_lengths': [1.5, 2.5]}, {'context_lengths': ['4']},
+        {'context': 'PRIVATE'}, {'context_prefix': 'PRIVATE'},
+    ])
+    def test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents(changes):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:56: ImportError
+_ test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_type] _
+
+omitted = 'context_type'
+
+    @pytest.mark.parametrize('omitted', ['context_type', 'context_total_length', 'context_lengths'])
+    def test_partial_geometry_is_rejected_instead_of_filling_unknown_fields(omitted):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:65: ImportError
+_ test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_total_length] _
+
+omitted = 'context_total_length'
+
+    @pytest.mark.parametrize('omitted', ['context_type', 'context_total_length', 'context_lengths'])
+    def test_partial_geometry_is_rejected_instead_of_filling_unknown_fields(omitted):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:65: ImportError
+_ test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_lengths] _
+
+omitted = 'context_lengths'
+
+    @pytest.mark.parametrize('omitted', ['context_type', 'context_total_length', 'context_lengths'])
+    def test_partial_geometry_is_rejected_instead_of_filling_unknown_fields(omitted):
+>       from rlm_opsd.harness.trajectory import ContextMetadataTrace
+E       ImportError: cannot import name 'ContextMetadataTrace' from 'rlm_opsd.harness.trajectory' (/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/harness/trajectory.py)
+
+tests/test_detector_trace_metadata.py:65: ImportError
+_ test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[0] _
+
+size_bucket = 0
+
+    @pytest.mark.parametrize('size_bucket', [0, 8192, None])
+    def test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes(size_bucket):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       trace = EpisodeTrace.model_validate({**legacy_trace(), 'size_bucket': size_bucket})
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=0, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:77: ValidationError
+_ test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[8192] _
+
+size_bucket = 8192
+
+    @pytest.mark.parametrize('size_bucket', [0, 8192, None])
+    def test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes(size_bucket):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       trace = EpisodeTrace.model_validate({**legacy_trace(), 'size_bucket': size_bucket})
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=8192, input_type=int]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:77: ValidationError
+_ test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[None] _
+
+size_bucket = None
+
+    @pytest.mark.parametrize('size_bucket', [0, 8192, None])
+    def test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes(size_bucket):
+        from rlm_opsd.harness.trajectory import EpisodeTrace
+    
+>       trace = EpisodeTrace.model_validate({**legacy_trace(), 'size_bucket': size_bucket})
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for EpisodeTrace
+E       size_bucket
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=None, input_type=NoneType]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/test_detector_trace_metadata.py:77: ValidationError
+_ test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[TOP_SECRET\U0001f989-expected0-8192] _
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-134/test_episode_populates_geometr0')
+context = 'TOP_SECRET🦉'
+expected = {'context_lengths': [], 'context_total_length': 11, 'context_type': 'str'}
+size_bucket = 8192
+
+    @pytest.mark.parametrize('context,expected,size_bucket', [
+        ('TOP_SECRET🦉', dict(context_type='str', context_total_length=11, context_lengths=[]), 8192),
+        (['TOP_', 'SECRET🦉'], dict(context_type='list', context_total_length=11, context_lengths=[4, 7]), None),
+        ([], dict(context_type='list', context_total_length=0, context_lengths=[]), 0),
+    ])
+    def test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix(
+            tmp_path, context, expected, size_bucket):
+        from rlm_opsd.harness import Episode, HarnessConfig
+    
+        info = {**legacy_trace(), 'context': context, 'query': 'Find a value'}
+        if size_bucket is not None:
+            info['size_bucket'] = size_bucket
+        episode = Episode(config=HarnessConfig(prefix_chars=4), info=info,
+                          frozen_client=object(), frozen_model='unused-fixture', log_dir=tmp_path)
+        serialized = episode.trace.model_dump(mode='json')
+>       assert serialized['context_metadata'] == expected
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'context_metadata'
+
+tests/test_detector_trace_metadata.py:104: KeyError
+_ test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[context1-expected1-None] _
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-134/test_episode_populates_geometr1')
+context = ['TOP_', 'SECRET🦉']
+expected = {'context_lengths': [4, 7], 'context_total_length': 11, 'context_type': 'list'}
+size_bucket = None
+
+    @pytest.mark.parametrize('context,expected,size_bucket', [
+        ('TOP_SECRET🦉', dict(context_type='str', context_total_length=11, context_lengths=[]), 8192),
+        (['TOP_', 'SECRET🦉'], dict(context_type='list', context_total_length=11, context_lengths=[4, 7]), None),
+        ([], dict(context_type='list', context_total_length=0, context_lengths=[]), 0),
+    ])
+    def test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix(
+            tmp_path, context, expected, size_bucket):
+        from rlm_opsd.harness import Episode, HarnessConfig
+    
+        info = {**legacy_trace(), 'context': context, 'query': 'Find a value'}
+        if size_bucket is not None:
+            info['size_bucket'] = size_bucket
+        episode = Episode(config=HarnessConfig(prefix_chars=4), info=info,
+                          frozen_client=object(), frozen_model='unused-fixture', log_dir=tmp_path)
+        serialized = episode.trace.model_dump(mode='json')
+>       assert serialized['context_metadata'] == expected
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'context_metadata'
+
+tests/test_detector_trace_metadata.py:104: KeyError
+_ test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[context2-expected2-0] _
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-134/test_episode_populates_geometr2')
+context = []
+expected = {'context_lengths': [], 'context_total_length': 0, 'context_type': 'list'}
+size_bucket = 0
+
+    @pytest.mark.parametrize('context,expected,size_bucket', [
+        ('TOP_SECRET🦉', dict(context_type='str', context_total_length=11, context_lengths=[]), 8192),
+        (['TOP_', 'SECRET🦉'], dict(context_type='list', context_total_length=11, context_lengths=[4, 7]), None),
+        ([], dict(context_type='list', context_total_length=0, context_lengths=[]), 0),
+    ])
+    def test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix(
+            tmp_path, context, expected, size_bucket):
+        from rlm_opsd.harness import Episode, HarnessConfig
+    
+        info = {**legacy_trace(), 'context': context, 'query': 'Find a value'}
+        if size_bucket is not None:
+            info['size_bucket'] = size_bucket
+        episode = Episode(config=HarnessConfig(prefix_chars=4), info=info,
+                          frozen_client=object(), frozen_model='unused-fixture', log_dir=tmp_path)
+        serialized = episode.trace.model_dump(mode='json')
+>       assert serialized['context_metadata'] == expected
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'context_metadata'
+
+tests/test_detector_trace_metadata.py:104: KeyError
+=========================== short test summary info ============================
+FAILED tests/test_detector_trace_metadata.py::test_legacy_trajectory_accepts_missing_geometry_without_inventing_zero_length
+FAILED tests/test_detector_trace_metadata.py::test_valid_context_geometry_round_trips_as_metadata_only[metadata0]
+FAILED tests/test_detector_trace_metadata.py::test_valid_context_geometry_round_trips_as_metadata_only[metadata1]
+FAILED tests/test_detector_trace_metadata.py::test_valid_context_geometry_round_trips_as_metadata_only[metadata2]
+FAILED tests/test_detector_trace_metadata.py::test_valid_context_geometry_round_trips_as_metadata_only[metadata3]
+FAILED tests/test_detector_trace_metadata.py::test_valid_context_geometry_round_trips_as_metadata_only[metadata4]
+FAILED tests/test_detector_trace_metadata.py::test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata0-sum]
+FAILED tests/test_detector_trace_metadata.py::test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata1-sum]
+FAILED tests/test_detector_trace_metadata.py::test_inconsistent_geometry_cannot_be_used_as_a_coverage_denominator[metadata2-empty]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes0]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes1]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes2]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes3]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes4]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes5]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes6]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes7]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes8]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes9]
+FAILED tests/test_detector_trace_metadata.py::test_metadata_rejects_invalid_types_lengths_and_accidental_context_contents[changes10]
+FAILED tests/test_detector_trace_metadata.py::test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_type]
+FAILED tests/test_detector_trace_metadata.py::test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_total_length]
+FAILED tests/test_detector_trace_metadata.py::test_partial_geometry_is_rejected_instead_of_filling_unknown_fields[context_lengths]
+FAILED tests/test_detector_trace_metadata.py::test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[0]
+FAILED tests/test_detector_trace_metadata.py::test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[8192]
+FAILED tests/test_detector_trace_metadata.py::test_size_bucket_is_optional_and_accepts_known_nonnegative_character_sizes[None]
+FAILED tests/test_detector_trace_metadata.py::test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[TOP_SECRET\U0001f989-expected0-8192]
+FAILED tests/test_detector_trace_metadata.py::test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[context1-expected1-None]
+FAILED tests/test_detector_trace_metadata.py::test_episode_populates_geometry_and_bucket_without_logging_context_or_prefix[context2-expected2-0]
+29 failed, 4 passed in 1.81s
+
+exit_code=1

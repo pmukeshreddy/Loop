@@ -1,0 +1,27 @@
+M4 absent phase denominators must be blank; fixtures only.
+Command: .venv/bin/python -m pytest tests/test_detector_reports.py -q
+.....F..............................                                     [100%]
+=================================== FAILURES ===================================
+_____ test_absent_phases_and_groups_are_not_run_rather_than_measured_zero ______
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-132/test_absent_phases_and_groups_0')
+
+    def test_absent_phases_and_groups_are_not_run_rather_than_measured_zero(tmp_path):
+        from rlm_opsd.detectors.reports import aggregate_behavior
+    
+        before = fixture_record(tmp_path, "before")
+        teacher = fixture_record(tmp_path, "teacher", "teacher", family="repo_qa", domain="code", size_bucket=None)
+        teacher["analysis"]["detectors"]["D1"] = False
+        rows = aggregate_behavior([before, teacher])
+        assert metric(rows, "D1", "teacher")["value"] == 0.0
+        absent = metric(rows, "D1", "after")
+        assert (absent["status"], absent["value"], absent["trajectory_paths"]) == ("not run", None, [])
+>       assert absent["numerator"] is None and absent["denominator"] is None
+E       assert (0 is None)
+
+tests/test_detector_reports.py:122: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_detector_reports.py::test_absent_phases_and_groups_are_not_run_rather_than_measured_zero
+1 failed, 35 passed in 0.07s
+
+Exit code: 1

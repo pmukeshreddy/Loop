@@ -1,0 +1,624 @@
++zsh:1> cat .deps/rlm/training/src/rlm_train/__init__.py
+from rlm_train.env import RLMTrainEnv
+from rlm_train.proxy import ClientHandle, SubLLMProxy
+from rlm_train.repl import ExecResult, ReplBackend, SubprocessReplBackend
+from rlm_train.rubric import RLMTrainRubric
+
+__version__ = "0.1.0"
+
+__all__ = [
+    "RLMTrainEnv",
+    "RLMTrainRubric",
+    "ReplBackend",
+    "ExecResult",
+    "SubprocessReplBackend",
+    "SubLLMProxy",
+    "ClientHandle",
+]
++zsh:1> rg -n '^class |^def |^async def |vf\.|verifiers|teacher_tau|adv_tau|num_teacher_gpus|teacher_logprobs' .deps/rlm/training/src .deps/prime-rl/src/prime_rl/orchestrator .deps/prime-rl/src/prime_rl/trainer/rl/loss.py .deps/prime-rl/packages/prime-rl-configs/src .deps/verifiers/verifiers/__init__.py
+.deps/verifiers/verifiers/__init__.py:1:"""The verifiers package root; the stack lives in `verifiers.v1` (`import verifiers.v1 as vf`)."""
+.deps/verifiers/verifiers/__init__.py:7:    __version__ = _version("verifiers")
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:22:class LossInputs:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:40:class LossOutputs:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:47:class Loss(Protocol):
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:66:def selective_log_softmax(
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:74:def selective_log_softmax_with_sampling_mask(
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:96:def compute_entropy(shifted_logits: Float[Tensor, "batch seq vocab"]) -> Float[Tensor, "batch seq"]:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:103:def shift_tensor_left(t: Tensor, pad_value: float = 0.0) -> Tensor:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:114:def shift_tensor_right(t: Float[Tensor, "batch seq"], pad_value: float | None = None) -> Float[Tensor, "batch seq"]:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:132:def _safe_mean(values: Tensor, mask: Tensor) -> Tensor:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:138:def _mismatch_kl_from_log_ratio(log_importance_ratio: Tensor) -> Tensor:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:145:def _capped_importance_ratio(log_importance_ratio: Tensor, max_ratio: float) -> Tensor:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:150:class IPOLoss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:177:        pg_loss = -loss_config.adv_tau * advantages[keep_mask] * importance_ratio
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:193:class IcePopLoss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:213:        per_token_loss = -loss_config.adv_tau * advantages[keep_mask] * importance_ratio
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:227:class PPOLoss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:237:        advantages = config.adv_tau * inputs.advantages[inputs.loss_mask]
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:256:class CISPOLoss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:266:        advantages = config.adv_tau * inputs.advantages[inputs.loss_mask]
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:288:def ref_kl_loss_fn(inputs: LossInputs) -> LossOutputs:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:331:def ce_loss_fn(inputs: LossInputs) -> LossOutputs:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:347:class CustomLoss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:359:def setup_rl_loss_fn(loss_config: LossConfig) -> Loss:
+.deps/prime-rl/src/prime_rl/trainer/rl/loss.py:377:def compute_loss(
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:6:class WandbMonitorConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:26:class FileMonitorConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:46:class PrimeTrainMonitorConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:51:class PrimeEvalMonitorConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:56:class MonitorsConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:64:class TrainMonitorsConfig(MonitorsConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/monitors.py:69:class EvalMonitorsConfig(MonitorsConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/eval.py:4:import verifiers.v1 as vf
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/eval.py:20:class ServedEvalConfig(EvalSourcesConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/eval.py:53:class EvalConfig(ServedEvalConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/eval.py:65:    select: vf.SelectCLIConfig = vf.SelectCLIConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/eval.py:125:class SFTOnlineEvalConfig(ScheduledEvalConfig, ServedEvalConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/env_server.py:3:import verifiers.v1 as vf
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/env_server.py:10:class EnvServerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/env_server.py:15:    env: SerializeAsAny[vf.EnvConfig] = vf.SingleAgentEnvConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/env_server.py:18:    serve: vf.ServeConfig = vf.ServeConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/env_server.py:35:        return vf.resolve_env_field(data, vf.narrowed_env_annotation(cls))
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:28:class GCConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:33:class ActivationCheckpointConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:44:class ActivationOffloadingConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:52:class OptimizerInBackwardOffloadConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:69:def _normalize_optimizer_in_backward_offload(value: Any) -> Any:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:82:class CompileConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:90:class FusionsConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:98:class IndexCacheConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:106:class LoRAConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:134:class DebugModelConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:164:class FP8Config(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:170:class MXFP8Config(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:182:class MoEComputeConfigBase(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:209:class BF16MoEComputeConfig(MoEComputeConfigBase):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:217:class DeepGemmFP8MoEComputeConfig(MoEComputeConfigBase):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:223:class MXFP8MoEComputeConfig(MoEComputeConfigBase):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:237:class TorchMoEDispatchConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:245:class DeepEPMoEDispatchConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:262:class MoERuntimeConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:269:class ModelConfig(BaseModelConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:393:class TokenizerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:404:class ConstantSchedulerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:408:class LinearSchedulerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:421:class CosineSchedulerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:436:def validate_scheduler(scheduler: SchedulerConfig, max_steps: int | None) -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:458:class BaseOptimizerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:469:class AdamWConfig(BaseOptimizerConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:479:class MuonConfig(BaseOptimizerConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:492:class SignSGDConfig(BaseOptimizerConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:499:class CheckpointConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:522:class IPOLossConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:530:    adv_tau: float = Field(1.0, ge=0)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:534:class IcePopLossConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:543:    adv_tau: float = Field(1.0, ge=0)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:553:class PPOLossConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:565:    adv_tau: float = Field(1.0, ge=0)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:575:class CISPOLossConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:584:    adv_tau: float = Field(1.0, ge=0)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:588:class CustomLossConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:603:class FakeDataLoaderConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:611:class DataLoaderConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:619:class TrainerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:16:class ServerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:44:class VllmConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:219:class WeightBroadcastConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:224:class CPUOffloadTier(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:229:class DiskOffloadTier(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:234:class BaseKVCacheOffloadConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:251:class NativeKVCacheOffloadConfig(BaseKVCacheOffloadConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:268:class MooncakeKVCacheOffloadConfig(BaseKVCacheOffloadConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:309:class VllmRouterConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:321:class LlmdRouterConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:371:class BaseInferenceDeploymentConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:376:class SingleNodeInferenceDeploymentConfig(BaseInferenceDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:381:class MultiNodeInferenceDeploymentConfig(BaseInferenceDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:391:class DisaggregatedInferenceDeploymentConfig(BaseInferenceDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/inference.py:443:class InferenceConfig(BaseConfig):
+.deps/prime-rl/src/prime_rl/orchestrator/eval_sink.py:14:    import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/eval_sink.py:17:class EvalSink:
+.deps/prime-rl/src/prime_rl/orchestrator/eval_sink.py:22:        self.pending_batches: dict[tuple[str, int], list[vf.Episode]] = defaultdict(list)
+.deps/prime-rl/src/prime_rl/orchestrator/eval_sink.py:26:    def add(self, episode: vf.Episode) -> EvalBatch | None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:40:class BaseDataConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:62:class FakeDataConfig(BaseDataConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:75:class LossMaskConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:89:class SFTColumnsConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:111:class SFTDataConfig(BaseDataConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:166:class SFTValConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:179:class BaseDeploymentConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:184:class SingleNodeDeploymentConfig(BaseDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:200:class MultiNodeDeploymentConfig(BaseDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/sft.py:219:class SFTConfig(BaseConfig):
+.deps/rlm/training/src/rlm_train/repl/base.py:9:class ExecResult:
+.deps/rlm/training/src/rlm_train/repl/base.py:17:class ReplBackend(ABC):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:31:class SharedLogConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:39:class SharedWandbConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:70:class SharedMonitorsConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:83:class SharedCheckpointConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:97:class SharedModelConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:105:class BaseDeploymentConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:110:class SingleNodeDeploymentConfig(BaseDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:130:class MultiNodeDeploymentConfig(BaseDeploymentConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:162:class RLConfig(BaseConfig):
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:36:class HistogramSnapshot:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:44:class EngineSnapshot:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:59:class MetricsEndpoint:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:67:class TimedSnapshot:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:73:class EngineSample:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:88:def parse_prometheus_text(text: str) -> dict[str, EngineSnapshot]:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:122:def build_metrics_endpoints(
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:150:def histogram_quantile(buckets: dict[float, float], quantile: float) -> float | None:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:168:def engine_values(sample: EngineSample, previous: TimedSnapshot | None) -> dict[str, float]:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:214:def bucket_deltas(sample: EngineSample, previous: TimedSnapshot | None) -> dict[str, dict[float, float]]:
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:227:def build_scope_metrics(
+.deps/prime-rl/src/prime_rl/orchestrator/inference_metrics.py:263:class InferenceMetricsCollector:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:3:The orchestrator holds a real `vf.Trace` (validated in `envs.py`), so everything here is
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:8:live on `vf.Trace` itself.
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:20:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:27:def _image_urls(branch: vf.Branch) -> list[str]:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:39:def _image_runs(token_types: list[int]) -> list[tuple[int, int]]:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:51:def _build_mm_refs(urls: list[str], token_types: list[int]) -> MMRefs | None:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:66:def _encode_routed_experts(arr: np.ndarray | None, num_tokens: int) -> RoutedExperts | None:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:83:def _encode_sampling_mask(mask: vf.SamplingMask | None, num_tokens: int) -> SamplingMask | None:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:105:def iter_trainable_branches(trace: vf.Trace) -> Iterator[tuple[vf.Branch, list[bool]]]:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:131:def _loss_weights(branch: vf.Branch, name: str, trained_nodes: set[int]) -> list[float] | None:
+.deps/prime-rl/src/prime_rl/orchestrator/trajectories.py:150:def trace_to_samples(trace: vf.Trace, *, env_name: str = "") -> list[TrainingSample]:
+.deps/prime-rl/src/prime_rl/orchestrator/train_source.py:9:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/train_source.py:17:class TrainSource:
+.deps/prime-rl/src/prime_rl/orchestrator/train_source.py:42:    def on_result(self, group: list[vf.Episode]) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:12:    import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:18:class Policy:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:27:class Progress:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:42:class GroupCancellation:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:57:class DispatchFailure:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:68:    error: vf.Error
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:72:    DispatchResult: TypeAlias = vf.WireEpisode | DispatchFailure | GroupCancellation
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:78:class TaskRequest:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:82:    task: vf.Task
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:91:class LiveTrace:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:97:class InflightEpisode:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:103:    task: vf.Task
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:106:    client_config: vf.ClientConfig | None = None
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:117:class GroupState:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:122:    task: vf.Task
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:133:class TrainBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:149:class EvalBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/types.py:163:class VersionObserver(Protocol):
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:28:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:29:from verifiers.v1.runtimes import set_base_sandbox_labels
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:95:class Orchestrator:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:137:        intercept_vf_logging(logger="verifiers.v1", level="WARN")
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:527:            if not isinstance(episode.run, vf.TrainRunInfo):
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:653:        # the effective (shipped) subset, summing the same ``vf.Trace`` token properties the metric
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:1043:async def run_orchestrator(config: OrchestratorConfig) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:1050:def main() -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:5:import verifiers.v1 as vf
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:31:class LoRAConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:39:class ModelConfig(BaseModelConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:47:class TrainSamplingConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:65:    # easiest way to pass arbitrary extra parameters to the server via verifiers
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:113:class EvalSamplingConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:158:class EnvConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:159:    """One environment a run pulls from: the verifiers blocks it composes (``env`` — what
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:162:    env: SerializeAsAny[vf.EnvConfig] = vf.SingleAgentEnvConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:163:    """The verifiers environment — which env, its seed taskset, each agent, its knobs. Narrowed to the selected env's config class by the env id, else the taskset id."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:165:    serve: vf.ServeConfig = vf.ServeConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:171:    select: vf.SelectConfig = vf.SelectConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:178:        return vf.resolve_env_field(data, vf.narrowed_env_annotation(cls))
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:199:def inherit_defaults(defaults: dict[str, Any], source: dict) -> dict:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:202:    ``vf.merge_defaults``; a plain value such as ``group_size`` is used only when the
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:210:                merged[name] = vf.merge_defaults(value, own)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:216:def raw_field(data: dict, name: str, field: FieldInfo) -> tuple[bool, Any]:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:227:class StandardSamplerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:231:class DifficultyPoolConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:239:def default_difficulty_pools() -> dict[str, DifficultyPoolConfig]:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:247:class DifficultyPoolSamplerConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:273:class AdvRangeGateConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:289:class CurriculumConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:298:class TrainSourceConfig(EnvConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:320:class EvalSourceConfig(EnvConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:328:class OnlineEvalSourceConfig(EvalSourceConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:335:class SourceGroupConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:343:    - a nested block is filled in key by key (``vf.merge_defaults``);
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:350:    env: vf.SharedEnvConfig = vf.SharedEnvConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:378:class TrainConfig(SourceGroupConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:385:    select: vf.SelectConfig = vf.SelectConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:406:class EvalSourcesConfig(SourceGroupConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:415:    select: vf.SelectConfig = vf.SelectConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:442:class ScheduledEvalConfig(EvalSourcesConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:466:class RLOnlineEvalConfig(ScheduledEvalConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:471:class CheckpointConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:485:class ConcurrencyConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:518:class OrchestratorConfig(BaseConfig):
+.deps/prime-rl/src/prime_rl/orchestrator/annotations.py:14:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/annotations.py:20:def stamp_arrival(episodes: list[vf.Episode], kind: Kind, step: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/annotations.py:33:def stamp_batch(episodes: list[vf.Episode], step: int) -> list[dict[str, Any]]:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:5:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:11:def iter_trainable_traces(episodes: list[vf.Episode]):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:21:class Algorithm:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:42:    async def score_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:45:    async def score_group(self, episodes: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/base.py:48:    async def finalize_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:39:import verifiers.v1 as vf
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:47:class FrozenModelConfig(VLLMClientConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:76:class SamplingConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:89:class LinearLengthPenaltyConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:107:class EchoRoleConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:114:class EchoRolesConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:130:class EchoFilterConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:154:class BaseAlgoConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:186:    def validate_env(self, env_config: vf.EnvConfig) -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:194:class GRPOAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:211:class EchoAlgoConfig(GRPOAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:228:class MaxRLAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:242:class RAEAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:263:class HierarchicalGRPOAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:278:    def validate_env(self, env_config: vf.EnvConfig) -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:296:class OPDAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:315:class OPSDAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:344:class SFTAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/algorithm.py:367:class DebugAlgoConfig(BaseAlgoConfig):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opsd.py:6:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opsd.py:20:class OPSDAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opsd.py:54:    def _demonstration(self, episode: vf.Episode, trace: vf.Trace) -> str:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opsd.py:66:    async def score_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/periodic_logger.py:16:class PeriodicLogger:
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:3:Env servers stream every in-flight rollout as deltas (``verifiers.v1.serve.delta``). The
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:17:def dispatch_info(meta: InflightEpisode) -> dict[str, Any]:
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:34:def pending_event(meta: InflightEpisode) -> dict[str, Any]:
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:39:def dispatched_event(meta: InflightEpisode) -> dict[str, Any]:
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:44:def apply(meta: InflightEpisode, delta: dict[str, Any]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/live.py:59:def stage_counts(inflight: list[InflightEpisode]) -> str:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:14:class WorkerStartupError(RuntimeError):
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:18:class WorkerProtocolError(RuntimeError):
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:22:class SubprocessReplBackend(ReplBackend):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opd.py:6:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opd.py:17:class OPDAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/opd.py:35:    async def score_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/validation.py:6:def propagate_shared_fields(data: Any) -> Any:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:9:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:14:from verifiers.v1.clients.base import build_async_openai
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:15:from verifiers.v1.configs.client import (
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:28:class PrefillScorer:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:35:    async def score(self, config: vf.ClientConfig, model: str, token_ids: list[int]) -> list[float]:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:46:class InferenceClient:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:105:class AdminPlane:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:212:def setup_admin_plane(client_config: ClientConfig, model_name: str) -> AdminPlane:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:221:async def check_inference_ready(client_config: ClientConfig, model_name: str) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:232:async def connect_frozen_client(
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:247:def setup_client(
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:252:) -> vf.ClientConfig:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:268:def setup_admin_clients(client_config: ClientConfig) -> list[AsyncClient]:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:297:async def maybe_check_has_model(
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:320:async def check_health(
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:358:def _is_retryable_admin_error(exception: BaseException) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:383:async def _admin_post(client: AsyncClient, path: str, *, timeout_s: float = ADMIN_TIMEOUT_S, **kwargs) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:403:async def _pause_engines(admin_clients: list[AsyncClient], *, step: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:413:async def _resume_engines(admin_clients: list[AsyncClient]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:424:def _is_retryable_lora_error(exception: BaseException) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:448:async def load_lora_adapter(admin_plane: AdminPlane, lora_name: str, lora_path: Path) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:479:async def init_nixl_broadcast(
+.deps/prime-rl/src/prime_rl/orchestrator/clients.py:511:async def prefill_logprobs(openai: AsyncOpenAI, model: str, token_ids: list[int]) -> list[float]:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:9:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:14:def episode_env_name(episode: vf.Episode[Any, Any, Any]) -> str:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:21:def episode_group_id(episode: vf.Episode[Any, Any, Any]) -> str:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:28:def train_work(episode: vf.Episode[Any, Any, Any]) -> vf.TrainWorkInfo:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:30:    if not isinstance(run, vf.TrainRunInfo) or not isinstance(run.work, vf.TrainWorkInfo):
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:35:def eval_work(episode: vf.Episode[Any, Any, Any]) -> vf.EvalWorkInfo:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:37:    if not isinstance(run, vf.TrainRunInfo) or not isinstance(run.work, vf.EvalWorkInfo):
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:42:def min_fresh_version(step: int, max_off_policy_steps: int) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:48:def episode_staleness(episode: vf.Episode[Any, Any, Any], training_step: int) -> tuple[int, int, int]:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:64:def intercept_vf_logging(logger: str = "verifiers", level: str = "DEBUG", prefix: str | None = None):
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:65:    """Intercepts verifiers logging and routes through prime-rl logger with optional prefix."""
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:73:def setup_env_server_logging(log_level: str, json_logging: bool = False) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:75:    logs through it. Passed to verifiers' ``serve_env`` so it runs in the broker and in every
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:79:    intercept_vf_logging(logger="verifiers.v1", level=log_level)
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:82:def set_default_executor(max_workers: int = 64) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:88:def trim_process_memory() -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:97:def compute_pass_metrics(rewards: list[float]) -> dict[str, float]:
+.deps/rlm/training/src/rlm_train/worker.py:121:class _AnswerDict(dict):
+.deps/rlm/training/src/rlm_train/worker.py:137:class Worker:
+.deps/rlm/training/src/rlm_train/worker.py:345:def _send(obj: dict[str, Any]) -> None:
+.deps/rlm/training/src/rlm_train/worker.py:351:def main() -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/watcher.py:17:class WeightWatcher:
+.deps/rlm/training/src/rlm_train/proxy.py:1:"""Localhost HTTP proxy: worker sub-LLM calls -> verifiers Client."""
+.deps/rlm/training/src/rlm_train/proxy.py:22:class ClientHandle:
+.deps/rlm/training/src/rlm_train/proxy.py:33:async def _maybe_await(result: Any) -> Any:
+.deps/rlm/training/src/rlm_train/proxy.py:39:def _flatten_prompt(prompt: str | list) -> str:
+.deps/rlm/training/src/rlm_train/proxy.py:62:def _coerce_messages(prompt: str | list) -> list:
+.deps/rlm/training/src/rlm_train/proxy.py:70:        from verifiers.utils.message_utils import from_raw_message
+.deps/rlm/training/src/rlm_train/proxy.py:82:class SubLLMProxy:
+.deps/rlm/training/src/rlm_train/rubric.py:9:import verifiers as vf
+.deps/rlm/training/src/rlm_train/rubric.py:10:from verifiers.types import State
+.deps/rlm/training/src/rlm_train/rubric.py:13:class RLMTrainRubric(vf.Rubric):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:7:from verifiers.v1.configs.client import BaseClientConfig
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:28:def reject_protected_env_vars(env_vars: dict[str, str]) -> dict[str, str]:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:41:class BaseWeightBroadcastConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:47:class FileSystemWeightBroadcastConfig(BaseWeightBroadcastConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:51:class InMemoryWeightBroadcastConfig(BaseWeightBroadcastConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:62:class NCCLWeightBroadcastConfig(InMemoryWeightBroadcastConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:69:class NIXLWeightBroadcastConfig(InMemoryWeightBroadcastConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:89:class RunConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:97:class ResumeConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:124:class SlurmConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:186:class VLMConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:197:class BaseModelConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:208:class DynamoConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:216:class ClientConfig(BaseClientConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:230:class VLLMClientConfig(ClientConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:237:class LogConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:242:    """Log level for the verifiers package. Defaults to ``$PRIME_VF_LOG_LEVEL`` if set, else ``info``."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:254:class TrainerLogConfig(LogConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:259:class HeartbeatConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:269:class BaseTransportConfig(BaseConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:273:class FileSystemTransportConfig(BaseTransportConfig):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/shared.py:277:class ZMQTransportConfig(BaseTransportConfig):
+.deps/rlm/training/src/rlm_train/env.py:1:"""RLMTrainEnv: verifiers Environment that mirrors rlm.RLM.completion at depth=1."""
+.deps/rlm/training/src/rlm_train/env.py:11:import verifiers as vf
+.deps/rlm/training/src/rlm_train/env.py:12:from verifiers.types import Messages, State
+.deps/rlm/training/src/rlm_train/env.py:31:class RLMTrainEnv(vf.MultiTurnEnv):
+.deps/rlm/training/src/rlm_train/env.py:39:        rubric: vf.Rubric | None = None,
+.deps/rlm/training/src/rlm_train/env.py:224:    @vf.stop
+.deps/rlm/training/src/rlm_train/env.py:228:    @vf.cleanup
+.deps/rlm/training/src/rlm_train/env.py:241:    @vf.teardown
+.deps/rlm/training/src/rlm_train/env.py:246:def _normalize_for_api(msgs: list) -> list:
+.deps/rlm/training/src/rlm_train/env.py:274:def _last_assistant(completion: Any) -> Any:
+.deps/rlm/training/src/rlm_train/env.py:286:def _msg_text(msg: Any) -> str:
+.deps/rlm/training/src/rlm_train/env.py:300:def _pack_exec(code: str, result: ExecResult) -> dict[str, Any]:
+.deps/rlm/training/src/rlm_train/env.py:310:def _format_repl_outputs(outputs: list[dict[str, Any]]) -> list[dict[str, str]]:
+.deps/rlm/training/src/rlm_train/env.py:322:def _format_one(o: dict[str, Any]) -> str:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/echo.py:12:    import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/echo.py:17:class EchoAlgorithm(GRPOAlgorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/echo.py:36:    async def score_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/echo.py:41:    def _weight_observations(self, trace: vf.Trace) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/echo.py:92:    def _filter_masks(self, trace: vf.Trace, trainable_branches: list) -> list[list[bool]]:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/parsers.py:48:def _resolve(model_name: str, patterns: list[tuple[re.Pattern[str], str]]) -> str | None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/parsers.py:55:def resolve_tool_call_parser(model_name: str) -> str | None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/parsers.py:59:def resolve_reasoning_parser(model_name: str) -> str | None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/config.py:10:def default_output_dir() -> Path:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/config.py:15:def dump_resolved_config(config: BaseModel, exclude: set[str] | None = None) -> dict:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/config.py:25:def find_package_resource(subdir: str) -> Path | None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/config.py:41:def rgetattr(obj: Any, attr_path: str) -> Any:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/utils/config.py:51:def rsetattr(obj: Any, attr_path: str, value: Any) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/sft.py:6:class SFTDistillAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:5:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:11:def trainable_nodes(trace: vf.Trace) -> list[vf.MessageNode]:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:17:def assign_advantages(trace: vf.Trace, values: float | list[float]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:43:def assign_reference_logprobs(branch: vf.Branch, values: list[float]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:59:def scalar_advantage(trace: vf.Trace) -> float | None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:68:def is_trainable(trace: vf.Trace) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/routing.py:73:def stamp_loss_routing(sample: TrainingSample, action_loss_type: ActionLossType) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/ckpt.py:22:class CheckpointManager:
+.deps/prime-rl/src/prime_rl/orchestrator/ckpt.py:71:def setup_ckpt_manager(output_dir: Path, config: CheckpointConfig | None) -> CheckpointManager:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/rae.py:6:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/rae.py:16:class RAEAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/rae.py:39:    async def score_group(self, episodes: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/grpo.py:5:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/grpo.py:15:class GRPOAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/grpo.py:26:    async def score_group(self, episodes: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/debug.py:5:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/debug.py:15:class DebugAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/debug.py:28:    async def score_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/eval_source.py:16:    import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/eval_source.py:21:class EvalSource:
+.deps/prime-rl/src/prime_rl/orchestrator/eval_source.py:36:        self.tasks_by_env: dict[str, list[vf.Task]] = {}
+.deps/prime-rl/src/prime_rl/orchestrator/algo/__init__.py:56:def build_algorithm(config: AlgoConfig, clients: InferenceClient) -> Algorithm:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/base.py:8:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/base.py:18:class Curriculum:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/base.py:24:        tasks: Sequence[vf.Task] | Iterator[vf.Task],
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/base.py:51:    def on_result(self, group: list[vf.Episode]) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/concurrency.py:99:class EngineLoadSample:
+.deps/prime-rl/src/prime_rl/orchestrator/concurrency.py:116:class ConcurrencyController:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/hierarchical_grpo.py:6:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/hierarchical_grpo.py:16:class HierarchicalGRPOAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/hierarchical_grpo.py:33:    async def score_group(self, episodes: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/hierarchical_grpo.py:34:        peers: dict[tuple[str, str | None], list[vf.Trace]] = defaultdict(list)
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:9:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:18:def dispatch_failure_metrics(failures: list[DispatchFailure], *, prefix: str, total_attempts: int) -> dict[str, float]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:32:class TraceRecord:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:37:    episode: vf.Episode
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:38:    trace: vf.Trace
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:44:def _records(
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:45:    episodes: list[vf.Episode],
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:63:class Stat:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:105:class StatGroup:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:110:    def traces(self) -> list[vf.Trace]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:126:class TimingMetrics(StatGroup):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:166:class CustomMetrics(StatGroup):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:191:class TraceMetrics(StatGroup):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:277:class EpisodeMetrics:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:280:        episodes: list[vf.Episode],
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:356:class TrainMetrics(EpisodeMetrics):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:374:def pass_at_k(records: list[TraceRecord]) -> dict[str, float]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:389:class EvalMetrics(EpisodeMetrics):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:390:    def __init__(self, episodes: list[vf.Episode], records: list[TraceRecord], group_size: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:408:class EpisodeCollection:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:411:        episodes: list[vf.Episode] | None = None,
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:431:    def selected_episodes(self) -> list[vf.Episode]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:446:    def vf_episodes(self) -> list[vf.Episode]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:449:        by_episode: dict[int, list[vf.Trace]] = {}
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:464:        episode: vf.Episode,
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:479:        episodes: list[vf.Episode],
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:495:    def __iter__(self) -> Iterator[vf.Episode]:
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:499:class TrainEpisodes(EpisodeCollection):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:517:        grouped: dict[str, list[vf.Episode]] = {}
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:530:class EvalEpisodes(EpisodeCollection):
+.deps/prime-rl/src/prime_rl/orchestrator/metrics.py:533:        episodes: list[vf.Episode],
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:16:``Trace[WireTaskData]`` — real ``vf.Trace``\\ s (never loose dicts) whose task
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:28:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:30:from verifiers.v1.serve import EnvClient
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:45:async def wait_for_address(path: Path, timeout: float) -> str:
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:60:class Env:
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:73:        self.tasks: Iterator[vf.Task] | None = None
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:100:        taskset = vf.load_taskset(self.config.env.taskset).select(self.config.select)
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:112:    def _sampling(self, cache_salt: str | None) -> vf.SamplingConfig:
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:116:        return vf.SamplingConfig(**sampling)
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:120:        client: vf.ClientConfig,
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:125:    ) -> vf.WireEpisode:
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:138:class TrainEnv(Env):
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:180:class EvalEnv(Env):
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:186:        self.examples: list[vf.Task] = []
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:199:class Envs(Generic[EnvT]):
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:234:class TrainEnvs(Envs[TrainEnv]):
+.deps/prime-rl/src/prime_rl/orchestrator/envs.py:261:class EvalEnvs(Envs[EvalEnv]):
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:38:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:67:class DispatcherMode(Enum):
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:75:class DispatcherMetrics:
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:116:def _validate_episode_task(episode: vf.WireEpisode, task: vf.Task) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:123:class Dispatcher:
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:593:        async def run_episode() -> vf.WireEpisode:
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:642:            episode: vf.WireEpisode = task.result()
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:659:                    error=vf.Error(
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:672:                trace.errors.append(vf.Error(type="Timeout", message=f"Trace stopped by {trace.stop_condition}"))
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:708:        episode: vf.WireEpisode,
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:715:        episode.group = vf.GroupInfo(id=str(meta.group_id))
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:720:        policy = vf.PolicySpan(start=policy_version, end=self.policy.version) if live_policy else None
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:721:        work: vf.WorkInfo = (
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:722:            vf.EvalWorkInfo(step=meta.step, policy=policy)
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:724:            else vf.TrainWorkInfo(step=meta.step, policy=policy)
+.deps/prime-rl/src/prime_rl/orchestrator/dispatcher.py:726:        run = vf.TrainRunInfo(id=self.run_id, name=self.run_name, work=work)
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/pool.py:10:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/pool.py:18:class DifficultyPoolSampler(TaskSampler):
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/pool.py:29:        tasks: Sequence[vf.Task] | Iterator[vf.Task],
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/pool.py:57:    def __next__(self) -> vf.Task:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/pool.py:66:    def observe(self, group: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:15:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:29:def _prune_zero_advantages(sample: TrainingSample) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:57:class TrainSink:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:68:        on_result: Callable[[list[vf.Episode]], bool] | None = None,
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:81:        self.pending_groups: dict[str, list[vf.Episode]] = defaultdict(list)
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:87:        self.episode_by_trace: dict[str, vf.Episode] = {}
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:115:    async def add(self, episode: vf.Episode) -> TrainBatch | None:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:200:    async def process_episode(self, episode: vf.Episode) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:300:    def _admit(self, group: list[vf.Episode]) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:303:    def _record_zero_output(self, group: list[vf.Episode], survivors: list[vf.Trace], n_owed: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:342:        traces_by_episode: dict[int, list[vf.Trace]] = defaultdict(list)
+.deps/prime-rl/src/prime_rl/orchestrator/train_sink.py:343:        selected_episodes: dict[int, vf.Episode] = {}
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:20:def _text_config(model_config: Any) -> Any:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:25:def _is_mla(config: Any) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:29:def _kv_channels(config: Any) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:33:def _qkv_projection_flops_per_token(config: Any) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:62:def _attention_flops_per_token_squared(config: Any) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:74:def _ffn_flops_per_token(hidden_size: int, ffn_hidden_size: int) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:78:def _dense_ffn_hidden_size(config: Any) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:84:def _moe_ffn_hidden_size(config: Any) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:92:def _count_dense_and_moe_layers(config: Any) -> tuple[int, int]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:114:def _packing_cost_coeffs(config: Any) -> tuple[int, int]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:133:def build_bin_cost(model_config: Any | None) -> Callable[[Sequence[int]], int]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:151:class _WeightedSet:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:169:class _KKState:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:195:def _karmarkar_karp(weights: Sequence[int], num_partitions: int) -> list[list[int]]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:212:def _partition_loads(weights: Sequence[int], partitions: list[list[int]]) -> list[int]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:216:def _refine_by_swapping(weights: Sequence[int], partitions: list[list[int]]) -> list[list[int]]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:246:def balanced_partition(weights: Sequence[int], num_partitions: int) -> list[list[int]]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:255:def _copy_routed_experts(routed_experts: RoutedExperts) -> RoutedExperts:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:263:def _routed_experts_row_size(routed_experts: RoutedExperts) -> int:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:267:def _slice_routed_experts(routed_experts: RoutedExperts, seq_len: int) -> RoutedExperts:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:276:def _pad_routed_experts(micro_batch: MicroBatch, padding_size: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:287:def _empty_sampling_mask(num_tokens: int) -> SamplingMask:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:291:def _slice_sampling_mask(sampling_mask: SamplingMask, seq_len: int) -> SamplingMask:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:299:def _pad_sampling_mask(micro_batch: MicroBatch, padding_size: int) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:309:def _truncate_mm_refs(refs: MMRefs, seq_len: int) -> tuple[int, MMRefs | None]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:322:def multimodal_sample_error(sample: TrainingSample) -> str | None:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:340:def prepare_sample(training_example: TrainingSample, seq_len: int) -> MicroBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:469:def _is_multimodal_sample(sample: MicroBatch) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:475:class _MicroBatchBin:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:525:def _materialize_bin(bin_content: _MicroBatchBin) -> MicroBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:626:def _expand_bins_by_splitting(
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:643:def packed_samples_into_micro_bs(
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:682:def _distribute_group(
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:697:def pad_micro_batch(micro_batch: MicroBatch, pad_to_multiple_of: int) -> MicroBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:748:def _assert_token_arrays_aligned(micro_batch: MicroBatch) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:796:def _make_dummy_batch(source: MicroBatch) -> MicroBatch:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:814:def _pad_group_for_distribution(group: list[MicroBatch], num_train_workers: int) -> list[MicroBatch]:
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:823:def prepare_batch(
+.deps/prime-rl/src/prime_rl/orchestrator/batch.py:865:class BatchPacker:
+.deps/prime-rl/src/prime_rl/orchestrator/algo/max_rl.py:3:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/algo/max_rl.py:9:class MaxRLAlgorithm(Algorithm):
+.deps/prime-rl/src/prime_rl/orchestrator/algo/max_rl.py:21:    async def score_group(self, episodes: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/standard.py:10:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/standard.py:15:class StandardSampler(TaskSampler):
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/standard.py:18:    def __init__(self, tasks: Sequence[vf.Task] | Iterator[vf.Task]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/standard.py:32:    def __next__(self) -> vf.Task:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/base.py:9:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/base.py:12:class TaskSampler(Iterator[vf.Task], ABC):
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/base.py:16:    def __next__(self) -> vf.Task:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/samplers/base.py:20:    def observe(self, group: list[vf.Episode]) -> None:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/base.py:7:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/base.py:10:class AdmissionGate:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/base.py:13:    def admit(self, group: list[vf.Episode]) -> bool:
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/adv.py:7:import verifiers.v1 as vf
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/adv.py:15:class AdvRangeGate(AdmissionGate):
+.deps/prime-rl/src/prime_rl/orchestrator/curriculum/gates/adv.py:25:    def admit(self, group: list[vf.Episode]) -> bool:
++zsh:1> git -C .deps/prime-rl ls-tree HEAD deps/verifiers
+160000 commit da75527ca8e9c422786e16f2cbce1095e330f8c3	deps/verifiers
++zsh:1> git -C .deps/prime-rl log -1 '--format=fuller'
+commit 083b8fe9ecead6026b33fe83053a44127ebb425c
+Author:     Florian Brand <46377542+xeophon@users.noreply.github.com>
+AuthorDate: Thu Oct 8 17:17:55 2026 -0700
+Commit:     GitHub <noreply@github.com>
+CommitDate: Thu Oct 8 17:17:55 2026 -0700
+
+    ci: reduce GPU usage and parallelize test setup (#3944)
+    
+    Reduce CI time and GPU usage by selecting the relevant test suites for
+    each PR, moving hosted eval to CPU, and running independent setup steps
+    in parallel.
+    
+    - Select GPU unit tests, SFT, RL, and hosted eval from changed paths
+    before allocating runners. Shared runtime and dependency changes retain
+    broad coverage; pushes to `main` and manual runs execute the full suite.
+    - Keep RL/SFT coverage for checkpoint converters, dashboard code, and
+    the shared dashboard smoke helper.
+    - Run `gsm8k_eval` on `ubuntu-latest` because it uses hosted inference.
+    - Run public submodule initialization and `uv` setup concurrently, then
+    wait for both before installing dependencies. Keep dependency caching
+    keyed on `uv.lock` and the five-job limit on GPU integration tests.
+    - Cancel superseded CPU and style runs on the same PR.
+    - Give the GPU workflow read-only contents access and the test selector
+    PR read access.
+    
+    <!-- CURSOR_SUMMARY -->
+    ---
+    
+    > [!NOTE]
+    > **Medium Risk**
+    > Path-based GPU job gating can skip integration coverage on PRs if
+    filters miss a dependency; full suite still runs on main and manual
+    dispatch.
+    >
+    > **Overview**
+    > **GPU CI now picks which jobs to run from the PR diff**, instead of
+    always running the full GPU unit + integration matrix on every non-draft
+    PR. A new **Select tests** job uses path filters for unit, SFT, RL, and
+    eval; pushes to `main` and `workflow_dispatch` still run everything.
+    RL/SFT integration scenarios are built dynamically (still capped at
+    `max-parallel: 5` on `prime-rl-2xh200`).
+    >
+    > **`gsm8k_eval` is split out** into a dedicated job on `ubuntu-latest`
+    (hosted inference), so it no longer consumes GPU runners. Integration
+    pytest invocations use `tests/integration/test_${{ matrix.test }}.py`
+    from the dynamic matrix rather than per-row `pytest_args`.
+    >
+    > **Setup and queueing tweaks:** submodule init and `setup-uv` run in
+    parallel in CPU/GPU jobs; CPU and style workflows cancel in-progress
+    runs per PR; GPU workflow gets `workflow_dispatch`, read-only
+    `contents`, and PR-scoped concurrency cancel. `docs/development.md`
+    documents the new triggers and runner split.
+    >
+    > <sup>Reviewed by [Cursor Bugbot](https://cursor.com/bugbot) for commit
+    20da35f30de85b2b18cf82e29598846a1228ca12. Bugbot is set up for automated
+    code reviews on this repo. Configure
+    [here](https://www.cursor.com/dashboard/bugbot).</sup>
+    <!-- /CURSOR_SUMMARY -->
++zsh:1> git -C .deps/rlm log -1 '--format=fuller'
+commit d04208afbad29ca675ab13478c40ee8bebc84bfe
+Author:     az <alex.lx.zhang@gmail.com>
+AuthorDate: Thu Sep 24 14:34:55 2026 -0400
+Commit:     GitHub <noreply@github.com>
+CommitDate: Thu Sep 24 14:34:55 2026 -0400
+
+    Update README paper.
+    
+    Updated reference to the NeurIPS 2026 paper in the README.

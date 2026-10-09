@@ -1,0 +1,65 @@
+Command: .venv/bin/python; inspect installed stdlib before category implementation
+3.12.12 (main, Jan 14 2026, 23:36:32) [Clang 21.1.4 ]
+tokenize: /Users/mukeshreddy/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/tokenize.py
+sha256=026f566ac63e60d69c8185a3880831b657accc5eac984fadf271fc99a5e5825d
+tokenize.generate_tokens(readline)
+tokenize.TokenInfo(type, string, start, end, line)
+tokenize.TokenError<class 'tokenize.TokenError'>
+token: /Users/mukeshreddy/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/token.py
+sha256=1a4d994ce9744f4bfe2d964fc24d112a1e76796a08c2e45a2d73c82a8587f922
+token.NAME1
+token.COMMENT64
+token.ERRORTOKEN66
+re: /Users/mukeshreddy/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/re/__init__.py
+sha256=8ff3c37c63b917fcf8dc8d50993a502292a3dc159e41de4f4018c72a53d1c07b
+re.compile(pattern, flags=0)
+re.finditer(pattern, string, flags=0)
+io: /Users/mukeshreddy/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/io.py
+sha256=7cec3cb8ac004058dd0a5af246e6d950fb59c7ddd0058fda48bcb3fcb98d8822
+io.StringIO(initial_value='', newline='\n')
+math: None
+math.isfinite(x, /)
+math.fsum(seq, /)
+def generate_tokens(readline):
+    """Tokenize a source reading Python code as unicode strings.
+
+    This has the same API as tokenize(), except that it expects the *readline*
+    callable to return str objects instead of bytes.
+    """
+    return _generate_tokens_from_c_tokenizer(readline, extra_tokens=True)
+
+Category mapping uses tokenize NAME/COMMENT source coordinates in Unicode characters; no tokenizer.encode calls.
+
+Command: inspect actual installed cached-tokenizer API signatures and source hashes
+transformers==5.9.0
+tokenizers==0.22.2
+PromptConfig.from_yaml(path=None)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/prompts/chat.py
+sha256=78406e5d7bbea72af378edd2a213ecb52f5d00047a5c397e9299c6bbb5d80449
+ChatRenderer.__init__(self, config, *, tokenizer=None)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/rlm_opsd/prompts/chat.py
+sha256=78406e5d7bbea72af378edd2a213ecb52f5d00047a5c397e9299c6bbb5d80449
+PreTrainedTokenizerBase.__call__(self, text: 'TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None' = None, text_pair: 'TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None' = None, text_target: 'TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None' = None, text_pair_target: 'TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None' = None, add_special_tokens: 'bool' = True, padding: 'bool | str | PaddingStrategy' = False, truncation: 'bool | str | TruncationStrategy | None' = None, max_length: 'int | None' = None, stride: 'int' = 0, is_split_into_words: 'bool' = False, pad_to_multiple_of: 'int | None' = None, padding_side: 'str | None' = None, return_tensors: 'str | TensorType | None' = None, return_token_type_ids: 'bool | None' = None, return_attention_mask: 'bool | None' = None, return_overflowing_tokens: 'bool' = False, return_special_tokens_mask: 'bool' = False, return_offsets_mapping: 'bool' = False, return_length: 'bool' = False, verbose: 'bool' = True, tokenizer_kwargs: 'dict[str, Any] | None' = None, **kwargs) -> 'BatchEncoding'
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/transformers/tokenization_utils_base.py
+sha256=c2cce6123f042052475867332cac670d245d0364a56f82a2724fa14adecbcc1d
+        return_offsets_mapping: bool = False,
+            "return_offsets_mapping": return_offsets_mapping,
+TokenizersBackend._encode_plus(self, text: str | list[str] | list[list[str]], text_pair: str | list[str] | list[list[str]] | None = None, add_special_tokens: bool = True, padding_strategy: transformers.utils.generic.PaddingStrategy = <PaddingStrategy.DO_NOT_PAD: 'do_not_pad'>, truncation_strategy: transformers.tokenization_utils_base.TruncationStrategy = <TruncationStrategy.DO_NOT_TRUNCATE: 'do_not_truncate'>, max_length: int | None = None, stride: int = 0, is_split_into_words: bool = False, pad_to_multiple_of: int | None = None, padding_side: str | None = None, return_tensors: bool | None = None, return_token_type_ids: bool | None = None, return_attention_mask: bool | None = None, return_overflowing_tokens: bool = False, return_special_tokens_mask: bool = False, return_offsets_mapping: bool = False, return_length: bool = False, verbose: bool = True, split_special_tokens: bool | None = None, **kwargs) -> transformers.tokenization_utils_base.BatchEncoding
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/transformers/tokenization_utils_tokenizers.py
+sha256=71fe603de67a75393063c2c79019c4b62a631f026b247af037ff760ca6986bca
+        return_offsets_mapping: bool = False,
+        encodings = self._tokenizer.encode_batch(
+                return_offsets_mapping=return_offsets_mapping,
+TokenizersBackend._convert_encoding(self, encoding: tokenizers.Encoding, return_token_type_ids: bool | None = None, return_attention_mask: bool | None = None, return_overflowing_tokens: bool = False, return_special_tokens_mask: bool = False, return_offsets_mapping: bool = False, return_length: bool = False, verbose: bool = True) -> tuple[dict[str, typing.Any], list[tokenizers.Encoding]]
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/transformers/tokenization_utils_tokenizers.py
+sha256=71fe603de67a75393063c2c79019c4b62a631f026b247af037ff760ca6986bca
+        return_offsets_mapping: bool = False,
+            if return_offsets_mapping:
+                encoding_dict["offset_mapping"].append(e.offsets)
+Tokenizer.encode(self, sequence, pair=None, is_pretokenized=False, add_special_tokens=True)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/tokenizers/__init__.py
+sha256=148ecb122f3fee03be9abb1fe213dd85fbc691bf2ad2b437ff531533781a6a3a
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/tokenizers/tokenizers.abi3.so
+sha256=899b244f19f1ddd6506c45ea0f7163f38952f2a552272a687a6ef4b9ddcc7327
+Source confirms return_offsets_mapping yields per-token (char_start,char_end), _convert_encoding copies e.offsets without recomputing text.
+TokenizersBackend __call__ used only to create a standalone fixture once; production category functions consume already supplied offsets.

@@ -1,0 +1,41 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+____________ test_worker_group_cleanup_is_idempotent_after_success _____________
+tests/test_harness.py:235: in test_worker_group_cleanup_is_idempotent_after_success
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_harness.py:231: in run
+    await backend._kill_worker()
+rlm_opsd/harness/sandbox.py:89: in _kill_worker
+    os.killpg(self._proc.pid, signal.SIGKILL)
+tests/test_harness.py:225: in killpg
+    raise PermissionError("process group no longer owned")
+E   PermissionError: process group no longer owned
+___________ test_resource_limit_waits_for_worker_exit_before_raising ___________
+tests/test_harness.py:264: in test_resource_limit_waits_for_worker_exit_before_raising
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_harness.py:262: in run
+    assert backend.process_returncode == -9
+E   assert None == -9
+E    +  where None = <rlm_opsd.harness.sandbox.SandboxBackend object at 0x114adf0e0>.process_returncode
+=========================== short test summary info ============================
+FAILED tests/test_harness.py::test_worker_group_cleanup_is_idempotent_after_success
+FAILED tests/test_harness.py::test_resource_limit_waits_for_worker_exit_before_raising
+2 failed, 1 passed, 27 deselected in 1.97s

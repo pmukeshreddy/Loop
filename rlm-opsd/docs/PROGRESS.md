@@ -1,0 +1,988 @@
+# Progress
+
+## M0 — setup code prepared; server execution deferred
+
+Date: 2026-10-09 UTC. Scope: M0 only.
+
+**Status:** Dependencies are pinned, the local inspection environment is installed, and API/source smoke checks pass. Full prime-rl dependencies cannot be installed on this Apple Silicon Mac. The user clarified: “write code for h100 or a100 or something will run in server later first finsh the code.” Accordingly, Linux/CUDA execution is deferred; a server installer is supplied. **The original M0 criterion of a complete, working dependency installation has not yet been demonstrated.** No later milestone was started.
+
+### Inputs read
+
+Read `AGENTS.md`, then `SPEC.md`, `TASKS.md`, `DETECTORS.md`, `student_system.md`, and `teacher_manual.md`, in that order. The supplied files are at the project root, whereas AGENTS.md describes `docs/` and `prompts/` paths. The original files were preserved. Their SHA-256 hashes are recorded in the [source catalog](logs/m0/23-source-catalog.log).
+
+Initial read-only commands included `pwd`, `rg --files`, `cat AGENTS.md`, `cat SPEC.md TASKS.md DETECTORS.md student_system.md teacher_manual.md`, `git rev-parse --show-toplevel`, and `git status --short --branch`. The containing Git repository is the parent `Refine deepswe` project; `rlm-opsd/` was untracked input. All deliverables and dependency environments were kept inside `rlm-opsd/`; no commit or push was made. Workflow planning, debugging, and verification guidance was consulted; the user's M0-only boundary governs the work.
+
+### Deliverables
+
+- [pyproject.toml](../pyproject.toml): immutable RLM, training-adapter, verifiers, prime-rl, and config-package pins; supporting source overrides.
+- [.python-version](../.python-version): Python 3.12.12, matching prime-rl's Python 3.12 requirement.
+- [VERIFIED_APIS.md](VERIFIED_APIS.md): exact source paths, public symbols, configuration keys, teacher-request location, native loss formula, and deviations from SPEC.
+- [requirements-m0-local.in](../requirements-m0-local.in), [local lock](../requirements-m0-local.lock), [overrides](../requirements-m0-overrides.txt): the reproducible macOS inspection dependency set. These do not claim GPU-runtime readiness.
+- [server additions lock](../requirements-m0-server-additions.lock): RLM/verifiers dependencies resolved for Linux x86_64, constrained to shared versions in pinned prime-rl's runtime lock. The server installer uses upstream's own frozen lock for CUDA/trainer dependencies.
+- [scripts/check_m0.py](../scripts/check_m0.py): offline imports/configuration, installed-source provenance and byte comparisons, and an actual upstream subprocess REPL smoke check. These are installation checks, not the M1 harness suite.
+- [scripts/setup_m0_server.sh](../scripts/setup_m0_server.sh): Linux x86_64 H100/A100 setup, separate `.venv-server`, frozen upstream runtime, pinned additions, dependency/import/CUDA checks, timestamped logs. No model download, SFT, rollout, or training invocation.
+- [Makefile](../Makefile): `make test`, `make check-deps`, `make setup-server`. Later-milestone targets have not been created.
+
+### What ran and what happened
+
+The logs retain failures as well as successes. Most command groups use shell tracing and `tee`, with `pipefail`; installation/verification groups use `set -e`. Exploratory search logs can contain missing-path diagnostics and are not passing installation checks.
+
+| Commands / activity | Observed result | Log |
+|---|---|---|
+| `date -u`, `uname -sm`, `uv --version`, `python3 --version`, `git status`, `docker info` | Darwin arm64; system Python 3.13.5; uv 0.9.26; Docker daemon unavailable | [00 host](logs/m0/00-host.log) |
+| `git clone --depth 1` for the three upstream repositories | Clones created in `.deps/` | [01 clones](logs/m0/01-clone.log) |
+| `git rev-parse HEAD`, `cat` upstream project metadata | Initial moving-branch commits/requirements recorded; these were candidates, not all final pins | [02 metadata](logs/m0/02-upstream-metadata.log) |
+| `rg`, `cat`, `git ls-tree`, `git log` | Current API incompatibility identified | [03 discovery](logs/m0/03-api-discovery.log) |
+| `git fetch --unshallow --tags`, history searches for `teacher_tau` | Located the change that replaced the required loss schema | [04 prime history](logs/m0/04-prime-history.log) |
+| RLM history fetch/search for adapter and finish protocol | Training adapter was introduced after answer-dictionary protocol change | [05 RLM history](logs/m0/05-rlm-history.log) |
+| `git show eaf95997^:pyproject.toml`, `git rev-parse`, lock/config inspection | Selected prime-rl `09e11c...`; one exploratory config path was absent because configs are a separate subpackage | [06 selection](logs/m0/06-pin-candidate.log) |
+| Checkout prime-rl, fetch/checkout its verifiers pin; `uv venv --python 3.12 .venv` | Exact checkouts and Python 3.12.12 local environment created | [07 pins/environment](logs/m0/07-selected-pins.log) |
+| Prime config/teacher/loss searches and source reads | Teacher helper located in `orchestrator/utils.py`; guessed `teacher.py` does not exist | [08 prime source](logs/m0/08-prime-source.log) |
+| `uv pip install --python .venv/bin/python -r pyproject.toml` with initial Git URLs | Failed: automatic recursive Git fetch tried upstream private/SSH submodules | [09 Git install failure](logs/m0/09-full-install.log) |
+| RLM constructors/parsing/backend source reads | Inference and training interfaces recorded | [10 RLM source](logs/m0/10-rlm-source.log) |
+| Same full install using exact-commit prime-rl archives | Failed: vLLM dependency wheels unavailable for macOS arm64 | [11 platform blocker](logs/m0/11-full-install-archive.log) |
+| verifiers environment and training-adapter source reads | Loader, lifecycle, scoring, state/token interfaces recorded | [12 environment source](logs/m0/12-environment-source.log) |
+| `uv pip compile --exclude-newer 2026-05-28` for RLM/adapter/verifiers; install resulting lock | Core dependencies installed. Temporary core lock subsequently superseded by the checked-in local lock | [13 core install](logs/m0/13-core-install.log) |
+| Prompt builder, worker, proxy, and environment-loader source reads | Protocol/prompt/sandbox differences recorded; no implementation changes | [14 protocol](logs/m0/14-protocol-source.log) |
+| Compile/install local config dependency set; `uv pip check` before expansion | Core check passed; config wheel build failed because uv traversed absent archive workspace members | [15 config install](logs/m0/15-local-config-install.log) |
+| Import `rlm`, `rlm_train`, `verifiers`; assert adapter subclass | Passed | [16 imports](logs/m0/16-core-imports.log) |
+| Retry config build with `uv pip install --no-sources` | Same missing-workspace-member build failure; flag did not fix it | [17 failed flag](logs/m0/17-local-install-no-sources.log) |
+| Install pip 25.3; `pip install --no-deps -r requirements-m0-local.lock`; `uv pip check` | pip built the archive correctly; check exposed renderers archive's `0.0.0` fallback version | [18 build/version finding](logs/m0/18-local-install-pip.log) |
+| Pin renderers via Git at the same commit; regenerate local lock; pip install; dependency check | VCS metadata restored renderers `0.1.8.dev4`; **all local inspection dependencies compatible** before adding the prime-rl source wheel | [19 corrected local install](logs/m0/19-local-install-vcs-version.log) |
+| `pip install --no-deps` pinned prime-rl archive; `make test` | Source wheel installed; 3 offline smoke tests passed, with installed Python bytes matching all five pinned distributions | [20 source install/smoke](logs/m0/20-prime-source-and-smoke.log) |
+| `make check-deps` after prime-rl source install | Failed: 18 missing runtime dependencies; intentionally reported, not suppressed | [21 full dependency check](logs/m0/21-final-dependency-check.log) |
+| `.venv/bin/rl --help` | Failed at import: missing `pynvml`; trainer CLI not runtime verified | [22 CLI](logs/m0/22-cli-check.log) |
+| AST symbol/signature catalog, file/input hashes, metadata provenance | Exact audited paths and symbols recorded | [23 catalog](logs/m0/23-source-catalog.log) |
+| Public server submodule reachability; `uvx --from uv==0.11.1 uv --version` | Public repository accessible; selected uv version executed | [24 prerequisites](logs/m0/24-server-prerequisites.log) |
+| Initialize public workspace submodules with command-scoped HTTPS rewrite; `uv export --frozen --no-dev --extra flash-attn` | Pinned upstream runtime lock exported successfully; no CUDA packages installed | [25 frozen export](logs/m0/25-server-lock-export.log) |
+| Extract shared upstream versions; `uv pip compile --python-version 3.12 --python-platform x86_64-manylinux_2_34 ...`; `bash -n` | Linux additions resolved against 102 common upstream constraints; shell syntax passed | [26 Linux resolution](logs/m0/26-server-additions-check.log) |
+| `bash -n`, execute installer on Mac and assert rejection, `make test` | Syntax passed; unsupported host rejected with exit 2 before installation; 3 local smoke tests passed | [27 final local checks](logs/m0/27-final-local-checks.log) |
+| Compare primary pins across manifests/locks, check local documentation links, parse Python, inspect M0 scope, `git diff --check` | Pin/link/syntax/scope checks passed. Git whitespace check ran; project files remain untracked in the parent repository | [28 artifact review](logs/m0/28-artifact-review.log) |
+
+### Reproduce local inspection
+
+Run from `rlm-opsd/`. A clean machine also needs the `.deps` checkouts at the commits in VERIFIED_APIS.md for source-byte comparison; clone without recursive submodules and check out each exact commit. The server script automates this for its supported platform.
+
+```bash
+uv venv --python 3.12.12 .venv
+uv pip install --python .venv/bin/python 'pip==25.3'
+.venv/bin/python -m pip install --no-deps -r requirements-m0-local.lock
+uv pip check --python .venv/bin/python
+.venv/bin/python -m pip install --no-deps \
+  'prime-rl @ https://github.com/PrimeIntellect-ai/prime-rl/archive/09e11c7527a242b9f150c7c4c71b1b96da66cb75.tar.gz'
+make test
+make check-deps
+```
+
+The first `--no-deps` installs an already resolved complete **inspection** lock; its closure was checked successfully. The second deliberately installs only the trainer's source wheel. Consequently, the final `make check-deps` fails on this Mac and is **not** an expected success criterion for the inspection subset. No dependency failure is hidden by the smoke suite.
+
+### Run later on the GPU server
+
+Target: Linux x86_64, glibc compatible with the pinned `manylinux_2_34` vLLM wheel, an A100/H100-class NVIDIA GPU, and a driver compatible with the pinned CUDA artifacts. `git`, `uvx`, and `nvidia-smi` must be available. CUDA extension builds may require the matching CUDA development toolchain. The installation uses upstream's locked torch/vLLM/FlashAttention versions rather than unpinned latest packages.
+
+```bash
+cd rlm-opsd
+make setup-server
+```
+
+The script installs into `.venv-server`, retains the upstream runtime versions while adding the checked-in RLM lock, verifies the pinned installed sources, runs `rl --help`, and checks CUDA/FlashAttention/vLLM imports. It writes `docs/logs/m0-server/<UTC timestamp>/setup.log`, source/requirement records, runtime constraints, and final installed packages. It exits on any failure. It does not start training or choose model/harness/gate settings. Invoke the server interpreter directly afterward; an unrelated `uv sync` could replace the deliberately combined environment.
+
+**Not run:** Linux/CUDA installation, A100/H100 imports or kernels, model inference, teacher scoring, numerical loss checks, training, evaluations, or any M1–M9 work. Successful frozen export and cross-platform dependency resolution are not GPU execution. Close the original full-install criterion only after the server installer and its checks actually pass.
+
+### Decisions and remaining work
+
+The latest upstream APIs do not match this spec, so historical prime-rl/verifiers pins preserve the required adapter/loss surface. RLM's training adapter still needs later project-specific finish-protocol, metadata, prompt, frozen-subcall, and budget adaptations; these are documented, not built. Native prime-rl teacher scoring and the sampled-token loss were inspected; no teacher-context hook or Mode B loss was implemented. The user explicitly deferred server execution, so there is no pending request for GPU-host credentials and work stops at M0 setup.
+## M1 — harness complete
+
+Date: 2026-10-09. Scope: SPEC §2 only, following the user's authorization to
+implement M1 and stop. **Status: complete.** The final `make test` passed all
+3 M0 source/API smoke checks and 31 M1 tests; shell syntax and Python compilation
+also passed. See the [final executed log](logs/m1/13-final-tests.log). One
+upstream `importlib.abc.Traversable` deprecation warning remains visible; no test
+was skipped, marked xfail, or weakened to obtain a pass.
+
+### Inputs and scope
+
+Read `AGENTS.md` and every listed input before implementation: the supplied root
+`SPEC.md`, `TASKS.md`, `DETECTORS.md`, `student_system.md`, `teacher_manual.md`.
+The canonical `docs/` and `prompts/` paths now link to those originals, with byte
+equality and hashes checked in [09](logs/m1/09-layout-and-install.log). The
+original content and M0 dependency pins were preserved. No worktree, commit,
+push, model download, or external model request was made.
+
+The user's M1-only request and existing specification supplied the implementation
+scope. Test-driven development, debugging, and verification guidance were used;
+the [implementation plan](superpowers/plans/2026-10-09-m1.md) records the design.
+Initial read-only inspection used `pwd`, `rg --files`, `cat`/`sed` on the guidance,
+source and manifests, `git status`, and `rg` for pinned symbols. A guessed
+`verifiers/utils/decorators.py` path did not exist; the actual file is
+`verifiers/decorators.py`, captured in the source catalog below.
+
+### Built
+
+- [rlm_opsd/harness](../rlm_opsd/harness): a reference-adapter subclass and real
+  subprocess REPL; metadata-only initialization; persistent variables/function
+  globals; code extraction; bounded combined stdout/stderr with full-length
+  notices and tracebacks; external `FINAL`/`FINAL_VAR`; missing-variable recovery
+  and ignored-suffix logging.
+- [configs/harness.yaml](../configs/harness.yaml): root token/turn budgets,
+  subcall count/size/concurrency/timeouts, recursion opt-in/depth, output and
+  wall/memory/CPU limits. Operational defaults are adjustable; no gate or exit
+  thresholds were invented.
+- Frozen-model subcalls through the pinned localhost proxy and verifiers client,
+  with request logging, no root-client fallback, shared concurrency/count budgets,
+  and optional child REPL recursion. Local HTTP tests exercise the actual client
+  wire serialization; the server's actual frozen weights are an operator setup
+  requirement, not something a local test can establish.
+- Atomic JSON trajectories on success, caps, errors, and cancellation. Full
+  provider completion IDs are copied unchanged, even when verifiers clips its
+  separate training token representation. Provider reasoning fields remain in
+  the next root request. No token-alignment builder was implemented.
+- [Tests](../tests/test_harness.py), [verifiers/HTTP integration](../tests/test_verifiers_env.py),
+  and [server manifest regression](../tests/test_setup_manifest.py). Tests use
+  deterministic model transports and actual workers, not a simulated REPL.
+- [HARNESS.md](HARNESS.md) for usage, inputs, lifecycle and limitations;
+  [VERIFIED_APIS.md](VERIFIED_APIS.md) for new exact source interfaces;
+  [third-party notice](../THIRD_PARTY_NOTICES.md) for the adapted RLM code.
+- [requirements-m1.txt](../requirements-m1.txt) and explicit support pins in
+  `pyproject.toml`; server setup installs them under its runtime constraints.
+  M0 provenance checks now also verify exact-version support packages while
+  retaining every original source-byte assertion. `make test` runs both suites;
+  `make test-m1` runs the harness suite alone.
+
+### Commands and outcomes
+
+Commands ran from `rlm-opsd/` with `.venv/bin/python`. Failed runs were retained.
+The test sources were written before the initial red run and implementation;
+additional regressions were run failing before their corresponding fixes.
+
+| Commands / activity | Observed result | Log |
+|---|---|---|
+| Read pinned runtime versions via `tomllib`; `make test` before M1 | M0's 3 checks passed; selected support versions match the pinned server lock | [00 baseline](logs/m1/00-baseline.log) |
+| `python -m pytest tests -q --tb=short`, before implementation | 19 tests failed because `rlm_opsd` did not exist | [01 red contracts](logs/m1/01-red-contracts.log) |
+| `uv pip install --python .venv/bin/python psutil==7.2.2`; inspect installed method signatures | Installed exact support dependency; verified resource-monitoring interface | [02 dependency](logs/m1/02-resource-dependency.log) |
+| Same pytest command after initial implementation | 17 passed, 2 failed: fixture responses omitted required pinned verifiers fields | [03 implementation](logs/m1/03-first-implementation.log) |
+| Correct fixtures to construct valid `Response`/`ResponseMessage`; rerun pytest | 19 passed; assertions unchanged | [04 fixture correction](logs/m1/04-correct-response-fixtures.log) |
+| Add timeout, recursion/depth, persistent function globals/deletion, child cleanup, parser and real HTTP loader cases; run pytest | 28 passed, 1 failed: frozen-client config dict was not resolved into a client | [05 expanded contracts](logs/m1/05-expanded-contracts.log) |
+| Resolve client config through pinned API; `pytest tests/test_verifiers_env.py` | HTTP subcall succeeded; remaining assertion exposed dropped reasoning in next root request | [06 HTTP integration](logs/m1/06-http-client-integration.log) |
+| Preserve original message fields; run full pytest suite | 29 passed | [07 contracts](logs/m1/07-complete-contracts.log) |
+| Add raw-token regression with `max_seq_len` clipping; run integration tests | Regression failed: JSON had clipped training IDs instead of full provider IDs | [08 token regression](logs/m1/08-raw-token-regression.log) |
+| Create canonical input symlinks, assert byte equality, hash inputs; install `requirements-m1.txt`; `bash -n` | Links/versions/shell syntax verified | [09 layout/install](logs/m1/09-layout-and-install.log) |
+| Copy IDs directly from `response.message.tokens`; rerun integration tests | 3 integration cases passed, including clipped training representation | [10 token fix](logs/m1/10-original-token-ids.log) |
+| AST/signature and SHA-256 catalog of pinned source and installed support APIs; package-version inspection | Exact paths, signatures and installed versions recorded | [11 source catalog](logs/m1/11-api-source-catalog.log) |
+| Run M0 checks and new server-manifest export regression after adding version pins | Both exposed the old assumption that every dependency was a source URL | [12 manifest regression](logs/m1/12-manifest-regression.log) |
+| Support exact-version requirements without removing source checks; `make test`; `bash -n scripts/setup_m0_server.sh`; `python -m compileall -q rlm_opsd tests scripts/check_m0.py` | All 3 M0 checks and 31 M1 tests passed; shell/Python checks passed | [13 final tests](logs/m1/13-final-tests.log) |
+| Documentation-link, whitespace, scope, original-input and artifact-hash review; `git diff --check` / `git status` | Final local artifact review (project remains untracked in parent repository) | [14 artifact review](logs/m1/14-artifact-review.log) |
+
+### Verification boundary and stop
+
+Local tests exercised actual wall-time, cumulative CPU and resident-memory
+termination, child-process cleanup, last-turn execution, metadata/prefix privacy,
+stdout/stderr/truncation, finish parsing, subcall limits/concurrency/timeouts,
+recursion/depth, cancellation, and serialized schema/IDs. The process-group and
+sampled resource watchdogs are **resource containment, not a hostile-code security
+sandbox**; full semantics and sampling limitations are in HARNESS.md.
+
+**Not run:** the Linux-only address-space backstop, CUDA installation/kernels,
+A100/H100 model inference, training, teacher evaluation, or other milestones.
+The user's earlier deferral of GPU-server execution still applies. M0's known
+local trainer-runtime dependency gap is unchanged; successful harness tests do
+not establish a working macOS trainer. M2–M9 were not started. Work stops at M1.
+
+## M2 — task implementation complete; full held-out certification pending
+
+Date: 2026-10-09. Scope: M2 / TASKS.md only. The milestone's code and local
+acceptance checks are complete: deterministic generators, independent answer
+verifiers, a materialized manifest, and an executed decontamination pass. The
+pass covers only the public query artifact actually imported. **The generated
+pool is inspection-only until complete reserved benchmark queries and source
+documents are imported and decontamination reruns.** The normal train/dev loader
+rejects this pool rather than claiming full coverage.
+
+The [full suite](logs/m2/14-full-suite.log) passed 3 M0 smoke checks and 92 pytest
+tests (31 M1 + 61 M2); Python compilation passed. The existing upstream
+`importlib.abc.Traversable` deprecation warning remains visible. The
+[generation run](logs/m2/12-generation-and-decontamination.log) wrote and
+independently reverified 112 tasks. These are generator/oracle results, not model
+accuracy results.
+
+### Inputs and implementation
+
+Read AGENTS.md and its listed documents in order, using the canonical docs and
+prompt links. Original input hashes were rechecked in the
+[pool audit](logs/m2/13-materialized-pool-audit.log). The user confirmed there are
+no local reserved benchmark snapshots/indexes. Public source discovery located
+and pinned classification data and benchmark schemas; only the explicitly
+listed artifacts were downloaded. No substitute dataset was silently used for
+a missing benchmark.
+
+The user's specification and M2-only authorization define the scope. Planning,
+test-driven development, debugging and verification guidance were used; the
+[implementation plan](superpowers/plans/2026-10-09-m2.md) records the sequence.
+The initial tests ran failing before implementation. Added regression tests also
+ran failing before their corresponding fixes. No tests were skipped, marked
+xfail, or weakened to get a passing result.
+
+- [rlm_opsd/tasks](../rlm_opsd/tasks): all six deterministic task families,
+  lossless encodings, source provenance, offline independent verifiers, real
+  process-pool generation, atomic manifest/context writes, explicit split
+  loading and answer-free OPSD records.
+- [configs/tasks.yaml](../configs/tasks.yaml): source URLs/revisions/SHA-256,
+  family weights, sizes, structures, split counts, seed and data-filter settings.
+  No new library dependencies or changes to M0/M1 dependency pins.
+- Strict JSON/JSONL held-out adapters for S-NIAH, BrowseComp-Plus 1K docs,
+  OOLONG `trec_coarse`, OOLONG-Pairs, and LongBench-v2 CodeQA. These return only
+  `eval_heldout` tasks. Complete benchmark imports remain unrun; adapter tests
+  use small labelled fixtures, not claimed benchmark samples.
+- Decontamination by normalized exact/near query and shared source identity or
+  content; per-rule/per-split reporting; missing coverage, manifest changes,
+  context corruption, duplicate IDs and path escape guards.
+- [Task tests](../tests/test_tasks.py), [pipeline tests](../tests/test_task_pipeline.py),
+  [held-out tests](../tests/test_heldout_tasks.py), and [CLI tests](../tests/test_task_cli.py).
+  Serial/parallel manifests are compared byte-for-byte; known-answer fixtures
+  exercise every oracle and all decontamination rules, including both splits.
+- [TASK_PIPELINE.md](TASK_PIPELINE.md) documents reproduction, configuration,
+  data shapes, required reserved exports and coverage limits.
+  [VERIFIED_APIS.md](VERIFIED_APIS.md) records exact entry points and inspected
+  schemas. [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) attributes BANKING77.
+- `make test-m2`, `make tasks`, `make tasks-prepare`, and `make tasks-verify`.
+  `make test-m1` now explicitly selects its original harness files;
+  `make test` runs all milestones' tests. Generated context files are ignored
+  by Git; the manifest and reports are retained.
+
+### Commands and observed outcomes
+
+Commands ran from `rlm-opsd/` with `.venv/bin/python`. Logs preserve red runs and
+failures. Exploratory reads included `rg`, `cat`/`sed`, `git status`, primary
+source/schema browsing, and GitHub/Hugging Face metadata requests. Shell command
+groups used tracing and `pipefail`; successful build/check groups used `set -e`.
+
+| Commands / activity | Observed result | Log |
+|---|---|---|
+| `make test` before M2 | 3 M0 checks and 31 M1 tests passed | [00 baseline](logs/m2/00-baseline.log) |
+| Python `urllib` requests to primary GitHub/HF metadata | Exact candidate dataset revisions and schema/file listings captured | [01 discovery](logs/m2/01-public-source-discovery.log) |
+| Download exact-revision BANKING77 CSVs/license, OOLONG-Pairs templates, BrowseComp/LongBench READMEs; compute SHA-256 | Public files pinned and cached; sizes/hashes logged | [02 source snapshots](logs/m2/02-source-snapshots.log) |
+| `pytest tests/test_tasks.py tests/test_task_pipeline.py tests/test_heldout_tasks.py -q --tb=short` before implementation | 54 failures: task package absent | [03 red contracts](logs/m2/03-red-contracts.log) |
+| `pytest tests/test_tasks.py -q --tb=short` after generator/oracle implementation | 45 passed | [04 generators](logs/m2/04-generators.log) |
+| Import actual BANKING77 CSV with default ambiguity rejection | Failed on conflicting normalized-text labels, exposing real source ambiguity | [05 import finding](logs/m2/05-classification-import.log) |
+| `pytest tests/test_heldout_tasks.py tests/test_task_pipeline.py -q --tb=short` | 7 passed, 2 failed because build module was still absent | [06 partial implementation](logs/m2/06-heldout-and-decontam.log) |
+| Add ambiguous-source regression; `pytest tests/test_tasks.py -k banking -q --tb=short` | Failed before explicit drop-policy support existed | [07 red ambiguity](logs/m2/07-ambiguous-source-red.log) |
+| Implement audited ambiguity policy and build pipeline; run the three initial test files | 55 passed, including actual subprocess parallelism | [08 pipeline](logs/m2/08-pipeline-implementation.log) |
+| Write CLI/config tests; `pytest tests/test_task_cli.py -q --tb=short` | 2 failed, 1 passed; missing CLI and config | [09 CLI red](logs/m2/09-cli-red.log) |
+| Implement CLI/config; run all four M2 test files | 58 passed | [10 CLI green](logs/m2/10-cli-and-pipeline.log) |
+| Add JSON/JSONL importer and release-guard regressions; run held-out/pipeline files | 1 failed, 11 passed; snapshot loader absent | [11 importer red](logs/m2/11-importer-and-release-red.log) |
+| Implement importer; `make test-m2`; `make tasks`; `make tasks-verify` | 61 passed; 112 generated, verified and written; all 112 reverified from disk; partial query decontamination ran | [12 real pool](logs/m2/12-generation-and-decontamination.log) |
+| Audit manifest grid/counts/source partitions; exercise normal training loader; hash input/artifacts | Actual counts below; loader rejects incomplete coverage; original inputs preserved | [13 pool audit](logs/m2/13-materialized-pool-audit.log) |
+| `make test`; `python -m compileall -q rlm_opsd tests` | 3 M0 checks and 92 pytest tests passed; compilation passed | [14 full suite](logs/m2/14-full-suite.log) |
+| Pin/read RULER schema source and OOLONG cards; AST signature/file hash catalog | Exact inspected source revisions, paths, fields and local entry points recorded | [15 source catalog](logs/m2/15-source-catalog.log) |
+| Check local doc links, whitespace, scope, source overlap, artifact hashes and Git state | Final artifact review, with results retained | [16 artifact review](logs/m2/16-artifact-review.log) |
+
+### Actual pool and eligible grid
+
+Source: [materialized pool audit](logs/m2/13-materialized-pool-audit.log),
+[manifest](../data/manifest.jsonl), and [build report](../data/build-report.json).
+The two splits have identical eligible-cell counts and distinct derived seeds.
+Each table row below gives **counts per split**, for both `train` and
+`dev_behavior`; `str/list` is shown within each cell.
+
+| Family | 8,192 chars | 32,768 | 131,072 | 524,288 | 2,097,152 | 8,388,608 | Total per split |
+|---|---|---|---|---|---|---|---|
+| sparse_retrieval | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 12 |
+| multi_hop | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 12 |
+| linear_aggregation | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 12 |
+| quadratic_pairs | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 12 |
+| repo_qa | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 0/1 | 6 |
+| small_context_control | 1/1 | excluded | excluded | excluded | excluded | excluded | 2 |
+
+Total: **56 train + 56 dev = 112 tasks**, **217,042,469 actual context chars**.
+Structures: 50 string and 62 list contexts. Encodings: 21 plain, 21 JSONL,
+19 CSV, 19 logs and 32 Markdown. Repo QA's file-list semantics exclude string
+cells; small controls exclude buckets at or above the configured direct-read
+limit. These exclusions are recorded explicitly in the build report. All other
+eligible family/bucket/structure cells are represented. No eval benchmark was
+inserted into either generated split. [Count evidence](logs/m2/13-materialized-pool-audit.log).
+
+BANKING77 source import counts, from the [executed source preparation](logs/m2/12-generation-and-decontamination.log):
+
+| Upstream partition → project split | Raw rows | Ambiguous rows removed | Duplicate rows removed | Retained |
+|---|---|---|---|---|
+| train → train | 10,003 | 2 | 30 | 9,971 |
+| test → dev_behavior | 3,080 | 2 | 3 | 3,075 |
+
+The full upstream train/test partitions share 25 normalized utterances
+([audit](logs/m2/13-materialized-pool-audit.log)). The configured selected-label
+pool actually materialized here shares **zero** source content hashes between
+its train/dev tasks ([final artifact audit](logs/m2/16-artifact-review.log)).
+This result applies to this pool; broader future label selections must recheck
+train/dev source overlap. Neither partition uses TREC.
+
+### Decontamination result and verification boundary
+
+The actual held-out index contains 20 public OOLONG-Pairs question templates.
+The [decontamination report](../data/decontamination.json) records 112 inputs,
+112 retained, and 0 dropped by each of `exact_query`, `near_query`,
+`shared_source`, and `shared_content`.
+[Executed evidence](logs/m2/12-generation-and-decontamination.log).
+
+**Those source-overlap zeros do not certify source disjointness:** the downloaded
+template artifact contains no benchmark source contexts. Full query/source
+coverage is missing for all five named benchmark sets, including full
+OOLONG-Pairs contexts. Accordingly, `coverage_complete=false`, all missing
+benchmarks are named in the report, and normal train/dev loading fails with
+`heldout coverage is incomplete; pool is inspection-only`. Positive coverage
+and drop-rule behavior were tested with explicit fixtures, not fabricated full
+benchmark data. Complete reserved exports and a fresh decontamination build are
+still required before using this pool for training or teacher-gate evaluation.
+
+**Not run:** complete benchmark import/decontamination, benchmark model
+evaluation, A100/H100 inference, CUDA/trainer installation, teacher gate, OPSD,
+or GRPO. The earlier server-execution deferral still applies. No prompts,
+detectors, training hooks or losses were implemented. M3–M9 were not started;
+work stops at M2.
+
+## M3 — prompts complete
+
+Date: 2026-10-09. Scope: SPEC §3 only. **Status: complete.** Student/teacher
+builders, pinned chat prefixes, token-ID suffix alignment, manual versioning and
+harness integration are implemented. The final run passed **3 M0 smoke checks
+and 120 pytest tests**, including **28 new M3 cases**, plus Python compilation
+and real-tokenizer checks in both thinking modes.
+[Final executed log](logs/m3/09-final-tests.log).
+
+### Inputs, decisions and scope
+
+Read AGENTS.md and every listed source in order: SPEC, TASKS, DETECTORS, student
+system and teacher manual. Canonical source links and original bytes are
+preserved. The user selected **Qwen/Qwen3.5-27B** after the model question.
+Its tokenizer/template revision is
+`fc05daec18b0a78c049392ed2e771dde82bdf654`; exact artifact checksums and download
+URLs are recorded in [01](logs/m3/01-tokenizer-source.log) and
+[VERIFIED_APIS.md](VERIFIED_APIS.md). No model weights were downloaded.
+
+The existing specification supplied the design and the user authorized its
+execution. Planning, test-driven development, debugging, verification and a
+separate read-only code review were used. The
+[implementation plan](superpowers/plans/2026-10-09-m3.md) records scope and test
+focus. Work stayed in the shared project, which remains untracked in the parent
+repository; no branch, commit, push or external publication was made.
+
+Thinking is explicitly enabled by default for both prefixes, with one shared
+configurable Boolean. The real-tokenizer smoke also exercises disabled thinking.
+The teacher's privileged manual addition depends only on operating limits. The
+shared API block still contains permitted metadata, and both user messages hold
+the identical query, as SPEC §3 defines. There is no task answer input to the
+builder; fixed illustrative code/query text from the supplied manual is retained.
+
+### Built
+
+- [rlm_opsd/prompts](../rlm_opsd/prompts): one-pass named-placeholder rendering,
+  checksum-verified prompt sources, exact x/y* message builders, one pinned chat
+  renderer, and `build_teacher_sequence` with exact prefix validation and suffix
+  equality assertion. The suffix helper has no tokenizer dependency.
+- [configs/prompts.yaml](../configs/prompts.yaml): exact model revision,
+  template/tokenizer/config hashes and thinking setting. The unmodified chat
+  template is [vendored](../prompts/chat_template.jinja), with its
+  [source license](../prompts/QWEN_LICENSE). Tokenizer JSONs are ignored local
+  cache artifacts. No new library dependency or M0 pin change.
+- [Version registry](../prompts/versions.json), immutable
+  [manual_v1](../prompts/versions/manual_v1.md) snapshot, and
+  [manual changelog](../prompts/CHANGELOG.md). Unregistered versions, altered
+  source bytes and task-metadata placeholders in the manual fail validation.
+- Harness integration: default Episode/Env messages now use the authoritative
+  files; the user message is query-only and metadata is in the shared system
+  API. Logs identify `manual_v1`. Custom system overrides require explicit
+  `custom_...` provenance. Recursive roots inherit the manual and thinking
+  configuration and preserve provider reasoning on subsequent turns.
+- Chunk-size default derives from a custom sub-call limit when omitted; explicit
+  chunk sizes cannot exceed the limit. Existing configured defaults remain.
+- Root requests carry the configured `chat_template_kwargs.enable_thinking`;
+  conflicting thinking settings and request-level chat-template overrides fail.
+- [M3 tests](../tests/test_prompts.py), strengthened existing harness/rollout
+  assertions, `make test-m3`, `make prompts-prepare`, and `make prompts-check`.
+  [PROMPTS.md](PROMPTS.md) documents usage and boundaries; the harness guide and
+  verified API catalog are updated.
+
+### Commands and outcomes
+
+All commands ran from `rlm-opsd/` with `.venv/bin/python`. Initial tests were
+written before implementation, and review regressions failed before their fixes.
+Failed logs were retained. No skip, xfail or weakened suffix/privacy assertion
+was used to obtain a pass.
+
+| Commands / activity | Observed result | Log |
+|---|---|---|
+| `pwd`, `rg --files`, ordered `cat` reads, pinned harness/client/rendering source inspection, `git status` | M3 contract and existing integration points located; project remains untracked in parent Git repository | Source/API findings retained in [07](logs/m3/07-api-catalog.log) |
+| `make test` before M3 | 3 M0 checks and 92 pytest tests passed. The shell wrapper then exited 1 because `status` is read-only in zsh; subsequent wrappers use `task_exit_code`. No test failed. | [00 baseline](logs/m3/00-baseline.log) |
+| Primary Qwen model/template lookup; HF metadata and exact-revision tokenizer/template/license downloads; SHA-256 and installed API inspection | User-selected source pinned; tokenizer-only artifacts cached | [01 source](logs/m3/01-tokenizer-source.log) |
+| `pytest tests/test_prompts.py -q --tb=short` before implementation | 21 failed: absent prompt package and invalid chunk-size default behavior | [02 red contracts](logs/m3/02-red-contracts.log) |
+| Implement builders/alignment/config; rerun M3 file | 17 passed, 4 failed: harness not connected; test fixture assumed trailing system whitespace survives the Qwen template | [03 first implementation](logs/m3/03-builders-and-alignment.log) |
+| Read the pinned template's `\|trim` branches; correct exact fixture expectation; add CLI/harness/thinking tests; run M3 and verifiers files | 20 passed, 7 failed: expected missing CLI, custom provenance checks and harness/request integration | [04 integration red](logs/m3/04-harness-and-cli-red.log) |
+| Implement CLI and harness paths; `pytest tests/test_prompts.py tests/test_harness.py tests/test_verifiers_env.py -q --tb=short` | 54 passed; existing upstream warning remains | [05 integration](logs/m3/05-prompt-harness-integration.log) |
+| `make prompts-prepare`; `make prompts-check` | Cached artifact hashes verified; actual Qwen tokenizer suffix equality passed with thinking on/off | [06 real tokenizer](logs/m3/06-real-qwen-tokenizer.log) |
+| Inspect installed tokenizer signatures/source; fetch server-pinned Transformers `tokenization_utils_base.py`; catalog pinned client/server keys, project signatures and hashes | Source-verified local/server template API contracts; no server execution | [07 catalog](logs/m3/07-api-catalog.log) |
+| Separate read-only review of SPEC/plan and M3 files | Found recursive thinking loss, direct-constructor source-check bypass, and request template override gap | [10 review record](logs/m3/10-review.md) |
+| Add regressions; `pytest tests/test_prompts.py -k 'forged or recursive_roots or override_pinned' -q --tb=short` | 4 failures reproduced before fixes | [08 review red](logs/m3/08-review-regressions-red.log) |
+| Fix validated builder construction, recursive settings/reasoning and override rejection; `make test`; `python -m compileall -q rlm_opsd tests`; `make prompts-check` | 3 M0 + 120 pytest tests passed; compilation and both real tokenizer checks passed | [09 final verification](logs/m3/09-final-tests.log) |
+| Documentation links, source/input/artifact hashes, pin equality, whitespace and milestone-scope audit; `git diff --check`, `git status` | Final artifact results retained | [11 artifact review](logs/m3/11-artifact-review.log) |
+
+### Token alignment evidence
+
+The fixture regression uses a real BPE tokenizer and an intentionally unmerged
+token pair: decoding/re-encoding it changes its segmentation. Alignment preserves
+those original IDs plus role markers, an observation and a later assistant turn.
+Other tests reject a wrong/truncated prefix and invalid IDs, check empty suffixes,
+and verify that inputs are not mutated. See the
+[passing final suite](logs/m3/09-final-tests.log).
+
+The real Qwen smoke produced the following counts for its fixed synthetic
+query/context, from [09](logs/m3/09-final-tests.log):
+
+| Mode | Student prefix tokens | Teacher prefix tokens | Copied suffix tokens | Exact suffix equality |
+|---|---|---|---|---|
+| Thinking on | 205 | 2,125 | 31 | true |
+| Thinking off | 207 | 2,127 | 31 | true |
+
+These are tokenizer results, not model outputs or quality measurements. The
+suffix checksum was identical in both runs. The log visibly reports that PyTorch
+is absent; tokenizer-only execution succeeds without it. The existing upstream
+`importlib.abc.Traversable` deprecation warning is unchanged.
+
+### Review closure and stop
+
+Every review finding was addressed with a failing regression followed by the
+passing full suite. The template override gap was treated as a correctness issue
+because a local prefix could otherwise disagree with a server request. No
+reviewed implementation issue remains deferred. The review excluded unfinished
+documentation (subsequently completed/audited), later milestones, GPU/model
+behavior and actual server parity; those boundaries are recorded here.
+
+**Not run:** model-weight loading, actual Qwen inference, A100/H100 execution,
+remote server/tokenizer parity, teacher gate, training, or any later milestone.
+The M6 teacher-request hook and logprob-position mapping are not implemented.
+This milestone provides the token-ID prefix replacement primitive they will use.
+The M2 inspection-only pool and incomplete held-out coverage are unchanged.
+M4–M9 were not started. Work stops at M3.
+
+## M4 — behavior detectors, offline reports and token categories (2026-10-09)
+
+**Complete.** M4 only, per the user's explicit milestone boundary. Re-read
+AGENTS and its listed source documents; used test-first implementation and
+separate review. The plan is
+[recorded here](superpowers/plans/2026-10-09-m4.md).
+
+### Built
+
+- [D1–D19 analysis](../rlm_opsd/detectors/evaluate.py) over
+  [bounded AST facts](../rlm_opsd/detectors/facts.py): alias/provenance tracking,
+  search/window/chaining facts, actual subcall statistics, storage/reuse,
+  finish/error checks, coverage and task-tag matching. Missing or unsupported
+  evidence remains unknown and cannot satisfy a required tag.
+- [Strict detector config](../configs/detectors.yaml), with operational values
+  left required/unset. The hand-labelled tests use separate explicit thresholds;
+  no gate/exit acceptance threshold was selected.
+- [Token categories and supplied-divergence summaries](DETECTOR_CATEGORIES.md):
+  prose/code/comment/protocol, Unicode character offsets, boundary/special
+  tokens, category/turn means and highest-value positions. Sampled logprob
+  deltas remain distinct from full KL. No divergence is computed from models.
+- [Source-linked Markdown/CSV reports](DETECTOR_REPORTS.md), with before/teacher/
+  after phases, family/bucket/domain breakdowns, known/unknown denominators,
+  pooled syntax rate, weighted prompt statistics and optional supplied success.
+  Missing phases are explicitly `not run`.
+- [Offline CLI](DETECTOR_CLI.md), preserved
+  [fixture manifest/config/trajectories](../tests/fixtures/detectors/manifest.json),
+  and an executed [fixture report](logs/m4/fixture-report/behavior.md)
+  ([CSV](logs/m4/fixture-report/behavior.csv)). Its phase labels and values are
+  fixture demonstrations, not model measurements.
+- Backward-compatible optional `context_metadata` and `size_bucket` fields in
+  trajectory logs. New geometry is validated and contains only type/lengths;
+  context text/prefix is not added. Legacy logs can supply geometry externally.
+- `make test-m4`, [usage/limitations](DETECTOR_USAGE.md), and
+  [verified APIs](VERIFIED_APIS.md#m4-additions-offline-behavior-analysis-and-token-categories).
+
+### Commands and outcomes
+
+Commands ran from `rlm-opsd/` using `.venv/bin/python`. Failed red logs are
+retained. No test was skipped, xfailed, or weakened to obtain a pass. The listed
+pytest shorthand means `.venv/bin/python -m pytest`; root detector invocations
+used `-q --tb=short`.
+
+| Command / activity | Observed result | Evidence |
+|---|---|---|
+| Ordered repository reads, source inspection, baseline `make test` | 3 M0 checks + 120 pytest tests passed | [00 baseline](logs/m4/00-baseline.log) |
+| `pytest tests/test_detectors.py` before implementation | 51 failures: missing detector package API | [01 red](logs/m4/01-detectors-red.log) |
+| Implement core; rerun same file | 51 passed | [02 green](logs/m4/02-detectors-first-green.log) |
+| Add alias/prompt/false-comprehension/window/iteration/control-transfer regressions; rerun | 5 failed / 54 passed, then 59 passed after fixes | [03 red](logs/m4/03-edges-red.log), [04 green](logs/m4/04-edges-green.log) |
+| Add review regressions for whole slices, helpers, pattern values, error coverage and prompt-size facts | 7 failed / 61 passed, then 68 passed | [05 red](logs/m4/05-review-red.log), [06 green](logs/m4/06-review-green.log) |
+| Add scalar-position and bounded-provenance checks | 2 failed / 70 passed, then 72 passed | [07 red](logs/m4/07-bounds-red.log), [08 green](logs/m4/08-bounds-green.log) |
+| Add plan-only finish, impossible-count and executable-default regressions | 5 failed / 72 passed, then 77 passed | [09 red](logs/m4/09-final-edges-red.log), [10 green](logs/m4/10-final-edges-green.log) |
+| `pytest tests/test_detector_categories.py -q`; Unicode/newline regressions | Initial 45 missing-feature failures; final 47 passed | [red](logs/m4/categories-red.log), [first green](logs/m4/categories-green.log), [Unicode red](logs/m4/categories-unicode-red.log), [Unicode green](logs/m4/categories-unicode-green.log), [final](logs/m4/categories-final.log) |
+| Inspect installed stdlib/tokenizer APIs; cached Qwen offset smoke with offline flags | Actual 30-token fixture classified, including duplicate Unicode offsets; obsolete private API lookup corrected | [API](logs/m4/categories-api.log), [lookup investigation](logs/m4/categories-tokenizer-api-investigation.log), [offset smoke](logs/m4/categories-tokenizer-smoke.log) |
+| `pytest tests/test_detector_reports.py -q`; report validation/absent-phase regressions | Initial 33 failures; final 36 passed | [red](logs/m4/reports-red.log), [first green](logs/m4/reports-green.log), [validation red](logs/m4/reports-validation-red.log), [validation green](logs/m4/reports-validation-green.log), [absence red](logs/m4/reports-absent-red.log), [final](logs/m4/reports-absent-green.log) |
+| `pytest tests/test_detector_trace_metadata.py -q` | 29 failures / 4 existing rejections before extension; 33 passed after | [red](logs/m4/trace-metadata-red.log), [green](logs/m4/trace-metadata-green.log), [API](logs/m4/trace-metadata-api.log) |
+| `pytest tests/test_detector_cli.py -q`; CLI + report tests | 20 initial failures; 20 CLI tests passed, 56 combined passed | [red](logs/m4/reports-cli-red.log), [integration](logs/m4/reports-cli-integration.log), [combined](logs/m4/reports-cli-green.log) |
+| Initial report-agent `make test` during concurrent core implementation | 51 missing-core-API failures / 200 passed; superseded by final suite | [intermediate regression](logs/m4/reports-regression.log) |
+| Duplicate agent `make test` during final integration | Intentionally interrupted at parent request; not a full-suite result | [interruption record](logs/m4/reports-cli-regression.log) |
+| Separate read-only review and exact-reproduction closure | All seven reported issues resolved with regressions; no category/report/metadata finding required a fix | [review](logs/m4/14-review.md) |
+| Final `make test` | **3 M0 checks + 333 pytest tests passed**, one existing upstream deprecation warning | [11 full suite](logs/m4/11-full-suite.log) |
+| Installed/source signature/hash inspection via Python `inspect` | Exact AST, YAML, config and public project interfaces catalogued | [12 API catalog](logs/m4/12-api-catalog.log) |
+| Offline CLI fixture command below; final regeneration with `--overwrite` | Source-linked fixture Markdown/CSV generated; after phase absent | [initial exact command](logs/m4/reports-cli-fixture.log), [13 final run](logs/m4/13-fixture-report-final.log) |
+| `make test-m4` | 213 M4 tests passed | [15 M4 target](logs/m4/15-m4-target.log) |
+| Source/input hashes, relative documentation links, fixture CSV/source links, whitespace and scope audit; `git diff --check`, `git status --short` | Final artifact audit, including unchanged spec/prompt/data pins | [16 artifact audit](logs/m4/16-artifact-audit.log) |
+
+Executed final fixture command:
+
+```bash
+.venv/bin/python -m rlm_opsd.detectors \
+  --config tests/fixtures/detectors/fixture-config.yaml \
+  --manifest tests/fixtures/detectors/manifest.json \
+  --output docs/logs/m4/fixture-report \
+  --source-label 'Hand-labelled fixtures; not model results' --overwrite
+```
+
+### Limits and stop
+
+The analyzer is conservative static analysis, not arbitrary Python execution.
+Dynamic loops/branches, arbitrary helpers and unavailable runtime locations
+produce unknown evidence. Coverage is the union of supplied input ranges, not
+proof that every character was semantically processed. Plan-only finish detection
+uses a documented English heuristic. The report and usage guides detail these
+boundaries and aggregation denominators. Operational detector thresholds remain
+unset for the user to choose; fixture thresholds are not production defaults.
+
+**Not run:** model inference, real model KL/logprobs, A100/H100 execution,
+teacher gate, checkpoint behavior comparison, OPSD, retention or GRPO.
+M0 server-environment limitations and M2 incomplete held-out coverage are
+unchanged. No M5–M9 code or make target was implemented. Work stops at M4.
+
+## M5 — teacher-gate code prepared; real model gate not run
+
+Date: 2026-10-09. Scope: SPEC §5 teacher gate, plus the user's explicit update
+to SPEC §6 making Mode B primary. **The real-run M5 acceptance criterion remains
+unmet.** The user previously deferred server execution in favor of finishing the
+code. The attempted operational `make teacher-gate` stopped before any request:
+no endpoint URLs, unset user-controlled gate/detector thresholds, and incomplete
+held-out decontamination coverage. Fixture evidence is not a model result.
+The implementation is locally verified: final `make test` passed **3 M0 checks
+and 374 pytest tests**, including all 38 M5 tests and the sandbox regressions.
+One existing upstream deprecation warning remains visible.
+
+### Inputs, design and deliverables
+
+Read AGENTS.md and all listed files in order, then the existing M0–M4 code,
+progress and verified source contracts. Used the existing specification as the
+authorized design, recorded the [M5 plan](superpowers/plans/2026-10-09-m5.md),
+and wrote failing tests before production code. The shared project remains
+untracked in its parent repository; no branch move, commit or push was made.
+
+- [Gate implementation](../rlm_opsd/eval/gate.py), [config](../configs/gate.yaml)
+  and [usage](TEACHER_GATE.md): paired initial-base generation under x and y*,
+  fixed dev order/sampling, persistent REPL, separate frozen leaf client,
+  original completion IDs/reasoning when supplied, and source-linked evidence.
+- Strict no-network preflight checks model/template pins, environment-variable
+  names, complete decontamination and every eligible dev family/bucket group.
+  It uses the normal M2 loader; answers are stripped and no inspection bypass is
+  offered. Operational thresholds remain unset for the user to choose.
+- Gate decisions use only teacher behavior, inclusive explicit bounds, minimum
+  known counts and maximum unknown fractions. Missing evidence is inconclusive;
+  infrastructure errors override threshold results. No correctness reward runs.
+- `make teacher-gate`, `make teacher-gate-check`, `make test-m5`; the gate writes
+  `run.json`, requests, raw traces, analyses, behavior Markdown/CSV and decisions.
+  It preserves partial failures and refuses to overwrite an existing run.
+- Failure handling covers HTTP errors/timeouts/model-alias mismatch, provider
+  exception text, construction/analysis/cleanup, and recursive child workers.
+  Child setup/execution/cleanup failures cannot pass through a recovered root.
+- Full regression exposed a pre-existing sandbox cleanup race. Deterministic
+  regressions preceded the fix: signal the process group once, await reaping
+  before a resource-limit error, and preserve initial permission failures.
+
+### User-authorized Mode B change
+
+[SPEC §6](SPEC.md#6-opsd-training) now selects full-vocabulary masked JSD from
+two in-trainer passes on aligned rollout token IDs. The teacher uses the frozen
+initial base with the adapter contribution disabled; Mode A is optional. There
+is no scoring server/API. Endpoints serve generation only: student rollouts,
+teacher-gate policies and frozen leaf calls. Privileged prefixes still differ,
+while the scored suffix IDs and causal positions must align.
+
+[VERIFIED_APIS](VERIFIED_APIS.md#mode-b-verified-adapter-residual-off-mechanism-in-pinned-prime-rl)
+records exact pinned files/symbols and the full-logit config. prime-rl uses custom
+MultiLoRA, with no built-in `disable_adapter()` context. The verified mechanism
+zeros/restores cached scaling tensors in place and preserves token routing.
+Zero scaling still runs adapter kernels/dropout; finite residuals, frozen base
+weights, restoration, checkpointing/FSDP/compile behavior and GPU equivalence
+must be tested during later integration. No teacher forward or JSD trainer was
+implemented or executed in M5. SPEC sections outside §6 were byte-preserved.
+
+### Commands and outcomes
+
+Commands ran from `rlm-opsd/` with `.venv/bin/python`; `pytest` below abbreviates
+`.venv/bin/python -m pytest`. Failed red/regression runs remain in the logs.
+No tests were skipped, xfailed, or weakened to obtain a pass.
+
+| Command / activity | Observed result | Evidence |
+|---|---|---|
+| Ordered inputs, baseline `make test` | 3 M0 checks + 333 pytest tests passed | [00 baseline](logs/m5/00-baseline.log) |
+| Installed source/signature/hash inspection; environment variable names and local port availability | Exact generation/loader APIs catalogued; no configured inference endpoint found | [01 source API](logs/m5/01-source-api.log) |
+| `pytest tests/test_teacher_gate.py -q --tb=short`, config/preflight/decision stage | 19 failures before implementation; then 19 passed | [02 red](logs/m5/02-config-preflight-red.log), [03 green](logs/m5/03-config-preflight-green.log) |
+| Same file, real-REPL/local-HTTP paired runner stage | 5 new failures / 19 passed; then 24 passed | [04 red](logs/m5/04-runner-red.log), [05 green](logs/m5/05-runner-green.log) |
+| `pytest tests/test_teacher_gate_cli.py -q --tb=short` | 4 failures before CLI/targets; then 4 passed | [06 red](logs/m5/06-cli-red.log), [07 green](logs/m5/07-cli-green.log) |
+| Six initial review regressions, then both M5 test files | 6 failures before fixes; then 34 passed | [08 red](logs/m5/08-review-red.log), [09 green](logs/m5/09-review-green.log) |
+| Pinned prime-rl HEAD/hash/excerpt/AST inspection and installed-byte comparison; SPEC section/hash assertions | Custom MultiLoRA and full-logit contracts verified from source; no GPU import/forward | [10 source verification](logs/m5/10-mode-b-source-verification.log) |
+| First full `make test` | 3 M0 checks; 366 passed / 1 existing CPU-limit cleanup failure | [11 regression failure](logs/m5/11-full-suite.log) |
+| `make teacher-gate-check`; `make teacher-gate` with operational config | Both not_run, exit 2, no model request or operational report | [12 readiness](logs/m5/12-readiness.log), [13 real attempt](logs/m5/13-real-gate-attempt.log) |
+| Instrumented repeat of real CPU-limit test (up to 8 planned, stopped on failure at iteration 2) | Repeated signals observed; EOF surfaced before worker return code was ready | [14 investigation](logs/m5/14-cleanup-investigation.log) |
+| `pytest tests/test_harness.py -q -k 'cleanup_is_idempotent or waits_for_worker_exit or initial_permission' --tb=short`; then harness and both M5 files | 2 failed / 1 passed before fix; then 64 passed | [15 red](logs/m5/15-cleanup-red.log), [16 green](logs/m5/16-cleanup-green.log) |
+| `make test` after cleanup fix | 3 M0 checks + 370 pytest tests passed | [17 regression](logs/m5/17-full-suite.log) |
+| `pytest tests/test_teacher_gate.py -q -k recursive_worker --tb=short` before recursive fix | 3 false-pass failures; budget-only control passed | [18 red](logs/m5/18-recursion-red.log) |
+| `pytest tests/test_teacher_gate.py tests/test_teacher_gate_cli.py tests/test_harness.py -q --tb=short` after recursive fix | 68 passed | [19 green](logs/m5/19-recursion-green.log) |
+| Separate read-only reviews and follow-up closure | Reported issues addressed test-first; no further substantive findings | [20 review](logs/m5/20-review.md) |
+| `.venv/bin/python docs/logs/m5/run_http_fixture.py` | First attempt failed before a run because the script directory hid the project import; added repository to sys.path, removed only the newly created empty output directory, then reran successfully | [21 initial failure](logs/m5/21-http-fixture.log), [21 successful CLI run](logs/m5/21-http-fixture-green.log) |
+| Final `make test` | **3 M0 checks + 374 pytest tests passed**, one upstream deprecation warning | [22 final full suite](logs/m5/22-full-suite-final.log) |
+| Python source/input hashes, documentation/source links, fixture evidence, syntax/whitespace and scope assertions; `git diff --check`, `git status --short`, pinned source status | Audit passed; unchanged prompt/task/data pins and intended SPEC hash verified | [23 artifact audit](logs/m5/23-artifact-audit.log) |
+
+### Preserved fixture demonstration
+
+The [reproduction script](logs/m5/run_http_fixture.py) starts a local HTTP fixture
+and invokes the actual `make teacher-gate` CLI with fixture-only inputs. Its
+[report](logs/m5/http-fixture/report/gate.md),
+[behavior Markdown](logs/m5/http-fixture/report/behavior.md) and
+[CSV](logs/m5/http-fixture/report/behavior.csv) link the executed REPL traces.
+It completed 12 episodes (6 paired tasks), 24 root and 12 leaf requests, all to
+synthetic HTTP responders; [counts](logs/m5/http-fixture/fixture-summary.json)
+and the command log provide evidence. Every report is labelled
+**TEST HTTP FIXTURE; NOT MODEL RESULTS**. The fixture's asserted coverage and
+thresholds are confined to test inputs; operational data/configs are unchanged.
+
+### Limits and stop
+
+**Not run:** actual Qwen generation or teacher-gate acceptance, GPU execution,
+teacher scoring, full-vocabulary logits/JSD, OPSD, monitoring/exit or GRPO.
+Operational `reports/teacher-gate-manual_v1` was not created. A ready local
+preflight would still not prove remote weight/template identity; aliases are
+checked and deployment identity is operator-declared.
+
+To close the original M5 real-run criterion later, supply generation endpoints,
+user-selected gate/detector values and a fully decontaminated dev pool, then run
+the documented `make teacher-gate`. No thresholds were invented, coverage
+overridden, or teacher manual changed on fixture evidence. Existing M0 server
+limitations and M2 held-out coverage gaps persist. No M6–M9 trainer/loss/hook or
+make target was implemented. Work stops at M5 code and the requested §6 update.
+
+## M6 — shared teacher hook and optional Mode A code; pretrained smokes not run
+
+Date: 2026-10-09. User-confirmed scope: **shared hook + optional Mode A; JSD
+stays in M7**. The implementation and local verification are complete. The
+original M6 acceptance requirement for a real small-model smoke followed by
+27B remains **unmet / not run**, under the user's earlier instruction to finish
+the code before running on an A100/H100 server. Both operational attempts
+stopped before generation. No model-performance numbers or fabricated run
+reports are presented.
+
+Final `make test`: **3 M0 checks + 427 pytest tests passed**, including all
+**53 M6 tests**. Fourteen upstream torch JIT deprecations and the existing
+Verifiers deprecation remain visible. No tests were skipped, xfailed or weakened.
+
+### Inputs, implementation and boundaries
+
+Read AGENTS.md and every listed file in order, existing progress/API evidence,
+and the pinned source. Recorded the [M6 implementation plan](superpowers/plans/2026-10-09-m6.md),
+wrote failing tests before production behavior, and obtained an independent
+review. Continued in the existing untracked shared project; no worktree,
+branch move, commit or push. SPEC, task definitions, manual/student prompts,
+27B template and all M0 dependency pins remain unchanged.
+
+- [Aligned samples](../rlm_opsd/training/samples.py): original per-turn token
+  IDs, exact teacher prefix replacement, independent causal positions, current
+  root assistant masks only. Missing/clipped IDs, inconsistent logprobs,
+  changed prefixes and overlength sequences fail. No suffix re-tokenization,
+  answer labels, correctness scoring or duplicated history targets.
+- [Shared teacher hook](../rlm_opsd/training/teacher.py): true dense MultiLoRA
+  computational bypass, frozen base, no teacher gradients, serialized forwards
+  and backward. Restores module flags, RNG, forward methods and cached global
+  routing/scaling tensors in place before checkpoint recomputation. Unsupported
+  adapter types, FSDP and compiled models are rejected.
+- [Optional Mode A](../rlm_opsd/training/mode_a.py): actual pinned native sampled
+  loss with `adv_tau=0`, positive `teacher_tau`, `kl_tau=0`, explicit unclipped
+  bounds, selected-root-token normalization and LoRA-only optimizer. Empty
+  masks do not update. No JSD or token gate was implemented.
+- [Backend](../rlm_opsd/training/backend.py) and [runner](../rlm_opsd/training/runner.py):
+  one dense adapter, one CUDA GPU/process, eager, unpadded per-turn sequences,
+  one task and one update. Uses the actual prime-rl model/LoRA/head/loss APIs
+  through a synchronous project loop. Native async transport has no teacher
+  prefix field; its schema/loop was not modified or claimed integrated.
+- Strict readiness requires a complete current real gate, normal decontaminated
+  train loader, fully cached exact model revision and Linux/CUDA. The 27B stage
+  requires a successful pinned small pretrained smoke plus checkpoint hash.
+  Outputs retain provenance, original token records, update metrics and a native
+  LoRA tensor checkpoint. Failures preserve available artifacts and attempt cleanup.
+- Generation starts from the frozen initial base and new zero-B adapters.
+  Explicit neutral sampling filters/penalties match unrestricted scoring.
+  Processed logprobs, endpoint weights and template identity are operator
+  declarations; they are not remotely attested. No teacher scoring API exists.
+  No post-update rollout/broadcast/resume support is claimed for this smoke.
+- [Small model config](../configs/opsd_mode_a_small.toml) pins Qwen3.5-0.8B at
+  `2fc06364715b967f1860aea9cf38778875588b17`; separate tokenizer/template/gate
+  configs account for its template differing from 27B. Only tokenizer artifacts
+  were downloaded. [27B config](../configs/opsd_mode_a.toml) retains its M3 pin.
+- [Usage](OPSD_MODE_A.md), [exact APIs/formula](VERIFIED_APIS.md#m6-shared-teacher-hook-and-optional-mode-a),
+  `make opsd-a`, `make opsd-a-check`, `make test-m6` are ready for later server
+  validation. Mode A remains optional; Mode B remains the primary design.
+
+### Commands and observed results
+
+Commands ran from `rlm-opsd/`; `pytest` abbreviates `.venv/bin/python -m pytest`.
+Inspection scripts and failed attempts are retained alongside successful logs.
+
+| Command / activity | Observed result | Evidence |
+|---|---|---|
+| Ordered reads/source inspection; baseline `make test` | 3 M0 checks + 374 pytest tests passed | [00 baseline](logs/m6/00-baseline.log) |
+| `uv pip install --dry-run --python .venv/bin/python ...`; inspect upstream lock; install the six CPU additions now in `requirements-m6-local.txt` | Dry run initially considered jaxtyping 0.3.7; corrected to locked 0.3.9 before installation. Torch 2.11.0 and five support packages installed | [01 resolution](logs/m6/01-torch-resolution.log), [02 install](logs/m6/02-torch-install.log) |
+| Torch/full-prime import probe | Torch CPU works; full model/loss import still encounters unavailable torchtitan/wandb. Tests isolate unchanged CPU-capable source files rather than mock the math | [03 import](logs/m6/03-torch-prime-import.log) |
+| `pytest tests/test_training_samples.py -q --tb=short` before/after implementation | 15 missing-feature failures, then 15 passed | [04 red](logs/m6/04-samples-red.log), [05 green](logs/m6/05-samples-green.log) |
+| Fetch primary HF small-model revision/tokenizer metadata; compare pinned templates | Exact small revision and separate template/config confirmed | [06 pin](logs/m6/06-small-model-pin.log) |
+| `pytest tests/test_training_teacher.py -q --tb=short` before hook/loss | Initial 10 fixture setup errors from namespace-package `__file__=None`; resolved package location through installed distribution. Corrected red run: 10 missing-feature failures | [07 initial](logs/m6/07-teacher-red.log), [07 corrected red](logs/m6/07-teacher-red-corrected.log) |
+| Inspect pinned LoRA/loss/model/config signatures, source hashes and local torch APIs | Exact source contract verified | [08 source API](logs/m6/08-source-api.log) |
+| Samples + teacher tensor tests after implementation | 25 passed, including actual upstream loss/LoRA, hand-derived gradients, frozen teacher after updates and checkpoint recomputation | [09 green](logs/m6/09-teacher-green.log) |
+| Prepare small tokenizer/template at exact revision | Hashes match; no weights downloaded | [10 tokenizer](logs/m6/10-small-tokenizer.log) |
+| `pytest tests/test_training_runner.py -q --tb=short` before/after runner/CLI | 14 missing-feature failures, then 14 passed; runner fixtures execute actual CPU optimizer work with controlled external boundaries | [11 red](logs/m6/11-runner-red.log), [12 green](logs/m6/12-runner-green.log) |
+| Random tiny Qwen3.5 CPU class/forward probe | Actual HF model graph produced finite logits; explicitly random weights, not a pretrained smoke | [13 probe](logs/m6/13-qwen-cpu-probe.log) |
+| `pytest tests/test_training_runner.py -q -k 'cached_snapshot or backend_adapter' --tb=short` | 2 regressions failed before cache-blob symlink/portable matmul fixes | [14 red](logs/m6/14-runtime-edges-red.log) |
+| Focused clipping/sampling/runtime regressions, then `make test-m6` | 3 review failures / 3 passing controls, then 45 M6 tests passed after fixes | [15 red](logs/m6/15-review-red.log), [16 green](logs/m6/16-review-green.log) |
+| Gate evidence regressions and random Qwen + pinned head integration | Initial 8 failures: fixture config path typo and missing loguru. Fixed test path, installed upstream-locked loguru 0.7.3; corrected run: 6 real evidence-validation failures / 2 passing controls including Qwen update | [17 initial](logs/m6/17-evidence-red-and-qwen.log), [18 install](logs/m6/18-loguru-install.log), [19 corrected red](logs/m6/19-evidence-red-corrected.log) |
+| `make test-m6` after gate-evidence checks | **53 passed** | [20 M6 green](logs/m6/20-m6-green.log) |
+| `make test` | **3 M0 checks + 427 pytest tests passed**, 15 visible upstream deprecation warnings | [21 full suite](logs/m6/21-full-suite.log) |
+| `.venv/bin/python docs/logs/m6/verify_source.py` | Installed/source byte equality, signatures, native model/loss config validation, both pinned tokenizer renders, exact external generation/sampling source hashes | [22 source verification](logs/m6/22-source-verification.log), [script](logs/m6/verify_source.py) |
+| `make opsd-a-check OPSD_CONFIG=configs/opsd_mode_a_small.toml`; `make opsd-a OPSD_CONFIG=configs/opsd_mode_a_small.toml OPSD_OUTPUT=reports/opsd-a-small` | Both **not_run**, exit 2: no passed small gate, cached weights or Linux/CUDA. No requests/output run directory | [23 small check](logs/m6/23-small-opsd-a-check.log), [23 small attempt](logs/m6/23-small-opsd-a.log) |
+| `make opsd-a-check OPSD_CONFIG=configs/opsd_mode_a.toml`; `make opsd-a OPSD_CONFIG=configs/opsd_mode_a.toml OPSD_OUTPUT=reports/opsd-a-27b` | Both **not_run**, exit 2: no passed 27B gate, successful small smoke, cached weights or Linux/CUDA. No requests/output run directory | [23 27B check](logs/m6/23-27b-opsd-a-check.log), [23 27B attempt](logs/m6/23-27b-opsd-a.log) |
+| Independent read-only review and follow-up | Both findings resolved test-first; no new substantive findings | [24 review](logs/m6/24-review.md) |
+| Source/input hashes, documentation links, syntax, whitespace, scope, dependency-pin and output audit; `git diff --check` and status | Final artifact audit | [25 audit](logs/m6/25-artifact-audit.log), [audit script](logs/m6/audit_artifacts.py) |
+
+### Limits and stop
+
+Local CPU tests use torch 2.11.0 and existing Transformers 5.9.0. The pinned
+Linux server stack uses torch 2.11.0+cu128 and Transformers 5.5.0 at its exact
+upstream Git revision. The tiny random Qwen test exercises full attention and
+native head/LoRA/loss, not `get_model` pretrained loading, Qwen hybrid-attention
+patches or actual A100/H100 execution. No GPU, pretrained small/27B update,
+server template/logprob parity, distributed execution or memory fit was tested.
+The M6 full-logit correctness path makes no memory-bounded projection claim.
+
+M0 server limitations, unset M5 gate/detector thresholds and M2 incomplete
+held-out coverage persist. Operational gates and both pretrained smoke reports
+were not created. No thresholds were invented, coverage bypassed or checkpoint
+success manufactured. To close the real M6 acceptance criterion later, execute
+the documented small-then-27B sequence on the prepared server after real gates
+pass. Work stops at the authorized M6 code; M7–M9 remain unimplemented.
+
+## M7 — primary full-vocabulary JSD and optional detached token gate
+
+Date: 2026-10-09. **M7 implementation is complete and locally verified.**
+Mode B is selectable and is now the default; Mode A remains optional.
+Final `make test`: **3 M0 checks + 501 pytest tests passed**, including
+**74 M7 tests**. Fourteen upstream torch JIT deprecation warnings and the
+existing Verifiers deprecation remain visible. No tests were skipped, xfailed,
+silenced or weakened. Required predeployment small/27B GPU runs remain
+**not run**, consistent with the user's earlier server-later instruction.
+
+### What changed
+
+Read AGENTS.md and every file it lists, then the M6 trainer, verified source
+contracts and logs. The [M7 plan](superpowers/plans/2026-10-09-m7.md) records
+the existing SPEC as the authorized design, task interfaces, tests and scope.
+Used inline test-first implementation and an independent read-only review.
+The shared project remains untracked in its parent repository; no worktree,
+branch move, commit or push was performed. No dependencies were installed.
+
+- [JSD objective](../rlm_opsd/training/jsd.py): exact full-vocabulary beta=0.5
+  JSD with natural logarithms. Teacher tensors are detached; masks select root
+  assistant targets only. The optional detached gate is
+  `sigmoid(k * (log pT(target) - log pS(target)))`, default off. Both variants
+  normalize by selected-token count; empty masks safely contribute zero.
+- Vocabulary projection occurs only after selecting aligned hidden rows, in
+  configurable row chunks. A custom first-order autograd function saves hidden
+  states/head references and recomputes one projection/loss chunk per backward
+  iteration. It does not retain every chunk's graph, project whole sequences,
+  copy the full head to FP32, or approximate the vocabulary with top-k.
+- [Mode B trainer](../rlm_opsd/training/mode_b.py): actual backbone passes under
+  the existing serialized M6 frozen-teacher context; restores adapter/routing/
+  mode/RNG state before backward. Uses the frozen ordinary head and updates
+  only LoRA. Tests compare values and gradients against an independent dense
+  reference across multi-turn samples and activation checkpointing.
+- [Configuration](../configs/opsd_mode_b.toml),
+  [small model config](../configs/opsd_mode_b_small.toml), factory and runner
+  select Mode B end-to-end. New keys: fixed `jsd_beta=0.5`,
+  `jsd_chunk_size=64`, `token_gate=false`, positive finite `token_gate_k=1.0`.
+  `make opsd-b`, `make opsd-b-check`, `make test-m7` are available. The direct
+  training CLI defaults to Mode B; Mode A targets retain explicit A configs.
+- Smoke reports include mode and objective identity. The 27B Mode B stage
+  requires real small Mode B evidence with matching beta, temperature and gate
+  settings, plus its checkpoint hash. Mode A is not a prerequisite. Existing
+  gates, complete decontamination, cached exact weights and CUDA checks remain
+  mandatory; no test override is exposed.
+- [Usage](OPSD_MODE_B.md) and [verified APIs](VERIFIED_APIS.md#m7-primary-full-vocabulary-jsd-and-optional-token-gate)
+  record exact interfaces, config keys, mathematical formula and runtime limits.
+  SPEC, prompts/manual, tokenizer/model pins, operational thresholds and task
+  data were preserved. The obsolete M6 test rejecting mode B now rejects
+  unknown mode C; new tests prove valid B selection and existing A behavior.
+
+### Commands and results
+
+Commands ran from `rlm-opsd/`; `pytest` below means `.venv/bin/python -m pytest`.
+All failed red runs are retained. Numerical/CPU fixture values are not model
+performance results.
+
+| Command / activity | Observed result | Evidence |
+|---|---|---|
+| Ordered input/source reads, workspace status; baseline `make test` | 3 M0 checks + 427 pytest tests passed | [00 baseline](logs/m7/00-baseline.log) |
+| Python `inspect`/hash/source inspection of installed torch autograd and pinned prime-rl head boundary | Signatures/source verified before custom autograd implementation | [01 source API](logs/m7/01-source-api.log) |
+| `pytest tests/test_training_jsd.py -q --tb=short`, dense stage | 22 missing-feature failures, then 22 passed | [02 red](logs/m7/02-jsd-red.log), [03 green](logs/m7/03-jsd-green.log) |
+| Same file, `-k 'chunk or low_precision_projection'`, then whole file | 17 missing-feature failures, then 39 passed. Includes independent dense gradients, finite differences, BF16/FP16, tail-vocabulary sensitivity, bounded projection and saved-tensor observations | [04 red](logs/m7/04-chunk-red.log), [05 green](logs/m7/05-chunk-green.log) |
+| `pytest tests/test_training_mode_b.py -q --tb=short`, then JSD + Mode B files | 16 missing-feature failures, then 55 passed, including actual MultiLoRA and random tiny Qwen3.5 full-attention update | [06 red](logs/m7/06-mode-b-red.log), [07 green](logs/m7/07-mode-b-green.log) |
+| `pytest tests/test_training_mode_b_runner.py -q --tb=short`, then `pytest tests/test_training_*.py -q --tb=short` | 13 missing-feature failures, then all 121 M6/M7 training tests passed | [08 red](logs/m7/08-runner-red.log), [09 green](logs/m7/09-training-green.log) |
+| First `make test` before review regressions were collected | 3 M0 checks + 495 pytest tests passed; superseded by final suite | [10 regression](logs/m7/10-full-suite.log) |
+| Independent review; targeted Python overflow-stage reproduction | Finite logits/settings can overflow normalization before JSD multiplication; dense/chunked APIs previously returned NaN | [11 investigation](logs/m7/11-overflow-investigation.log), [19 review](logs/m7/19-review.md) |
+| `pytest tests/test_training_jsd.py -q -k normalization_overflow --tb=short`; then `make test-m7` | 4 regression failures before normalized-logprob checks; then 72 M7 tests passed | [12 red](logs/m7/12-overflow-red.log), [13 green](logs/m7/13-m7-green.log) |
+| `pytest tests/test_training_jsd.py -q -k unrepresentable_scalars --tb=short`; then `make test-m7` | 2 regression failures before working-precision scalar checks; then **74 passed** | [14 red](logs/m7/14-scalar-red.log), [15 final M7](logs/m7/15-m7-final.log) |
+| `.venv/bin/python docs/logs/m7/verify_source.py` | Pinned/installed byte equality, torch/project signatures, both B configs and hand-derived binary-distribution value/gradient verified | [16 source verification](logs/m7/16-source-verification.log), [script](logs/m7/verify_source.py) |
+| Final `make test` after all fixes | **3 M0 checks + 501 pytest tests passed**, 15 visible upstream warnings | [17 final suite](logs/m7/17-full-suite-final.log) |
+| `make opsd-b-check OPSD_B_CONFIG=configs/opsd_mode_b_small.toml`; `make opsd-b OPSD_B_CONFIG=configs/opsd_mode_b_small.toml OPSD_B_OUTPUT=reports/opsd-b-small` | Both **not_run**, exit 2: missing real small gate, cached weights and Linux/CUDA; no requests or run directory | [18 small check](logs/m7/18-small-opsd-b-check.log), [18 small attempt](logs/m7/18-small-opsd-b.log) |
+| `make opsd-b-check OPSD_B_CONFIG=configs/opsd_mode_b.toml`; `make opsd-b OPSD_B_CONFIG=configs/opsd_mode_b.toml OPSD_B_OUTPUT=reports/opsd-b-27b` | Both **not_run**, exit 2: missing real 27B gate, small B smoke, cached weights and Linux/CUDA; no requests or run directory | [18 27B check](logs/m7/18-27b-opsd-b-check.log), [18 27B attempt](logs/m7/18-27b-opsd-b.log) |
+| Python immutable-input/source hashes, syntax/whitespace, relative links, scope and output audit; `git diff --check`/status | Final artifact verification | [20 audit](logs/m7/20-artifact-audit.log), [audit script](logs/m7/audit_artifacts.py) |
+
+### Limits and stop
+
+The bounded allocation claim applies to vocabulary projection/divergence
+workspace, O(chunk size × vocabulary), plus O(selected positions × hidden)
+state/gradient. Frozen head weights and student backbone activations remain.
+No peak GPU allocation or total-model memory fit was measured. Loss gradients
+are first-order only. Inputs whose normalization or scalar arithmetic exceeds
+working precision fail explicitly; no clipping/approximation masks the failure.
+
+The integration remains a synchronous one-task/one-update smoke, eager on one
+GPU with one dense adapter. It does not implement upstream async transport,
+weight broadcast, resume, packing, FSDP or compilation. Local random Qwen tests
+cover full attention with Transformers 5.9.0; pinned server loading/hybrid
+attention and A100/H100 execution remain unverified. Existing M0/M2/M5 runtime,
+coverage and gate limitations persist. No teacher scoring API was introduced.
+
+**Not run:** real pretrained small/27B Mode B updates, gate-on/off behavior
+comparison on the fixed dev split, peak GPU memory, monitoring/exit or GRPO.
+No pretrained smoke report was created or fixture relabelled as real evidence.
+M7's implemented/tested/config-selectable criterion is met; predeployment server
+validation remains deferred. Work stops at M7; no M8/M9 implementation was added.
+
+## M8 — OPSD-only monitoring and two-condition exit
+
+Date: 2026-10-09. **M8 server-ready implementation is complete.** Final full
+verification: **3 M0 checks + 576 pytest tests passed**, with 15 visible upstream
+deprecation warnings. Real checkpoint behavior and retention evaluations are
+**not run**. The user explicitly changed M8 during
+implementation: remove both GRPO-pool readiness items, move them to the M9
+specification, and leave the retention path plus behavior/retention tolerances
+required and unset until initial reports are reviewed. No M9 code is delivered.
+
+### What changed
+
+Read AGENTS.md and every listed file in order. Followed the existing SPEC with
+inline test-first implementation, then incorporated the user's revised scope
+with new failing tests before changing the implementation. The
+[M8 plan and ledger](superpowers/plans/2026-10-09-m8.md) records scope and checks.
+[Independent read-only review](logs/m8/28-review.md) found two issues, both fixed
+with red/green regressions. No dependencies were installed; model/tokenizer/
+upstream pins and task data remain unchanged. The project is still untracked
+in its parent repository; no commit, branch move or push was performed.
+
+- [Behavior runner](../rlm_opsd/eval/monitor.py): evaluates every fixed
+  `dev_behavior` task as base + x, base + y*, and checkpoint + x. Uses the real
+  RLM harness and pinned generation clients, frozen leaf endpoint, exact saved
+  native adapter, and source-linked detector reports. No answers enter prompts.
+  Behavior evaluation requires no retention set or exit tolerance.
+- [Local KL scoring](../rlm_opsd/eval/scoring.py): full-vocabulary KL(T||S) at
+  aligned root targets, chunked projection, no gradients or optimization.
+  Original rollout IDs supply both suffixes; offset lookup must round-trip
+  exactly and never supplies scored IDs. Teacher uses the M6 true LoRA bypass;
+  state and module flags are restored. KL is reported overall, by category and
+  turn, with top text positions and readable trajectories under
+  `review/step_<n>/<family>/`.
+- [Exit](../rlm_opsd/eval/exit.py) validates complete behavior evidence and
+  recomputes its summaries, then runs [paired retention](../rlm_opsd/eval/retention.py)
+  through the base/checkpoint generation endpoints. It compares only detector
+  agreement with teacher-as-policy and retention drop from base. Invalid gold
+  fails before requests; missing evidence is inconclusive; infrastructure
+  failures cannot pass. Decimal boundary comparisons account only for binary64
+  roundoff, without setting performance tolerances.
+- [Configuration](../configs/eval.yaml) and [exit settings](../configs/exit.yaml)
+  expose `make eval-behavior`, `make exit-check`, and local `-check` targets.
+  The exit file has required unset `retention_path`, `behavior_tolerance`, and
+  `retention_tolerance`, plus explicit evidence sufficiency settings. Periodic
+  evaluation checks `checkpoint_step % eval_interval`; the checkpoint driver
+  calls it. No long-running training loop, publication or merge was added.
+- Updated [SPEC §7–9](SPEC.md#7-monitoring) and [AGENTS M8/M9](../AGENTS.md)
+  exactly for the requested phase boundary. Pass@k, entropy on the GRPO pool,
+  and its mixed pass/fail criterion are M9 prerequisites before any GRPO step.
+  Their initial in-progress M8 implementation and tests were removed before
+  delivery. Earlier logs preserve that superseded work honestly.
+- [Usage](MONITORING.md) and [verified APIs](VERIFIED_APIS.md#m8-opsd-only-monitoring-and-two-condition-exit)
+  document exact settings, entry points, source files, evidence format and limits.
+
+### Commands and results
+
+Commands ran from `rlm-opsd/`; `pytest` means `.venv/bin/python -m pytest`.
+HTTP fixtures and CPU tensors are test evidence, never model-performance runs.
+
+| Command / activity | Observed result | Evidence |
+| --- | --- | --- |
+| Ordered input/source reads, status, baseline `make test` | 3 M0 checks + 501 pytest tests passed | [00 baseline](logs/m8/00-baseline.log) |
+| Initial `pytest tests/test_monitor_metrics.py tests/test_exit_check.py -q --tb=short` | 34 missing-feature failures, then 34 passed; later revised to OPSD-only scope | [01 red](logs/m8/01-metrics-red.log), [02 green](logs/m8/02-metrics-green.log) |
+| Inspect torch checkpoint, Verifiers rollout/client and tokenizer offset APIs; execute Unicode token fixture | Actual signatures, paths and Unicode offsets recorded | [03 APIs](logs/m8/03-source-api.log) |
+| `pytest tests/test_monitor_scoring.py -q --tb=short` | 12 missing-feature failures, then 12 passed; entropy portion later removed per user | [04 red](logs/m8/04-scoring-red.log), [05 green](logs/m8/05-scoring-green.log) |
+| Initial runner and divergence summary tests before/after implementation | 14 + 1 red failures; then 37 runner/metrics tests passed | [06 runner red](logs/m8/06-runner-red.log), [07 summary red](logs/m8/07-summary-red.log), [08 green](logs/m8/08-runner-green.log) |
+| CLI tests before/after implementation | 5 red failures; first green attempt exposed 2 Make executable-path quoting failures; quoted M8 Python paths, then 5 passed | [09 red](logs/m8/09-cli-red.log), [10 quoting failure](logs/m8/10-cli-green.log), [11 green](logs/m8/11-cli-green.log) |
+| Initial evidence replay regressions | 5 red failures; first fix exposed JSON tuple/list normalization in detector facts; normalized comparison, then 28 passed | [12 red](logs/m8/12-evidence-red.log), [13 normalization failure](logs/m8/13-evidence-green.log), [14 green](logs/m8/14-evidence-green.log) |
+| User's OPSD-only revision: revised behavior/exit, separate retention, and KL-only tests before code changes | 13 scope failures; 7 separate-retention/config failures; 3 KL-only failures. Existing controls passed | [15 scope red](logs/m8/15-opsd-scope-red.log), [16 retention red](logs/m8/16-retention-red.log), [17 KL red](logs/m8/17-kl-only-red.log) |
+| `make test-m8` after scope revision | First run: 63 passed / 1 fixture assertion failure. Source shows Verifiers translates `max_tokens` to `max_completion_tokens`; corrected the emitted-key assertion while preserving the value 32 | [18 run](logs/m8/18-opsd-only-green.log) |
+| New exit-preflight provenance regression; subsequent M8 run and focused retention verification | Regression red on descriptive endpoint-identity wording; fix preserves all hash/pin checks. Interim M8 run: 64 passed / same provider-key assertion; corrected focused run: 7 passed | [19 red](logs/m8/19-retention-provenance-red.log), [20 interim](logs/m8/20-opsd-only-green.log), [21 green](logs/m8/21-retention-green.log) |
+| First OPSD-only full `make test` before review regressions | 3 M0 checks + 566 pytest tests passed | [22 full suite](logs/m8/22-full-suite.log) |
+| Review regression command: `pytest tests/test_retention.py tests/test_exit_check.py -q -k 'invalid_gold or decimal_rate' --tb=short`; then both files | 10 failures before fixes; all 36 retention/exit tests passed after fixes | [23 red](logs/m8/23-review-red.log), [24 green](logs/m8/24-review-green.log) |
+| Final post-review `make test` | **3 M0 checks + 576 pytest tests passed**, 15 visible upstream deprecation warnings | [25 final suite](logs/m8/25-full-suite-final.log) |
+| `.venv/bin/python docs/logs/m8/verify_source.py` | Installed/pinned source byte equality, exact signatures/config fields and executed offset mapping; CUDA false | [26 source verification](logs/m8/26-source-verification.log), [script](logs/m8/verify_source.py) |
+| `make eval-behavior-check`; `make eval-behavior` | Both **not_run**, exit 2; unset checkpoint/endpoint/step settings. No model requests or evaluation output directory | [27 check](logs/m8/27-eval-behavior-check.log), [27 attempt](logs/m8/27-eval-behavior.log) |
+| `make exit-check-check`; `make exit-check` | Both **not_run**, exit 2; required retention path, checkpoint identity and acceptance settings unset. No model requests or exit output directory | [27 check](logs/m8/27-exit-check-check.log), [27 attempt](logs/m8/27-exit-check.log) |
+| Final `make test-m8` | **75 passed**, 14 visible upstream torch JIT deprecation warnings | [29 M8 final](logs/m8/29-m8-final.log) |
+| `.venv/bin/python docs/logs/m8/audit_artifacts.py`; `git diff --check` | Preservation, config scope, syntax, source cleanliness, relative links, whitespace and no fabricated run outputs verified | [30 audit](logs/m8/30-artifact-audit.log), [audit script](logs/m8/audit_artifacts.py) |
+
+### Runtime limits and stop
+
+Local coverage includes actual pinned MultiLoRA CPU scoring against an
+independent dense KL calculation, projection bounds, no gradients, Unicode
+alignment, atomic checkpoint validation, real HTTP clients/harness execution,
+partial-failure logs, source-evidence replay, user-required settings, and
+hand-derived exit boundaries. Model-quality numbers have not been measured.
+No tests are skipped or xfailed and no operational thresholds are filled in.
+
+Real evaluation still needs the prepared Linux/CUDA server, cached pinned
+weights, a real OPSD checkpoint served by the generation endpoint, complete
+held-out decontamination and a passed teacher gate. Retention/exit additionally
+needs the user's dataset and tolerances. Endpoint weight/template identity
+remains operator-declared; actual GPU fit and pretrained 27B behavior/retention
+are **not run**, consistent with the user's server-later instruction. M8 code
+is the delivery here; its real-run acceptance remains pending those inputs.
+M9 specification changes only; no M9 readiness runner or GRPO training added.
+
+## Repository publication preparation
+
+The user requested publishing the completed project to
+`https://github.com/pmukeshreddy/Loop`, directly on `main`, with commit email
+`mukeshreddy662369@gmail.com`. Existing Git identity already matches. Fetched
+`origin` and verified local/remote `main` both at `04b9b1a` before the commit.
+
+Re-ran `make test`: **3 M0 checks + 576 pytest tests passed**, with 15 visible
+upstream warnings. [Pre-push test log](logs/m8/31-pre-push-tests.log).
+Validated the publication inventory, symlinks and file sizes. Added narrow
+ignore exceptions for the 12 scripted M5 HTTP trajectory fixtures required by
+regression tests and linked reports. Dependencies, caches and generated context
+files remain under their existing ignore rules. No milestone code changed.
+
+Staged source/document whitespace checks pass. Raw historical logs and CSVs
+retain their captured whitespace/line endings; they are excluded from that
+formatting check. Removed one extra EOF blank line from `eval/metrics.py`.

@@ -1,0 +1,27 @@
+Command: inspect tokenize.generate_tokens source coordinates and newline kinds before fixing.
+source='s = "a\u2028b"\n# next\nllm_query(s)\n'
+splitlines=['s = "a\u2028', 'b"\n', '# next\n', 'llm_query(s)\n']
+StringIO physical lines=['s = "a\u2028b"\n', '# next\n', 'llm_query(s)\n']
+TokenInfo(type=1 (NAME), string='s', start=(1, 0), end=(1, 1), line='s = "a\u2028b"\n')
+TokenInfo(type=55 (OP), string='=', start=(1, 2), end=(1, 3), line='s = "a\u2028b"\n')
+TokenInfo(type=3 (STRING), string='"a\u2028b"', start=(1, 4), end=(1, 9), line='s = "a\u2028b"\n')
+TokenInfo(type=4 (NEWLINE), string='\n', start=(1, 9), end=(1, 10), line='s = "a\u2028b"\n')
+TokenInfo(type=64 (COMMENT), string='# next', start=(2, 0), end=(2, 6), line='# next\n')
+TokenInfo(type=65 (NL), string='\n', start=(2, 6), end=(2, 7), line='# next\n')
+TokenInfo(type=1 (NAME), string='llm_query', start=(3, 0), end=(3, 9), line='llm_query(s)\n')
+TokenInfo(type=55 (OP), string='(', start=(3, 9), end=(3, 10), line='llm_query(s)\n')
+TokenInfo(type=1 (NAME), string='s', start=(3, 10), end=(3, 11), line='llm_query(s)\n')
+TokenInfo(type=55 (OP), string=')', start=(3, 11), end=(3, 12), line='llm_query(s)\n')
+TokenInfo(type=4 (NEWLINE), string='\n', start=(3, 12), end=(3, 13), line='llm_query(s)\n')
+TokenInfo(type=0 (ENDMARKER), string='', start=(4, 0), end=(4, 0), line='')
+source='llm_query\n(context)\n'
+splitlines=['llm_query\n', '(context)\n']
+StringIO physical lines=['llm_query\n', '(context)\n']
+TokenInfo(type=1 (NAME), string='llm_query', start=(1, 0), end=(1, 9), line='llm_query\n')
+TokenInfo(type=4 (NEWLINE), string='\n', start=(1, 9), end=(1, 10), line='llm_query\n')
+TokenInfo(type=55 (OP), string='(', start=(2, 0), end=(2, 1), line='(context)\n')
+TokenInfo(type=1 (NAME), string='context', start=(2, 1), end=(2, 8), line='(context)\n')
+TokenInfo(type=55 (OP), string=')', start=(2, 8), end=(2, 9), line='(context)\n')
+TokenInfo(type=4 (NEWLINE), string='\n', start=(2, 9), end=(2, 10), line='(context)\n')
+TokenInfo(type=0 (ENDMARKER), string='', start=(3, 0), end=(3, 0), line='')
+Root causes: str.splitlines recognizes U+2028 but tokenize readline uses LF; NEWLINE was discarded along with insignificant NL.

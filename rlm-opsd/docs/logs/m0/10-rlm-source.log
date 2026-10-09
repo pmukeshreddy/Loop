@@ -1,0 +1,591 @@
++zsh:1> sed -n 1,190p .deps/rlm/rlm/core/rlm.py
+import time
+from collections.abc import Callable
+from contextlib import contextmanager
+from typing import Any
+
+from rlm.clients import BaseLM, get_client
+from rlm.core.lm_handler import LMHandler
+from rlm.core.types import (
+    ClientBackend,
+    CodeBlock,
+    EnvironmentType,
+    REPLResult,
+    RLMChatCompletion,
+    RLMIteration,
+    RLMMetadata,
+    UsageSummary,
+)
+from rlm.environments import BaseEnv, SupportsPersistence, get_environment
+from rlm.logger import RLMLogger, VerbosePrinter
+from rlm.utils.exceptions import (
+    BudgetExceededError,
+    CancellationError,
+    ErrorThresholdExceededError,
+    TimeoutExceededError,
+    TokenLimitExceededError,
+)
+from rlm.utils.parsing import (
+    find_code_blocks,
+    format_iteration,
+)
+from rlm.utils.prompts import (
+    RLM_SYSTEM_PROMPT,
+    QueryMetadata,
+    build_rlm_system_prompt,
+    build_user_prompt,
+)
+from rlm.utils.rlm_utils import filter_sensitive_keys
+from rlm.utils.token_utils import count_tokens, get_context_limit
+
+
+class RLM:
+    """
+    Recursive Language Model class that the user instantiates and runs on their tasks.
+
+    Each completion() call spawns its own environment and LM handler, which are
+    cleaned up when the call completes.
+    """
+
+    def __init__(
+        self,
+        backend: ClientBackend = "openai",
+        backend_kwargs: dict[str, Any] | None = None,
+        environment: EnvironmentType = "local",
+        environment_kwargs: dict[str, Any] | None = None,
+        depth: int = 0,
+        max_depth: int = 1,
+        max_iterations: int = 30,
+        max_budget: float | None = None,
+        max_timeout: float | None = None,
+        max_tokens: int | None = None,
+        max_errors: int | None = None,
+        custom_system_prompt: str | None = None,
+        other_backends: list[ClientBackend] | None = None,
+        other_backend_kwargs: list[dict[str, Any]] | None = None,
+        logger: RLMLogger | None = None,
+        verbose: bool = False,
+        persistent: bool = False,
+        custom_tools: dict[str, Any] | None = None,
+        custom_sub_tools: dict[str, Any] | None = None,
+        compaction: bool = False,
+        compaction_threshold_pct: float = 0.85,
+        max_concurrent_subcalls: int = 4,
+        on_subcall_start: Callable[[int, str, str], None] | None = None,
+        on_subcall_complete: Callable[[int, str, float, str | None], None] | None = None,
+        on_iteration_start: Callable[[int, int], None] | None = None,
+        on_iteration_complete: Callable[[int, int, float], None] | None = None,
+        sampling_args: dict[str, Any] | None = None,
+        sub_sampling_args: dict[str, Any] | None = None,
+        orchestrator: bool = True,
+        user_prologue: str | None = None,
+    ):
+        """
+        Args:
+            backend: The backend to use for the RLM.
+            backend_kwargs: The kwargs to pass to the backend.
+            environment: The environment to use for the RLM.
+            environment_kwargs: The kwargs to pass to the environment.
+            depth: The current depth of the RLM (0-indexed).
+            max_depth: The maximum depth of recursion. When depth >= max_depth, falls back to plain LM completion.
+            max_iterations: The maximum number of iterations of the RLM.
+            max_budget: Maximum budget in USD. Execution stops if exceeded. Requires cost-tracking backend (e.g., OpenRouter).
+            max_timeout: Maximum execution time in seconds. Execution stops if exceeded, returning best answer if available.
+            max_tokens: Maximum total tokens (input + output). Execution stops if exceeded, returning best answer if available.
+            max_errors: Maximum consecutive errors before stopping. Execution stops if exceeded, returning best answer if available.
+            custom_system_prompt: The custom system prompt to use for the RLM.
+            other_backends: A list of other client backends that the environments can use to make sub-calls.
+            other_backend_kwargs: The kwargs to pass to the other client backends (ordered to match other_backends).
+            logger: The logger to use for the RLM.
+            verbose: Whether to print verbose output in rich to console.
+            persistent: If True, reuse the environment across completion() calls for multi-turn conversations.
+            custom_tools: Dict of custom functions/tools available in the REPL. Keys are function names,
+                values are callable functions. These are injected into the REPL globals.
+            custom_sub_tools: Dict of custom tools for sub-agents (llm_query calls). If None, inherits
+                from custom_tools. Pass an empty dict {} to disable tools for sub-agents.
+            compaction: If True, keep full root model history in REPL variable `history` and compact
+                when root context reaches compaction_threshold_pct of the model's context limit.
+            compaction_threshold_pct: When compaction is on, trigger summarization when root
+                message token count reaches this fraction of the model context limit (default 0.85).
+            max_concurrent_subcalls: Maximum number of parallel threads for rlm_query_batched subcalls.
+                Each child RLM runs in its own thread. Default 4.
+            on_subcall_start: Callback fired when a child RLM starts. Args: (depth, model, prompt_preview).
+            on_subcall_complete: Callback fired when a child RLM completes. Args: (depth, model, duration, error_or_none).
+            on_iteration_start: Callback fired when an iteration starts. Args: (depth, iteration_num).
+            on_iteration_complete: Callback fired when an iteration completes. Args: (depth, iteration_num, duration).
+        """
+        # Sampling args plumbed into backend_kwargs / other_backend_kwargs
+        # before the clients are constructed, so they reach the chat-completions
+        # call (e.g. temperature, top_p, max_tokens, seed). ``sampling_args``
+        # applies to the root model (depth=0); ``sub_sampling_args`` to
+        # depth=1 sub-LLM calls. If ``sub_sampling_args`` is set without an
+        # ``other_backends``, we mirror the root backend so depth=1 routes
+        # through a separate client with its own sampling args.
+        if sampling_args is not None:
+            backend_kwargs = dict(backend_kwargs or {})
+            existing = dict(backend_kwargs.get("sampling_args") or {})
+            existing.update(sampling_args)
+            backend_kwargs["sampling_args"] = existing
+        if sub_sampling_args is not None:
+            if other_backends is None:
+                other_backends = [backend]
+                other_backend_kwargs = [dict(backend_kwargs or {})]
+            else:
+                other_backend_kwargs = [dict(kw or {}) for kw in (other_backend_kwargs or [{}])]
+            first = dict(other_backend_kwargs[0])
+            existing = dict(first.get("sampling_args") or {})
+            existing.update(sub_sampling_args)
+            first["sampling_args"] = existing
+            other_backend_kwargs[0] = first
+
+        # Store config for spawning per-completion
+        self.backend = backend
+        self.backend_kwargs = backend_kwargs
+        self.environment_type = environment
+        self.environment_kwargs = (
+            environment_kwargs.copy() if environment_kwargs is not None else {}
+        )
+        # Validate other_backends: currently only support one additional backend
+        if other_backends is not None:
+            if len(other_backends) != 1:
+                raise ValueError(
+                    "We currently only support one additional backend for the recursive sub-calls! "
+                    "This model will be the model used for recursive sub-calls, but this will change in the future"
+                )
+
+        self.other_backends = other_backends
+        self.other_backend_kwargs = other_backend_kwargs
+
+        # Custom tools: functions available in the REPL environment
+        self.custom_tools = custom_tools
+        # Sub-tools: if None, inherit from custom_tools; if {}, no tools for sub-agents
+        self.custom_sub_tools = custom_sub_tools if custom_sub_tools is not None else custom_tools
+
+        self.compaction = compaction
+        self.compaction_threshold_pct = compaction_threshold_pct
+        self.max_concurrent_subcalls = max_concurrent_subcalls
+
+        self.depth = depth
+        self.max_depth = max_depth
+        self.max_iterations = max_iterations
+        self.max_budget = max_budget
+        self.max_timeout = max_timeout
+        self.max_tokens = max_tokens
+        self.max_errors = max_errors
+        self.system_prompt = custom_system_prompt if custom_system_prompt else RLM_SYSTEM_PROMPT
+        self.orchestrator = orchestrator
+        # Optional user-prologue message inserted between the metadata user
+        # message and the iter-0 turn prompt. Mirrors RLMTrainEnv's
+        # ``user_prologue`` so canonical inference can match envs that
+        # depend on a task-specific tips message (e.g. BC+).
+        self.user_prologue = user_prologue
+        self.logger = logger
+        self.verbose = VerbosePrinter(enabled=verbose)
+
+        # Event callbacks for live tree display
+        self.on_subcall_start = on_subcall_start
+        self.on_subcall_complete = on_subcall_complete
+        self.on_iteration_start = on_iteration_start
+        self.on_iteration_complete = on_iteration_complete
+
+        # Tracking (cumulative across all calls including children)
++zsh:1> cat .deps/rlm/rlm/utils/parsing.py
+"""
+Parsing utilities for RLM trjaectories.
+"""
+
+import re
+
+from rlm.core.types import REPLResult, RLMIteration
+
+
+def find_code_blocks(text: str) -> list[str]:
+    """
+    Find REPL code blocks in text wrapped in triple backticks and return List of content(s).
+    Returns None if no code blocks are found.
+    """
+    pattern = r"```repl\s*\n(.*?)\n```"
+    results = []
+
+    for match in re.finditer(pattern, text, re.DOTALL):
+        code_content = match.group(1).strip()
+        results.append(code_content)
+
+    return results
+
+
+def format_iteration(
+    iteration: RLMIteration, max_character_length: int = 20000
+) -> list[dict[str, str]]:
+    """
+    Format an RLM iteration (including all code blocks) to append to the message history for
+    the prompt of the LM in the next iteration. We also truncate code execution results
+    that exceed the max_character_length.
+
+    Each iteration produces exactly two messages in history: one assistant
+    turn containing the model's response (with any ```repl``` blocks
+    embedded), followed by a single user message that concatenates the
+    outputs of all executed code blocks in that turn. This keeps the
+    per-turn shape assistant-then-user even when the model emits several
+    blocks in one response, and avoids redundantly echoing the code
+    (which is already in the assistant message) back in the user reply.
+    Each block's output is still individually truncated at
+    ``max_character_length``.
+
+    Args:
+        iteration: The iteration to format
+        max_character_length: Per-block cap on the formatted execution
+            result. Longer outputs are tail-trimmed.
+
+    Returns:
+        A list of messages to add to the next prompt — always length 1
+        (just the assistant) when no code was run, or length 2 (assistant
+        + one combined user reply) otherwise.
+    """
+    messages = [{"role": "assistant", "content": iteration.response}]
+
+    parts = []
+    multi = len(iteration.code_blocks) > 1
+    for i, code_block in enumerate(iteration.code_blocks):
+        result = format_execution_result(code_block.result)
+        if len(result) > max_character_length:
+            result = (
+                result[:max_character_length]
+                + f"... + [{len(result) - max_character_length} chars...]"
+            )
+        header = f"REPL output (block {i + 1}):" if multi else "REPL output:"
+        parts.append(f"{header}\n{result}")
+
+    if parts:
+        messages.append({"role": "user", "content": "\n\n".join(parts)})
+    return messages
+
+
+################
+# TODO: Remove and refactor these soon
+################
+
+
+def format_execution_result(result: REPLResult) -> str:
+    """
+    Format the execution result as a string for display.
+
+    Args:
+        result: The REPLResult object to format.
+    """
+    result_parts = []
+
+    if result.stdout:
+        result_parts.append(f"\n{result.stdout}")
+
+    if result.stderr:
+        result_parts.append(f"\n{result.stderr}")
+
+    # Show some key variables (excluding internal ones)
+    important_vars = {}
+    for key, value in result.locals.items():
+        if not key.startswith("_") and key not in [
+            "__builtins__",
+            "__name__",
+            "__doc__",
+        ]:
+            # Only show simple types or short representations
+            if isinstance(value, (str, int, float, bool, list, dict, tuple)):
+                important_vars[key] = ""
+
+    if important_vars:
+        result_parts.append(f"REPL variables: {list(important_vars.keys())}\n")
+
+    return "\n\n".join(result_parts) if result_parts else "No output"
+
+
+def convert_context_for_repl(context):
+    """
+    Convert REPL context to either some
+    """
+    if isinstance(context, dict):
+        context_data = context
+        context_str = None
+    elif isinstance(context, str):
+        context_data = None
+        context_str = context
+    elif isinstance(context, list):
+        if len(context) > 0 and isinstance(context[0], dict):
+            if "content" in context[0]:
+                context_data = [msg.get("content", "") for msg in context]
+            else:
+                context_data = context
+            context_str = None
+        else:
+            context_data = context
+            context_str = None
+    else:
+        context_data = context
+        context_str = None
+
+    return context_data, context_str
++zsh:1> rg -n '^class QueryMetadata|^def build_|^def get_|^    def |^    async def ' .deps/rlm/rlm/utils/prompts.py .deps/rlm/rlm/environments/local_repl.py .deps/rlm/training/src/rlm_train/repl/base.py .deps/rlm/training/src/rlm_train/repl/subprocess.py
+.deps/rlm/rlm/utils/prompts.py:211:def build_rlm_system_prompt(
+.deps/rlm/rlm/utils/prompts.py:251:def build_user_prompt(
+.deps/rlm/training/src/rlm_train/repl/base.py:19:    async def start(self, proxy_url: str, rollout_id: str, depth: int = 1) -> None: ...
+.deps/rlm/training/src/rlm_train/repl/base.py:22:    async def load_context(self, payload: Any, index: int | None = None) -> int: ...
+.deps/rlm/training/src/rlm_train/repl/base.py:25:    async def execute(self, code: str) -> ExecResult: ...
+.deps/rlm/training/src/rlm_train/repl/base.py:28:    async def stop(self) -> None: ...
+.deps/rlm/training/src/rlm_train/repl/base.py:30:    async def bootstrap(self, code: str) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:25:    def __init__(
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:42:    async def start(self, proxy_url: str, rollout_id: str, depth: int = 1) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:73:    async def stop(self) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:103:    async def load_context(self, payload: Any, index: int | None = None) -> int:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:107:    async def bootstrap(self, code: str) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:112:    async def execute(self, code: str) -> ExecResult:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:122:    async def _request(self, payload: dict[str, Any]) -> dict[str, Any]:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:144:    async def _kill_worker(self) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:156:    async def _send(self, payload: dict[str, Any]) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:162:    async def _read_line(self) -> dict[str, Any]:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:173:    async def _drain_stderr(self) -> None:
+.deps/rlm/training/src/rlm_train/repl/subprocess.py:184:    def _stderr_text(self) -> str:
+.deps/rlm/rlm/environments/local_repl.py:35:    def __init__(self, on_ready=None):
+.deps/rlm/rlm/environments/local_repl.py:41:    def __setitem__(self, key, value):
+.deps/rlm/rlm/environments/local_repl.py:153:    def __init__(
+.deps/rlm/rlm/environments/local_repl.py:208:    def setup(self):
+.deps/rlm/rlm/environments/local_repl.py:244:    def _capture_answer(self, content: Any) -> None:
+.deps/rlm/rlm/environments/local_repl.py:247:    def _show_vars(self) -> str:
+.deps/rlm/rlm/environments/local_repl.py:258:    def _llm_query(self, prompt: str, model: str | None = None) -> str:
+.deps/rlm/rlm/environments/local_repl.py:282:    def _llm_query_batched(self, prompts: list[str], model: str | None = None) -> list[str]:
+.deps/rlm/rlm/environments/local_repl.py:313:    def _rlm_query(self, prompt: str, model: str | None = None) -> str:
+.deps/rlm/rlm/environments/local_repl.py:335:    def _rlm_query_batched(self, prompts: list[str], model: str | None = None) -> list[str]:
+.deps/rlm/rlm/environments/local_repl.py:399:    def load_context(self, context_payload: dict | list | str):
+.deps/rlm/rlm/environments/local_repl.py:403:    def add_context(
+.deps/rlm/rlm/environments/local_repl.py:441:    def update_handler_address(self, address: tuple[str, int]) -> None:
+.deps/rlm/rlm/environments/local_repl.py:445:    def get_context_count(self) -> int:
+.deps/rlm/rlm/environments/local_repl.py:449:    def add_history(
+.deps/rlm/rlm/environments/local_repl.py:477:    def get_history_count(self) -> int:
+.deps/rlm/rlm/environments/local_repl.py:481:    def append_compaction_entry(self, entry: list[dict[str, Any]] | dict[str, Any]) -> None:
+.deps/rlm/rlm/environments/local_repl.py:493:    def _capture_output(self):
+.deps/rlm/rlm/environments/local_repl.py:505:    def _temp_cwd(self):
+.deps/rlm/rlm/environments/local_repl.py:514:    def _restore_scaffold(self) -> None:
+.deps/rlm/rlm/environments/local_repl.py:547:    def execute_code(self, code: str) -> REPLResult:
+.deps/rlm/rlm/environments/local_repl.py:585:    def __enter__(self):
+.deps/rlm/rlm/environments/local_repl.py:588:    def __exit__(self, exc_type, exc_val, exc_tb):
+.deps/rlm/rlm/environments/local_repl.py:592:    def cleanup(self):
+.deps/rlm/rlm/environments/local_repl.py:603:    def __del__(self):
++zsh:1> cat .deps/rlm/training/src/rlm_train/repl/base.py
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
+
+
+@dataclass
+class ExecResult:
+    stdout: str = ""
+    stderr: str = ""
+    final_answer: str | None = None
+    execution_time: float = 0.0
+    locals_keys: list[str] = field(default_factory=list)
+
+
+class ReplBackend(ABC):
+    @abstractmethod
+    async def start(self, proxy_url: str, rollout_id: str, depth: int = 1) -> None: ...
+
+    @abstractmethod
+    async def load_context(self, payload: Any, index: int | None = None) -> int: ...
+
+    @abstractmethod
+    async def execute(self, code: str) -> ExecResult: ...
+
+    @abstractmethod
+    async def stop(self) -> None: ...
+
+    async def bootstrap(self, code: str) -> None:
+        if not code:
+            return
+        await self.execute(code)
++zsh:1> cat .deps/rlm/training/src/rlm_train/repl/subprocess.py
+"""Subprocess-based REPL backend: one `python -u worker.py` per rollout."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import sys
+from typing import Any
+
+from rlm_train.repl.base import ExecResult, ReplBackend
+
+
+class WorkerStartupError(RuntimeError):
+    pass
+
+
+class WorkerProtocolError(RuntimeError):
+    pass
+
+
+class SubprocessReplBackend(ReplBackend):
+    _STREAM_LIMIT = 16 * 1024 * 1024
+
+    def __init__(
+        self,
+        python: str | None = None,
+        worker_module: str = "rlm_train.worker",
+        startup_timeout: float = 30.0,
+        request_timeout: float = 1200.0,
+    ):
+        self._python = python or sys.executable
+        self._worker_module = worker_module
+        self._startup_timeout = startup_timeout
+        self._request_timeout = request_timeout
+        self._proc: asyncio.subprocess.Process | None = None
+        self._req_counter = 0
+        self._lock = asyncio.Lock()
+        self._stderr_task: asyncio.Task | None = None
+        self._stderr_buf: list[str] = []
+
+    async def start(self, proxy_url: str, rollout_id: str, depth: int = 1) -> None:
+        env = os.environ.copy()
+        env["RLM_TRAIN_PROXY_URL"] = proxy_url
+        env["RLM_TRAIN_ROLLOUT_ID"] = rollout_id
+        env["RLM_TRAIN_DEPTH"] = str(depth)
+        env.setdefault("PYTHONUNBUFFERED", "1")
+
+        self._proc = await asyncio.create_subprocess_exec(
+            self._python,
+            "-u",
+            "-m",
+            self._worker_module,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
+            limit=self._STREAM_LIMIT,
+        )
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
+        try:
+            init = await asyncio.wait_for(self._read_line(), timeout=self._startup_timeout)
+        except TimeoutError as e:
+            await self.stop()
+            raise WorkerStartupError(
+                f"Worker did not produce init line in {self._startup_timeout}s; "
+                f"stderr={self._stderr_text()!r}"
+            ) from e
+        if not init.get("ok"):
+            await self.stop()
+            raise WorkerStartupError(f"Worker init failed: {init.get('error')}")
+
+    async def stop(self) -> None:
+        if self._proc is None:
+            return
+        try:
+            if self._proc.returncode is None:
+                try:
+                    await self._send({"id": "_shutdown", "type": "shutdown"})
+                    await asyncio.wait_for(self._read_line(), timeout=2.0)
+                except (TimeoutError, BrokenPipeError, ConnectionResetError, WorkerProtocolError):
+                    pass
+        finally:
+            if self._proc.returncode is None:
+                try:
+                    self._proc.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(self._proc.wait(), timeout=2.0)
+                except TimeoutError:
+                    self._proc.kill()
+                    await self._proc.wait()
+            if self._stderr_task and not self._stderr_task.done():
+                self._stderr_task.cancel()
+                try:
+                    await self._stderr_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+            self._proc = None
+            self._stderr_task = None
+
+    async def load_context(self, payload: Any, index: int | None = None) -> int:
+        result = await self._request({"type": "load_context", "payload": payload, "index": index})
+        return int(result.get("index", 0))
+
+    async def bootstrap(self, code: str) -> None:
+        if not code:
+            return
+        await self._request({"type": "bootstrap", "code": code})
+
+    async def execute(self, code: str) -> ExecResult:
+        result = await self._request({"type": "exec", "code": code})
+        return ExecResult(
+            stdout=result.get("stdout", ""),
+            stderr=result.get("stderr", ""),
+            final_answer=result.get("final_answer"),
+            execution_time=float(result.get("execution_time") or 0.0),
+            locals_keys=list(result.get("locals_keys") or []),
+        )
+
+    async def _request(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self._proc is None:
+            raise WorkerProtocolError("worker not started")
+        async with self._lock:
+            self._req_counter += 1
+            rid = f"r{self._req_counter}"
+            payload = {"id": rid, **payload}
+            await self._send(payload)
+            try:
+                resp = await asyncio.wait_for(self._read_line(), timeout=self._request_timeout)
+            except TimeoutError as e:
+                await self._kill_worker()
+                raise WorkerProtocolError(
+                    f"Request {payload.get('type')} exceeded parent watchdog "
+                    f"({self._request_timeout:g}s); worker SIGKILLed."
+                ) from e
+        if resp.get("id") != rid:
+            raise WorkerProtocolError(f"id mismatch: expected {rid!r}, got {resp.get('id')!r}")
+        if not resp.get("ok"):
+            raise WorkerProtocolError(f"worker error: {resp.get('error')}")
+        return resp
+
+    async def _kill_worker(self) -> None:
+        if self._proc is None or self._proc.returncode is not None:
+            return
+        try:
+            self._proc.kill()
+        except ProcessLookupError:
+            return
+        try:
+            await asyncio.wait_for(self._proc.wait(), timeout=2.0)
+        except TimeoutError:
+            pass
+
+    async def _send(self, payload: dict[str, Any]) -> None:
+        assert self._proc is not None and self._proc.stdin is not None
+        line = (json.dumps(payload) + "\n").encode("utf-8")
+        self._proc.stdin.write(line)
+        await self._proc.stdin.drain()
+
+    async def _read_line(self) -> dict[str, Any]:
+        assert self._proc is not None and self._proc.stdout is not None
+        line = await self._proc.stdout.readline()
+        if not line:
+            stderr = self._stderr_text()
+            raise WorkerProtocolError(f"worker closed stdout; stderr={stderr!r}")
+        try:
+            return json.loads(line.decode("utf-8"))
+        except json.JSONDecodeError as e:
+            raise WorkerProtocolError(f"bad worker line: {line!r}") from e
+
+    async def _drain_stderr(self) -> None:
+        assert self._proc is not None and self._proc.stderr is not None
+        while True:
+            chunk = await self._proc.stderr.readline()
+            if not chunk:
+                return
+            text = chunk.decode("utf-8", errors="replace")
+            self._stderr_buf.append(text)
+            if len(self._stderr_buf) > 200:
+                self._stderr_buf = self._stderr_buf[-200:]
+
+    def _stderr_text(self) -> str:
+        return "".join(self._stderr_buf)

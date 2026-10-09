@@ -1,0 +1,396 @@
++zsh:1> rg -n 'teacher|verification|num_teacher_gpus|rollouts_per_example' .deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py .deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py .deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py .deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py .deps/prime-rl/src/prime_rl/orchestrator/utils.py .deps/prime-rl/src/prime_rl/orchestrator/teacher.py
+rg: .deps/prime-rl/src/prime_rl/orchestrator/teacher.py: No such file or directory (os error 2)
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:81:async def compute_teacher_logprobs(
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:86:    """Compute teacher model logprobs for a batch of training samples via prefill."""
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:188:    if config.teacher_rollout_model is not None:
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:189:        rollout_client_config = config.teacher_rollout_model.client
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:190:        rollout_model_name = config.teacher_rollout_model.model.name
+.deps/prime-rl/src/prime_rl/orchestrator/utils.py:193:            f"Using external teacher rollout model (base_url={', '.join(rollout_client_config.base_url)}, "
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:46:    compute_teacher_logprobs,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:124:    # Setup teacher inference pool if configured
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:125:    if config.teacher_model:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:127:            f"Initializing teacher inference pool (base_url={', '.join(config.teacher_model.client.base_url)}, "
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:128:            f"model={config.teacher_model.model.name})"
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:130:        teacher_inference_pool = await setup_inference_pool(
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:131:            config.teacher_model.client,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:132:            model_name=config.teacher_model.model.name,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:136:        teacher_inference_pool = None
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:267:    # Check health of teacher inference server if configured
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:268:    if config.teacher_model and teacher_inference_pool:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:269:        logger.info("Waiting for teacher inference pool to be ready")
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:270:        await teacher_inference_pool.wait_for_ready(config.teacher_model.model.name)
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:432:            compute_advantages(train_rollouts, config.rollouts_per_example, config.advantage)
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:576:        # Compute teacher logprobs if teacher model is configured
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:577:        teacher_logprobs_time = 0
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:578:        if config.teacher_model and teacher_inference_pool:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:579:            logger.info(f"Computing teacher logprobs for {len(train_examples)} training examples")
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:580:            teacher_logprobs_start_time = time.perf_counter()
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:581:            teacher_logprobs_list = await compute_teacher_logprobs(
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:582:                clients=teacher_inference_pool.train_clients,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:583:                model_name=config.teacher_model.model.name,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:586:            for train_example, teacher_logprobs in zip(train_examples, teacher_logprobs_list):
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:587:                train_example.teacher_logprobs = teacher_logprobs
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:588:            teacher_logprobs_time = time.perf_counter() - teacher_logprobs_start_time
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:589:            logger.debug(f"Computed teacher logprobs in {teacher_logprobs_time:.2f}s")
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:646:            solve_all = (reward_per_problem == config.rollouts_per_example).mean()
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:709:            "time/teacher_logprobs": teacher_logprobs_time,
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:859:        if teacher_inference_pool is not None:
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:860:            await teacher_inference_pool.stop()
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:910:      - external teacher rollout → MITO (``openai_chat_completions``),
+.deps/prime-rl/src/prime_rl/orchestrator/orchestrator.py:919:    if config.teacher_rollout_model is not None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:187:    num_teacher_gpus: Annotated[int | None, Field(description="Number of teacher inference GPUs")] = None
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:191:        total = self.num_train_gpus + self.num_infer_gpus + (self.num_teacher_gpus or 0)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:195:                f" + {self.num_teacher_gpus or 0} teacher) exceeds gpus_per_node ({self.gpus_per_node})."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:220:    num_teacher_nodes: Annotated[int | None, Field(description="Number of teacher inference nodes.")] = None
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:234:    def teacher_inference_not_supported(self):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:235:        if self.num_teacher_nodes is not None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:257:    teacher_inference: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:260:            description="Teacher inference config. If None, will use the same config as inference or a default config. Only used when teacher GPUs or nodes are set."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:391:    def validate_no_teacher_in_multinode(self):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:392:        if self.deployment.type == "multi_node" and self.teacher_inference is not None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:426:    def validate_teacher_model(self):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:428:            self.trainer.loss.type == "default" and self.trainer.loss.teacher_tau > 0
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:429:        ) and not self.orchestrator.teacher_model:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:431:                "teacher_model must be configured when teacher_tau > 0. "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:432:                "Either set teacher_tau = 0, set deployment.num_teacher_gpus, or configure teacher_model manually."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:438:        """Forbid configuring a local inference server when rollouts come from an external teacher.
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:440:        Orchestrator-only invariants (``use_sft_loss`` paired with ``teacher_rollout_model``,
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:444:        if self.orchestrator.teacher_rollout_model is not None and self.inference is not None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:446:                "inference must be omitted when orchestrator.teacher_rollout_model is configured. "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:934:    def auto_setup_teacher_inference(self):
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:935:        """Auto-configure teacher inference server and orchestrator teacher_model client."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:938:        if self.deployment.num_teacher_gpus is None or self.deployment.num_teacher_gpus == 0:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:945:        if self.teacher_inference is None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:947:                self.teacher_inference = InferenceConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:949:                self.teacher_inference = copy.deepcopy(self.inference)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:950:            self.teacher_inference.server.port = (self.inference.server.port if self.inference else 8000) + 1
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:951:        elif self.inference is not None and self.teacher_inference.server.port == self.inference.server.port:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:953:                f"teacher_inference.server.port ({self.teacher_inference.server.port}) conflicts with "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:955:                "Either use different ports or let teacher_inference be auto-configured."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:958:        tp = self.teacher_inference.parallel.tp
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:959:        num_teacher_gpus = self.deployment.num_teacher_gpus
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:960:        if num_teacher_gpus != self.teacher_inference.parallel.dp * tp:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:961:            assert num_teacher_gpus % tp == 0, "Number of teacher GPUs must be divisible by tensor parallel size"
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:962:            assert num_teacher_gpus > 0, "num_teacher_gpus cannot be zero"
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:963:            self.teacher_inference.parallel.dp = num_teacher_gpus // tp
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:965:        if self.orchestrator.teacher_model is None:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:966:            self.orchestrator.teacher_model = TeacherModelConfig()
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:967:        host = self.teacher_inference.server.host or "localhost"
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:968:        port = self.teacher_inference.server.port
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:969:        self.orchestrator.teacher_model.client.base_url = [f"http://{host}:{port}/v1"]
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/rl.py:970:        self.orchestrator.teacher_model.model.name = self.teacher_inference.model.name
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:397:    rollouts_per_example: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:401:            description="Number of rollouts generated per example. Used for pass@k estimation (e.g. rollouts_per_example=8 enables pass@1 through pass@8).",
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:486:    rollouts_per_example: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:513:        """Resolve per-env overrides: inherit group-level sampling, num_workers, max_retries, num_examples, rollouts_per_example, and interval. Then resolve auto num_workers."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:523:            if "rollouts_per_example" not in env.model_fields_set:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:524:                env.rollouts_per_example = self.rollouts_per_example
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:531:            # Resolve auto num_workers now that num_examples and rollouts_per_example are set
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:536:                    max_concurrent = env.num_examples * env.rollouts_per_example
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:884:    """Configures the teacher model for computing teacher logprobs (e.g. for distillation)."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:888:        Field(description="The OAI client configuration for the teacher model."),
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:893:        Field(description="The model configuration for the teacher model."),
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:898:    """Configures an external teacher model used to generate rollout text."""
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:932:    # The teacher model configuration (optional)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:933:    teacher_model: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:936:            description="The teacher model configuration for computing teacher logprobs (e.g. for distillation). "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:937:            "If provided, teacher logprobs will be computed using the specified model. "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:938:            "If None, no teacher model will be used."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:942:    # External teacher rollout model configuration (optional)
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:943:    teacher_rollout_model: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:947:                "Optional external teacher model used for rollout generation. "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:959:                "Requires a teacher_rollout_model to be configured."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1050:    rollouts_per_example: Annotated[
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1090:            description="The group is dropped from the current step's batch once this many of its dispatch rounds have returned errored or empty rollouts (the trainer proceeds with the rollouts from other groups). Counts rounds, not individual rollouts: a non-group-scoring env that dispatches `rollouts_per_example` rollouts at once still only counts one round per failed batch. `None` means retry indefinitely (legacy behavior). Useful for unblocking single-example hangs in agent envs.",
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1129:            "teacher rollouts require MITO."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1195:        has_teacher = self.teacher_rollout_model is not None
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1196:        if self.use_sft_loss and not has_teacher:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1198:                "orchestrator.use_sft_loss = true requires orchestrator.teacher_rollout_model to be configured."
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1200:        if has_teacher and not self.use_sft_loss:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1201:            raise ValueError("orchestrator.teacher_rollout_model requires orchestrator.use_sft_loss = true.")
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1202:        if has_teacher and self.use_renderer:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1204:                "orchestrator.use_renderer must be false when orchestrator.teacher_rollout_model is configured "
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1315:            if self.batch_size % self.rollouts_per_example != 0:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1319:                self.rollouts_per_example,
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1329:        if self.max_inflight_rollouts is not None and self.max_inflight_rollouts < self.rollouts_per_example:
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:1358:        is_vllm = self.teacher_rollout_model is None
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/trainer.py:692:    teacher_tau: Annotated[float, Field(ge=0, description="The tau for teacher logprobs.")] = 0.0
++zsh:1> cat .deps/prime-rl/src/prime_rl/orchestrator/teacher.py
+cat: .deps/prime-rl/src/prime_rl/orchestrator/teacher.py: No such file or directory
++zsh:1> sed -n 1,280p .deps/prime-rl/src/prime_rl/trainer/rl/loss.py
+from dataclasses import dataclass
+from typing import Any, Callable
+
+import torch
+from beartype import beartype as typechecker
+from jaxtyping import Bool, Float, Int, jaxtyped
+from torch import Tensor
+
+from prime_rl.configs.trainer import CustomLossConfig, DefaultLossConfig, LossConfig, SFTLossConfig
+from prime_rl.utils.utils import import_object
+
+
+@dataclass
+class LossInputs:
+    """Inputs for computing loss on a single sample."""
+
+    trainer_logprobs: Float[Tensor, " seq"]
+    inference_logprobs: Float[Tensor, " seq"]
+    teacher_logprobs: Float[Tensor, " seq"] | None
+    advantages: Float[Tensor, " seq"]
+    loss_mask: Bool[Tensor, " seq"]
+
+
+@dataclass
+class LossOutputs:
+    """Outputs from computing loss on a single sample."""
+
+    loss: Float[Tensor, ""]
+    metrics: dict[str, Tensor]
+
+
+LossFn = Callable[..., LossOutputs]
+"""Type for a per-sample loss function.
+
+Expected signature:
+    def my_loss(inputs: LossInputs, **kwargs) -> LossOutputs:
+        ...
+"""
+
+
+@jaxtyped(typechecker=typechecker)
+@torch.compile(dynamic=True)
+def selective_log_softmax(
+    logits: Float[Tensor, "batch seq vocab"], index: Int[Tensor, "batch seq"]
+) -> Float[Tensor, "batch seq"]:
+    logprobs = logits.log_softmax(dim=-1)
+    return torch.gather(logprobs, dim=-1, index=index.unsqueeze(-1)).squeeze(-1)
+
+
+@jaxtyped(typechecker=typechecker)
+@torch.compile(dynamic=True)
+def compute_entropy(shifted_logits: Float[Tensor, "batch seq vocab"]) -> Float[Tensor, "batch seq"]:
+    with torch.no_grad():
+        pd = torch.nn.functional.softmax(shifted_logits, dim=-1)
+        entropy = torch.logsumexp(shifted_logits, dim=-1) - torch.sum(pd * shifted_logits, dim=-1)
+    return entropy
+
+
+@jaxtyped(typechecker=typechecker)
+def shift_logits(
+    logits: Float[Tensor, "batch seq vocab"], left_pad_logit: Float[Tensor, "batch 1 vocab"] | None = None
+) -> Float[Tensor, "batch seq vocab"]:
+    """Removes final token logits and adds a left pad logit for the first token."""
+    # We drop the last logit because it corresponds to the next token that will be sampled but is not here yet
+    batch, seq, vocab = logits.shape
+    logits = logits[:, :-1, :]  # (batch, seq-1, vocab)
+    if left_pad_logit is None:
+        left_pad_logit = torch.zeros(batch, 1, vocab, device=logits.device, dtype=logits.dtype)  # (batch, 1, vocab)
+    logits = torch.cat([left_pad_logit, logits], dim=1)  # (batch, seq, vocab)
+    return logits
+
+
+def shift_tensor_left(t: Float[Tensor, "batch seq"]) -> Float[Tensor, "batch seq"]:
+    """Shifts the tensor one token to the left.
+
+    Used to create labels from input_ids: labels[i] = input_ids[i+1].
+    The last position is padded with 0 (a valid token index) since this value
+    will be shifted off by shift_tensor_right and never used.
+    """
+    return torch.cat([t[:, 1:], torch.full((t.shape[0], 1), 0, device=t.device, dtype=t.dtype)], dim=1)
+
+
+def shift_tensor_right(t: Float[Tensor, "batch seq"], pad_value: float | None = None) -> Float[Tensor, "batch seq"]:
+    """Shifts the tensor one token to the right, prepending a padding value.
+
+    Used to realign logprobs/entropy after computing with shifted labels.
+    After shift: result[i] = t[i-1], result[0] = pad_value.
+    This converts from "predict next token" convention to "probability of current token" convention.
+
+    Args:
+        t: Tensor to shift right
+        pad_value: Value to use for position 0. If None, uses 0.0 for backward compatibility.
+                   For logprobs, should be log(1/vocab_size) to represent uniform distribution.
+                   For entropy, should be log(vocab_size) to represent maximum entropy.
+    """
+    if pad_value is None:
+        pad_value = 0.0
+    return torch.cat([torch.full((t.shape[0], 1), pad_value, device=t.device, dtype=t.dtype), t[:, :-1]], dim=1)
+
+
+def _safe_mean(values: Tensor, mask: Tensor) -> Tensor:
+    """Mean of values over a boolean mask; returns 0 when mask is empty."""
+    denom = torch.clamp_min(mask.sum(), 1)
+    return values[mask].sum() / denom
+
+
+def compute_importance_ratio_and_mismatch_kl(
+    trainer_logprobs: Tensor, inference_logprobs: Tensor
+) -> tuple[Tensor, Tensor, Tensor]:
+    log_importance_ratio = trainer_logprobs - inference_logprobs
+    importance_ratio = torch.exp(log_importance_ratio)
+    mismatch_kl = importance_ratio - log_importance_ratio - 1
+    return log_importance_ratio, importance_ratio, mismatch_kl
+
+
+def default_loss_fn(inputs: LossInputs, loss_config: DefaultLossConfig) -> LossOutputs:
+    """
+    DPPO+KL loss, combining:
+    - DPPO-Binary TV Loss (https://arxiv.org/pdf/2602.04879)
+    - Kimi-K2.5 KL Loss (https://arxiv.org/pdf/2602.02276)
+
+    The mask is conditioned on the advantage sign: for positive advantages,
+    we mask tokens whose probability increased too much (trust region violation
+    in the upweight direction); for negative advantages, we mask tokens whose
+    probability decreased too much (trust region violation in the downweight
+    direction).
+    """
+    trainer_logprobs = inputs.trainer_logprobs
+    inference_logprobs = inputs.inference_logprobs
+    teacher_logprobs = inputs.teacher_logprobs
+    advantages = inputs.advantages
+    loss_mask = inputs.loss_mask
+
+    log_importance_ratio, importance_ratio, mismatch_kl = compute_importance_ratio_and_mismatch_kl(
+        trainer_logprobs, inference_logprobs
+    )
+
+    probs_diff = torch.exp(trainer_logprobs) - torch.exp(inference_logprobs)
+    dppo_invalid_mask_high = probs_diff > loss_config.dppo_mask_high
+    dppo_invalid_mask_low = probs_diff < -loss_config.dppo_mask_low
+    positive_advantages = advantages > 0
+    negative_advantages = advantages < 0
+    dppo_invalid_mask = torch.where(positive_advantages, dppo_invalid_mask_high, dppo_invalid_mask_low)
+
+    is_masked = dppo_invalid_mask
+    is_masked_high = positive_advantages & dppo_invalid_mask_high
+    is_masked_low = negative_advantages & dppo_invalid_mask_low
+    drop_mask = loss_mask & is_masked
+    keep_mask = loss_mask & ~is_masked
+
+    advantages = loss_config.adv_tau * advantages
+    if teacher_logprobs is not None:
+        teacher_kl = teacher_logprobs - trainer_logprobs
+        advantages = advantages + loss_config.teacher_tau * teacher_kl.detach()
+    else:
+        teacher_kl = None
+
+    pg_loss = keep_mask * advantages * importance_ratio
+    kl_loss = loss_mask * log_importance_ratio**2
+    loss = (-pg_loss + loss_config.kl_tau * kl_loss).sum()
+
+    metrics = {
+        "masked_mismatch_kl": _safe_mean(mismatch_kl, loss_mask & is_masked),  # all trainable, masked tokens
+        "unmasked_mismatch_kl": _safe_mean(mismatch_kl, keep_mask),  # all trainable, unmasked tokens
+        "is_masked": _safe_mean(is_masked, loss_mask),
+        "is_masked_low": _safe_mean(is_masked_low, loss_mask),
+        "is_masked_high": _safe_mean(is_masked_high, loss_mask),
+        "masked_advantage_positive": _safe_mean(positive_advantages, drop_mask),
+        "masked_advantage_negative": _safe_mean(negative_advantages, drop_mask),
+    }
+    if teacher_kl is not None:
+        metrics["teacher_kl"] = _safe_mean(teacher_kl, loss_mask)
+
+    return LossOutputs(loss=loss, metrics=metrics)
+
+
+def sft_loss_fn(inputs: LossInputs) -> LossOutputs:
+    """SFT-style masked negative log-likelihood over trainable tokens."""
+    trainer_logprobs = inputs.trainer_logprobs
+    loss_mask = inputs.loss_mask
+
+    loss = -(trainer_logprobs[loss_mask]).sum()
+    metrics = {
+        "nll": _safe_mean(-trainer_logprobs, loss_mask),
+    }
+    return LossOutputs(loss=loss, metrics=metrics)
+
+
+def setup_loss_fn(loss_config: LossConfig) -> LossFn:
+    """Setup the loss function based on config."""
+    if isinstance(loss_config, CustomLossConfig):
+        custom_fn = import_object(loss_config.import_path)
+        kwargs = loss_config.kwargs
+
+        def loss_fn(inputs: LossInputs) -> LossOutputs:
+            return custom_fn(inputs, **kwargs)
+
+        return loss_fn
+
+    if isinstance(loss_config, SFTLossConfig):
+        return sft_loss_fn
+
+    def loss_fn(inputs: LossInputs) -> LossOutputs:
+        return default_loss_fn(inputs, loss_config)
+
+    return loss_fn
+
+
+def compute_loss(
+    trainer_logprobs: list[Float[Tensor, " seq_i"]],
+    inference_logprobs: list[Float[Tensor, " seq_i"]],
+    teacher_logprobs: list[Float[Tensor, " seq_i"]] | None,
+    advantages: list[Float[Tensor, " seq_i"]],
+    loss_mask: list[Bool[Tensor, " seq_i"]],
+    loss_fn: LossFn,
+    loss_scale: int,
+    sft_loss: bool = False,
+) -> tuple[Float[Tensor, ""], dict[str, Any]]:
+    """
+    Compute loss for packed sequences (batch size = 1, multiple sequences packed along sequence dimension).
+
+    Args:
+        trainer_logprobs: Log probabilities for each sequence
+        inference_logprobs: Reference log probabilities for each sequence
+        teacher_logprobs: Teacher log probabilities for each sequence, or None
+        advantages: Advantages for each sequence
+        loss_mask: Loss mask for each sequence
+        loss_fn: Per-sequence loss function
+        loss_scale: Scale factor to normalize the loss
+        sft_loss: If True, use SFT loss instead of the configured loss_fn for this batch
+
+    Returns:
+        Tuple of (scaled_loss, aggregated_metrics)
+    """
+    effective_loss_fn = sft_loss_fn if sft_loss else loss_fn
+
+    total_loss = 0.0
+    all_metrics: dict[str, list[Tensor]] = {}
+
+    if teacher_logprobs is None:
+        teacher_logprobs = [None] * len(trainer_logprobs)
+
+    for t_logp, i_logp, teach_logp, adv, mask in zip(
+        trainer_logprobs,
+        inference_logprobs,
+        teacher_logprobs,
+        advantages,
+        loss_mask,
+    ):
+        inputs = LossInputs(
+            trainer_logprobs=t_logp,
+            inference_logprobs=i_logp,
+            teacher_logprobs=teach_logp,
+            advantages=adv,
+            loss_mask=mask,
+        )
+
+        result = effective_loss_fn(inputs)
+
+        total_loss = total_loss + result.loss
+
+        for k, v in result.metrics.items():
+            if k not in all_metrics:
+                all_metrics[k] = []
+            all_metrics[k].append(v)
+
+    scaled_loss = total_loss / loss_scale
+
+    aggregated: dict[str, Any] = {}
+    for k, v in all_metrics.items():
+        if v[0].dim() == 0:
+            aggregated[k] = torch.stack(v)
+        else:
+            aggregated[k] = torch.cat(v)
+
+    return scaled_loss, aggregated

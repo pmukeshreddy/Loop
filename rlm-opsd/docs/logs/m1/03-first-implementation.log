@@ -1,0 +1,59 @@
++zsh:1> .venv/bin/python -m pytest tests -q '--tb=short'
+............F.....F                                                      [100%]
+=================================== FAILURES ===================================
+_______________ test_subcall_budget_concurrency_routing_and_logs _______________
+tests/test_harness.py:180: in test_subcall_budget_concurrency_routing_and_logs
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_harness.py:176: in run
+    assert sum(c.error is None for c in calls) == 3
+E   assert 0 == 3
+E    +  where 0 = sum(<generator object test_subcall_budget_concurrency_routing_and_logs.<locals>.run.<locals>.<genexpr> at 0x112cdc860>)
+______ test_real_verifiers_rollout_processes_last_turn_and_preserves_ids _______
+tests/test_verifiers_env.py:50: in test_real_verifiers_rollout_processes_last_turn_and_preserves_ids
+    asyncio.run(run())
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/test_verifiers_env.py:33: in run
+    state = await env.rollout(input=dict(example_id=0, prompt=[dict(role="user", content="query")],
+.venv/lib/python3.12/site-packages/verifiers/envs/multiturn_env.py:221: in rollout
+    await asyncio.wait_for(rollout_loop(), timeout=self.timeout_seconds)
+../../../.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/asyncio/tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+.venv/lib/python3.12/site-packages/verifiers/envs/multiturn_env.py:209: in rollout_loop
+    response = await self.get_model_response(state, prompt_messages)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/verifiers/envs/environment.py:541: in get_model_response
+    response = await client.get_response(
+tests/test_verifiers_env.py:19: in get_response
+    return Response(message=ResponseMessage(
+E   pydantic_core._pydantic_core.ValidationError: 2 validation errors for ResponseMessage
+E   finish_reason
+E     Field required [type=missing, input_value={'content': '```repl\nres... multi_modal_data=None)}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.13/v/missing
+E   is_truncated
+E     Field required [type=missing, input_value={'content': '```repl\nres... multi_modal_data=None)}, input_type=dict]
+E       For further information visit https://errors.pydantic.dev/2.13/v/missing
+----------------------------- Captured stderr call -----------------------------
+Map:   0%|          | 0/1 [00:00<?, ? examples/s]Map: 100%|██████████| 1/1 [00:00<00:00, 133.30 examples/s]
+prompt_messages returned raw dicts/strings instead of vf.Messages. This repeatedly triggers normalize_messages(), causing unnecessary Pydantic validation overhead. Return vf.Message types (e.g. vf.UserMessage, vf.AssistantMessage) to avoid this.
+=========================== short test summary info ============================
+FAILED tests/test_harness.py::test_subcall_budget_concurrency_routing_and_logs
+FAILED tests/test_verifiers_env.py::test_real_verifiers_rollout_processes_last_turn_and_preserves_ids
+2 failed, 17 passed in 14.45s

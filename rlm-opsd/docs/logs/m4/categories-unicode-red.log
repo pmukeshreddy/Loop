@@ -1,0 +1,43 @@
+$ .venv/bin/python -m pytest tests/test_detector_categories.py -q
+...................FF..........................                          [100%]
+=================================== FAILURES ===================================
+_ test_unicode_line_separator_inside_python_string_does_not_shift_later_offsets _
+
+    def test_unicode_line_separator_inside_python_string_does_not_shift_later_offsets():
+        from rlm_opsd.detectors.categories import classify_text_spans
+    
+        text = '```repl\ns = "a\u2028b"\n# next\nllm_query(s)\n```'
+>       assert [(s['category'], text[s['start']:s['end']])
+                for s in classify_text_spans(text)] == [
+            ('protocol', '```repl\n'), ('code', 's = "a\u2028b"\n'),
+            ('comment', '# next'), ('code', '\n'), ('protocol', 'llm_query'),
+            ('code', '(s)\n'), ('protocol', '```'),
+        ]
+E       assert [('protocol',...ocol', '```')] == [('protocol',...'(s)\n'), ...]
+E         
+E         At index 1 diff: ('code', 's = "a\u2028') != ('code', 's = "a\u2028b"\n')
+E         Right contains one more item: ('protocol', '```')
+E         Use -v to get more diff
+
+tests/test_detector_categories.py:117: AssertionError
+_________ test_bare_api_reference_on_previous_statement_is_not_a_call __________
+
+    def test_bare_api_reference_on_previous_statement_is_not_a_call():
+        from rlm_opsd.detectors.categories import classify_text_spans
+    
+        text = '```repl\nllm_query\n(context)\n```'
+>       assert [(s['category'], text[s['start']:s['end']])
+                for s in classify_text_spans(text)] == [
+            ('protocol', '```repl\n'), ('code', 'llm_query\n(context)\n'), ('protocol', '```')]
+E       AssertionError: assert [('protocol',...ocol', '```')] == [('protocol',...ocol', '```')]
+E         
+E         At index 0 diff: ('protocol', '```repl\nllm_query') != ('protocol', '```repl\n')
+E         Use -v to get more diff
+
+tests/test_detector_categories.py:129: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_detector_categories.py::test_unicode_line_separator_inside_python_string_does_not_shift_later_offsets
+FAILED tests/test_detector_categories.py::test_bare_api_reference_on_previous_statement_is_not_a_call
+2 failed, 45 passed in 0.04s
+
+exit_code=1

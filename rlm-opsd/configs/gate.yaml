@@ -1,0 +1,38 @@
+# M5 operator settings. All acceptance values must be chosen by the user.
+base_model: Qwen/Qwen3.5-27B
+revision: fc05daec18b0a78c049392ed2e771dde82bdf654
+run_label: Qwen3.5-27B teacher gate, manual_v1
+# Both endpoints must serve these same frozen initial weights and pinned template.
+# Sharing an endpoint is allowed; independent client instances are used.
+root_endpoint:
+  base_url: null
+  served_model: Qwen/Qwen3.5-27B
+  api_key_var: null  # env-variable NAME if required; never place a secret here
+frozen_endpoint:
+  base_url: null
+  served_model: Qwen/Qwen3.5-27B
+  api_key_var: null
+# Paths resolve relative to this file.
+manifest_path: ../data/manifest.jsonl
+harness_config: harness.yaml
+prompt_config: prompts.yaml
+detector_config: detectors.yaml
+temperature: 0.0
+seed: 417
+request_timeout_s: 300.0
+episode_timeout_s: 1200.0
+criteria:
+  - metric: task_tag_match
+    dimension: overall
+    group: all
+    direction: min
+    threshold: null
+    min_known: null
+    max_unknown_fraction: null
+  - metric: D16
+    dimension: overall
+    group: all
+    direction: max
+    threshold: null
+    min_known: null
+    max_unknown_fraction: null

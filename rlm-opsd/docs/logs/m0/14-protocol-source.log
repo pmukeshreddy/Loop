@@ -1,0 +1,588 @@
++zsh:1> sed -n 1,90p .deps/rlm/rlm/utils/prompts.py
+import textwrap
+from typing import Any
+
+from rlm.core.types import QueryMetadata
+
+# DEPRECATED: not used anywhere. Kept for reference only. The current default
+# system prompt is the short variant below (`RLM_SYSTEM_PROMPT`), combined
+# with `ORCHESTRATOR_ADDENDUM` via `build_rlm_system_prompt`.
+RLM_SYSTEM_PROMPT_OLD = textwrap.dedent(
+    """You are tasked with answering a query with associated context. You can access, transform, and analyze this context interactively in a REPL environment that can recursively query sub-LLMs, which you are strongly encouraged to use as much as possible. You will be queried iteratively until you provide a final answer.
+
+The REPL environment is initialized with:
+1. A `context` variable that contains extremely important information about your query. You should check the content of the `context` variable to understand what you are working with. Make sure you look through it sufficiently as you answer your query.
+2. A `llm_query(prompt, model=None)` function that makes a single LLM completion call (no REPL, no iteration). Fast and lightweight -- use this for simple extraction, summarization, or Q&A over a chunk of text. The sub-LLM can handle around 500K chars.
+3. A `llm_query_batched(prompts, model=None)` function that runs multiple `llm_query` calls concurrently: returns `List[str]` in the same order as input prompts. Much faster than sequential `llm_query` calls for independent queries.
+4. A `rlm_query(prompt, model=None)` function that spawns a **recursive RLM sub-call** for deeper thinking subtasks. The child gets its own REPL environment and can reason iteratively over the prompt, just like you. Use this when a subtask requires multi-step reasoning, code execution, or its own iterative problem-solving -- not just a simple one-shot answer. Falls back to `llm_query` if recursion is not available.
+5. A `rlm_query_batched(prompts, model=None)` function that spawns multiple recursive RLM sub-calls. Each prompt gets its own child RLM. Falls back to `llm_query_batched` if recursion is not available.
+6. A `SHOW_VARS()` function that returns all variables you have created in the REPL. Use this to check what variables exist.
+7. The ability to use `print()` statements to view the output of your REPL code and continue your reasoning.
+8. An `answer` dict (`{{"content": "", "ready": False}}`) that you use to submit your final answer. See "Submitting your final answer" below.
+{custom_tools_section}
+
+**When to use `llm_query` vs `rlm_query`:**
+- Use `llm_query` for simple, one-shot tasks: extracting info from a chunk, summarizing text, answering a factual question, classifying content. These are fast single LLM calls.
+- Use `rlm_query` when the subtask itself requires deeper thinking: multi-step reasoning, solving a sub-problem that needs its own REPL and iteration, or tasks where a single LLM call might not be enough. The child RLM can write and run code, query further sub-LLMs, and iterate to find the answer.
+
+**Breaking down problems:** You must break problems into more digestible components—whether that means chunking or summarizing a large context, or decomposing a hard task into easier sub-problems and delegating them via `llm_query` / `rlm_query`. Use the REPL to write a **programmatic strategy** that uses these LLM calls to solve the problem, as if you were building an agent: plan steps, branch on results, combine answers in code.
+
+**REPL for computation:** You can also use the REPL to compute programmatic steps (e.g. `math.sin(x)`, distances, physics formulas) and then chain those results into an LLM call. For complex math or physics, compute intermediate quantities in code and pass the numbers to the LM for interpretation or the final answer. Example: data describes an electron in a magnetic field undergoing helical motion; task is to find the entry angle.
+```repl
+import math
+# Suppose the context or an earlier LM call gave us: B, m, q, pitch, R (radius). Extract or set them.
+# Helical motion: v_parallel = pitch * (q*B)/(2*pi*m), v_perp = R * (q*B)/m. Entry angle theta: tan(theta) = v_perp/v_parallel.
+v_parallel = pitch * (q * B) / (2 * math.pi * m)
+v_perp = R * (q * B) / m
+theta_rad = math.atan2(v_perp, v_parallel)
+theta_deg = math.degrees(theta_rad)
+summary = llm_query(f"An electron entered a B field and underwent helical motion. Computed entry angle: {{theta_deg:.2f}} deg. State the answer clearly for the user.")
+```
+You will only be able to see truncated outputs from the REPL environment, so you should use the query LLM function on variables you want to analyze. You will find this function especially useful when you have to analyze the semantics of the context. Use these variables as buffers to build up your final answer.
+Make sure to explicitly look through the entire context in REPL before answering your query. Break the context and the problem into digestible pieces: e.g. figure out a chunking strategy, break up the context into smart chunks, query an LLM per chunk and save answers to a buffer, then query an LLM over the buffers to produce your final answer.
+
+You can use the REPL environment to help you understand your context, especially if it is huge. Remember that your sub LLMs are powerful -- they can fit around 500K characters in their context window, so don't be afraid to put a lot of context into them. For example, a viable strategy is to feed 10 documents per sub-LLM query. Analyze your input data and see if it is sufficient to just fit it in a few sub-LLM calls!
+
+When you want to execute Python code in the REPL environment, wrap it in triple backticks with 'repl' language identifier. For example, say we want our recursive model to search for the magic number in the context (assuming the context is a string), and the context is very long, so we want to chunk it:
+```repl
+chunk = context[:10000]
+answer = llm_query(f"What is the magic number in the context? Here is the chunk: {{chunk}}")
+print(answer)
+```
+
+As an example, suppose you're trying to answer a question about a book. You can iteratively chunk the context section by section, query an LLM on that chunk, and track relevant information in a buffer.
+```repl
+query = "In Harry Potter and the Sorcerer's Stone, did Gryffindor win the House Cup because they led?"
+for i, section in enumerate(context):
+    if i == len(context) - 1:
+        buffer = llm_query(f"You are on the last section of the book. So far you know that: {{buffers}}. Gather from this last section to answer {{query}}. Here is the section: {{section}}")
+        print(f"Based on reading iteratively through the book, the answer is: {{buffer}}")
+    else:
+        buffer = llm_query(f"You are iteratively looking through a book, and are on section {{i}} of {{len(context)}}. Gather information to help answer {{query}}. Here is the section: {{section}}")
+        print(f"After section {{i}} of {{len(context)}}, you have tracked: {{buffer}}")
+```
+
+As another example, when the context isn't that long (e.g. >100M characters), a simple but viable strategy is, based on the context chunk lengths, to combine them and recursively query an LLM over chunks. For example, if the context is a List[str], we ask the same query over each chunk using `llm_query_batched` for concurrent processing:
+```repl
+query = "A man became famous for his book "The Great Gatsby". How many jobs did he have?"
+# Suppose our context is ~1M chars, and we want each sub-LLM query to be ~0.1M chars so we split it into 10 chunks
+chunk_size = len(context) // 10
+chunks = []
+for i in range(10):
+    if i < 9:
+        chunk_str = "\n".join(context[i*chunk_size:(i+1)*chunk_size])
+    else:
+        chunk_str = "\n".join(context[i*chunk_size:])
+    chunks.append(chunk_str)
+
+# Use batched query for concurrent processing - much faster than sequential calls!
+prompts = [f"Try to answer the following query: {{query}}. Here are the documents:\n{{chunk}}. Only answer if you are confident in your answer based on the evidence." for chunk in chunks]
+answers = llm_query_batched(prompts)
+for i, answer in enumerate(answers):
+    print(f"I got the answer from chunk {{i}}: {{answer}}")
+summary = llm_query(f"Aggregating all the answers per chunk, answer the original query about total number of jobs: {{query}}\\n\\nAnswers:\\n" + "\\n".join(answers))
+```
+
+For subtasks that require deeper reasoning (e.g. solving a complex sub-problem), use `rlm_query` instead. The child gets its own REPL to iterate; you can then use the result in parent logic:
+```repl
+# Child RLM solves the sub-problem in its own REPL; we use the result in code
+trend = rlm_query(f"Analyze this dataset and conclude with one word: up, down, or stable: {{data}}")
+if "up" in trend.lower():
+    recommendation = "Consider increasing exposure."
++zsh:1> sed -n 175,255p .deps/rlm/rlm/utils/prompts.py
+            "Sub-LLMs have no REPL; they only see the prompt and the `context` slice you pass "
+            "them. Hand them clean, focused inputs and ask for terse, structured outputs you "
+            "can manipulate programmatically."
+        ),
+        (
+            "Sub-call budget is finite on two independent axes, and `llm_query_batched` only "
+            "parallelizes — it does not relax either. (1) Per-prompt capacity: a single "
+            "sub-call answers well only when its input stays modestly sized — a useful rough "
+            "ceiling is ~100K characters per prompt, less when the text is dense. Pack each "
+            "prompt close to that capacity (a chunk of many items, a whole document) so one "
+            "call accomplishes a lot of work. (2) Per-batch fan-out: `llm_query_batched` "
+            "concurrency is bounded too — a useful rough ceiling is ~20 prompts per batch. "
+            "Tiny-prompt mega-batches (hundreds or thousands of single-item prompts) are the "
+            "anti-pattern; fat-prompt small batches are correct. For many independent units, "
+            "use several ~20-wide batches of full-capacity prompts in sequence, not one "
+            "mega-batch of tiny prompts. When the work can be expressed either as a "
+            "sequential loop of `llm_query`s or as one comparably-sized batched call, "
+            "prefer batched — same total work, far fewer turns burned. After Python-side "
+            "filtering has narrowed the candidate set, batch-extract the survivors rather "
+            "than reading them by hand. If the raw workload exceeds both budgets at once "
+            "(e.g. a context far larger than ~20 × 100K chars), don't brute-force it: "
+            "filter aggressively in Python first to a tractable subset, or stage the task — "
+            "a cheap coarse pass narrows candidates, then a targeted second pass extracts "
+            "from the survivors."
+        ),
+        (
+            "Reserve your own tokens for high-level decisions: what to ask next, how to combine "
+            "sub-LM outputs, when to finalize. Delegate everything else."
+        ),
+    ]
+)
+
+
+_DEFAULT_MAX_ITERATIONS = 30
+
+
+def build_rlm_system_prompt(
+    system_prompt: str,
+    query_metadata: QueryMetadata,
+    custom_tools: dict[str, Any] | None = None,
+    root_prompt: str | None = None,
+    orchestrator: bool = True,
+) -> list[dict[str, str]]:
+    from rlm.environments.base_env import format_tools_for_prompt
+
+    tools_formatted = format_tools_for_prompt(custom_tools)
+    if tools_formatted:
+        custom_tools_section = (
+            f"\n6. Custom tools and data available in the REPL:\n{tools_formatted}"
+        )
+    else:
+        custom_tools_section = ""
+
+    final_system_prompt = system_prompt.format(custom_tools_section=custom_tools_section)
+    if orchestrator:
+        final_system_prompt = f"{final_system_prompt}\n\n{ORCHESTRATOR_ADDENDUM}"
+
+    metadata_body = (
+        f"Your context is a {query_metadata.context_type} of "
+        f"{query_metadata.context_total_length} total characters. "
+        "Each sub-LLM call can handle roughly ~100k tokens at once."
+    )
+    if root_prompt:
+        metadata_prompt = f"Answer the following: {root_prompt}\n\n{metadata_body}"
+    else:
+        metadata_prompt = metadata_body
+
+    return [
+        {"role": "system", "content": final_system_prompt},
+        {"role": "user", "content": metadata_prompt},
+    ]
+
+
+USER_PROMPT = "Turn {iter_1}/{max_iter}:"
+
+
+def build_user_prompt(
+    root_prompt: str | None = None,
+    iteration: int = 0,
+    context_count: int = 1,
+    history_count: int = 0,
++zsh:1> sed -n 120,345p .deps/rlm/training/src/rlm_train/worker.py
+
+class _AnswerDict(dict):
+    def __init__(self, on_ready=None):
+        super().__init__()
+        super().__setitem__("content", "")
+        super().__setitem__("ready", False)
+        self._on_ready = on_ready
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if key == "ready" and value and self._on_ready is not None:
+            try:
+                self._on_ready(self.get("content", ""))
+            except Exception:
+                pass
+
+
+class Worker:
+    def __init__(
+        self,
+        proxy_url: str,
+        rollout_id: str,
+        depth: int = 1,
+        exec_timeout_s: float | None = None,
+    ):
+        self.proxy_url = proxy_url.rstrip("/")
+        self.rollout_id = rollout_id
+        self.depth = depth
+        if exec_timeout_s is None:
+            try:
+                exec_timeout_s = float(os.environ.get("RLM_TRAIN_EXEC_TIMEOUT_S", "600"))
+            except ValueError:
+                exec_timeout_s = 600.0
+        self.exec_timeout_s = exec_timeout_s
+        self._lock = threading.Lock()
+        self._last_final_answer: str | None = None
+        self._context_count = 0
+        self.globals: dict[str, Any] = {}
+        self.locals: dict[str, Any] = {}
+        self._setup_namespace()
+
+    def _setup_namespace(self) -> None:
+        self.globals = {"__builtins__": _SAFE_BUILTINS.copy(), "__name__": "__main__"}
+        self.locals = {}
+        self.globals["SHOW_VARS"] = self._show_vars
+        self.globals["llm_query"] = self._llm_query
+        self.globals["llm_query_batched"] = self._llm_query_batched
+        self.globals["rlm_query"] = self._llm_query
+        self.globals["rlm_query_batched"] = self._llm_query_batched
+        self.locals["answer"] = _AnswerDict(on_ready=self._capture_answer)
+
+    def _restore_scaffold(self) -> None:
+        for name in RESERVED_TOOL_NAMES:
+            if name == "llm_query":
+                self.globals["llm_query"] = self._llm_query
+            elif name == "llm_query_batched":
+                self.globals["llm_query_batched"] = self._llm_query_batched
+            elif name == "rlm_query":
+                self.globals["rlm_query"] = self._llm_query
+            elif name == "rlm_query_batched":
+                self.globals["rlm_query_batched"] = self._llm_query_batched
+            elif name == "SHOW_VARS":
+                self.globals["SHOW_VARS"] = self._show_vars
+            elif name == "answer":
+                current = self.locals.get("answer")
+                if not isinstance(current, _AnswerDict):
+                    replacement = _AnswerDict(on_ready=self._capture_answer)
+                    if isinstance(current, dict):
+                        for k, v in current.items():
+                            dict.__setitem__(replacement, k, v)
+                        if current.get("ready") and self._last_final_answer is None:
+                            self._last_final_answer = str(current.get("content", ""))
+                    self.locals["answer"] = replacement
+            elif name == "context" and "context_0" in self.locals:
+                self.locals["context"] = self.locals["context_0"]
+
+    def _capture_answer(self, content: Any) -> None:
+        self._last_final_answer = str(content)
+
+    def _show_vars(self) -> str:
+        available = {
+            k: type(v).__name__
+            for k, v in self.locals.items()
+            if not k.startswith("_") and k != "answer"
+        }
+        if not available:
+            return "No variables created yet. Use ```repl``` blocks to create variables."
+        return f"Available variables: {available}"
+
+    def _proxy_post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+        url = f"{self.proxy_url}/rollout/{self.rollout_id}/{path.lstrip('/')}"
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=600) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            try:
+                detail = e.read().decode("utf-8")
+            except Exception:
+                detail = ""
+            too_large = (
+                e.code == 413
+                or "Entity Too Large" in (detail or "")
+                or "Entity Too Large" in (e.reason or "")
+            )
+            return {"error": f"HTTP {e.code}: {detail or e.reason}", "too_large": too_large}
+        except Exception as e:
+            return {"error": f"Proxy request failed: {e}"}
+
+    def _llm_query(self, prompt: str, model: str | None = None) -> str:
+        del model
+        result = self._proxy_post("llm_query", {"prompt": prompt, "depth": self.depth})
+        if "error" in result and result["error"]:
+            if result.get("too_large"):
+                return (
+                    "Error: sub-LLM prompt exceeded the endpoint's request-size limit "
+                    f"(prompt was {len(prompt):,} chars). Shorten or chunk the prompt. "
+                    f"Underlying error: {result['error']}"
+                )
+            return f"Error: {result['error']}"
+        return result.get("response", "")
+
+    def _llm_query_batched(self, prompts: list[str], model: str | None = None) -> list[str]:
+        if not prompts:
+            return []
+        del model
+        result = self._proxy_post(
+            "llm_query_batched", {"prompts": list(prompts), "depth": self.depth}
+        )
+        if "error" in result and result["error"]:
+            if result.get("too_large"):
+                total = sum(len(p) for p in prompts)
+                longest = max(len(p) for p in prompts)
+                msg = (
+                    "Error: sub-LLM batched request exceeded the endpoint's request-size limit "
+                    f"({len(prompts)} prompts, total {total:,} chars, longest {longest:,} chars). "
+                    f"Underlying error: {result['error']}"
+                )
+                return [msg] * len(prompts)
+            return [f"Error: {result['error']}"] * len(prompts)
+        responses = result.get("responses")
+        if not isinstance(responses, list) or len(responses) != len(prompts):
+            return ["Error: malformed batched response"] * len(prompts)
+        return [r if isinstance(r, str) else f"Error: {r}" for r in responses]
+
+    def load_context(self, payload: Any, index: int | None = None) -> int:
+        if index is None:
+            index = self._context_count
+        var = f"context_{index}"
+        self.locals[var] = payload
+        if index == 0:
+            self.locals["context"] = payload
+        self._context_count = max(self._context_count, index + 1)
+        return index
+
+    @contextmanager
+    def _capture_output(self):
+        with self._lock:
+            old_out, old_err = sys.stdout, sys.stderr
+            out_buf, err_buf = io.StringIO(), io.StringIO()
+            try:
+                sys.stdout, sys.stderr = out_buf, err_buf
+                yield out_buf, err_buf
+            finally:
+                sys.stdout, sys.stderr = old_out, old_err
+
+    def _exec_with_timeout(self, code: str, ns: dict[str, Any]) -> None:
+        timeout_s = self.exec_timeout_s
+        if timeout_s <= 0 or not hasattr(signal, "SIGALRM"):
+            exec(code, ns, ns)  # noqa: S102
+            return
+
+        def _on_alarm(signum, frame):  # noqa: ARG001
+            raise TimeoutError(f"```repl``` block exceeded {timeout_s:g}s execution timeout")
+
+        old_handler = signal.signal(signal.SIGALRM, _on_alarm)
+        signal.setitimer(signal.ITIMER_REAL, timeout_s)
+        try:
+            exec(code, ns, ns)  # noqa: S102
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, old_handler)
+
+    def execute(self, code: str) -> dict[str, Any]:
+        start = time.perf_counter()
+        with self._capture_output() as (out_buf, err_buf):
+            try:
+                combined = {**self.globals, **self.locals}
+                self._exec_with_timeout(code, combined)
+                for k, v in combined.items():
+                    if k not in self.globals and not k.startswith("_"):
+                        self.locals[k] = v
+                self._restore_scaffold()
+                stdout = out_buf.getvalue()
+                stderr = err_buf.getvalue()
+            except BaseException as e:  # noqa: BLE001
+                stdout = out_buf.getvalue()
+                stderr = err_buf.getvalue() + f"\n{type(e).__name__}: {e}"
+                tb = traceback.format_exc()
+                if tb and tb.strip() and tb not in stderr:
+                    stderr = stderr + "\n" + tb
+        final_answer = self._last_final_answer
+        self._last_final_answer = None
+        simple_keys = [
+            k
+            for k, v in self.locals.items()
+            if not k.startswith("_")
+            and k not in ("__builtins__", "__name__", "__doc__")
+            and isinstance(v, (str, int, float, bool, list, dict, tuple))
+        ]
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "final_answer": final_answer,
+            "execution_time": time.perf_counter() - start,
+            "locals_keys": simple_keys,
+        }
+
+
+def _send(obj: dict[str, Any]) -> None:
++zsh:1> sed -n 210,290p .deps/rlm/training/src/rlm_train/proxy.py
+        return web.json_response({"responses": results})
+
+    async def _completion(
+        self,
+        handle: ClientHandle,
+        prompt: str | list,
+        model: str,
+    ) -> tuple[str, dict[str, Any]]:
+        if handle.fake_query is not None:
+            prompt_text = _flatten_prompt(prompt)
+            result = handle.fake_query(prompt_text, handle.state_ref)
+            content = await _maybe_await(result)
+            if content is not None:
+                return (content if isinstance(content, str) else str(content)), {}
+
+        messages = _coerce_messages(prompt)
+        sampling_args = dict(handle.sampling_args or {})
+        # TITO client requires non-None state; hand it an empty trajectory.
+        response = await handle.client.get_response(
+            prompt=messages,
+            model=model,
+            tools=None,
+            sampling_args=sampling_args,
+            state={"trajectory": []},
+        )
+        try:
+            raw_content = response.message.content
+        except AttributeError:
+            raw_content = None
+        if isinstance(raw_content, str):
+            content = raw_content
+        elif isinstance(raw_content, list):
+            parts = []
+            for p in raw_content:
+                text = getattr(p, "text", None) or (p.get("text") if isinstance(p, dict) else None)
+                if text:
+                    parts.append(text)
+            content = "".join(parts)
+        else:
+            content = ""
+        meta: dict[str, Any] = {}
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            meta["usage"] = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
+        return content, meta
++zsh:1> sed -n 300,355p .deps/rlm/training/src/rlm_train/env.py
+def _pack_exec(code: str, result: ExecResult) -> dict[str, Any]:
+    return {
+        "code": code,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "locals_keys": result.locals_keys,
+        "final_answer": result.final_answer,
+    }
+
+
+def _format_repl_outputs(outputs: list[dict[str, Any]]) -> list[dict[str, str]]:
+    if not outputs:
+        return []
+    parts: list[str] = []
+    multi = len(outputs) > 1
+    for i, o in enumerate(outputs):
+        body = _format_one(o)
+        header = f"REPL output (block {i + 1}):" if multi else "REPL output:"
+        parts.append(f"{header}\n{body}")
+    return [{"role": "user", "content": "\n\n".join(parts)}]
+
+
+def _format_one(o: dict[str, Any]) -> str:
+    parts: list[str] = []
+    if o.get("stdout"):
+        parts.append(f"\n{o['stdout']}")
+    if o.get("stderr"):
+        parts.append(f"\n{o['stderr']}")
+    if o.get("locals_keys"):
+        parts.append(f"REPL variables: {list(o['locals_keys'])}\n")
+    body = "\n\n".join(parts) if parts else "No output"
+    if len(body) > _MAX_REPL_OUTPUT_CHARS:
+        body = (
+            body[:_MAX_REPL_OUTPUT_CHARS] + f"... + [{len(body) - _MAX_REPL_OUTPUT_CHARS} chars...]"
+        )
+    return body
++zsh:1> sed -n 1,100p .deps/verifiers/verifiers/utils/env_utils.py
+import importlib
+import inspect
+import logging
+from types import UnionType
+from typing import Callable, Union, get_args, get_origin, get_type_hints
+
+from verifiers.envs.environment import Environment
+from verifiers.utils.config_utils import MissingKeyError
+from verifiers.v1.config import EnvConfig
+
+
+def load_environment(env_id: str, **env_args) -> Environment:
+    logger = logging.getLogger("verifiers.utils.env_utils")
+    logger.info(f"Loading environment: {env_id}")
+
+    module_name = env_id.replace("-", "_").split("/")[-1]
+    try:
+        module = importlib.import_module(module_name)
+
+        if not hasattr(module, "load_environment"):
+            raise AttributeError(
+                f"Module '{module_name}' does not have a 'load_environment' function. "
+                f"This usually means there's a package name collision. Please either:\n"
+                f"1. Rename your environment (e.g. suffix with '-env')\n"
+                f"2. Remove unneeded files with the same name\n"
+                f"3. Check that you've installed the correct environment package"
+            )
+
+        env_load_func: Callable[..., Environment] = getattr(module, "load_environment")
+        sig = inspect.signature(env_load_func)
+        defaults_info = []
+        for param_name, param in sig.parameters.items():
+            if param.default != inspect.Parameter.empty:
+                if isinstance(param.default, (dict, list)):
+                    defaults_info.append(f"{param_name}={param.default}")
+                elif isinstance(param.default, str):
+                    defaults_info.append(f"{param_name}='{param.default}'")
+                else:
+                    defaults_info.append(f"{param_name}={param.default}")
+            else:
+                defaults_info.append(f"{param_name}=<required>")
+
+        if defaults_info:
+            logger.debug(f"Environment defaults: {', '.join(defaults_info)}")
+
+        if env_args:
+            provided_params = set(env_args.keys())
+        else:
+            provided_params = set()
+
+        all_params = set(sig.parameters.keys())
+        default_params = all_params - provided_params
+
+        if provided_params:
+            provided_values = []
+            for param_name in provided_params:
+                provided_values.append(f"{param_name}={env_args[param_name]}")
+            logger.info(f"Using provided args: {', '.join(provided_values)}")
+
+        if default_params:
+            default_values = []
+            for param_name in default_params:
+                param = sig.parameters[param_name]
+                if param.default != inspect.Parameter.empty:
+                    if isinstance(param.default, str):
+                        default_values.append(f"{param_name}='{param.default}'")
+                    else:
+                        default_values.append(f"{param_name}={param.default}")
+            if default_values:
+                logger.info(f"Using default args: {', '.join(default_values)}")
+
+        call_env_args = prepare_typed_env_config(env_load_func, sig, env_args)
+        env_instance: Environment = env_load_func(**call_env_args)
+        env_instance.env_id = env_instance.env_id or env_id
+        env_instance.env_args = env_instance.env_args or env_args
+
+        logger.info(f"Successfully loaded environment '{env_id}'")
+
+        return env_instance
+
+    except ImportError as e:
+        logger.error(
+            f"Failed to import environment module {module_name} for env_id {env_id}: {str(e)}"
+        )
+        raise ValueError(
+            f"Could not import '{env_id}' environment. Ensure the package for the '{env_id}' environment is installed."
+        ) from e
+    except MissingKeyError:
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to load environment {env_id} with args {env_args}: {str(e)}"
+        )
+        raise RuntimeError(f"Failed to load environment '{env_id}': {str(e)}") from e
+
+
+def prepare_typed_env_config(
+    env_load_func: Callable[..., Environment],
+    sig: inspect.Signature,
+    env_args: dict,

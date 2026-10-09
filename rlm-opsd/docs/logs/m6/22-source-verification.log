@@ -1,0 +1,74 @@
+prime HEAD 09e11c7527a242b9f150c7c4c71b1b96da66cb75
+SOURCE .deps/prime-rl/src/prime_rl/trainer/model.py SHA256 6d08d32bedd021e98615d2a06b4acc043ae5d438c55ecc29a881d11d06bb144a INSTALLED_BYTES_IDENTICAL
+SYMBOL get_model LINE 416 config: ModelConfig, device: torch.device=torch.device('cpu'), dtype: torch.dtype=torch.bfloat16
+SYMBOL forward LINE 1122 model: nn.Module, input_ids: Int[Tensor, 'batch seq'], position_ids: Int[Tensor, 'batch seq'], labels: Int[Tensor, 'batch seq'] | None=None, temperature: Tensor | None=None, routed_experts: Int[Tensor, 'batch seq layers topk'] | None=None, pixel_values: Float[Tensor, 'num_patches patch_dim'] | None=None, image_grid_thw: Int[Tensor, 'num_images 3'] | None=None, mm_token_type_ids: Int[Tensor, 'batch seq'] | None=None
+SOURCE .deps/prime-rl/src/prime_rl/trainer/runs.py SHA256 16f694ac9f4b15cad5b1445495c803a6a42a891f7be0e641178a2907a73cf8b5 INSTALLED_BYTES_IDENTICAL
+SYMBOL MultiRunManager LINE 28 
+SYMBOL setup_multi_run_manager LINE 490 output_dir: Path, max_runs: int, device: torch.device, lora_config: LoRAConfig | None=None
+SOURCE .deps/prime-rl/src/prime_rl/trainer/lora.py SHA256 0e4a26a6a61311026274ab43eaf855be5078b5ef6e33839af9b72ce5418f30ad INSTALLED_BYTES_IDENTICAL
+SYMBOL freeze_all_except_lora_and_specified LINE 115 model: nn.Module, config: LoRAConfig
+SYMBOL apply_lora_to_model LINE 132 model: nn.Module, config: LoRAConfig
+SOURCE .deps/prime-rl/src/prime_rl/trainer/models/layers/lora/base.py SHA256 5d6fac5b0ab0bc81e538a37ac46bb5751a74f9d8adf464d7445d102e078bcb24 INSTALLED_BYTES_IDENTICAL
+SYMBOL set_lora_num_tokens LINE 17 num_tokens: torch.Tensor, reset_reference: bool=False
+SYMBOL set_multilora_scaling LINE 45 scaling_factors: torch.Tensor, reset_reference: bool=False
+SOURCE .deps/prime-rl/src/prime_rl/trainer/models/layers/lora/multi_linear.py SHA256 203e1704c8f0284dad024ff5b4061a40c48cb4411360d672b071e6c79792b4ba INSTALLED_BYTES_IDENTICAL
+SYMBOL _run_lora_for_loop LINE 20 x: torch.Tensor, lora_A: torch.Tensor, lora_B: torch.Tensor, offsets: torch.LongTensor
+SYMBOL MultiLoRALinear LINE 38 
+SOURCE .deps/prime-rl/src/prime_rl/trainer/models/layers/lm_head.py SHA256 3a91a2a876805ba8473db07524bcb227020a699f92e389d4e53de41b6fb81672 INSTALLED_BYTES_IDENTICAL
+SYMBOL VanillaOutputLinear LINE 66 
+SYMBOL inject_prime_lm_head LINE 271 model: nn.Module, chunk_size: int | None=None, fused_cross_entropy: bool | str=False
+SYMBOL _patch_model_forward LINE 345 model: nn.Module
+SOURCE .deps/prime-rl/src/prime_rl/trainer/rl/loss.py SHA256 f6ef9d30f8df162d568d630d60a842a1003dff3ae05900ab6311a1aa8ee8c549 INSTALLED_BYTES_IDENTICAL
+SYMBOL LossInputs LINE 14 trainer_logprobs: Float[Tensor, ' seq'], inference_logprobs: Float[Tensor, ' seq'], teacher_logprobs: Float[Tensor, ' seq'] | None, advantages: Float[Tensor, ' seq'], loss_mask: Bool[Tensor, ' seq']
+SYMBOL LossOutputs LINE 25 loss: Float[Tensor, ''], metrics: dict[str, Tensor]
+SYMBOL default_loss_fn LINE 116 inputs: LossInputs, loss_config: DefaultLossConfig
+SOURCE .deps/prime-rl/src/prime_rl/transport/types.py SHA256 ceed321f18eaccaeece2155fcba282544fa0e5d16b95553014c805068b3e0aab INSTALLED_BYTES_IDENTICAL
+SYMBOL TrainingSample LINE 5 prompt_ids: list[int], prompt_mask: list[bool], completion_ids: list[int], completion_mask: list[bool], completion_logprobs: list[float], completion_temperatures: list[float], env_name: str, teacher_logprobs: list[float] | None = None, advantage: float | None = None, reward: float | None = None, pixel_values: bytes | None = None, pixel_values_shape: list[int] | None = None, image_grid_thw: list[list[int]] | None = None, routed_experts: list[list[list[int]]] | None = None, mm_token_type_ids: list[int] | None = None, sft_loss: bool = False
+SYMBOL MicroBatch LINE 42 input_ids: list[int], loss_mask: list[bool], advantages: list[float], inference_logprobs: list[float], position_ids: list[int], temperatures: list[float], env_names: list[str], teacher_logprobs: list[float] | None = None, lora_num_tokens: list[int] | None = None, routed_experts: list[list[list[int]]] | None = None, pixel_values: bytes | None = None, pixel_values_shape: list[int] | None = None, image_grid_thw: list[list[int]] | None = None, mm_token_type_ids: list[int] | None = None, sft_loss: bool = False
+VALIDATED_MODEL_KEYS {"ac": null, "attn": "eager", "compile": null, "cp": 1, "ep": 1, "fused_lm_head_token_chunk_size": "disabled", "impl": "hf", "lora": {"alpha": 32.0, "dropout": 0.0, "modules_to_save": [], "rank": 16, "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"]}, "name": "pinned-cache-snapshot", "seq_len": 4096}
+NATIVE_LOSS_CONFIG {'type': 'default', 'dppo_mask_low': 1.0, 'dppo_mask_high': 1.0, 'adv_tau': 0.0, 'teacher_tau': 1.0, 'kl_tau': 0.0}
+snapshot_download (repo_id: str, *, repo_type: str | None = None, revision: str | None = None, cache_dir: str | pathlib.Path | None = None, local_dir: str | pathlib.Path | None = None, library_name: str | None = None, library_version: str | None = None, user_agent: dict | str | None = None, etag_timeout: float = 10, force_download: bool = False, token: bool | str | None = None, local_files_only: bool = False, allow_patterns: list[str] | str | None = None, ignore_patterns: list[str] | str | None = None, max_workers: int = 8, tqdm_class: type[tqdm.asyncio.tqdm_asyncio] | None = None, headers: dict[str, str] | None = None, endpoint: str | None = None, dry_run: bool = False) -> str | list[huggingface_hub.file_download.DryRunFileInfo]
+LOCAL_VERSION torch 2.11.0
+LOCAL_VERSION transformers 5.9.0
+LOCAL_VERSION huggingface-hub 1.17.0
+LOCAL_VERSION beartype 0.22.9
+LOCAL_VERSION jaxtyping 0.3.9
+LOCAL_VERSION loguru 0.7.3
+LOCAL_VERSION networkx 3.6.1
+LOCAL_VERSION setuptools 80.10.2
+LOCAL_VERSION wadler-lindig 0.1.7
+RUNTIME darwin CUDA False not a pretrained smoke
+PINNED_PREFIX_FIXTURE small Qwen/Qwen3.5-0.8B 2fc06364715b967f1860aea9cf38778875588b17 204 2124 273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80
+PINNED_PREFIX_FIXTURE 27b Qwen/Qwen3.5-27B fc05daec18b0a78c049392ed2e771dde82bdf654 204 2124 a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715
+PRIMARY_SOURCE qwen27_generation_config https://huggingface.co/Qwen/Qwen3.5-27B/resolve/fc05daec18b0a78c049392ed2e771dde82bdf654/generation_config.json SHA256 303aba891d66ab63908a7b3cc9163bcb835fdf8b9f6301c73216f3f1eb3992dd
+{
+    "bos_token_id": 248044,
+    "do_sample": true,
+    "eos_token_id": [
+        248046,
+        248044
+    ],
+    "pad_token_id": 248044,
+    "temperature": 0.6,
+    "top_k": 20,
+    "top_p": 0.95,
+    "transformers_version": "4.57.0.dev0"
+}
+PRIMARY_SOURCE vllm_sampling_params https://raw.githubusercontent.com/vllm-project/vllm/v0.21.0/vllm/sampling_params.py SHA256 a9a4cb497247d36f7a01b6f61ed59a06f7b641511e95f96fbe7aa8916119b295
+193 presence_penalty: float = 0.0
+197 frequency_penalty: float = 0.0
+201 repetition_penalty: float = 1.0
+209 top_p: float = 1.0
+212 top_k: int = 0
+215 min_p: float = 0.0
+320 presence_penalty: float | None = 0.0,
+321 frequency_penalty: float | None = 0.0,
+322 repetition_penalty: float | None = 1.0,
+324 top_p: float | None = 1.0,
+325 top_k: int = 0,
+326 min_p: float = 0.0,
+PRIMARY_SOURCE vllm_model_config https://raw.githubusercontent.com/vllm-project/vllm/v0.21.0/vllm/config/model.py SHA256 9645ccecfc0d610ad1d55957eac15405148f41156141da8d0fcfaae4c7329deb
+91 "raw_logits", "raw_logprobs", "processed_logits", "processed_logprobs"
+227 logprobs_mode: LogprobsMode = "raw_logprobs"
+230 1) raw_logprobs, 2) processed_logprobs, 3) raw_logits, 4) processed_logits.
+Source/config checks passed; real small/27B pretrained smokes NOT RUN.

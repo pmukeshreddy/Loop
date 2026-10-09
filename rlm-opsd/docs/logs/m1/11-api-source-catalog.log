@@ -1,0 +1,143 @@
++zsh:1> .venv/bin/python -
+
+FILE .deps/rlm/rlm/utils/parsing.py SHA256 dd0a706c885ba5a820ecf81c9aa20e99457758108727f1900b045167998d03d6
+10: find_code_blocks(text: str)
+
+FILE .deps/rlm/training/src/rlm_train/env.py SHA256 0caf3bfb2162ca884f34f0e6786f7bf546df0fa90e67f828039460f5f2f11efd
+32: __init__(self, backend_factory: Callable[[], ReplBackend] | None=None, max_iterations: int=30, sub_model: str | None=None, sub_sampling_args: dict[str, Any] | None=None, custom_system_prompt: str | None=None, rubric: vf.Rubric | None=None, sub_llm_fn: Callable[[str, Any], Any] | None=None, sub_llm_fn_batched: Callable[[list[str], Any], Any] | None=None, user_prologue: str | None=None, bootstrap_code: str | None=None, orchestrator: bool=True, **kwargs: Any)
+67: _ensure_proxy(self)
+77: _teardown_proxy(self)
+100: setup_state(self, state: State)
+163: get_prompt_messages(self, state: State)
+229: cleanup_rlm(self, state: State)
+242: teardown_rlm(self)
+
+FILE .deps/rlm/training/src/rlm_train/proxy.py SHA256 957636eda86fb2020378d4ada47e4099dfbd49d219754d53cc79aae517a538ea
+83: __init__(self, host: str='127.0.0.1', port: int=0)
+93: start(self)
+111: stop(self)
+124: register(self, rollout_id: str, handle: ClientHandle)
+128: unregister(self, rollout_id: str)
+132: _handle_single(self, request: web.Request)
+157: _handle_batched(self, request: web.Request)
+212: _completion(self, handle: ClientHandle, prompt: str | list, model: str)
+
+FILE .deps/rlm/training/src/rlm_train/worker.py SHA256 1559e47361000c8ad69a79405149b987b283b06f1a7af38f5ae53680b797606c
+137: Worker
+345: _send(obj: dict[str, Any])
+122: __init__(self, on_ready=None)
+138: __init__(self, proxy_url: str, rollout_id: str, depth: int=1, exec_timeout_s: float | None=None)
+161: _setup_namespace(self)
+209: _proxy_post(self, path: str, payload: dict[str, Any])
+235: _llm_query(self, prompt: str, model: str | None=None)
+248: _llm_query_batched(self, prompts: list[str], model: str | None=None)
+271: load_context(self, payload: Any, index: int | None=None)
+292: _exec_with_timeout(self, code: str, ns: dict[str, Any])
+309: execute(self, code: str)
+
+FILE .deps/rlm/training/src/rlm_train/repl/base.py SHA256 25fe204d5ac2930541ec64385f868efe44bde8883f019c7deeae17c662faf57e
+19: start(self, proxy_url: str, rollout_id: str, depth: int=1)
+22: load_context(self, payload: Any, index: int | None=None)
+25: execute(self, code: str)
+28: stop(self)
+
+FILE .deps/rlm/training/src/rlm_train/repl/subprocess.py SHA256 f687a1f322eac31182efa322d60a0a5115f0205594f9d93a63e42e701a3212ed
+25: __init__(self, python: str | None=None, worker_module: str='rlm_train.worker', startup_timeout: float=30.0, request_timeout: float=1200.0)
+42: start(self, proxy_url: str, rollout_id: str, depth: int=1)
+73: stop(self)
+103: load_context(self, payload: Any, index: int | None=None)
+112: execute(self, code: str)
+122: _request(self, payload: dict[str, Any])
+144: _kill_worker(self)
+156: _send(self, payload: dict[str, Any])
+162: _read_line(self)
+
+FILE .deps/verifiers/verifiers/envs/multiturn_env.py SHA256 658df7a2e98521b342eb85eec782437f522aacca1fbb4d10e8cce4a9491785a4
+31: __init__(self, **kwargs)
+40: __init__(self, max_turns: int=-1, timeout_seconds: float | None=None, **kwargs)
+97: setup_state(self, state: State)
+101: get_prompt_messages(self, state: State)
+135: add_trajectory_step(self, state: State, trajectory_step: TrajectoryStep)
+169: rollout(self, input: RolloutInput, client: Client, model: str, sampling_args: SamplingArgs | None=None)
+
+FILE .deps/verifiers/verifiers/envs/environment.py SHA256 c6534eec145d069e0e2749cfbd67816c262b72f18726fc6d8394cfe73c56bf9a
+98: __init__(self, dataset: 'Dataset | DatasetBuilder | None'=None, eval_dataset: 'Dataset | DatasetBuilder | None'=None, system_prompt: str | None=None, few_shot: Messages | None=None, parser: Parser | None=None, rubric: Rubric | None=None, sampling_args: SamplingArgs | None=None, message_type: MessageType | object=_MESSAGE_TYPE_UNSET, tool_defs: list[Tool] | None=None, max_workers: int=512, env_id: str | None=None, env_args: dict | None=None, map_kwargs: dict={}, max_seq_len: int | None=None, score_rollouts: bool=True, pass_threshold: float=0.5, **kwargs)
+491: get_model_response(self, state: State, prompt: Messages, client: Client | None=None, model: str | None=None, tool_defs: list[Tool] | None=None, sampling_args: SamplingArgs | None=None)
+553: init_state(self, input: RolloutInput, client: Client | ClientConfig, model: str, sampling_args: SamplingArgs | None=None)
+615: rollout(self, input: RolloutInput, client: Client, model: str, sampling_args: SamplingArgs | None=None)
+627: cleanup(self, state: State, task: object | None=None, resources: object | None=None)
+
+FILE .deps/verifiers/verifiers/clients/__init__.py SHA256 28c79f2a33999fec6a701feffec6003c4c84ec52448b83b7012d683ae65a9c55
+30: resolve_client(client_or_config: Client | ClientConfig)
+
+FILE .deps/verifiers/verifiers/clients/client.py SHA256 a9a801646a63fb11f9f65a96551ba09c80a125641ec79728b8bf0e55d28076f8
+40: __init__(self, client_or_config: ClientT | ClientConfig)
+54: setup_client(self, config: ClientConfig)
+62: to_native_prompt(self, messages: Messages)
+67: get_native_response(self, prompt: MessagesT, model: str, sampling_args: SamplingArgs, tools: list[ToolT] | None=None, **kwargs)
+84: from_native_response(self, response: ResponseT)
+113: get_response(self, prompt: Messages, model: str, sampling_args: SamplingArgs, tools: list[Tool] | None=None, **kwargs)
+
+FILE .deps/verifiers/verifiers/clients/openai_chat_completions_client.py SHA256 a3fb40c977a81bf0593607a3f4baace608a4dddee57963e01bab4795482ac458
+155: setup_client(self, config: ClientConfig)
+161: to_native_prompt(self, messages: Messages)
+243: get_native_response(self, prompt: OpenAIChatMessages, model: str, sampling_args: SamplingArgs, tools: list[OpenAITool] | None=None, **kwargs)
+339: from_native_response(self, response: OpenAIChatResponse)
+
+FILE .deps/verifiers/verifiers/types.py SHA256 2e7276ab4d910368f92f57931e69f3e5068547d2d9d619ad18b308ba15dc7d68
+186: ResponseTokens
+204: ResponseMessage
+210: Response
+429: State
+1010: ClientConfig
+463: __init__(self, *args: Any, **kwargs: Any)
+573: stop(self, condition: str='state_done')
+
+FILE .deps/verifiers/verifiers/utils/client_utils.py SHA256 b961d4641bb342dcef6cf3aec275d0b6f1f075517bc035aca552a4bab042e996
+100: _setup_openai_client_from_resolved(config: ClientConfig)
+110: setup_openai_client(config: ClientConfig)
+
+FILE .deps/verifiers/verifiers/utils/response_utils.py SHA256 bf77073d1d87e68789ec705e823a39fc2fb4656211a433e41ce88ceb5e9f7f3b
+34: parse_response_message(response: Response)
+48: parse_response_tokens(response: Response, max_seq_len: int | None=None)
+
+FILE .deps/verifiers/verifiers/utils/message_utils.py SHA256 08c1c4e3ee17461764ed9af625036ff3c63aceee3b5dca4a7582407c8884fe35
+128: normalize_messages(value: MessageInput, *, field_name: str='messages')
+
+FILE .deps/verifiers/verifiers/decorators.py SHA256 d2d765dfd75a137bc748dfa4c869c035df0460e8cd62b8240fc53443bdda388e
+25: stop(func: F, priority: int=0)
+29: stop(func: None=None, priority: int=0)
+32: stop(func: F | None=None, priority: int=0)
+92: cleanup(func: F, priority: int=0, stage: SignalStage='rollout')
+96: cleanup(func: None=None, priority: int=0, stage: SignalStage='rollout')
+101: cleanup(func: F | None=None, priority: int=0, stage: SignalStage='rollout')
+254: teardown(func: F, priority: int=0)
+258: teardown(func: None=None, priority: int=0)
+261: teardown(func: F | None=None, priority: int=0)
+
+FILE .venv/lib/python3.12/site-packages/psutil/__init__.py SHA256 d138a5786b163b56ba86ea0b2d5589dfca37e1bcdf8de1057fe1e933d6ab808a
+1690: cpu_times(percpu=False)
+313: __init__(self, pid=None)
+775: create_time(self)
+951: children(self, recursive=False)
+1119: cpu_times(self)
+1130: memory_info(self)
+1428: __init__(self, *args, **kwargs)
+
+FILE .venv/lib/python3.12/site-packages/yaml/__init__.py SHA256 b19dfcc333d6a75dfd73073901164507252f271b41d3b5f7d85510033a0547a7
+117: safe_load(stream)
+351: __init__(cls, name, bases, kwds)
+
+FILE .venv/lib/python3.12/site-packages/pydantic/main.py SHA256 35b842cfe92ef300e060b40c062ef93afee1cb075cf0b7b0037a1434867c2554
+253: __init__(self, /, **data: Any)
+427: model_dump(self, *, mode: Literal['json', 'python'] | str='python', include: IncEx | None=None, exclude: IncEx | None=None, context: Any | None=None, by_alias: bool | None=None, exclude_unset: bool=False, exclude_defaults: bool=False, exclude_none: bool=False, exclude_computed_fields: bool=False, round_trip: bool=False, warnings: bool | Literal['none', 'warn', 'error']=True, fallback: Callable[[Any], Any] | None=None, serialize_as_any: bool=False, polymorphic_serialization: bool | None=None)
+493: model_dump_json(self, *, indent: int | None=None, ensure_ascii: bool=False, include: IncEx | None=None, exclude: IncEx | None=None, context: Any | None=None, by_alias: bool | None=None, exclude_unset: bool=False, exclude_defaults: bool=False, exclude_none: bool=False, exclude_computed_fields: bool=False, round_trip: bool=False, warnings: bool | Literal['none', 'warn', 'error']=True, fallback: Callable[[Any], Any] | None=None, serialize_as_any: bool=False, polymorphic_serialization: bool | None=None)
+694: model_validate(cls, obj: Any, *, strict: bool | None=None, extra: ExtraValues | None=None, from_attributes: bool | None=None, context: Any | None=None, by_alias: bool | None=None, by_name: bool | None=None)
+INSTALLED rlms 0.1.3
+INSTALLED rlm-train 0.1.0
+INSTALLED verifiers 0.1.15.dev7
+INSTALLED prime-rl 0.4.0
+INSTALLED psutil 7.2.2
+INSTALLED PyYAML 6.0.3
+INSTALLED pydantic 2.13.4
+INSTALLED pytest 9.0.3

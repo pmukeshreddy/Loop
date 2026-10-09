@@ -1,0 +1,100 @@
+RULER schema inspection revision: c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a
+{"path": ".deps/m2-sources/ruler-niah.py", "url": "https://raw.githubusercontent.com/NVIDIA/RULER/c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a/scripts/data/synthetic/niah.py", "bytes": 12733, "sha256": "e9cada0a7660d274fe73a1338a90a7087e17b630169f1aaf14a8d3221c6805b5"}
+  58: parser.add_argument("--max_seq_length", type=int, required=True, help='max sequence length including all input tokens and generated tokens.')
+  130: def generate_input_output(num_haystack):
+  200:     input_text = template.format(
+  206:     return input_text, answers
+  225:     sample_input_text, _ = generate_input_output(incremental)
+  226:     sample_tokens = len(TOKENIZER.text_to_tokens(sample_input_text))
+  244:         input_text, answer = generate_input_output(mid)
+  245:         total_tokens = len(TOKENIZER.text_to_tokens(input_text)) + tokens_to_generate
+  267:                 input_text, answer  = generate_input_output(used_haystack)
+  268:                 length = len(TOKENIZER.text_to_tokens(input_text)) + tokens_to_generate
+  276:             input_text = ' '.join(input_text.replace('\n', ' ').replace('\t', ' ').strip().split())
+  277:         answer_prefix_index = input_text.rfind(TASKS['niah']['answer_prefix'][:10]) # use first 10 char of answer prefix to locate it
+  278:         answer_prefix = input_text[answer_prefix_index:]
+  279:         input_text = input_text[:answer_prefix_index]
+  281:         index = input_text.find(answer[0])
+  282:         token_position_answer = len(TOKENIZER.text_to_tokens(input_text[:index]))
+  284:             'index': index,
+  285:             "input": input_text,
+  286:             "outputs": answer,
+{"path": ".deps/m2-sources/oolong-README.md", "url": "https://huggingface.co/datasets/oolongbench/oolong-synth/resolve/f0d59eaf0febf130664cfceb710436c8e3216b2b/README.md", "bytes": 1469, "sha256": "90f02d57e06f838b292eb26f30b9aabb60dc7f02ebe4422926d554fc64d512ea"}
+  6:   - name: context_len
+  10:   - name: context_window_text
+  12:   - name: context_window_text_with_labels
+  22:   - name: answer_type
+  24:   - name: input_subset
+  51: - input: `context_window_text` + "\n" + `question` (these are separated because the context window text can be cached for reuse across multiple input queries)
+{"path": ".deps/m2-sources/pairs-README.md", "url": "https://huggingface.co/datasets/mit-oasys/oolong-pairs/resolve/d1e1522b86ac0c169bbc890b0471408aaa29e8fa/README.md", "bytes": 6772, "sha256": "2b377317af2f688ef3248a8758db4b74b86cf3815986cf1d63d818a48f4554e1"}
+  2: license: mit
+  13:   data_files: questions.json
+  31: > their ground-truth answers. The long-context input must be loaded from the
+  32: > [`oolongbench/oolong-synth`](https://huggingface.co/datasets/oolongbench/oolong-synth) `trec_coarse`
+  39: | `questions.json` | The 20 candidate question templates (answers left empty). |
+  40: | `data/oolong-pairs-{context_len}.json` | The 20 questions **with full ground-truth answers** computed for a given context length. **Source of truth for evaluation.** |
+  48: `data/oolong-pairs-{context_len}.json` files (download-only):
+  51: - **`pairs_summary`** — 220 rows (11 context lengths × 20 questions) with columns `context_len`,
+  55: Available context lengths (`context_len`): `1024`, `2048`, `4096`, `8192`, `16384`, `32768`,
+  58: Each entry in a `data/oolong-pairs-{context_len}.json` file looks like:
+  77: The ground-truth answers in `data/oolong-pairs-{context_len}.json` were computed against the
+  78: `context_window_text_with_labels` field of the `trec_coarse` examples in the **validation** split of
+  80: model, you pair each question with the **same context** at the matching `context_len`.
+  94: context_len = 65536  # one of the available lengths
+  98:     filename=f"data/oolong-pairs-{context_len}.json",
+  107: `validation` split to `dataset == "trec_coarse"` and matching `context_len`. All examples sharing a
+  108: `context_len` share the same context window.
+  113: def get_context_for_length(context_len: int) -> str:
+  114:     """Return the trec_coarse context window for a given context length."""
+  116:     trec_coarse_examples = [
+  118:         if ex.get("context_len", 0) == context_len
+  119:         and ex.get("dataset", "") == "trec_coarse"
+  121:     if not trec_coarse_examples:
+  122:         raise ValueError(f"No trec_coarse example for context_len={context_len}")
+  123:     # All examples with the same context_len share the same context.
+  124:     return trec_coarse_examples[0]["context_window_text"]
+  126: context = get_context_for_length(context_len)
+  129: > The benchmark answers were generated from `context_window_text_with_labels` (which exposes the
+  130: > gold TREC label per line). At **evaluation** time you feed the model `context_window_text` (no
+Python: 3.12.12 (main, Jan 14 2026, 23:36:32) [Clang 21.1.4 ]
+PyYAML: 6.0.3
+rlm_opsd/tasks/__init__.py sha256=3d7af32b03510bbb0755c10b308d503846930068e131f2262f439bc6cbc6c453
+rlm_opsd/tasks/__main__.py sha256=b6b31d762c332bbb1f47a436f7e2f3aed34a33dd84583c630926f66b88d3a898
+  13: main()
+rlm_opsd/tasks/build.py sha256=5162bfb7b249a97fafa8f2892f74fcaa5c1cc180e0a13f75a501530907639200
+  15: plan_specs(config)
+  57: _generate_and_verify(job)
+  66: _counts(tasks)
+  73: build_pool(config, output_dir, *, corpora, heldout=None)
+  112: _read_tasks(manifest_path)
+  134: load_tasks(manifest_path, *, split, inspection_only=False)
+  153: verify_pool(manifest_path, *, corpora)
+rlm_opsd/tasks/codec.py sha256=dfbe5d75a34441c29063873489324155d320fe2c0928c80eeb04ae810ea781da
+  10: render_records(records, *, encoding, structure, chunk_chars=4096)
+  35: parse_records(context, encoding)
+rlm_opsd/tasks/decontam.py sha256=b070e15090a57ae7859e00113042e78dc8ed71df63646bfe9032152d59b6ef96
+  10: HeldoutRecord
+  18: HeldoutIndex
+  48: grams(text, n)
+  54: decontaminate(tasks, heldout, *, ngram_size, overlap_threshold)
+rlm_opsd/tasks/generators.py sha256=8812971069aaa1e547663c619c1f56da2a3f6216d6cff50a90e93e1e2d9df362
+  21: generate(spec, corpus=None)
+rlm_opsd/tasks/heldout.py sha256=da325447b32845110383483f959db023ae2ebcf12d9cfb17cc7205fdeb7a5ad4
+  9: adapt_heldout(benchmark, raw, *, revision, license, context_record=None, context_len=None, documents=None)
+  71: load_heldout_snapshot(path, *, benchmark, revision, license)
+rlm_opsd/tasks/models.py sha256=5afe1e0a71f03b00ef8b65ef6a314163609cae2b8c1c325fc9568e7eb1ca48b4
+  13: canonical(value)
+  17: digest(value)
+  21: normalized(text)
+  25: source_ref(dataset, revision, item_id, text)
+  30: TaskSpec
+  38: Task
+rlm_opsd/tasks/prepare.py sha256=7d4c0d543dcbbc2c435704012bc6e3fc11e5801adeb7bffc7e7e6c5bb243867d
+  10: checked_source(source, *, download=False)
+  28: load_corpora(config)
+  38: prepare_sources(config)
+rlm_opsd/tasks/sources.py sha256=4da161a9701b9c9c1397472cc17474830b086ab72d7a0bf0107c155eb7f56afe
+  9: ClassificationCorpus
+rlm_opsd/tasks/verify.py sha256=eb427d71e66f5ac8c75d2a22557c1e8d6a73e381ec03568ac3e3ff9ad270a98f
+  10: repo_files(context)
+  22: verify_answer(task, corpus=None)

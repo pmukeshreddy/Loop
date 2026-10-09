@@ -1,0 +1,36 @@
+........................................................................ [ 93%]
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_common_plan_only_finishes_are_rejected[I am going to search the context and then return the answer.] _
+tests/test_detectors.py:334: in test_common_plan_only_finishes_are_rejected
+    assert analyze(trace(turn(finish=f'FINAL({plan})'),final_value=plan))['detectors']['D15'] is False
+E   assert True is False
+_ test_common_plan_only_finishes_are_rejected[Next, I will search the context.] _
+tests/test_detectors.py:334: in test_common_plan_only_finishes_are_rejected
+    assert analyze(trace(turn(finish=f'FINAL({plan})'),final_value=plan))['detectors']['D15'] is False
+E   assert True is False
+_ test_common_plan_only_finishes_are_rejected[First, search the context, then aggregate the results.] _
+tests/test_detectors.py:334: in test_common_plan_only_finishes_are_rejected
+    assert analyze(trace(turn(finish=f'FINAL({plan})'),final_value=plan))['detectors']['D15'] is False
+E   assert True is False
+___________ test_impossible_prompt_lengths_raise_a_validation_error ____________
+tests/test_detectors.py:339: in test_impossible_prompt_lengths_raise_a_validation_error
+    analyze(trace(turn('x = llm_query(context[:20])',calls=[10**309])))
+tests/test_detectors.py:82: in analyze
+    return analyze_trajectory(value, DetectorConfig(**{**THRESHOLDS, **changes}))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+rlm_opsd/detectors/evaluate.py:216: in analyze_trajectory
+    detectors['D10'] = len(logged) <= limit and sum(sizes)/len(sizes) >= config.min_batch_chars if limit is not None else None
+                                                ^^^^^^^^^^^^^^^^^^^^^
+E   OverflowError: integer division result too large for a float
+_ test_definition_defaults_execute_at_definition_time_so_are_not_silently_ignored _
+tests/test_detectors.py:344: in test_definition_defaults_execute_at_definition_time_so_are_not_silently_ignored
+    assert result['task_tag_match'] is not True
+E   assert True is not True
+=========================== short test summary info ============================
+FAILED tests/test_detectors.py::test_common_plan_only_finishes_are_rejected[I am going to search the context and then return the answer.]
+FAILED tests/test_detectors.py::test_common_plan_only_finishes_are_rejected[Next, I will search the context.]
+FAILED tests/test_detectors.py::test_common_plan_only_finishes_are_rejected[First, search the context, then aggregate the results.]
+FAILED tests/test_detectors.py::test_impossible_prompt_lengths_raise_a_validation_error
+FAILED tests/test_detectors.py::test_definition_defaults_execute_at_definition_time_so_are_not_silently_ignored
+5 failed, 72 passed in 0.26s

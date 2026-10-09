@@ -1,0 +1,435 @@
+Command: pinned prime-rl source search, AST signature checks, installed/source-byte comparison and numbered excerpts
+Commit: 09e11c7527a242b9f150c7c4c71b1b96da66cb75
+GPU/trainer runtime execution: NOT RUN; local torch installed: False
+
+FILE src/prime_rl/trainer/models/layers/lora/base.py sha256 5d6fac5b0ab0bc81e538a37ac46bb5751a74f9d8adf464d7445d102e078bcb24 installed bytes match
+12: # Global state for multilora - initialized once in train.py, referenced by modules
+13: LORA_NUM_TOKENS: torch.Tensor | None = None  # [n_adapters] token counts per adapter
+14: SCALING_FACTORS: torch.Tensor | None = None  # [max_runs] scaling factors per run
+15: 
+16: 
+17: def set_lora_num_tokens(num_tokens: torch.Tensor, reset_reference: bool = False) -> None:
+18:     """Set the number of tokens per adapter.
+19: 
+20:     Args:
+21:         num_tokens: Tensor of shape [n_adapters] with token counts per adapter.
+22:         reset_reference: If True, replace the tensor reference. If False, copy values in-place.
+23:     """
+24:     global LORA_NUM_TOKENS
+25:     if LORA_NUM_TOKENS is None or reset_reference:
+26:         if SCALING_FACTORS is not None and num_tokens is not None:
+27:             assert num_tokens.shape == SCALING_FACTORS.shape, (
+28:                 f"lora_num_tokens shape {num_tokens.shape} != scaling_factors shape {SCALING_FACTORS.shape}"
+29:             )
+30:         LORA_NUM_TOKENS = num_tokens
+31:     else:
+32:         LORA_NUM_TOKENS.copy_(num_tokens)
+33: 
+34: 
+35: def get_lora_num_tokens() -> torch.Tensor:
+36:     """Get the current lora_num_tokens tensor.
+37: 
+38:     Raises:
+39:         AssertionError: If called before set_lora_num_tokens() has been called.
+40:     """
+41:     assert LORA_NUM_TOKENS is not None, "LORA_NUM_TOKENS not initialized. Call set_lora_num_tokens() first."
+42:     return LORA_NUM_TOKENS
+43: 
+44: 
+45: def set_multilora_scaling(scaling_factors: torch.Tensor, reset_reference: bool = False) -> None:
+46:     """Set per-run scaling factors (alpha / rank).
+47: 
+48:     Args:
+49:         scaling_factors: Tensor of shape [max_runs] with scaling factors per run.
+50:         reset_reference: If True, replace the tensor reference. If False, copy values in-place.
+51:     """
+52:     global SCALING_FACTORS
+53:     if SCALING_FACTORS is None or reset_reference:
+54:         if LORA_NUM_TOKENS is not None and scaling_factors is not None:
+55:             assert scaling_factors.shape == LORA_NUM_TOKENS.shape, (
+56:                 f"scaling_factors shape {scaling_factors.shape} != lora_num_tokens shape {LORA_NUM_TOKENS.shape}"
+57:             )
+58:         SCALING_FACTORS = scaling_factors
+59:     else:
+60:         SCALING_FACTORS.copy_(scaling_factors)
+61: 
+62: 
+63: def get_multilora_scaling() -> torch.Tensor:
+64:     """Get the current scaling factors tensor.
+65: 
+66:     Raises:
+67:         AssertionError: If called before set_multilora_scaling() has been called.
+68:     """
+69:     assert SCALING_FACTORS is not None, "SCALING_FACTORS not initialized. Call set_multilora_scaling() first."
+70:     return SCALING_FACTORS
+78:     base_layer: nn.Module
+79: 
+80:     def __init__(self, base_layer: nn.Module) -> None:
+81:         super().__init__()
+82:         self.base_layer = base_layer
+83: 
+84:         # Freeze base layer parameters
+85:         for param in self.base_layer.parameters():
+86:             param.requires_grad = False
+87: 
+88:         # state_dict post hook to remove prefix (to save base_layer parameters)
+89:         self._register_state_dict_hook(self._post_state_dict_hook)
+
+FILE src/prime_rl/trainer/models/layers/lora/multi_linear.py sha256 203e1704c8f0284dad024ff5b4061a40c48cb4411360d672b071e6c79792b4ba installed bytes match
+61:         self.alpha = alpha
+62:         self.lora_dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
+63:         self.use_grouped_mm = use_grouped_mm
+64:         self.in_features = base_layer.in_features
+65:         self.out_features = base_layer.out_features
+66: 
+67:         self._lora_num_tokens = get_lora_num_tokens()
+68:         self._scaling_factors = get_multilora_scaling()
+137:         """
+138:         x: [..., in_features]
+139:         """
+140:         ori_shape = x.shape
+141:         new_shape = ori_shape[:-1] + (self.out_features,)
+142:         x = x.view(-1, x.shape[-1])
+143:         offsets = self._lora_num_tokens.cumsum(dim=0, dtype=torch.int32)
+144:         assert offsets[-1] == x.shape[0], f"offsets: {offsets}, x.shape: {x.shape}"
+145: 
+146:         base_out = self.base_layer(x)
+147:         lora_x = self.lora_dropout(x)
+148: 
+149:         combined_lora_A = torch.stack([i for i in self.lora_A], dim=0)
+150:         combined_lora_B = torch.stack([i for i in self.lora_B], dim=0)
+151:         if self.use_grouped_mm:
+152:             lora_out = _run_lora_grouped_mm(lora_x, combined_lora_A, combined_lora_B, offsets)
+153:         else:
+154:             lora_out = _run_lora_for_loop(lora_x, combined_lora_A, combined_lora_B, offsets)
+155: 
+156:         # Apply per-token scaling
+157:         per_token_scaling = torch.repeat_interleave(self._scaling_factors, self._lora_num_tokens).unsqueeze(-1)
+158:         return (base_out + per_token_scaling * lora_out).view(new_shape)
+
+FILE src/prime_rl/trainer/models/layers/lora/multi_moe.py sha256 917fc4ed029ac5f13362f54c7bec0bce7c70b0f218fa5426e17ab6d495205312 installed bytes match
+318:     def forward(self, x: torch.Tensor, num_tokens_per_expert: torch.Tensor) -> torch.Tensor:
+319:         # TODO: We assume theres only one adapter active in a sequence for now
+320:         # Being able to route multi-adapter sequences efficiently requires two things that are tricky
+321:         # 1. We need the tensor to be interleaved [(e0, a0), (e0, a1), (e1, a0), (e1, a1), ...]
+322:         # This causes issues when we want to create a stacked param for the optimizer
+323:         # 2. The topkrouter needs to set the offsets by binning its hist for each adapter
+324:         # The sort currently occurs there, so it needs to be done there too
+325:         adapter_idx = self._lora_num_tokens.argmax().item()
+326:         w1_lora_a = self.w1_lora_A[adapter_idx]  # [num_experts, rank, dim]
+327:         w1_lora_b = self.w1_lora_B[adapter_idx]  # [num_experts, hidden_dim, rank]
+328:         w2_lora_a = self.w2_lora_A[adapter_idx]  # [num_experts, rank, hidden_dim]
+329:         w2_lora_b = self.w2_lora_B[adapter_idx]  # [num_experts, dim, rank]
+330:         w3_lora_a = self.w3_lora_A[adapter_idx]  # [num_experts, rank, dim]
+331:         w3_lora_b = self.w3_lora_B[adapter_idx]  # [num_experts, hidden_dim, rank]
+332: 
+333:         # Get per-adapter scaling factor
+334:         scaling = self._scaling_factors[adapter_idx].item()
+335: 
+375:         # Compute offsets for grouped_mm
+376:         offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+377: 
+378:         lora_x = self.lora_dropout(x)
+379: 
+380:         if self.use_grouped_mm:
+381:             # Gate
+382:             h1_base = torch._grouped_mm(x.bfloat16(), base_w1.bfloat16().transpose(-2, -1), offs=offsets)
+383:             w1_lora_out = _run_lora_grouped_mm(lora_x, w1_lora_a, w1_lora_b, offsets)
+384:             h1 = h1_base + scaling * w1_lora_out.bfloat16()
+385: 
+386:             # Up
+387:             h3_base = torch._grouped_mm(x.bfloat16(), base_w3.bfloat16().transpose(-2, -1), offs=offsets)
+388:             w3_lora_out = _run_lora_grouped_mm(lora_x, w3_lora_a, w3_lora_b, offsets)
+389:             h3 = h3_base + scaling * w3_lora_out.bfloat16()
+390: 
+391:             # SwiGLU activation
+392:             h = F.silu(h1) * h3
+393: 
+394:             # Down
+395:             lora_h = self.lora_dropout(h)
+396:             h2_base = torch._grouped_mm(h, base_w2.bfloat16().transpose(-2, -1), offs=offsets)
+397:             w2_lora_out = _run_lora_grouped_mm(lora_h, w2_lora_a, w2_lora_b, offsets)
+398:             out = h2_base + scaling * w2_lora_out.bfloat16()
+643:     def forward(self, x: torch.Tensor, num_tokens_per_expert: torch.Tensor) -> torch.Tensor:
+644:         adapter_idx = self._lora_num_tokens.argmax().item()
+645:         w1_lora_a = self.w1_lora_A[adapter_idx]
+646:         w1_lora_b = self.w1_lora_B[adapter_idx]
+647:         w2_lora_a = self.w2_lora_A[adapter_idx]
+648:         w2_lora_b = self.w2_lora_B[adapter_idx]
+649: 
+650:         scaling = self._scaling_factors[adapter_idx].item()
+651: 
+685:         lora_x = self.lora_dropout(x)
+686: 
+687:         if self.use_grouped_mm:
+688:             # Up (w1)
+689:             h_base = torch._grouped_mm(x.bfloat16(), base_w1.bfloat16().transpose(-2, -1), offs=offsets)
+690:             w1_lora_out = _run_lora_grouped_mm(lora_x, w1_lora_a, w1_lora_b, offsets)
+691:             h = relu2(h_base + scaling * w1_lora_out.bfloat16())
+692: 
+693:             # Down (w2)
+694:             lora_h = self.lora_dropout(h)
+695:             out_base = torch._grouped_mm(h, base_w2.bfloat16().transpose(-2, -1), offs=offsets)
+696:             w2_lora_out = _run_lora_grouped_mm(lora_h, w2_lora_a, w2_lora_b, offsets)
+697:             out = out_base + scaling * w2_lora_out.bfloat16()
+698:             out = out.type_as(x)
+933:     def forward(self, x: torch.Tensor, num_tokens_per_expert: torch.Tensor) -> torch.Tensor:
+934:         adapter_idx = self._lora_num_tokens.argmax().item()
+935:         gu_a = self.gate_up_lora_A[adapter_idx]
+936:         gu_b = self.gate_up_lora_B[adapter_idx]
+937:         d_a = self.down_lora_A[adapter_idx]
+938:         d_b = self.down_lora_B[adapter_idx]
+939: 
+940:         scaling = self._scaling_factors[adapter_idx].item()
+941: 
+982:             gate_up_base = torch._grouped_mm(x.bfloat16(), base_gu.bfloat16(), offs=offsets)
+983:             gate_up_base = (
+984:                 gate_up_base
+985:                 + _broadcast_expert_bias(base_gu_bias, num_tokens_per_expert, gate_up_base.shape[0]).bfloat16()
+986:             )
+987:             gate_up_lora = _run_lora_grouped_mm(lora_x, gu_a, gu_b, offsets)
+988:             gate_up = gate_up_base + scaling * gate_up_lora.bfloat16()
+989: 
+990:             h = _gpt_oss_apply_gate(gate_up)
+991:             lora_h = self.lora_dropout(h)
+992: 
+993:             out_base = torch._grouped_mm(h, base_d.bfloat16(), offs=offsets)
+994:             out_base = (
+995:                 out_base + _broadcast_expert_bias(base_d_bias, num_tokens_per_expert, out_base.shape[0]).bfloat16()
+996:             )
+997:             out_lora = _run_lora_grouped_mm(lora_h, d_a, d_b, offsets)
+998:             out = out_base + scaling * out_lora.bfloat16()
+999:             out = out.type_as(x)
+
+FILE src/prime_rl/trainer/lora.py sha256 0e4a26a6a61311026274ab43eaf855be5078b5ef6e33839af9b72ce5418f30ad installed bytes match
+115: def freeze_all_except_lora_and_specified(model: nn.Module, config: LoRAConfig) -> None:
+116:     """
+117:     Freeze all parameters except LoRA adapters and specified trainable modules.
+118: 
+119:     Args:
+120:         model: The model to freeze parameters in
+121:         config: LoRA configuration with modules_to_save patterns
+122:     """
+123:     for name, param in model.named_parameters():
+124:         if any(lora_param in name for lora_param in ["lora_A", "lora_B"]):
+125:             param.requires_grad = True
+126:         elif _should_keep_trainable(name, config.modules_to_save):
+127:             param.requires_grad = True
+128:         else:
+129:             param.requires_grad = False
+130: 
+131: 
+
+FILE src/prime_rl/trainer/runs.py sha256 16f694ac9f4b15cad5b1445495c803a6a42a891f7be0e641178a2907a73cf8b5 installed bytes match
+66:         # Initialize lora globals on device so runs.* ARE the global tensors
+67:         from prime_rl.trainer.models.layers.lora import (
+68:             get_lora_num_tokens,
+69:             get_multilora_scaling,
+70:             set_lora_num_tokens,
+71:             set_multilora_scaling,
+72:         )
+73: 
+74:         # We first set to None so we dont check the shape
+75:         # Might be better to not have the check at all but this will do for now
+76:         set_lora_num_tokens(None, reset_reference=True)
+77:         set_multilora_scaling(None, reset_reference=True)
+78: 
+79:         set_lora_num_tokens(torch.zeros(max_runs, dtype=torch.int32, device=device), reset_reference=True)
+80:         self.lora_num_tokens = get_lora_num_tokens()
+81: 
+82:         set_multilora_scaling(
+83:             torch.ones(max_runs, dtype=torch.bfloat16, device=device) * 1000_000.0, reset_reference=True
+84:         )
+85:         self.scaling_factors = get_multilora_scaling()
+86: 
+
+FILE src/prime_rl/trainer/model.py sha256 6d08d32bedd021e98615d2a06b4acc043ae5d438c55ecc29a881d11d06bb144a installed bytes match
+1038: 
+1039:     lm_head_chunk_size: int | None = None
+1040:     if isinstance(config.fused_lm_head_token_chunk_size, int):
+1041:         lm_head_chunk_size = config.fused_lm_head_token_chunk_size
+1042: 
+1043:     inject_prime_lm_head(model, chunk_size=lm_head_chunk_size, fused_cross_entropy=fused_cross_entropy)
+1044: 
+1122: def forward(
+1123:     model: nn.Module,
+1124:     input_ids: Int[Tensor, "batch seq"],
+1125:     position_ids: Int[Tensor, "batch seq"],
+1126:     labels: Int[Tensor, "batch seq"] | None = None,
+1127:     temperature: Tensor | None = None,
+1128:     routed_experts: Int[Tensor, "batch seq layers topk"] | None = None,
+1129:     # Multimodal fields (Qwen3-VL)
+1130:     pixel_values: Float[Tensor, "num_patches patch_dim"] | None = None,
+1131:     image_grid_thw: Int[Tensor, "num_images 3"] | None = None,
+1132:     mm_token_type_ids: Int[Tensor, "batch seq"] | None = None,
+1133: ) -> PrimeLmOutput:
+1134:     # Build kwargs for model forward
+1135:     kwargs = {
+1136:         "input_ids": input_ids,
+1137:         "labels": labels,
+1138:         "temperature": temperature,
+1139:     }
+1140: 
+1141:     # For multimodal (VLM), don't pass position_ids - let the model compute MRoPE internally
+1142:     # using image_grid_thw. Qwen3-VL only computes proper MRoPE when position_ids is None.
+1143:     if pixel_values is not None:
+1144:         assert image_grid_thw is not None, "pixel_values requires image_grid_thw for MRoPE computation"
+1145:         kwargs["pixel_values"] = pixel_values
+1146:         kwargs["image_grid_thw"] = image_grid_thw
+1147:         mm_token_type_ids = _get_qwen3_vl_mm_token_type_ids(model, input_ids)
+1148:         if mm_token_type_ids is not None:
+1149:             kwargs["mm_token_type_ids"] = mm_token_type_ids
+1150:     else:
+1151:         kwargs["position_ids"] = position_ids
+1152: 
+1153:     if routed_experts is not None:
+1154:         kwargs["routed_experts"] = routed_experts
+1155: 
+1156:     out = model(**kwargs)
+1157: 
+1158:     # PrimeLmOutput is a TypedDict (dict at runtime), HF outputs are dataclass-like objects
+1159:     if isinstance(out, dict):
+1160:         return cast_float_and_contiguous(out)
+1161: 
+1162:     return cast_float_and_contiguous(PrimeLmOutput(logits=out.logits))
+
+FILE src/prime_rl/trainer/rl/train.py sha256 b8bb374f3be79042ae8c21debf64ede6446fe1ccab5de6e55849ce53d2595279 installed bytes match
+353:             input_ids = micro_batch["input_ids"].to("cuda")
+354:             position_ids = micro_batch["position_ids"].to("cuda")
+355:             advantages = micro_batch["advantages"].to("cuda")
+356:             loss_mask = micro_batch["loss_mask"].to("cuda")
+357:             inference_logprobs = micro_batch["inference_logprobs"].to("cuda")
+358:             teacher_logprobs = (
+359:                 micro_batch["teacher_logprobs"].to("cuda") if micro_batch["teacher_logprobs"] is not None else None
+360:             )
+361:             routed_experts = (
+403:             if config.model.lora:
+404:                 lora_num_tokens = micro_batch["lora_num_tokens"].to("cuda")
+405:                 if cp_enabled:
+406:                     chunk_size = input_ids.shape[1]
+407:                     # Convert to cumsum, adjust for CP chunk, convert back to num_tokens
+408:                     cu_offsets = lora_num_tokens.cumsum(dim=0, dtype=torch.int32)
+409:                     adjusted_cu = torch.clip(cu_offsets - chunk_size * cp_rank, min=0, max=chunk_size)
+410:                     lora_num_tokens = torch.diff(
+411:                         adjusted_cu, prepend=torch.tensor([0], device=adjusted_cu.device, dtype=adjusted_cu.dtype)
+412:                     )
+413:                 set_lora_num_tokens(lora_num_tokens)
+414: 
+415:             temperatures = micro_batch["temperatures"].to("cuda")
+416: 
+417:             # Shard temperatures for context parallelism if enabled
+418:             if cp_enabled:
+419:                 temperatures = shard_for_cp(temperatures, cp_rank=cp_rank, cp_world_size=cp_size)
+420: 
+421:             # Forward pass with per-token temperatures
+422:             with maybe_record_function("forward"), maybe_activation_offloading(config.model.ac_offloading):
+423:                 out = forward(
+424:                     model,
+425:                     input_ids,
+426:                     forward_position_ids,
+427:                     labels=labels,
+428:                     temperature=temperatures,
+429:                     pixel_values=pixel_values,
+430:                     image_grid_thw=image_grid_thw,
+431:                     mm_token_type_ids=mm_token_type_ids,
+432:                     routed_experts=routed_experts,
+433:                 )
+434: 
+435:             if out.get("logprobs") is None:
+436:                 # VanillaOutputLinear was used - need to compute logprobs externally with per-token temps
+437:                 assert out.get("logits") is not None, "Logits must be provided to compute logprobs"
+438:                 logits = out["logits"]
+439:                 # Per-token temperature scaling: temperatures is [batch, seq], logits is [batch, seq, vocab]
+440:                 scaled_logits = logits / temperatures.unsqueeze(-1)
+441:                 out["logprobs"] = selective_log_softmax(scaled_logits, labels)
+442:                 out["entropy"] = compute_entropy(scaled_logits)
+443:             # else: FusedOutputLinear was used - logprobs already computed with per-token temperatures
+444: 
+
+FILE src/prime_rl/trainer/models/layers/lm_head.py sha256 3a91a2a876805ba8473db07524bcb227020a699f92e389d4e53de41b6fb81672 installed bytes match
+38: class FusedOutputLinear(torch.nn.Linear):
+39:     def __init__(self, in_features: int, out_features: int, chunk_size: int):
+40:         super().__init__(in_features, out_features, bias=False)
+41:         self.chunk_size = chunk_size
+42: 
+43:     def forward(
+44:         self,
+45:         hidden_states: torch.Tensor,
+46:         labels: torch.Tensor | None = None,
+47:         temperature: Tensor | None = None,
+48:     ) -> PrimeLmOutput:
+49:         assert labels is not None, "FusedOutputLinear requires labels for chunked logprob computation"
+50:         assert temperature is not None, "FusedOutputLinear requires per-token temperatures"
+51: 
+52:         b, s, h = hidden_states.shape
+53:         hidden_states = hidden_states.reshape(b * s, h).contiguous()
+54:         labels = labels.reshape(b * s).contiguous()
+55:         inv_t = 1.0 / temperature.reshape(b * s).contiguous()  # [N]
+56: 
+57:         logprobs, entropy = _SequenceChunkedLogProbEntropyFn.apply(
+58:             hidden_states, self.weight, labels, inv_t, self.chunk_size
+59:         )
+60: 
+61:         logprobs = logprobs.reshape(b, s)
+62:         entropy = entropy.reshape(b, s)
+63:         return PrimeLmOutput(logprobs=logprobs, entropy=entropy)
+64: 
+65: 
+66: class VanillaOutputLinear(torch.nn.Linear):
+67:     def __init__(self, in_features: int, out_features: int):
+68:         super().__init__(in_features, out_features, bias=False)
+69: 
+70:     def forward(
+71:         self, hidden_states: torch.Tensor, labels: torch.Tensor | None = None, temperature: Tensor | None = None
+72:     ) -> PrimeLmOutput:
+73:         # VanillaOutputLinear just returns logits - temperature scaling is done externally in train.py
+74:         return PrimeLmOutput(logits=super().forward(hidden_states))
+331:     elif isinstance(chunk_size, int):
+332:         logger.info(f"Injecting chunked LM head with chunk size {chunk_size}")
+333:         model.lm_head = FusedOutputLinear(
+334:             in_features=old_lm_head.in_features, out_features=old_lm_head.out_features, chunk_size=chunk_size
+335:         )
+336:     else:
+337:         logger.info("Injecting vanilla LM head")
+338:         model.lm_head = VanillaOutputLinear(in_features=old_lm_head.in_features, out_features=old_lm_head.out_features)
+339:     model.lm_head.weight = old_lm_head.weight
+340:     del old_lm_head
+341: 
+342:     _patch_model_forward(model)
+
+FILE packages/prime-rl-configs/src/prime_rl/configs/trainer.py sha256 1b6fcfa09f0612ecc8577ddcd2ab0a83fdb18c92b6ecdbd09c215b22f6dfc873 installed bytes match
+162: 
+163:     modules_to_save: Annotated[
+164:         list[str],
+165:         Field(
+166:             description="Module names or regex patterns for modules to keep fully trainable (not freeze). Simple names match any component in the module path. Regex patterns match anywhere in the name.",
+167:         ),
+168:     ] = []
+169: 
+170: 
+171: class DebugModelConfig(BaseConfig):
+172:     """Debugging feature around model and distributed training."""
+173: 
+174:     num_layers: Annotated[
+377:     fused_lm_head_token_chunk_size: Annotated[
+378:         int | Literal["auto", "disabled"],
+379:         Field(
+380:             description=(
+381:                 "The flattened token chunk size to use for the fused LM head. "
+382:                 "Three behaviors: "
+383:                 "(1) int >= 1: explicitly set the number of tokens per LM-head chunk; "
+384:                 "(2) 'auto': auto-enable (RL training auto-sets to 8192); "
+385:                 "(3) 'disabled': explicitly disable fused LM head (use vanilla). "
+386:                 "Explicitly setting an integer value for this feature isn't supported for SFT training."
+387:             ),
+388:         ),
+389:     ] = "disabled"
+
+Verified: no disable_adapter definition in pinned src; custom per-run scaling is the source-backed residual-off mechanism.
+Zero scaling still computes LoRA kernels/dropout; not a computational bypass; finite-residual assumption required.
+Cached scaling references require in-place setter (reset_reference=False), save/restore in finally and serialized forwards.
+Future implementation must verify frozen non-LoRA weights, dropout/RNG restoration, checkpointing/FSDP/compile behavior and logits equivalence on GPU.
+
+User-authorized SPEC edit: section 6 only; original prefix and sections 7+ preserved byte-for-byte.
+Previous SPEC sha256=1095b04b02f7493ae64324f8ee54c398e61b2b1189b243a8eca32f9ad3f03aab
+Revised SPEC sha256=275e944247d1c06ce0b001577635e4cb0e409f19eebd462cf9b12715f2e14fc7

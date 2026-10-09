@@ -1,0 +1,171 @@
+Function (*args, **kwargs) /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/autograd/function.py 06e16c078035b03e8342d9da29bfa1e020be7df8a825b6e17b020bdcd2608005
+grad (outputs: Union[torch.Tensor, collections.abc.Sequence[torch.Tensor], ForwardRef('GradientEdge'), collections.abc.Sequence['GradientEdge']], inputs: Union[torch.Tensor, collections.abc.Sequence[torch.Tensor], ForwardRef('GradientEdge'), collections.abc.Sequence['GradientEdge']], grad_outputs: Union[torch.Tensor, collections.abc.Sequence[Optional[torch.Tensor]], NoneType] = None, retain_graph: Optional[bool] = None, create_graph: bool = False, only_inputs: bool = True, allow_unused: Optional[bool] = None, is_grads_batched: bool = False, materialize_grads: bool = False) -> tuple[torch.Tensor, ...] /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/autograd/__init__.py 903e178e09119be5b493aaca8eb4ace326117e62013b014a95dfd80bcfc24ace
+saved_tensors_hooks (pack_hook: collections.abc.Callable[[torch.Tensor], typing.Any], unpack_hook: collections.abc.Callable[[typing.Any], torch.Tensor]) -> None /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/autograd/graph.py 05470e880f0f293b31f59d4670eea1eeca14139bfc07ebfea8ee2ce3a5f4d8d7
+once_differentiable (fn: collections.abc.Callable[typing.Concatenate[~_T, ~_P], ~_R]) -> collections.abc.Callable[typing.Concatenate[~_T, ~_P], ~_R] /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/autograd/function.py 06e16c078035b03e8342d9da29bfa1e020be7df8a825b6e17b020bdcd2608005
+log_softmax (input: torch.Tensor, dim: Optional[int] = None, _stacklevel: int = 3, dtype: Optional[int] = None) -> torch.Tensor /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/nn/functional.py 06f330c5ce12f7a7b5be938fb4fd1b78dadcc4a345c49aac58dbb923b3a3a405
+    @staticmethod
+    def forward(*args: Any, **kwargs: Any) -> Any:
+        r"""Define the forward of the custom autograd Function.
+
+        This function is to be overridden by all subclasses.
+        There are two ways to define forward:
+
+        Usage 1 (Combined forward and ctx)::
+
+            @staticmethod
+            def forward(ctx: Any, *args: Any, **kwargs: Any) -> Any:
+                pass
+
+        - It must accept a context ctx as the first argument, followed by any
+          number of arguments (tensors or other types).
+        - See :ref:`combining-forward-context` for more details
+
+        Usage 2 (Separate forward and ctx)::
+
+            @staticmethod
+            def forward(*args: Any, **kwargs: Any) -> Any:
+                pass
+
+
+            @staticmethod
+            def setup_context(ctx: Any, inputs: Tuple[Any, ...], output: Any) -> None:
+                pass
+
+        - The forward no longer accepts a ctx argument.
+        - Instead, you must also override the :meth:`torch.autograd.Function.setup_context`
+          staticmethod to handle setting up the ``ctx`` object.
+          ``output`` is the output of the forward, ``inputs`` are a Tuple of inputs
+          to the forward.
+        - See :ref:`extending-autograd` for more details
+
+        The context can be used to store arbitrary data that can be then
+        retrieved during the backward pass. Tensors should not be stored
+        directly on `ctx` (though this is not currently enforced for
+        backward compatibility). Instead, tensors should be saved either with
+        :func:`ctx.save_for_backward` if they are intended to be used in
+        ``backward`` (equivalently, ``vjp``) or :func:`ctx.save_for_forward`
+        if they are intended to be used for in ``jvp``.
+        """
+        raise NotImplementedError(
+            "You must implement the forward function for custom autograd.Function."
+        )
+
+    @staticmethod
+    def backward(ctx: Any, *grad_outputs: Any) -> Any:
+        r"""Define a formula for differentiating the operation with backward mode automatic differentiation.
+
+        This function is to be overridden by all subclasses.
+        (Defining this function is equivalent to defining the ``vjp`` function.)
+
+        It must accept a context :attr:`ctx` as the first argument, followed by
+        as many outputs as the :func:`forward` returned (None will be passed in
+        for non tensor outputs of the forward function),
+        and it should return as many tensors, as there were inputs to
+        :func:`forward`. Each argument is the gradient w.r.t the given output,
+        and each returned value should be the gradient w.r.t. the
+        corresponding input. If an input is not a Tensor or is a Tensor not
+        requiring grads, you can just pass None as a gradient for that input.
+
+        The context can be used to retrieve tensors saved during the forward
+        pass. It also has an attribute :attr:`ctx.needs_input_grad` as a tuple
+        of booleans representing whether each input needs gradient. E.g.,
+        :func:`backward` will have ``ctx.needs_input_grad[0] = True`` if the
+        first input to :func:`forward` needs gradient computed w.r.t. the
+        output.
+        """
+        raise NotImplementedError(
+            "You must implement either the backward or vjp method for "
+            "your custom autograd.Function to use it with backward "
+            "mode AD."
+        )
+
+def once_differentiable(
+    fn: Callable[Concatenate[_T, _P], _R],
+) -> Callable[Concatenate[_T, _P], _R]:
+    @functools.wraps(fn)
+    def wrapper(ctx: _T, *args: _P.args, **kwargs: _P.kwargs) -> _R:
+        with torch.no_grad():
+            outputs = fn(ctx, *args, **kwargs)
+
+        if not torch.is_grad_enabled():
+            return outputs
+
+        # If any of the inputs have requires_grad=True, we force the outputs
+        # to have requires_grad=True but point to a grad_fn which throws an
+        # error message during (double) back-propagation.
+        # XXX: this is only an approximation of requires_grad - there's no way
+        # to figure out if fn didn't use ctx.saved_tensors and as a result
+        # some Tensors might require grad, even if no args do.
+        # Unfortunately, this leads to unexpected error messages ("no nodes
+        # require computing gradients"), but I don't have a better idea.
+        # These functions would raise an error in backward anyway.
+        requires_grad = any(
+            isinstance(arg, torch.Tensor) and arg.requires_grad for arg in args
+        )
+        if not requires_grad:
+            return outputs
+
+        if not isinstance(outputs, tuple):
+            outputs_ = (outputs,)
+        else:
+            outputs_ = outputs
+
+        err_fn = _functions.DelayedError(
+            b"trying to differentiate twice a function that was marked "
+            b"with @once_differentiable",
+            len(outputs_),
+        )
+
+        # Create aliases of each output that has requires_grad=True. We need
+        # at least one of the inputs to err_fn to require grad so that the
+        # output will have a grad_fn.
+        def fake_requires_grad(var):
+            if var is not None:
+                var = var.detach()
+                var.requires_grad = True
+            return var
+
+        return err_fn(*[fake_requires_grad(v) for v in outputs_])  # type: ignore[return-value]
+
+    return wrapper
+
+PINNED_HEAD 3a91a2a876805ba8473db07524bcb227020a699f92e389d4e53de41b6fb81672
+def _patch_model_forward(model: nn.Module) -> None:
+    # Patch the forward method to use the new lm_head with labels and temperature
+    def new_forward(
+        self: nn.Module,
+        input_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        logits_to_keep: int = 0,
+        temperature: torch.Tensor | None = None,
+        **kwargs: object,
+    ) -> PrimeLmOutput:
+        # For VLM with images, don't create position_ids - let model compute MRoPE internally
+        is_multimodal = kwargs.get("pixel_values") is not None
+        if position_ids is None and not is_multimodal:
+            reference_tensor = input_ids if input_ids is not None else inputs_embeds
+            position_ids = torch.arange(1, reference_tensor.shape[1] + 1, device=reference_tensor.device).unsqueeze(0)
+        outputs = self.model(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
+        )
+        hidden_states = outputs.last_hidden_state
+
+        # Slice hidden states for logits_to_keep
+        slice_indices = (
+            slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) and logits_to_keep > 0 else slice(None)
+        )
+
+        # Pass through the wrapped lm_head
+        return self.lm_head(
+            hidden_states[:, slice_indices, :],
+            labels[:, slice_indices] if labels is not None else None,
+            temperature=temperature[:, slice_indices] if temperature is not None else None,
+        )
+
+    # Bind the new forward to the model
+    model.forward = types.MethodType(new_forward, model)

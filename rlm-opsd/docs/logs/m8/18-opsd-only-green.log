@@ -1,0 +1,42 @@
+".venv/bin/python" -m pytest tests/test_monitor_metrics.py tests/test_monitor_scoring.py tests/test_monitor_runner.py tests/test_monitor_cli.py tests/test_exit_check.py tests/test_retention.py -q
+..............................................................F.         [100%]
+=================================== FAILURES ===================================
+____ test_exit_runs_paired_retention_and_never_accepts_request_errors[None] ____
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-199/test_exit_runs_paired_retentio0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x12cce35f0>
+fault = None
+
+    @pytest.mark.parametrize('fault',[None,'http'])
+    def test_exit_runs_paired_retention_and_never_accepts_request_errors(tmp_path,monkeypatch,fault):
+        result,requests,config=asyncio.run(run_fixture(tmp_path,monkeypatch,fault))
+        assert result['status']==('error' if fault else 'passed'),result
+        if not fault:
+            assert result['retention']['drop']==.5
+            assert result['retention_scores']=={'before':1.,'after':.5,'count':1}
+            assert [r['model'] for r in requests]==['fixture-base','fixture-student']
+            assert requests[0]['seed']==requests[1]['seed']
+            assert all(r['messages'][-1]['content']=='Name two letters' for r in requests)
+>           assert all(r['max_tokens']==32 for r in requests)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_retention.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <list_iterator object at 0x12cce3310>
+
+>   assert all(r['max_tokens']==32 for r in requests)
+               ^^^^^^^^^^^^^^^
+E   KeyError: 'max_tokens'
+
+tests/test_retention.py:66: KeyError
+=============================== warnings summary ===============================
+tests/test_monitor_scoring.py: 14 warnings
+  /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_retention.py::test_exit_runs_paired_retention_and_never_accepts_request_errors[None]
+1 failed, 63 passed, 14 warnings in 37.06s
+make: *** [test-m8] Error 1

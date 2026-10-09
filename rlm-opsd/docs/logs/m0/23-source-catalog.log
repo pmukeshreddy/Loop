@@ -1,0 +1,1206 @@
++zsh:1> .venv/bin/python -
+INPUT AGENTS.md d14dd6a81c64ab7f488c8787e14ae902a0ac97ebe8b83639fe81b787834ce502
+INPUT SPEC.md 1095b04b02f7493ae64324f8ee54c398e61b2b1189b243a8eca32f9ad3f03aab
+INPUT TASKS.md c4333e18a4581998423a26d2da16262c5374d3143ed8b000d1f3866a17da9dc1
+INPUT DETECTORS.md 7c358502c176997b54e3f66c9d8ed362698e9a86fa7eee922405719e0b9c74f1
+INPUT student_system.md 1aa4f640928ecac721c42e2b33244abf7c5f681474c8208c71704747b67cbb1b
+INPUT teacher_manual.md cf51af034621eca4727a11b10b5bf5cf4f81cb46bf833ac68cfe0d8de815a1ee
+
+CHECKOUT rlm d04208afbad29ca675ab13478c40ee8bebc84bfe
+
+SOURCE rlm/core/rlm.py sha256 f7df6af55027159b2f428ff98c9b19beb872618ee88aa8fef62c9498fa1e0562
+41:RLM
+  49:__init__(self, backend: ClientBackend='openai', backend_kwargs: dict[str, Any] | None=None, environment: EnvironmentType='local', environment_kwargs: dict[str, Any] | None=None, depth: int=0, max_depth: int=1, max_iterations: int=30, max_budget: float | None=None, max_timeout: float | None=None, max_tokens: int | None=None, max_errors: int | None=None, custom_system_prompt: str | None=None, other_backends: list[ClientBackend] | None=None, other_backend_kwargs: list[dict[str, Any]] | None=None, logger: RLMLogger | None=None, verbose: bool=False, persistent: bool=False, custom_tools: dict[str, Any] | None=None, custom_sub_tools: dict[str, Any] | None=None, compaction: bool=False, compaction_threshold_pct: float=0.85, max_concurrent_subcalls: int=4, on_subcall_start: Callable[[int, str, str], None] | None=None, on_subcall_complete: Callable[[int, str, float, str | None], None] | None=None, on_iteration_start: Callable[[int, int], None] | None=None, on_iteration_complete: Callable[[int, int, float], None] | None=None, sampling_args: dict[str, Any] | None=None, sub_sampling_args: dict[str, Any] | None=None, orchestrator: bool=True, user_prologue: str | None=None)
+  226:_spawn_completion_context(self, prompt: str | dict[str, Any])
+  300:_setup_prompt(self, prompt: str | dict[str, Any], root_prompt: str | None=None)
+  326:completion(self, prompt: str | dict[str, Any], root_prompt: str | None=None)
+  492:_check_timeout(self, iteration: int, time_start: float)
+  512:_check_iteration_limits(self, iteration: RLMIteration, iteration_num: int, lm_handler: LMHandler)
+  587:_get_compaction_status(self, message_history: list[dict[str, Any]])
+  597:_should_compact(self, message_history: list[dict[str, Any]])
+  602:_compact_history(self, lm_handler: LMHandler, environment: BaseEnv, message_history: list[dict[str, Any]], compaction_count: int=1)
+  646:_completion_turn(self, prompt: str | dict[str, Any], lm_handler: LMHandler, environment: BaseEnv)
+  673:_default_answer(self, message_history: list[dict[str, Any]], lm_handler: LMHandler)
+  698:_fallback_answer(self, message: str | dict[str, Any])
+  706:_subcall(self, prompt: str, model: str | None=None)
+  872:_validate_persistent_environment_support(self)
+  898:_env_supports_persistence(env: BaseEnv)
+  902:close(self)
+  909:__enter__(self)
+  912:__exit__(self, exc_type, exc_val, exc_tb)
+
+SOURCE rlm/core/types.py sha256 eef76a1a8cf977475ac6f34bd25a8f8139bf05ab6c3b36f3578a1b6b9b0385c5
+18:_serialize_value
+43:ModelUsageSummary
+  44:total_calls
+  45:total_input_tokens
+  46:total_output_tokens
+  47:total_cost
+  49:to_dict(self)
+  60:from_dict(cls, data: dict)
+70:UsageSummary
+  71:model_usage_summaries
+  74:total_cost(self)
+  84:total_input_tokens(self)
+  89:total_output_tokens(self)
+  93:to_dict(self)
+  105:from_dict(cls, data: dict)
+118:RLMChatCompletion
+  121:root_model
+  122:prompt
+  123:response
+  124:usage_summary
+  125:execution_time
+  126:metadata
+  129:error
+  133:to_dict(self)
+  148:from_dict(cls, data: dict)
+161:REPLResult
+  162:stdout
+  163:stderr
+  164:locals
+  165:execution_time
+  166:llm_calls
+  167:final_answer
+  169:__init__(self, stdout: str, stderr: str, locals: dict, execution_time: float=None, rlm_calls: list['RLMChatCompletion']=None, final_answer: str | None=None)
+  185:__str__(self)
+  188:to_dict(self)
+200:CodeBlock
+  201:code
+  202:result
+  204:to_dict(self)
+209:RLMIteration
+  210:prompt
+  211:response
+  212:code_blocks
+  213:final_answer
+  214:iteration_time
+  216:to_dict(self)
+232:RLMMetadata
+  235:root_model
+  236:max_depth
+  237:max_iterations
+  238:backend
+  239:backend_kwargs
+  240:environment_type
+  241:environment_kwargs
+  242:other_backends
+  244:to_dict(self)
+265:QueryMetadata
+  266:context_lengths
+  267:context_total_length
+  268:context_type
+  270:__init__(self, prompt: str | list[str] | dict[Any, Any] | list[dict[Any, Any]])
+
+SOURCE rlm/utils/parsing.py sha256 dd0a706c885ba5a820ecf81c9aa20e99457758108727f1900b045167998d03d6
+10:find_code_blocks
+25:format_iteration
+77:format_execution_result
+110:convert_context_for_repl
+
+SOURCE rlm/utils/prompts.py sha256 579c8ef220739f691d3896257b8289eec7e7b634fe473f41dea4adb83560b47e
+211:build_rlm_system_prompt
+251:build_user_prompt
+
+SOURCE training/src/rlm_train/env.py sha256 0caf3bfb2162ca884f34f0e6786f7bf546df0fa90e67f828039460f5f2f11efd
+31:RLMTrainEnv
+  32:__init__(self, backend_factory: Callable[[], ReplBackend] | None=None, max_iterations: int=30, sub_model: str | None=None, sub_sampling_args: dict[str, Any] | None=None, custom_system_prompt: str | None=None, rubric: vf.Rubric | None=None, sub_llm_fn: Callable[[str, Any], Any] | None=None, sub_llm_fn_batched: Callable[[list[str], Any], Any] | None=None, user_prologue: str | None=None, bootstrap_code: str | None=None, orchestrator: bool=True, **kwargs: Any)
+  67:_ensure_proxy(self)
+  77:_teardown_proxy(self)
+  84:_build_user_iter(self, *, root_prompt: str | None, iteration: int, context_count: int, history_count: int)
+  100:setup_state(self, state: State)
+  163:get_prompt_messages(self, state: State)
+  221:env_response(self, messages: Messages, state: State, **kwargs: Any)
+  225:has_final_answer(self, state: State)
+  229:cleanup_rlm(self, state: State)
+  242:teardown_rlm(self)
+246:_normalize_for_api
+274:_last_assistant
+286:_msg_text
+300:_pack_exec
+310:_format_repl_outputs
+322:_format_one
+
+SOURCE training/src/rlm_train/repl/base.py sha256 25fe204d5ac2930541ec64385f868efe44bde8883f019c7deeae17c662faf57e
+9:ExecResult
+  10:stdout
+  11:stderr
+  12:final_answer
+  13:execution_time
+  14:locals_keys
+17:ReplBackend
+  19:start(self, proxy_url: str, rollout_id: str, depth: int=1)
+  22:load_context(self, payload: Any, index: int | None=None)
+  25:execute(self, code: str)
+  28:stop(self)
+  30:bootstrap(self, code: str)
+
+SOURCE training/src/rlm_train/repl/subprocess.py sha256 f687a1f322eac31182efa322d60a0a5115f0205594f9d93a63e42e701a3212ed
+14:WorkerStartupError
+18:WorkerProtocolError
+22:SubprocessReplBackend
+  25:__init__(self, python: str | None=None, worker_module: str='rlm_train.worker', startup_timeout: float=30.0, request_timeout: float=1200.0)
+  42:start(self, proxy_url: str, rollout_id: str, depth: int=1)
+  73:stop(self)
+  103:load_context(self, payload: Any, index: int | None=None)
+  107:bootstrap(self, code: str)
+  112:execute(self, code: str)
+  122:_request(self, payload: dict[str, Any])
+  144:_kill_worker(self)
+  156:_send(self, payload: dict[str, Any])
+  162:_read_line(self)
+  173:_drain_stderr(self)
+  184:_stderr_text(self)
+
+SOURCE training/src/rlm_train/worker.py sha256 1559e47361000c8ad69a79405149b987b283b06f1a7af38f5ae53680b797606c
+121:_AnswerDict
+  122:__init__(self, on_ready=None)
+  128:__setitem__(self, key, value)
+137:Worker
+  138:__init__(self, proxy_url: str, rollout_id: str, depth: int=1, exec_timeout_s: float | None=None)
+  161:_setup_namespace(self)
+  171:_restore_scaffold(self)
+  196:_capture_answer(self, content: Any)
+  199:_show_vars(self)
+  209:_proxy_post(self, path: str, payload: dict[str, Any])
+  235:_llm_query(self, prompt: str, model: str | None=None)
+  248:_llm_query_batched(self, prompts: list[str], model: str | None=None)
+  271:load_context(self, payload: Any, index: int | None=None)
+  282:_capture_output(self)
+  292:_exec_with_timeout(self, code: str, ns: dict[str, Any])
+  309:execute(self, code: str)
+345:_send
+351:main
+
+SOURCE training/src/rlm_train/proxy.py sha256 957636eda86fb2020378d4ada47e4099dfbd49d219754d53cc79aae517a538ea
+22:ClientHandle
+  23:client
+  24:model
+  25:sampling_args
+  26:record_call
+  27:max_concurrent
+  28:fake_query
+  29:fake_query_batched
+  30:state_ref
+33:_maybe_await
+39:_flatten_prompt
+62:_coerce_messages
+82:SubLLMProxy
+  83:__init__(self, host: str='127.0.0.1', port: int=0)
+  93:start(self)
+  111:stop(self)
+  121:url(self)
+  124:register(self, rollout_id: str, handle: ClientHandle)
+  128:unregister(self, rollout_id: str)
+  132:_handle_single(self, request: web.Request)
+  157:_handle_batched(self, request: web.Request)
+  212:_completion(self, handle: ClientHandle, prompt: str | list, model: str)
+
+SOURCE training/src/rlm_train/rubric.py sha256 baf2260c1e718d7607acd6a25667a0755930e17a2528b136c0141f8dc9627d3d
+13:RLMTrainRubric
+  14:__init__(self, correctness: Callable[..., float] | None=None, weight: float=1.0, min_iterations: int=2, min_subcall: int=0, min_reward: float=0.0, gate_reward: bool=False, **kwargs: Any)
+  42:_passes_gates(self, state: dict)
+  51:_call_correctness(self, correctness: Callable[..., float], kwargs: dict[str, Any])
+  59:_make_main_correctness(self, correctness: Callable[..., float])
+  77:_make_gated_metric(self, correctness: Callable[..., float])
+  92:rlm_iterations(self, state: State)
+  95:rlm_repl_calls(self, state: State)
+  98:rlm_sub_llm_calls(self, state: State)
+  101:rlm_has_final_answer(self, state: State)
+  104:rlm_below_min_iterations(self, state: State)
+  108:rlm_below_min_subcall(self, state: State)
+  114:rlm_below_min_reward(self, state: State)
+
+CHECKOUT verifiers 58b119fa1b24eff85b74a75ccf3e132523b3c6c3
+
+SOURCE verifiers/envs/environment.py sha256 c6534eec145d069e0e2749cfbd67816c262b72f18726fc6d8394cfe73c56bf9a
+93:Environment
+  98:__init__(self, dataset: 'Dataset | DatasetBuilder | None'=None, eval_dataset: 'Dataset | DatasetBuilder | None'=None, system_prompt: str | None=None, few_shot: Messages | None=None, parser: Parser | None=None, rubric: Rubric | None=None, sampling_args: SamplingArgs | None=None, message_type: MessageType | object=_MESSAGE_TYPE_UNSET, tool_defs: list[Tool] | None=None, max_workers: int=512, env_id: str | None=None, env_args: dict | None=None, map_kwargs: dict={}, max_seq_len: int | None=None, score_rollouts: bool=True, pass_threshold: float=0.5, **kwargs)
+  214:requires_group_rollouts(self)
+  218:provides_advantages(self)
+  222:_normalize_tool_defs(tools: list[Tool] | list[dict[str, Any]] | None)
+  254:__post_init__(self)
+  277:_ensure_example_id(self, dataset: 'Dataset')
+  287:_ensure_prompt(self, dataset: 'Dataset', system_prompt: str | None=None, few_shot: Messages | None=None, question_key: str='question', answer_key: str='answer', map_kwargs: dict={})
+  354:_format_dataset(self, dataset: 'Dataset', system_prompt: str | None=None, few_shot: Messages | None=None, question_key: str='question', answer_key: str='answer', map_kwargs: dict={})
+  374:_format_completion_dataset(self, dataset: 'Dataset', map_kwargs: dict={})
+  385:_format_dataset_source(self, dataset: 'Dataset')
+  394:build_dataset(self)
+  404:build_eval_dataset(self)
+  415:get_dataset(self, n: int=-1, seed: int | None=None)
+  427:get_eval_dataset(self, n: int=-1, seed: int | None=None)
+  442:_get_usage_tracker(self, state: State, create_if_missing: bool=True)
+  457:increment_state_usage(self, state: State, input_tokens: int | float=0, output_tokens: int | float=0)
+  468:increment_state_usage_from_response(self, state: State, response: Response)
+  476:get_state_usage(self, state: State)
+  491:get_model_response(self, state: State, prompt: Messages, client: Client | None=None, model: str | None=None, tool_defs: list[Tool] | None=None, sampling_args: SamplingArgs | None=None)
+  553:init_state(self, input: RolloutInput, client: Client | ClientConfig, model: str, sampling_args: SamplingArgs | None=None)
+  615:rollout(self, input: RolloutInput, client: Client, model: str, sampling_args: SamplingArgs | None=None)
+  627:cleanup(self, state: State, task: object | None=None, resources: object | None=None)
+  645:_teardown(self)
+  653:_render_stop(self, state: State, condition, **kwargs)
+  673:is_completed(self, state: State, **kwargs)
+  680:_run_rollout_state(self, input: RolloutInput, client: Client, model: str, sampling_args: SamplingArgs)
+  704:_run_group_states(self, group_inputs: list[RolloutInput], client: Client, model: str, sampling_args: SamplingArgs)
+  739:run_rollout(self, input: RolloutInput, client: Client | ClientConfig, model: str, sampling_args: SamplingArgs, max_retries: int=0, state_columns: list[str] | None=None, env_client: EnvClient | None=None)
+  785:run_group(self, group_inputs: list[RolloutInput], client: Client | ClientConfig, model: str, sampling_args: SamplingArgs, max_retries: int=0, state_columns: list[str] | None=None, env_client: EnvClient | None=None, **kwargs)
+  833:generate(self, inputs: 'Dataset | List[RolloutInput]', client: Client | ClientConfig, model: str, sampling_args: SamplingArgs | None=None, max_concurrent: int=-1, results_path: Path | None=None, state_columns: list[str] | None=None, save_results: bool=False, push_to_hf_hub: bool=False, hf_hub_dataset_name: str | None=None, independent_scoring: bool=False, max_retries: int=0, on_start: StartCallback | None=None, on_progress: ProgressCallback | list[ProgressCallback] | None=None, on_log: LogCallback | None=None)
+  1132:generate_sync(self, inputs: 'Dataset | List[RolloutInput]', client: Client | ClientConfig, **kwargs)
+  1167:_get_eval_inputs(self, num_examples: int=-1, rollouts_per_example: int=1)
+  1177:evaluate(self, client: Client | ClientConfig, model: str, sampling_args: SamplingArgs | None=None, num_examples: int=-1, rollouts_per_example: int=1, max_concurrent: int=-1, results_path: Path | None=None, state_columns: list[str] | None=None, save_results: bool=False, push_to_hf_hub: bool=False, hf_hub_dataset_name: str | None=None, independent_scoring: bool=False, max_retries: int=0, on_start: StartCallback | None=None, on_progress: ProgressCallback | list[ProgressCallback] | None=None, on_log: LogCallback | None=None, **kwargs)
+  1225:evaluate_sync(self, client: Client | ClientConfig, model: str, sampling_args: SamplingArgs | None=None, num_examples: int=-1, rollouts_per_example: int=1, max_concurrent: int=-1, results_path: Path | None=None, state_columns: list[str] | None=None, save_results: bool=False, push_to_hf_hub: bool=False, hf_hub_dataset_name: str | None=None, independent_scoring: bool=False, max_retries: int=0)
+  1261:set_kwargs(self, **kwargs)
+  1277:add_rubric(self, rubric: Rubric)
+  1285:set_concurrency(self, concurrency: int)
+  1294:set_max_seq_len(self, max_seq_len: int | None)
+  1298:set_score_rollouts(self, score_rollouts: bool)
+  1302:start_server(self, address: str | None=None, extra_env_kwargs: dict[str, Any] | None=None, num_workers: int=1, log_level: str | None=None, log_dir: str | None=None, console_logging: bool=True, health_check_interval: float=1.0, startup_timeout: float=600.0, recovery_timeout: float=600.0)
+  1368:stop_server(self)
+
+SOURCE verifiers/envs/multiturn_env.py sha256 658df7a2e98521b342eb85eec782437f522aacca1fbb4d10e8cce4a9491785a4
+30:MultiTurnMonitorRubric
+  31:__init__(self, **kwargs)
+  35:num_turns(self, state: State)
+39:MultiTurnEnv
+  40:__init__(self, max_turns: int=-1, timeout_seconds: float | None=None, **kwargs)
+  53:set_max_total_completion_tokens(self, max_total_completion_tokens: int)
+  58:env_response(self, messages: Messages, state: State, **kwargs)
+  67:has_error(self, state: State, **kwargs)
+  71:prompt_too_long(self, state: State)
+  75:max_turns_reached(self, state: State)
+  78:mark_timed_out(self, state: State)
+  84:max_total_completion_tokens_reached(self, state: State)
+  93:has_final_env_response(self, state: State)
+  97:setup_state(self, state: State)
+  101:get_prompt_messages(self, state: State)
+  112:render_completion(self, state: State)
+  130:render_state(self, state: State)
+  135:add_trajectory_step(self, state: State, trajectory_step: TrajectoryStep)
+  139:_finalize_rollout(self, state: State)
+  143:add_model_response(self, state: State, prompt_messages: Messages, response: Response)
+  169:rollout(self, input: RolloutInput, client: Client, model: str, sampling_args: SamplingArgs | None=None)
+
+SOURCE verifiers/utils/env_utils.py sha256 e1ae670c2f6871b2f50ebee96c683950b6274c313e3532610f45004df72c78cb
+12:load_environment
+97:prepare_typed_env_config
+120:env_config_annotation
+133:env_config_type
+
+SOURCE verifiers/types.py sha256 2e7276ab4d910368f92f57931e69f3e5068547d2d9d619ad18b308ba15dc7d68
+63:CustomBaseModel
+  68:__getitem__(self, key)
+  71:__setitem__(self, key, value)
+  74:get(self, key, default=None)
+  77:__contains__(self, key)
+  80:__eq__(self, other: object)
+86:TextMessage
+  87:role
+  88:content
+91:TextContentPart
+  92:type
+  93:text
+96:ImageUrlSource
+  97:url
+100:ImageUrlContentPart
+  101:type
+  102:image_url
+105:InputAudioSource
+  106:data
+  107:format
+110:InputAudioContentPart
+  111:type
+  112:input_audio
+115:GenericContentPart
+  116:type
+129:SystemMessage
+  130:role
+  131:content
+  134:from_path(cls, path: str | Path)
+138:UserMessage
+  139:role
+  140:content
+143:ToolCall
+  144:id
+  145:name
+  146:arguments
+152:AssistantMessage
+  153:role
+  154:content
+  155:reasoning_content
+  156:thinking_blocks
+  157:tool_calls
+160:ToolMessage
+  161:role
+  162:tool_call_id
+  163:content
+172:Tool
+  173:name
+  174:description
+  175:parameters
+  176:strict
+179:Usage
+  180:prompt_tokens
+  181:reasoning_tokens
+  182:completion_tokens
+  183:total_tokens
+186:ResponseTokens
+  187:prompt_ids
+  188:prompt_mask
+  189:completion_ids
+  190:completion_mask
+  191:completion_logprobs
+  192:routed_experts
+  198:multi_modal_data
+204:ResponseMessage
+  205:finish_reason
+  206:is_truncated
+  207:tokens
+210:Response
+  211:id
+  212:created
+  213:model
+  214:usage
+  215:message
+227:TrajectoryStepTokens
+  228:prompt_ids
+  229:prompt_mask
+  230:completion_ids
+  231:completion_mask
+  232:completion_logprobs
+  233:overlong_prompt
+  234:is_truncated
+  235:routed_experts
+  240:multi_modal_data
+243:TokenUsage
+  244:input_tokens
+  245:output_tokens
+  246:final_input_tokens
+  247:final_output_tokens
+250:ModelPricing
+  251:input_usd_per_mtok
+  252:output_usd_per_mtok
+255:EvalCost
+  256:input_usd
+  257:output_usd
+  258:total_usd
+261:VersionInfo
+  262:vf_version
+  263:vf_commit
+  264:env_version
+  265:env_commit
+268:TrajectoryStep
+  269:prompt
+  270:completion
+  271:response
+  272:tokens
+  273:reward
+  274:advantage
+  275:is_truncated
+  276:trajectory_id
+  277:extras
+280:BaseRolloutInput
+  281:prompt
+  282:example_id
+285:RolloutInput
+  288:answer
+  289:info
+292:TimeSpan
+  300:start
+  301:end
+  305:duration(self)
+311:TimeSpans
+  314:spans
+  318:duration(self)
+322:RolloutTiming
+  331:start_time
+  333:setup
+  334:generation
+  335:scoring
+  336:model
+  337:env
+  341:total(self)
+  348:overhead(self)
+358:ErrorInfo
+  359:error
+  360:error_chain_repr
+  361:error_chain_str
+364:RolloutOutput
+  379:example_id
+  380:prompt
+  381:completion
+  382:reward
+  383:timing
+  384:is_completed
+  385:is_truncated
+  386:metrics
+  388:answer
+  389:info
+  390:error
+  391:stop_condition
+  392:trajectory
+  393:tool_defs
+  394:token_usage
+404:StateForTaskDescriptor
+  405:__get__(self, instance: 'State | None', owner: type['State'])
+429:State
+  442:input
+  443:task
+  444:client
+  445:model
+  446:sampling_args
+  448:is_completed
+  449:is_truncated
+  450:stop_condition
+  451:tool_defs
+  452:trajectory
+  453:completion
+  454:reward
+  455:advantage
+  456:metrics
+  457:timing
+  458:error
+  459:usage
+  460:usage_tracker
+  461:_vf_state_contract
+  463:__init__(self, *args: Any, **kwargs: Any)
+  468:uses_v1_contract(self)
+  471:_enable_v1_contract(self)
+  475:__getitem__(self, key: str)
+  483:get(self, key: str, default: Any=None)
+  489:__setitem__(self, key: str, value: Any)
+  500:__delitem__(self, key: str)
+  505:update(self, *args: Any, **kwargs: Any)
+  514:pop(self, key: str)
+  517:pop(self, key: str, default: _DefaultValue)
+  519:pop(self, key: str, default: Any=_MISSING)
+  526:popitem(self)
+  534:clear(self)
+  541:setdefault(self, key: object, default: Any=None, /)
+  546:__ior__(self, other: object)
+  550:_set_internal(self, key: str, value: Any)
+  555:_set_completed(self, value: bool=True)
+  558:_set_error(self, value: Any)
+  561:_set_stop_condition(self, value: str | None, *, overwrite: bool=False)
+  567:_set_truncated(self, value: bool=True, *, overwrite: bool=False)
+  573:stop(self, condition: str='state_done')
+  580:runtime_state(self)
+  586:_runtime(self)
+  591:get_model(self)
+  609:get_max_turns(self, default: int)
+  620:get_client(self, api: EndpointApi | ClientType='chat_completions', *, sync: bool=False)
+  630:get_endpoint_config(self, api: EndpointApi | ClientType='chat_completions')
+  638:get_tools(self)
+  643:_runtime_handles(self)
+  650:_runtime_handle(self, name: str)
+  699:_tools_handle(self, names: _ToolTarget)
+  711:_use_runtime_handle(self, name: str, handle: Mapping[str, Any])
+  715:strip_runtime_handles(self)
+  718:finalize(self)
+  724:_legacy_for_task(cls, task: Mapping[str, Any])
+  752:assert_serializable(self)
+756:_internal_key_error
+777:_state_for_task
+785:_uses_v1_contract
+791:_v1_state_for_task
+817:_borrow_from_state
+837:_borrow_targets
+845:_tool_names
+851:_strip_runtime_handles
+875:assert_json_serializable
+885:normalize_task_payload
+900:task_payload_from_info
+912:flatten_task_input
+936:GenerateMetadata
+  939:env_id
+  940:name
+  941:env_args
+  942:model
+  943:base_url
+  944:num_examples
+  945:rollouts_per_example
+  946:sampling_args
+  947:date
+  948:time
+  949:avg_reward
+  950:avg_metrics
+  951:avg_error
+  952:pass_at_k
+  953:pass_all_k
+  954:pass_threshold
+  955:usage
+  956:cost
+  957:version_info
+  958:state_columns
+  959:path_to_save
+  960:tools
+963:GenerateOutputs
+  966:outputs
+  967:metadata
+970:RolloutScore
+  973:reward
+  974:metrics
+977:RolloutScores
+  980:reward
+  981:metrics
+997:_validate_extra_headers_value
+1010:ClientConfig
+  1013:client_idx
+  1014:client_type
+  1015:renderer
+  1016:renderer_model_name
+  1017:renderer_pool_size
+  1018:tool_parser
+  1019:reasoning_parser
+  1020:preserve_all_thinking
+  1021:preserve_thinking_between_tool_calls
+  1022:api_key_var
+  1023:api_base_url
+  1024:endpoint_configs
+  1025:timeout
+  1026:connect_timeout
+  1027:max_connections
+  1028:max_keepalive_connections
+  1029:max_retries
+  1030:extra_headers
+  1031:extra_headers_from_state
+  1041:validate_extra_headers(cls, value: object)
+  1046:validate_non_recursive_endpoints(cls, value)
+1086:EndpointClientConfig
+  1089:client_idx
+  1090:api_key_var
+  1091:api_base_url
+  1092:timeout
+  1093:connect_timeout
+  1094:max_connections
+  1095:max_keepalive_connections
+  1096:max_retries
+  1097:extra_headers
+  1101:validate_extra_headers(cls, value: object)
+1108:EvalConfig
+  1112:env_id
+  1113:name
+  1114:env_args
+  1115:env_dir_path
+  1117:endpoint_id
+  1118:model
+  1119:client_config
+  1120:sampling_args
+  1121:num_examples
+  1122:rollouts_per_example
+  1123:max_concurrent
+  1124:num_workers
+  1125:independent_scoring
+  1126:extra_env_kwargs
+  1127:max_retries
+  1128:disable_env_server
+  1130:verbose
+  1131:disable_tui
+  1133:output_dir
+  1134:state_columns
+  1135:save_results
+  1136:resume_path
+  1137:save_to_hf_hub
+  1138:hf_hub_dataset_name
+1141:EvalRunConfig
+  1144:evals
+  1145:heartbeat_url
+
+SOURCE verifiers/clients/client.py sha256 a9a801646a63fb11f9f65a96551ba09c80a125641ec79728b8bf0e55d28076f8
+39:Client
+  40:__init__(self, client_or_config: ClientT | ClientConfig)
+  50:client(self)
+  54:setup_client(self, config: ClientConfig)
+  57:to_native_tool(self, tool: Tool)
+  62:to_native_prompt(self, messages: Messages)
+  67:get_native_response(self, prompt: MessagesT, model: str, sampling_args: SamplingArgs, tools: list[ToolT] | None=None, **kwargs)
+  79:raise_from_native_response(self, response: ResponseT)
+  84:from_native_response(self, response: ResponseT)
+  89:close(self)
+  93:to_native_tools(self, tools: list[Tool] | None)
+  102:_build_state_headers(self, state)
+  113:get_response(self, prompt: Messages, model: str, sampling_args: SamplingArgs, tools: list[Tool] | None=None, **kwargs)
+
+CHECKOUT prime-rl 09e11c7527a242b9f150c7c4c71b1b96da66cb75
+
+SOURCE src/prime_rl/entrypoints/rl.py sha256 404e8156843741881bb79f7c08db8dd4479b75e9ed16aabb471a03556f7399e4
+42:get_physical_gpu_ids
+51:write_config
+59:write_subconfigs
+81:check_gpus_available
+101:rl_local
+404:write_slurm_script
+485:rl_slurm
+546:rl
+582:main
+
+SOURCE src/prime_rl/orchestrator/utils.py sha256 b451459c8164c8076483a00a4823a5b1a8643f6aa69bd237c069420b86512dc5
+25:set_default_executor
+31:print_benchmark
+81:compute_teacher_logprobs
+137:get_weight_dir
+182:setup_external_rollout_model
+
+SOURCE src/prime_rl/orchestrator/orchestrator.py sha256 5942aeb9159c00db46ca5877d99bc4533e5fa7f738a448cbbfb08cb6d18ff070
+89:orchestrate
+892:main
+898:setup_rollout_inference_pool
+
+SOURCE src/prime_rl/orchestrator/trajectories.py sha256 bcf07550acfa2d32be659463b68e2367a92002f92597853f3fc6508f2b8f24e4
+28:_align_routed_experts
+49:_common_prefix_len
+53:_normalize_messages
+57:_deserialize_tool_calls
+61:_strip_message_content
+65:_render_messages
+81:_prepare_messages_for_processor
+121:_tokenize_step_from_messages
+178:_convert_tools_to_oai_format
+202:_tokenize_step_with_renderer
+217:pretokenize_rollout_trajectory
+252:interleave_rollout
+438:offload_images_to_disk
+480:_load_file_image
+485:_extract_images_from_messages
+511:_collect_image_keys_from_messages
+532:_decode_image
+545:strip_base64_images
+566:_extract_images_from_examples
+626:_ImageStore
+  633:__init__(self, image_bytes: list[bytes], image_num_patches: list[int], patch_dim: int, image_grids: list[list[int]])
+  646:assemble(self, indices: list[int])
+667:_preprocess_images_batched
+747:VLMImageCache
+  750:__init__(self, cache: dict[int, list[tuple[bytes | None, list[int] | None, list[list[int]] | None]]], num_unique_examples: int, extract_time: float, preprocess_time: float)
+  766:from_store(cls, store: _ImageStore | None, step_indices: dict[int, list[list[int]]], num_unique_examples: int, num_unique_images: int, extract_time: float, preprocess_time: float)
+  786:_assemble(self, indices: list[int])
+  791:get_for_step(self, cache_key: int, step_idx: int)
+  806:get_all(self, cache_key: int)
+820:build_vlm_image_cache
+
+SOURCE src/prime_rl/transport/types.py sha256 ceed321f18eaccaeece2155fcba282544fa0e5d16b95553014c805068b3e0aab
+5:TrainingSample
+  8:prompt_ids
+  9:prompt_mask
+  10:completion_ids
+  11:completion_mask
+  12:completion_logprobs
+  13:completion_temperatures
+  14:env_name
+  15:teacher_logprobs
+  16:advantage
+  17:reward
+  20:pixel_values
+  21:pixel_values_shape
+  23:image_grid_thw
+  25:routed_experts
+  28:mm_token_type_ids
+  30:sft_loss
+33:TrainingBatch
+  36:examples
+  37:step
+  38:run_idx
+42:MicroBatch
+  45:input_ids
+  46:loss_mask
+  47:advantages
+  48:inference_logprobs
+  49:position_ids
+  50:temperatures
+  51:env_names
+  52:teacher_logprobs
+  53:lora_num_tokens
+  54:routed_experts
+  57:pixel_values
+  58:pixel_values_shape
+  60:image_grid_thw
+  62:mm_token_type_ids
+  64:sft_loss
+
+SOURCE src/prime_rl/trainer/rl/loss.py sha256 f6ef9d30f8df162d568d630d60a842a1003dff3ae05900ab6311a1aa8ee8c549
+14:LossInputs
+  17:trainer_logprobs
+  18:inference_logprobs
+  19:teacher_logprobs
+  20:advantages
+  21:loss_mask
+25:LossOutputs
+  28:loss
+  29:metrics
+43:selective_log_softmax
+52:compute_entropy
+60:shift_logits
+73:shift_tensor_left
+83:shift_tensor_right
+101:_safe_mean
+107:compute_importance_ratio_and_mismatch_kl
+116:default_loss_fn
+177:sft_loss_fn
+189:setup_loss_fn
+209:compute_loss
+
+SOURCE packages/prime-rl-configs/src/prime_rl/configs/rl.py sha256 02a8e180ee1d0101a94b28da3320f17e6db5bd0ecb6ab86ac0262d9a6190675d
+55:RLExperimentalConfig
+59:SharedLogConfig
+  62:level
+  69:json_logging
+75:SharedWandbConfig
+  78:project
+  80:entity
+  82:name
+  84:group
+  86:tags
+  88:offline
+  90:shared
+  99:validate_shared_not_offline(self)
+105:SharedCheckpointConfig
+  108:output_dir
+  115:interval
+  117:resume_step
+  121:keep_last
+  129:keep_interval
+138:SharedModelConfig
+  141:name
+  146:vlm
+152:SharedWeightBroadcastConfig
+  155:type
+  159:port
+  160:timeout
+  161:quantize_in_weight_transfer
+172:BaseDeploymentConfig
+  177:gpus_per_node
+180:SingleNodeDeploymentConfig
+  183:type
+  185:num_train_gpus
+  186:num_infer_gpus
+  187:num_teacher_gpus
+  190:validate_gpu_count(self)
+200:MultiNodeDeploymentConfig
+  203:type
+  205:num_train_nodes
+  206:num_infer_nodes
+  213:num_infer_replicas
+  220:num_teacher_nodes
+  222:nodes_per_fsdp_group
+  230:total_infer_nodes(self)
+  234:teacher_inference_not_supported(self)
+245:RLConfig
+  248:trainer
+  249:orchestrator
+  250:inference
+  257:teacher_inference
+  264:output_dir
+  271:clean_output_dir
+  280:log
+  287:ckpt
+  294:wandb
+  301:model
+  308:tokenizer
+  316:max_steps
+  323:max_model_len
+  330:seq_len
+  339:max_async_level
+  346:weight_broadcast
+  350:bench
+  357:deployment
+  359:slurm
+  361:dry_run
+  363:experimental
+  371:validate_deployment(self)
+  391:validate_no_teacher_in_multinode(self)
+  400:validate_enough_devices_for_nccl(self)
+  410:validate_quantize_in_weight_transfer(self)
+  426:validate_teacher_model(self)
+  437:validate_external_rollout_inference(self)
+  454:auto_setup_output_dir(self)
+  464:auto_setup_logs(self)
+  476:auto_setup_ckpt(self)
+  513:auto_setup_wandb(self)
+  559:auto_setup_model(self)
+  582:auto_setup_tokenizer(self)
+  612:auto_setup_max_steps(self)
+  623:auto_setup_async_level(self)
+  634:auto_setup_seq_len(self)
+  655:auto_setup_weight_broadcast(self)
+  685:validate_eplb_requires_quantized_weight_transfer(self)
+  700:auto_setup_bench(self)
+  718:auto_setup_lora(self)
+  772:auto_setup_session_headers(self)
+  778:auto_setup_router_replay(self)
+  795:auto_setup_deployment(self)
+  894:auto_setup_disaggregated_inference(self)
+  920:auto_setup_dp_rank_count(self)
+  934:auto_setup_teacher_inference(self)
+  975:auto_setup_slurm_template(self)
+
+SOURCE packages/prime-rl-configs/src/prime_rl/configs/trainer.py sha256 1b6fcfa09f0612ecc8577ddcd2ab0a83fdb18c92b6ecdbd09c215b22f6dfc873
+30:GCConfig
+  37:interval
+46:ActivationCheckpointConfig
+  49:mode
+  56:freq
+  64:targets
+  72:validate_selective_targets(self)
+79:ActivationOffloadingConfig
+  82:pin_memory
+  84:max_inflight_activations
+93:CompileConfig
+  96:fullgraph
+102:BenchConfig
+  105:output_json
+111:LoRAConfig
+  114:rank
+  122:alpha
+  130:dropout
+  139:target_modules
+  163:modules_to_save
+171:DebugModelConfig
+  174:num_layers
+  179:random_init
+  186:force_balanced_routing
+194:ModelConfig
+  197:seq_len
+  199:attn
+  206:compile
+  213:ac
+  220:ac_offloading
+  227:fsdp_cpu_offload
+  234:optim_cpu_offload
+  241:reshard_after_forward
+  245:dp_replicate
+  252:ep
+  259:ep_comm_backend
+  269:deepep_num_sms
+  283:deepep_token_chunk_size
+  295:cp
+  302:cp_style
+  317:impl
+  327:optimization_dtype
+  334:reduce_dtype
+  341:moe_use_grouped_mm
+  348:fp8
+  356:freeze_moe_router
+  363:lora
+  370:debug
+  377:fused_lm_head_token_chunk_size
+  393:_normalize_attn_alias(cls, data)
+  400:trust_remote_code_only_with_hf(self)
+  408:cp_only_with_flash_attn(self)
+  423:ac_offloading_requires_ac(self)
+  430:selective_ac_only_with_custom_impl(self)
+  436:cpu_offload_mutual_exclusion(self)
+  442:flash_attention_4_only_with_custom_impl(self)
+  448:fp8_only_with_custom_impl(self)
+  454:validate_ep_comm_backend(self)
+464:TokenizerConfig
+  467:name
+  472:trust_remote_code
+  479:chat_template
+487:ConstantSchedulerConfig
+  490:type
+493:LinearSchedulerConfig
+  496:type
+  498:warmup_steps
+  502:decay_steps
+  510:min_lr
+513:CosineSchedulerConfig
+  516:type
+  518:warmup_steps
+  522:min_lr
+530:BaseOptimizerConfig
+  531:lr
+  532:weight_decay
+  533:max_norm
+538:SGDConfig
+  539:type
+  540:nesterov
+  541:momentum
+544:AdamWConfig
+  545:type
+  547:betas1
+  548:betas2
+551:MuonConfig
+  552:type
+  554:mu
+  555:betas1
+  558:betas2
+563:SignSGDConfig
+  564:type
+572:WeightCheckpointConfig
+  575:save_sharded
+  582:save_format
+  589:save_adapter_separately
+597:CheckpointConfig
+  600:output_dir
+  607:interval
+  615:weights
+  617:skip_gather_master_weights
+  624:weights_only
+  631:resume_step
+  639:keep_last
+  647:keep_interval
+  655:skip_progress
+  662:skip_scheduler
+  669:skip_dataloader
+  676:skip_optimizer
+684:DefaultLossConfig
+  687:type
+  689:dppo_mask_low
+  690:dppo_mask_high
+  691:adv_tau
+  692:teacher_tau
+  693:kl_tau
+696:SFTLossConfig
+  699:type
+702:CustomLossConfig
+  705:type
+  707:import_path
+  708:kwargs
+714:FakeDataLoaderConfig
+  717:batch_size
+  718:generate_samples
+723:DataLoaderConfig
+  726:fake
+729:BaseWeightBroadcastConfig
+735:FileSystemWeightBroadcastConfig
+  738:type
+  739:save_sharded
+  740:save_format
+745:NCCLWeightBroadcastConfig
+  748:type
+  749:host
+  750:port
+  751:timeout
+  753:inference_world_size
+  754:quantize_in_weight_transfer
+770:TrainerExperimentalConfig
+774:TrainerConfig
+  778:model
+  781:tokenizer
+  784:data
+  787:loss
+  790:optim
+  793:scheduler
+  796:ckpt
+  798:weight_broadcast
+  800:rollout_transport
+  803:log
+  806:wandb
+  808:output_dir
+  815:matmul_precision
+  828:max_steps
+  835:max_async_level
+  843:enable_router_replay
+  850:memory_profiler_path
+  852:bench
+  859:gc
+  866:trace_path
+  868:dist_timeout_seconds
+  875:heartbeat
+  879:metrics_server
+  884:max_concurrent_runs
+  892:experimental
+  898:deepep_disables_grad_clipping(self)
+  909:vlms_require_bfloat16(self)
+  919:vlm_freeze_incompatible_with_lora(self)
+  928:auto_setup_bench(self)
+  938:dont_do_massive_traces(self)
+  949:validate_lora_adapter_saving(self)
+  960:validate_weight_broadcast_type(self)
+  966:validate_opt_and_fsdp_offload(self)
+  972:validate_optim_cpu_offload_single_run(self)
+  978:validate_lora_broadcast(self)
+  985:auto_setup_tokenizer(self)
+  993:auto_setup_fused_lm_head_token_chunk_size(self)
+  1000:ep_only_with_custom_impl(self)
+  1007:router_replay_only_with_custom_impl(self)
+
+SOURCE packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py sha256 5d50e9a39d5ba1e9ba4c1a1aabe346a869626439c6f2a3246a3cdf3738a661c5
+23:OptimizerConfig
+  26:lr
+35:LoRAConfig
+  38:name
+  45:rank
+  53:alpha
+62:ModelConfig
+  65:lora
+73:TrainSamplingConfig
+  76:temperature
+  84:repetition_penalty
+  92:max_completion_tokens
+  100:min_tokens
+  108:seed
+  117:extra_body
+  124:to_sampling_args(self)
+  150:_deprecate_max_tokens(cls, data: Any)
+161:EvalSamplingConfig
+  168:temperature
+  173:repetition_penalty
+  178:top_p
+  183:top_k
+  188:min_p
+  193:max_completion_tokens
+  201:min_tokens
+  206:reasoning_effort
+  211:seed
+  216:extra_body
+  221:to_sampling_args(self)
+  251:_deprecate_max_tokens(cls, data: Any)
+262:EnvConfig
+  265:id
+  272:name
+  279:args
+  286:extra_env_kwargs
+  295:address
+  302:num_workers
+  309:ratio
+  317:max_retries
+  322:max_total_completion_tokens
+  332:timeout
+  341:stripped_id(self)
+  346:resolved_name(self)
+  350:validate_env_name(self)
+  358:resolve_max_total_completion_tokens(self)
+  363:resolve_timeout(self)
+369:TrainEnvConfig
+  372:sampling
+380:EvalEnvConfig
+  383:sampling
+  390:num_examples
+  397:rollouts_per_example
+  405:interval
+414:TrainConfig
+  417:env
+  419:sampling
+  421:num_workers
+  428:max_retries
+  434:resolve_env_defaults(self)
+  450:validate_unique_env_names(self)
+  460:validate_env_ratios(self)
+469:EvalConfig
+  472:env
+  474:sampling
+  479:num_examples
+  486:rollouts_per_example
+  491:num_workers
+  498:max_retries
+  503:interval
+  512:resolve_env_defaults(self)
+  541:validate_unique_env_names(self)
+  550:eval_base_model
+  557:skip_eval_on_resume
+  568:cancel_inflight_rollouts_on_eval
+576:CheckpointConfig
+  579:interval
+  581:resume_step
+  589:wait_for_weights_timeout
+  597:keep_last
+  605:keep_interval
+  613:skip_progress
+  620:skip_buffer
+628:BufferConfig
+  631:seed
+  638:easy_threshold
+  645:hard_threshold
+  652:easy_fraction
+  661:hard_fraction
+  670:online_difficulty_filtering
+  677:hash_keys
+  686:validate_thresholds(self)
+692:TokensLengthPenaltyConfig
+  705:type
+  706:completion_weight
+  714:tool_response_weight
+724:TurnsLengthPenaltyConfig
+  729:type
+738:DefaultAdvantageConfig
+  743:type
+  744:length_penalty
+758:CustomAdvantageConfig
+  761:type
+  762:import_path
+  765:kwargs
+776:GibberishFilterConfig
+  781:type
+  782:enforce
+  788:token_id_threshold
+  792:logprob_offset
+798:RepetitionFilterConfig
+  805:type
+  806:enforce
+  812:window
+  816:prob_threshold
+826:ZeroAdvantageFilterConfig
+  831:type
+  832:enforce
+846:FileSystemWeightBroadcastConfig
+  849:type
+852:NCCLWeightBroadcastConfig
+  855:type
+  857:host
+  858:port
+  859:timeout
+  860:quantize_in_weight_transfer
+  865:inference_world_size
+879:OrchestratorExperimentalConfig
+883:TeacherModelConfig
+  886:client
+  891:model
+897:TeacherRolloutModelConfig
+  900:client
+  905:model
+911:OrchestratorConfig
+  915:train
+  918:client
+  921:model
+  924:tokenizer
+  927:renderer
+  930:optim
+  933:teacher_model
+  943:teacher_rollout_model
+  954:use_sft_loss
+  965:eval
+  968:buffer
+  971:advantage
+  974:filters
+  977:log
+  980:wandb
+  983:prime_monitor
+  986:collect_inference_metrics
+  989:ckpt
+  991:weight_broadcast
+  993:rollout_transport
+  995:output_dir
+  1002:tasks_per_minute
+  1010:batch_size
+  1018:token_batch_size
+  1026:oversampling_factor
+  1038:max_inflight_rollouts
+  1050:rollouts_per_example
+  1058:seq_len
+  1066:num_train_workers
+  1071:max_steps
+  1078:max_off_policy_steps
+  1086:max_error_reschedule_attempts
+  1094:max_async_level
+  1102:strict_async_level
+  1109:bench
+  1116:seed
+  1118:heartbeat
+  1122:use_renderer
+  1133:env_install_prerelease
+  1140:experimental
+  1147:_env_to_train(cls, data: Any)
+  1173:auto_setup_tokenizer(self)
+  1181:validate_unique_filter_types(self)
+  1188:validate_sft_distill_mode(self)
+  1210:validate_renderer_vs_vlm(self)
+  1224:validate_renderer_args(self)
+  1255:validate_renderer_auto_resolves(self)
+  1291:nccl_max_async_level(self)
+  1298:resolve_batching(self)
+  1341:auto_setup_bench(self)
+  1356:resolve_env_config(self)
+
+PRIME ENTRYPOINTS {'rl': 'prime_rl.entrypoints.rl:main', 'sft': 'prime_rl.entrypoints.sft:main', 'inference': 'prime_rl.entrypoints.inference:main', 'trainer': 'prime_rl.trainer.rl.train:main', 'orchestrator': 'prime_rl.orchestrator.orchestrator:main', 'env-server': 'prime_rl.orchestrator.env_server.env_server:main'}
+SUPPORT PIN renderers 0.1.8.dev4 {"url": "https://github.com/PrimeIntellect-ai/renderers.git", "vcs_info": {"commit_id": "8704f9d50252692a4a677177eb98d274f8d3ac5d", "requested_revision": "8704f9d50252692a4a677177eb98d274f8d3ac5d", "vcs": "git"}}
+SUPPORT PIN pydantic-config 0.3.0 {"url": "https://github.com/samsja/pydantic_config.git", "vcs_info": {"commit_id": "73c1d84f7c359fa5fa3b7cfb946272352866efb7", "requested_revision": "73c1d84f7c359fa5fa3b7cfb946272352866efb7", "vcs": "git"}}
