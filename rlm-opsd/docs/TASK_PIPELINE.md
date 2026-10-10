@@ -52,8 +52,8 @@ They do not define teacher-gate or OPSD-exit thresholds.
 | `families` | Family names mapped to positive integer weights |
 | `splits` | `train` and `dev_behavior`, each with a positive per-cell multiplier |
 | `direct_read_max_chars` | Strict upper bound for small-context controls |
-| `labels` | Classification intents allowed in generated dense tasks |
-| `family_knobs` | Per-family generation parameters below |
+| `labels` | Optional fixed classification-intent selection; omit when using `label_count` |
+| `family_knobs` | Per-family parameters, each a fixed value, inclusive `{min, max}` range, or `{choices: [...]}` |
 | `classification_sources` | Separate train/dev CSV paths, URLs, SHA-256, revisions, partitions, and ambiguity policy |
 | `heldout_index` | Destination for reserved queries and source references |
 | `heldout_question_sources` | Pinned query-only artifacts; cannot establish full coverage |
@@ -68,6 +68,29 @@ The other families cover all configured sizes and both structures. Encoding is
 rotated, not an extra Cartesian-product axis. Reports include excluded cells
 and both the generated and retained grids.
 
+The default train multiplier is `5`, the dev multiplier is `1`, and the
+small-context family weight is `3`. Each knob is sampled from a separate RNG
+derived from the task seed and knob name. Worker count and YAML key order do
+not change the sampled values. Integer ranges include both endpoints; date
+ranges sample calendar days inclusively and use quoted ISO date strings.
+For example:
+
+```yaml
+family_knobs:
+  sparse_retrieval:
+    needles: {min: 1, max: 8}
+  linear_aggregation:
+    label_count: {min: 2, max: 8}
+    temporal_filter: {choices: [true, false]}
+    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
+```
+
+The shipped ranges cover needles `1–8`, hops `2–4`, label counts `2–8`, repo
+files `8–64`, and small-context quantity records `4–24`. Both pair relations
+and temporal-filter states are sampled. `label_count` selects a seeded subset
+from all labels in the split's pinned corpus, without a fixed allowlist. It
+must fit the available labels and cannot be combined with explicit `labels`.
+
 Common generator knobs are `target_chars`, `structure`, `encoding`, and
 `chunk_chars`. Leave the grid-derived size/structure knobs to the planner when
 using `family_knobs`. Records remain whole across list chunks. Target sizes are
@@ -78,15 +101,23 @@ character counts are stored in the manifest.
 |---|---|
 | `sparse_retrieval` | `needles` from 1–8; exact parcel IDs, shuffled facts and near-ID distractors |
 | `multi_hop` | `hops` from 2–4; keyed links, terminal lookup and decoy terminal |
-| `linear_aggregation` | `entries` (optional explicit count), `users`, `labels`, `temporal_filter`, `query_type` (`count` or `most_frequent`) |
+| `linear_aggregation` | `entries` (optional explicit count), `users`, `labels` or `label_count`, `temporal_filter`, `cutoff_date`, `query_type` (`count` or `most_frequent`) |
 | `quadratic_pairs` | Dense-task knobs plus `pair_relation` (`both_have_any` or `cover_labels`); unique pairs sorted numerically |
 | `repo_qa` | `files` (at least three), `repo_query_type` (`definition`, `callers`, `config`); generated Python repository |
-| `small_context_control` | `direct_read_max_chars`; sum the quantities of a named group |
+| `small_context_control` | `records` (positive quantity-record count, default `8`), `direct_read_max_chars`; sum the quantities of a named group |
 
 With no explicit `entries`, dense tasks grow using classification entries until
 the target size is reached. With an explicit small count, unrelated records can
-pad the context. Temporal filtering means dates strictly after `2023-03-31`;
-generated dates and user IDs are synthetic. Most-frequent ties use lexical order.
+pad the context. Temporal filtering means dates strictly after `cutoff_date`
+(default `2023-03-31` for direct generator calls). With the filter off, all
+dates are eligible. Generated dates span January through June 2023, and user
+IDs are synthetic. Most-frequent ties use lexical order and empty results
+return `NONE`. Small-context `records` counts quantity records, excluding any
+unrelated archival filler used to reach the context-size bucket.
+
+Every query type has four wordings, selected by seed using an RNG separate
+from context generation and label sampling. Each wording preserves the same
+matching, date, tie-breaking and output-order rules.
 The verifier parses the serialized records independently; it does not call the
 generator or read `task.answer`. Repo verification uses Python ASTs without
 executing repository code.
@@ -98,9 +129,12 @@ schemas and multiline text. JSONL uses one JSON object per line. Repo QA uses
 
 Task identity includes family, resolved knobs, seed and split. Dense-task knobs
 also include a fingerprint of the pinned classification corpus. Resolved knobs,
-including query criteria and actual entry counts, remain in the manifest for
-audit and offline verification. Neither these criteria nor annotation maps are
-passed to the model.
+including selected labels, query criteria, `query_variant` and actual entry
+counts, remain in the manifest for audit and offline verification. Neither
+these criteria nor annotation maps are passed to the model. Regenerate from
+the original build configuration or input `TaskSpec`; resolved manifest knobs
+are audit output, not a replacement input recipe (`label_count` and its
+resolved `labels` are both recorded, but are mutually exclusive as inputs).
 
 ## Classification provenance
 
@@ -158,7 +192,8 @@ reject attempts to use eval tasks as training candidates.
 
 The current public query-only import is **incomplete**. Its zero-drop result is
 not evidence of no overlap with all benchmark queries/documents. See the
-[executed report](../data/decontamination.json) and [run log](logs/m2/12-generation-and-decontamination.log).
+[executed report](../data/decontamination.json) and
+[current build log](checks/task-diversity/04-make-tasks.log).
 
 For complete coverage, supply the actual reserved JSON array or JSONL exports
 in `heldout_snapshots`. Each entry has `benchmark`, `path`, `sha256`, `revision`,

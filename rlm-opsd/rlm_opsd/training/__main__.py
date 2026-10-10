@@ -7,9 +7,9 @@ from .runner import check_readiness,run_smoke
 
 
 def main(argv=None):
-    parser=argparse.ArgumentParser(description='Primary Mode B / optional Mode A one-update smoke; teacher scoring is local')
+    parser=argparse.ArgumentParser(description='OPSD full-vocabulary JSD smoke; teacher scoring is local')
     parser.add_argument('command',choices=['smoke'])
-    parser.add_argument('--config',default='configs/opsd_mode_b.toml')
+    parser.add_argument('--config',default='configs/opsd.toml')
     parser.add_argument('--output')
     parser.add_argument('--check',action='store_true')
     args=parser.parse_args(argv)

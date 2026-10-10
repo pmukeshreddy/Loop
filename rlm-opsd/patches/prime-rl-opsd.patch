@@ -1,0 +1,375 @@
+diff --git a/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py b/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
+index ce155cf1..4d987b71 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
+@@ -929,6 +929,18 @@ class OrchestratorConfig(BaseConfig):
+     # The optimizer configuration (per-run LR for multi-run training)
+     optim: OptimizerConfig = OptimizerConfig()
+ 
++    opsd: bool = False
++    opsd_max_seq_len: int | None = Field(default=None, gt=0)
++
++    @model_validator(mode='after')
++    def validate_opsd(self):
++        if self.opsd:
++            if self.teacher_model or self.teacher_rollout_model or self.use_sft_loss:
++                raise ValueError('OPSD uses local frozen-teacher scoring and student rollouts without SFT')
++            if self.rollouts_per_example != 1 or self.buffer.online_difficulty_filtering or self.filters:
++                raise ValueError('OPSD requires one rollout per task without reward/advantage filters')
++        return self
++
+     # The teacher model configuration (optional)
+     teacher_model: Annotated[
+         TeacherModelConfig | None,
+diff --git a/packages/prime-rl-configs/src/prime_rl/configs/rl.py b/packages/prime-rl-configs/src/prime_rl/configs/rl.py
+index b55d1314..5063f833 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/rl.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/rl.py
+@@ -983,4 +983,17 @@ class RLConfig(BaseConfig):
+                     self.slurm.template_path = templates_dir / "multi_node_rl.sbatch.j2"
+         return self
+ 
++    @model_validator(mode='after')
++    def validate_opsd_integration(self):
++        if (self.trainer.opsd is not None) != self.orchestrator.opsd:
++            raise ValueError('OPSD must be enabled on both trainer and orchestrator')
++        if self.trainer.opsd is not None:
++            if self.teacher_inference or self.orchestrator.teacher_model or self.orchestrator.teacher_rollout_model:
++                raise ValueError('OPSD forbids remote teacher scoring or teacher-generated rollouts')
++            self.orchestrator.opsd_max_seq_len = self.trainer.model.seq_len
++            for env in self.orchestrator.train.env:
++                if env.id != 'rlm_opsd.training.prime_env' or env.args.get('score_rollouts', False):
++                    raise ValueError('OPSD requires the unscored RLM OPSD environment')
++        return self
++
+     ### Warnings
+diff --git a/packages/prime-rl-configs/src/prime_rl/configs/trainer.py b/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
+index a076d1e2..d45fb45e 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
+@@ -771,6 +771,13 @@ class TrainerExperimentalConfig(BaseConfig):
+     """Experimental features for the trainer."""
+ 
+ 
++class OpsdConfig(BaseConfig):
++    chunk_size: int = Field(default=64, gt=0)
++    temperature: float = Field(default=1., gt=0, allow_inf_nan=False)
++    token_gate: bool = False
++    gate_k: float = Field(default=1., gt=0, allow_inf_nan=False)
++
++
+ class TrainerConfig(BaseConfig):
+     """Configures the RL trainer"""
+ 
+@@ -785,6 +792,26 @@ class TrainerConfig(BaseConfig):
+ 
+     # The loss configuration
+     loss: LossConfig = DefaultLossConfig()
++    opsd: OpsdConfig | None = None
++
++    @model_validator(mode='after')
++    def validate_opsd(self):
++        if self.opsd is None:
++            return self
++        if self.model.lora is None or self.model.lora.modules_to_save:
++            raise ValueError('OPSD requires LoRA with all base weights frozen')
++        if self.max_concurrent_runs != 1 or self.model.cp != 1 or self.model.ep != 1:
++            raise ValueError('OPSD supports one run with FSDP data sharding; CP/EP are unsupported')
++        if self.model.fsdp_cpu_offload:
++            raise ValueError('OPSD does not support FSDP parameter CPU offload')
++        if (self.model.compile is not None or self.model.fp8 or self.model.vlm is not None
++                or self.model.impl != 'hf' or self.enable_router_replay):
++            raise ValueError('OPSD requires eager dense text HF models without FP8/router replay')
++        if self.data.fake is not None:
++            raise ValueError('OPSD requires original aligned rollout data')
++        if any(name in self.model.lora.target_modules for name in ('lm_head', 'embed_tokens')):
++            raise ValueError('OPSD requires a frozen ordinary output head and embeddings')
++        return self
+ 
+     # The optimizer configuration
+     optim: OptimizerConfig = AdamWConfig()
+diff --git a/src/prime_rl/orchestrator/orchestrator.py b/src/prime_rl/orchestrator/orchestrator.py
+index 1fef6049..2a6b1109 100644
+--- a/src/prime_rl/orchestrator/orchestrator.py
++++ b/src/prime_rl/orchestrator/orchestrator.py
+@@ -429,7 +429,12 @@ async def orchestrate(config: OrchestratorConfig):
+             # Compute advantages (in-place)
+             num_rollouts = len(train_rollouts)
+             num_unique_examples = len({(r["env_name"], r["example_id"]) for r in train_rollouts})
+-            compute_advantages(train_rollouts, config.rollouts_per_example, config.advantage)
++            if config.opsd:
++                for rollout in train_rollouts:
++                    rollout['advantage'] = 0.
++                    rollout['reward'] = 0.
++            else:
++                compute_advantages(train_rollouts, config.rollouts_per_example, config.advantage)
+ 
+             # Apply rollout filters — sets rollout["filters"] and rollout["is_filtered"]
+             apply_filters(rollout_filters, train_rollouts)
+@@ -499,6 +504,7 @@ async def orchestrate(config: OrchestratorConfig):
+                         tokenizer,
+                         processor=processor,
+                         renderer=renderer,
++                        require_original=config.opsd,
+                     )
+                     for rollout in train_rollouts
+                 )
+@@ -525,6 +531,10 @@ async def orchestrate(config: OrchestratorConfig):
+ 
+         # Process rollouts in parallel
+         def process_rollout(rollout: vf.RolloutOutput, rollout_idx: int) -> list[TrainingSample] | None:
++            if config.opsd:
++                from rlm_opsd.training.prime_data import opsd_samples
++
++                return opsd_samples(rollout, max_seq_len=config.opsd_max_seq_len or config.seq_len)
+             return interleave_rollout(
+                 rollout,
+                 vlm_cache=vlm_cache,
+diff --git a/src/prime_rl/orchestrator/trajectories.py b/src/prime_rl/orchestrator/trajectories.py
+index 94412eb8..7b26bfc3 100644
+--- a/src/prime_rl/orchestrator/trajectories.py
++++ b/src/prime_rl/orchestrator/trajectories.py
+@@ -219,6 +219,7 @@ def pretokenize_rollout_trajectory(
+     tokenizer: PreTrainedTokenizer,
+     processor=None,
+     renderer=None,
++    require_original: bool = False,
+ ) -> bool:
+     """Populate missing step tokens from prompt/completion messages.
+ 
+@@ -231,6 +232,8 @@ def pretokenize_rollout_trajectory(
+     for step_idx, step in enumerate(output["trajectory"]):
+         if step["tokens"] is not None:
+             continue
++        if require_original:
++            raise ValueError('OPSD requires original recorded rollout token IDs; re-tokenization is forbidden')
+ 
+         if renderer is not None:
+             step["tokens"] = _tokenize_step_with_renderer(step, renderer, tools=tools)
+diff --git a/src/prime_rl/trainer/batch.py b/src/prime_rl/trainer/batch.py
+index e900aa46..b9549320 100644
+--- a/src/prime_rl/trainer/batch.py
++++ b/src/prime_rl/trainer/batch.py
+@@ -8,6 +8,10 @@ def prepare_sample(training_example: TrainingSample, seq_len: int) -> MicroBatch
+     Prepare a problem for sequence packing training.
+     Tokenize and prepare tensors.
+     """
++    if training_example.opsd_teacher_ids is not None:
++        from rlm_opsd.training.prime_data import validate_opsd_sample
++
++        validate_opsd_sample(training_example, seq_len)
+     input_ids = training_example.prompt_ids + training_example.completion_ids
+     loss_mask = training_example.prompt_mask + training_example.completion_mask
+     inference_logprobs = [0.0] * len(training_example.prompt_ids) + training_example.completion_logprobs
+@@ -82,6 +86,9 @@ def prepare_sample(training_example: TrainingSample, seq_len: int) -> MicroBatch
+         pixel_values_shape=training_example.pixel_values_shape,
+         image_grid_thw=training_example.image_grid_thw,
+         sft_loss=training_example.sft_loss,
++        opsd_teacher_ids=training_example.opsd_teacher_ids,
++        opsd_teacher_positions=training_example.opsd_teacher_positions,
++        opsd_prefix_lengths=training_example.opsd_prefix_lengths,
+     )
+ 
+ 
+@@ -109,7 +116,7 @@ def packed_samples_into_micro_bs(
+ 
+     for idx, sample in samples:
+         # Multimodal samples cannot be packed - each becomes its own micro batch
+-        if _is_multimodal_sample(sample):
++        if _is_multimodal_sample(sample) or sample.opsd_teacher_ids is not None:
+             sample.lora_num_tokens = [0] * num_loras
+             sample.lora_num_tokens[idx] = len(sample.input_ids)
+             micro_batches.append(sample)
+@@ -118,7 +125,7 @@ def packed_samples_into_micro_bs(
+         # Try to find a bin that can fit this sequence (only pack text-only samples)
+         for bin_content in micro_batches:
+             # Don't pack into multimodal micro batches
+-            if _is_multimodal_sample(bin_content):
++            if _is_multimodal_sample(bin_content) or bin_content.opsd_teacher_ids is not None:
+                 continue
+             # Check if sequence fits in this bin
+             if (
+@@ -165,6 +172,8 @@ def pad_micro_batch(micro_batch: MicroBatch, pad_to_multiple_of: int) -> MicroBa
+         The padded micro batch.
+     """
+ 
++    if micro_batch.opsd_teacher_ids is not None and pad_to_multiple_of != 1:
++        raise ValueError('OPSD requires context parallelism disabled and unpadded sequences')
+     padding_size = (pad_to_multiple_of - (len(micro_batch.input_ids) % pad_to_multiple_of)) % pad_to_multiple_of
+ 
+     if len(micro_batch.env_names) != len(micro_batch.input_ids):
+@@ -200,6 +209,8 @@ def _make_dummy_batch(source: MicroBatch) -> MicroBatch:
+     dummy = copy.deepcopy(source)
+     dummy.advantages = [0.0] * len(dummy.input_ids)
+     dummy.loss_mask = [False] * len(dummy.input_ids)
++    if dummy.opsd_teacher_ids is not None:
++        dummy.opsd_teacher_positions = []
+     return dummy
+ 
+ 
+@@ -229,6 +240,9 @@ def prepare_batch(
+     a text-only batch, the all-gather will hang. We separate micro batches by modality
+     and distribute them so that at each step index, all ranks see the same modality.
+     """
++    modes = {rollout.opsd_teacher_ids is not None for rollout in rollouts}
++    if len(modes) > 1:
++        raise ValueError('cannot mix OPSD and ordinary training samples in a distributed batch')
+     all_samples = [(idx, prepare_sample(rollout, seq_len)) for idx, rollout in zip(idxs, rollouts)]
+ 
+     micro_batches = packed_samples_into_micro_bs(all_samples, seq_len, num_loras)
+diff --git a/src/prime_rl/trainer/model.py b/src/prime_rl/trainer/model.py
+index 910a978a..0be545c4 100644
+--- a/src/prime_rl/trainer/model.py
++++ b/src/prime_rl/trainer/model.py
+@@ -879,7 +879,7 @@ def reshard_module(model: nn.Module):
+             module.reshard()
+ 
+ 
+-def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig):
++def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig, *, preserve_rng_state: bool = False):
+     logger = get_logger()
+     language_model = get_language_model(model)
+     target_list = sorted(frozenset(ac_config.targets))
+@@ -899,7 +899,7 @@ def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig):
+         else:
+             if ac_config.mode == "selective":
+                 fallback_layer_types.add(type(transformer_block).__name__)
+-            transformer_block = checkpoint_wrapper(transformer_block, preserve_rng_state=False)
++            transformer_block = checkpoint_wrapper(transformer_block, preserve_rng_state=preserve_rng_state)
+             full_layers += 1
+ 
+         language_model.layers.register_module(layer_name, transformer_block)
+@@ -1007,6 +1007,7 @@ def setup_model(
+     parallel_dims: ParallelDims,
+     loading_from_checkpoint_later: bool = False,
+     fused_cross_entropy: bool | str = False,
++    opsd_config=None,
+ ) -> nn.Module:
+     if config.attn == "flash_attention_3" and not is_flash_attn_3_available():
+         raise ValueError(
+@@ -1041,6 +1042,10 @@ def setup_model(
+         lm_head_chunk_size = config.fused_lm_head_token_chunk_size
+ 
+     inject_prime_lm_head(model, chunk_size=lm_head_chunk_size, fused_cross_entropy=fused_cross_entropy)
++    if opsd_config is not None:
++        from rlm_opsd.training.prime_step import install_opsd_head
++
++        install_opsd_head(model, opsd_config)
+ 
+     if config.fp8:
+         replace_linear_with_fp8_blockwise_linear(model)
+@@ -1064,7 +1069,7 @@ def setup_model(
+ 
+     # the right order is AC -> Compile -> FSDP
+     if config.ac is not None:
+-        apply_ac(model, config.ac)
++        apply_ac(model, config.ac, preserve_rng_state=opsd_config is not None)
+     if config.compile is not None:
+         apply_compile(model, config.compile)
+ 
+diff --git a/src/prime_rl/trainer/rl/data.py b/src/prime_rl/trainer/rl/data.py
+index 6342132e..4a1c7864 100644
+--- a/src/prime_rl/trainer/rl/data.py
++++ b/src/prime_rl/trainer/rl/data.py
+@@ -42,6 +42,9 @@ class TensorMicroBatch(TypedDict):
+ 
+     # When True, trainer uses SFT loss instead of RL loss for this batch
+     sft_loss: bool
++    opsd_teacher_ids: list[int] | None
++    opsd_teacher_positions: list[int] | None
++    opsd_prefix_lengths: list[int] | None
+ 
+ 
+ class FakeDataLoader:
+@@ -228,4 +231,7 @@ class DataLoader:
+             if micro_batch.routed_experts is not None
+             else None,
+             sft_loss=micro_batch.sft_loss,
++            opsd_teacher_ids=micro_batch.opsd_teacher_ids,
++            opsd_teacher_positions=micro_batch.opsd_teacher_positions,
++            opsd_prefix_lengths=micro_batch.opsd_prefix_lengths,
+         )
+diff --git a/src/prime_rl/trainer/rl/train.py b/src/prime_rl/trainer/rl/train.py
+index fc03e89f..df4c1d94 100644
+--- a/src/prime_rl/trainer/rl/train.py
++++ b/src/prime_rl/trainer/rl/train.py
+@@ -143,14 +143,14 @@ def train(config: TrainerConfig):
+     # Initialize the model and tokenizer
+     logger.info(f"Initializing model ({config.model})")
+     loading_from_ckpt_later = config.ckpt and checkpoint_step is not None
+-    model = setup_model(config.model, parallel_dims, loading_from_ckpt_later)
++    model = setup_model(config.model, parallel_dims, loading_from_ckpt_later, opsd_config=config.opsd)
+ 
+     logger.info(f"Initializing tokenizer ({config.tokenizer})")
+     tokenizer = setup_tokenizer(config.tokenizer)
+ 
+     # Set up the loss function
+     logger.info(f"Setting up loss function ({config.loss})")
+-    loss_fn = setup_loss_fn(config.loss)
++    loss_fn = setup_loss_fn(config.loss) if config.opsd is None else None
+ 
+     # Set up the optimizer
+     logger.info(f"Initializing optimizer ({config.optim})")
+@@ -341,6 +341,12 @@ def train(config: TrainerConfig):
+         # Normalize by the local number of unmasked tokens in the batch (per-batch length normalization)
+         loss_scale = sum(micro_batch["loss_mask"].sum().item() for micro_batch in micro_batches)
+         loss_scale = max(loss_scale, 1)
++        if config.opsd is not None:
++            from rlm_opsd.training.prime_step import global_loss_scale
++
++            local_tokens = sum(mb['loss_mask'].sum().item() for mb in micro_batches)
++            loss_scale = global_loss_scale(local_tokens, device=torch.device('cuda', world.local_rank),
++                                          group=parallel_dims.get_mesh('dp').get_group())
+ 
+         logger.debug(f"Starting forward and backward pass ({batch_size=})")
+         tensors = Tensors()  # Used to accumulate tensor statistics across micro-batches and ranks for logging
+@@ -350,6 +356,16 @@ def train(config: TrainerConfig):
+         cp_size = parallel_dims.cp
+ 
+         for micro_step, micro_batch in enumerate(micro_batches):
++            if config.opsd is not None:
++                from rlm_opsd.training.prime_step import opsd_forward
++
++                with maybe_record_function('forward'), maybe_activation_offloading(config.model.ac_offloading):
++                    out = opsd_forward(model, micro_batch, loss_scale=loss_scale)
++                with maybe_record_function('backward'):
++                    out['loss'].backward()
++                tensors['loss'].append(out['loss'].detach().cpu().unsqueeze(0))
++                tensors['entropy/all'].append(out['entropy'].detach().cpu())
++                continue
+             input_ids = micro_batch["input_ids"].to("cuda")
+             position_ids = micro_batch["position_ids"].to("cuda")
+             advantages = micro_batch["advantages"].to("cuda")
+@@ -514,6 +530,11 @@ def train(config: TrainerConfig):
+                 micro_step_message += f" | Max Vio: {tensors['max_vio'][-1].mean().item():.4f}"
+             logger.debug(micro_step_message)
+ 
++        if config.opsd is not None:
++            # Each rank contributes its token-sum / (global_tokens / DP size).
++            # One scalar per rank makes the metrics' rank mean the token mean.
++            tensors['opsd/jsd'].append(torch.cat(tensors['loss']).sum().reshape(1))
++
+         # Optionally, clip the gradients
+         grad_norm: torch.Tensor | None = None
+         if config.optim.max_norm is not None:
+diff --git a/src/prime_rl/transport/types.py b/src/prime_rl/transport/types.py
+index f90af1a3..89788ea8 100644
+--- a/src/prime_rl/transport/types.py
++++ b/src/prime_rl/transport/types.py
+@@ -28,6 +28,9 @@ class TrainingSample(msgspec.Struct, array_like=True, gc=False, omit_defaults=Tr
+     mm_token_type_ids: list[int] | None = None
+ 
+     sft_loss: bool = False  # When True, trainer uses SFT loss instead of RL loss for this sample
++    opsd_teacher_ids: list[int] | None = None
++    opsd_teacher_positions: list[int] | None = None
++    opsd_prefix_lengths: list[int] | None = None
+ 
+ 
+ class TrainingBatch(msgspec.Struct, array_like=True, gc=False, omit_defaults=True):
+@@ -62,3 +65,6 @@ class MicroBatch(msgspec.Struct, array_like=True, gc=False, omit_defaults=True):
+     mm_token_type_ids: list[int] | None = None
+ 
+     sft_loss: bool = False  # When True, trainer uses SFT loss instead of RL loss for this batch
++    opsd_teacher_ids: list[int] | None = None
++    opsd_teacher_positions: list[int] | None = None
++    opsd_prefix_lengths: list[int] | None = None

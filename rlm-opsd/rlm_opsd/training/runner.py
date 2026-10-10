@@ -74,10 +74,8 @@ def verify_gate(config):
 
 
 def objective_metadata(config):
-    if config.mode=='b':
-        return dict(kind='full_vocab_jsd',beta=config.jsd_beta,token_gate=config.token_gate,
-                    token_gate_k=config.token_gate_k,temperature=config.temperature)
-    return dict(kind='native_sampled_token',teacher_tau=config.teacher_tau,temperature=config.temperature)
+    return dict(kind='full_vocab_jsd',beta=config.jsd_beta,token_gate=config.token_gate,
+                token_gate_k=config.token_gate_k,temperature=config.temperature)
 
 
 def verify_small_smoke(config):
@@ -93,8 +91,8 @@ def verify_small_smoke(config):
         raise ValueError('a successful pinned pretrained small-model smoke is required')
     if sha256(contained(root,record['checkpoint']))!=record.get('checkpoint_sha256'):
         raise ValueError('small-smoke checkpoint hash differs')
-    if config.mode=='b' and (record.get('mode')!='b' or record.get('objective')!=objective_metadata(config)):
-        raise ValueError('run a small Mode B smoke with the same JSD/token-gate objective before 27B')
+    if record.get('objective')!=objective_metadata(config):
+        raise ValueError('run a small OPSD smoke with the same JSD/token-gate objective before 27B')
 
 
 def cached_snapshot(config):
@@ -195,7 +193,7 @@ async def run_smoke(config,output_dir):
                   config=config.model_dump(mode='json'),provenance=plan.provenance)
     write_json(output/'run.json',metadata)
     result=dict(status='error',kind='not_loaded',stage=config.stage,base_model=config.base_model,
-                revision=config.revision,mode=config.mode,objective=objective_metadata(config))
+                revision=config.revision,objective=objective_metadata(config))
     backend=None;cancelled=None
     try:
         rollout=await collect_rollout(config,plan,output)

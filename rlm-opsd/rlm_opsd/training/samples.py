@@ -33,7 +33,7 @@ def samples_from_rollout(rollout, prefixes, *, max_seq_len):
         raise ValueError('rollout failed or has no trajectory')
     temperature=rollout.get('sampling_args',{}).get('temperature')
     if (type(temperature) not in (int,float) or not math.isfinite(temperature) or temperature<=0):
-        raise ValueError('Mode A needs an explicit positive sampling temperature')
+        raise ValueError('OPSD needs an explicit positive sampling temperature')
     if type(max_seq_len) is not int or max_seq_len<1:
         raise ValueError('max_seq_len must be positive')
     results=[]

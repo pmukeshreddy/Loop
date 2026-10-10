@@ -1,0 +1,529 @@
+FFFFFFFFFFF                                                              [100%]
+=================================== FAILURES ===================================
+__ test_mode_b_config_uses_native_async_lora_and_preserves_precision_defaults __
+
+    def test_mode_b_config_uses_native_async_lora_and_preserves_precision_defaults():
+        from prime_rl.configs.rl import RLConfig
+        from prime_rl.configs.trainer import ModelConfig
+>       cfg = RLConfig.model_validate(native_config())
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+__________ test_incompatible_native_modes_fail_configuration[no_lora] __________
+
+fault = 'no_lora'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+______ test_incompatible_native_modes_fail_configuration[base_trainable] _______
+
+fault = 'base_trainable'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+____________ test_incompatible_native_modes_fail_configuration[cp] _____________
+
+fault = 'cp'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+__________ test_incompatible_native_modes_fail_configuration[compile] __________
+
+fault = 'compile'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+______ test_incompatible_native_modes_fail_configuration[remote_teacher] _______
+
+fault = 'remote_teacher'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+______ test_incompatible_native_modes_fail_configuration[reward_filters] _______
+
+fault = 'reward_filters'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_______ test_incompatible_native_modes_fail_configuration[trainer_only] ________
+
+fault = 'trainer_only'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prime_mode_b_launch.py:46: Failed
+_____ test_incompatible_native_modes_fail_configuration[orchestrator_only] _____
+
+fault = 'orchestrator_only'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_prime_mode_b_launch.py:46: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.deps/prime-rl/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py:939: in validate_opsd_mode_b
+    if self.rollouts_per_example != 1 or self.buffer.filter_difficulty or self.filters:
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = BufferConfig(seed=None, easy_threshold=None, hard_threshold=None, easy_fraction=0.0, hard_fraction=0.0, online_difficulty_filtering=False, hash_keys=['env_name', 'prompt'])
+item = 'filter_difficulty'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'BufferConfig' object has no attribute 'filter_difficulty'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+__________ test_checked_patch_reconstructs_sources_and_rejects_drift ___________
+
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-209/test_checked_patch_reconstruct0')
+
+    def test_checked_patch_reconstructs_sources_and_rejects_drift(tmp_path):
+>       from rlm_opsd.training.prime_patch import apply_patch, patch_manifest
+E       ModuleNotFoundError: No module named 'rlm_opsd.training.prime_patch'
+
+tests/test_prime_mode_b_launch.py:50: ModuleNotFoundError
+________ test_shipped_configuration_parses_and_check_never_launches_gpu ________
+
+    def test_shipped_configuration_parses_and_check_never_launches_gpu():
+>       from rlm_opsd.training.prime_launch import load_launch_config
+E       ModuleNotFoundError: No module named 'rlm_opsd.training.prime_launch'
+
+tests/test_prime_mode_b_launch.py:69: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_prime_mode_b_launch.py::test_mode_b_config_uses_native_async_lora_and_preserves_precision_defaults
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[no_lora]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[base_trainable]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[cp]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[compile]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[remote_teacher]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[reward_filters]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[trainer_only]
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[orchestrator_only]
+FAILED tests/test_prime_mode_b_launch.py::test_checked_patch_reconstructs_sources_and_rejects_drift
+FAILED tests/test_prime_mode_b_launch.py::test_shipped_configuration_parses_and_check_never_launches_gpu
+11 failed in 2.31s

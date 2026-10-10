@@ -14,7 +14,6 @@ MODEL_PINS={
 
 
 class OpsdConfig(GateModel):
-    mode: Literal['a','b']='b'
     stage: Literal['small','27b']
     base_model: str
     revision: str
@@ -29,7 +28,6 @@ class OpsdConfig(GateModel):
     logprobs_mode: Literal['processed_logprobs']
     seed: int=Field(default=417,ge=0)
     learning_rate: float=Field(default=2e-5,gt=0,allow_inf_nan=False)
-    teacher_tau: float=Field(default=1.0,gt=0,allow_inf_nan=False)
     max_grad_norm: float=Field(default=1.0,gt=0,allow_inf_nan=False)
     lora_rank: int=Field(default=16,gt=0)
     lora_alpha: float=Field(default=32.0,gt=0,allow_inf_nan=False)
@@ -42,10 +40,6 @@ class OpsdConfig(GateModel):
     def pinned_model(self):
         if (self.base_model,self.revision)!=MODEL_PINS[self.stage]:
             raise ValueError('model/revision must match the pinned smoke stage')
-        if self.mode=='a' and self.token_gate:
-            raise ValueError('the optional token gate applies to Mode B')
-        if self.mode=='b' and self.teacher_tau!=1.0:
-            raise ValueError('teacher_tau is a Mode A setting; Mode B uses beta=0.5 JSD')
         return self
 
     @classmethod

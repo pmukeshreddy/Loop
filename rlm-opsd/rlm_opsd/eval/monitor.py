@@ -125,8 +125,7 @@ async def run_monitor(config,output_dir):
     records=[];turns=[];clients=[];backend=None;cancelled=None
     result=dict(status='error',kind='not_loaded',errors=[],provenance=plan.provenance)
     try:
-        # Mode A checkpoints can also be evaluated through the ordinary Mode B head.
-        backend_config=plan.training.model_copy(update={'mode':'b','teacher_tau':1.})
+        backend_config=plan.training
         backend=load_backend(backend_config,plan.snapshot,output)
         load_adapter(backend.model,config.checkpoint,config.checkpoint_sha256,api=backend.trainer.api)
         result['kind']='pretrained_model_evaluation' if backend.kind=='pretrained_model_smoke' else backend.kind

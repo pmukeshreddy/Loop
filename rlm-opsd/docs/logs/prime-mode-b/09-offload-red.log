@@ -1,0 +1,28 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_incompatible_native_modes_fail_configuration[cpu_offload] ________
+
+fault = 'cpu_offload'
+
+    @pytest.mark.parametrize('fault', ['no_lora', 'base_trainable', 'cp', 'compile', 'remote_teacher',
+                                      'reward_filters', 'trainer_only', 'orchestrator_only', 'cpu_offload'])
+    def test_incompatible_native_modes_fail_configuration(fault):
+        from prime_rl.configs.rl import RLConfig
+        raw = native_config()
+        if fault == 'no_lora': del raw['trainer']['model']['lora']
+        elif fault == 'base_trainable': raw['trainer']['model']['lora']['modules_to_save'] = ['lm_head']
+        elif fault == 'cp': raw['trainer']['model']['cp'] = 2
+        elif fault == 'compile': raw['trainer']['model']['compile'] = {}
+        elif fault == 'remote_teacher': raw['deployment']['num_teacher_gpus'] = 1
+        elif fault == 'reward_filters': raw['orchestrator']['filters'] = [{'type': 'zero_advantage'}]
+        elif fault == 'trainer_only': raw['orchestrator']['opsd_mode_b'] = False
+        elif fault == 'orchestrator_only': del raw['trainer']['opsd']
+        elif fault == 'cpu_offload': raw['trainer']['model']['fsdp_cpu_offload'] = True
+>       with pytest.raises(ValueError): RLConfig.model_validate(raw)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'ValueError'>
+
+tests/test_prime_mode_b_launch.py:47: Failed
+=========================== short test summary info ============================
+FAILED tests/test_prime_mode_b_launch.py::test_incompatible_native_modes_fail_configuration[cpu_offload]
+1 failed, 12 deselected in 2.85s

@@ -52,7 +52,58 @@ def config():
                                         'quadratic_pairs', 'repo_qa', 'small_context_control']},
                 splits=dict(train=1, dev_behavior=1), direct_read_max_chars=3000,
                 decontamination=dict(ngram_size=3, overlap_threshold=0.8),
-                labels=['card_arrival', 'exchange_rate'])
+                family_knobs={
+                    'sparse_retrieval': {'needles': {'min': 1, 'max': 8}},
+                    'multi_hop': {'hops': {'min': 2, 'max': 4}},
+                    'linear_aggregation': {'label_count': {'min': 1, 'max': 2},
+                                           'temporal_filter': {'choices': [True, False]},
+                                           'cutoff_date': {'min': '2023-01-01', 'max': '2023-06-28'}},
+                    'quadratic_pairs': {'label_count': 2, 'pair_relation': {'choices': ['both_have_any', 'cover_labels']}},
+                    'repo_qa': {'files': {'min': 8, 'max': 64}},
+                    'small_context_control': {'records': {'min': 4, 'max': 24}},
+                })
+
+
+def test_knob_ranges_are_seeded_inclusive_and_do_not_mutate_configuration():
+    from rlm_opsd.tasks.build import plan_specs
+    settings = config()
+    settings.update(size_buckets=[2048], structures=['list'], splits=dict(train=512, dev_behavior=1))
+    original = copy.deepcopy(settings)
+    tasks, excluded = plan_specs(settings)
+    assert settings == original
+    assert (tasks, excluded) == plan_specs(copy.deepcopy(settings))
+    for family, key, low, high in [('sparse_retrieval', 'needles', 1, 8), ('multi_hop', 'hops', 2, 4),
+                                   ('repo_qa', 'files', 8, 64), ('small_context_control', 'records', 4, 24)]:
+        values = [s.knobs[key] for s in tasks if s.family == family]
+        assert all(type(value) is int and low <= value <= high for value in values)
+        assert set(values) == set(range(low, high + 1))
+    dense = [s.knobs for s in tasks if s.family == 'linear_aggregation']
+    assert {k['temporal_filter'] for k in dense} == {True, False}
+    assert all('2023-01-01' <= k['cutoff_date'] <= '2023-06-28' for k in dense)
+    assert len({k['cutoff_date'] for k in dense}) > 10
+    assert {s.knobs['pair_relation'] for s in tasks if s.family == 'quadratic_pairs'} == {'both_have_any', 'cover_labels'}
+    for knobs in settings['family_knobs'].values():
+        items = list(knobs.items())[::-1]
+        knobs.clear()
+        knobs.update(items)
+    assert plan_specs(settings) == (tasks, excluded)
+    settings['seed'] += 1
+    assert [s.knobs for s in plan_specs(settings)[0]] != [s.knobs for s in tasks]
+
+
+@pytest.mark.parametrize('value', [
+    {'min': 8, 'max': 1}, {'min': 1}, {'choices': []}, {'choices': 'count'},
+    {'min': True, 'max': 8}, {'min': 1.5, 'max': 8},
+    {'min': '2023-02-30', 'max': '2023-06-01'},
+    {'min': '2023-06-01', 'max': '2023-01-01'},
+    {'min': 1, 'max': 8, 'choices': [1, 8]},
+])
+def test_invalid_knob_ranges_fail_before_generating(value):
+    from rlm_opsd.tasks.build import plan_specs
+    settings = config()
+    settings['family_knobs']['sparse_retrieval']['needles'] = value
+    with pytest.raises(ValueError, match='knob'):
+        plan_specs(settings)
 
 
 def test_parallel_pool_is_reproducible_materialized_and_incomplete_pool_blocked(tmp_path):

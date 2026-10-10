@@ -1,0 +1,82 @@
+# Native prime-rl loop. Hardware sizing is an editable starting configuration.
+max_steps = 1000
+max_async_level = 1
+output_dir = "../reports/opsd-train-27b"
+
+[opsd]
+smoke_config = "opsd.toml"
+
+[model]
+name = "Qwen/Qwen3.5-27B"
+
+[deployment]
+type = "single_node"
+gpus_per_node = 8
+num_train_gpus = 4
+num_infer_gpus = 2
+# Frozen llm_query generation is the external endpoint in gate.yaml.
+# The local teacher scoring pass consumes no inference GPU allocation.
+
+[weight_broadcast]
+type = "filesystem"
+
+[ckpt]
+interval = 25
+keep_last = 2
+
+[trainer.model]
+impl = "hf"
+seq_len = 16384
+attn = "flash_attention_2"
+dp_replicate = 1
+cp = 1
+ep = 1
+fused_lm_head_token_chunk_size = "disabled"
+
+[trainer.model.ac]
+mode = "full"
+freq = 1
+
+[trainer.model.lora]
+rank = 16
+alpha = 32.0
+dropout = 0.0
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+modules_to_save = []
+
+[trainer.opsd]
+chunk_size = 64
+temperature = 1.0
+token_gate = false
+gate_k = 1.0
+
+[trainer.optim]
+lr = 0.00002
+weight_decay = 0.0
+max_norm = 1.0
+
+[orchestrator]
+opsd = true
+use_renderer = false
+seq_len = 8192
+batch_size = 16
+rollouts_per_example = 1
+filters = []
+
+[orchestrator.buffer]
+online_difficulty_filtering = false
+seed = 417
+
+[orchestrator.train.sampling]
+temperature = 1.0
+max_completion_tokens = 256
+
+[[orchestrator.train.env]]
+id = "rlm_opsd.training.prime_env"
+name = "rlm-opsd"
+
+[inference.model]
+max_model_len = 8192
+
+[inference.parallel]
+tp = 2

@@ -5,7 +5,7 @@ import math
 import pytest
 import torch
 from prime_cpu import prime_api
-from test_training_mode_b import BackboneModel
+from test_training_opsd import BackboneModel
 from test_training_samples import build
 
 

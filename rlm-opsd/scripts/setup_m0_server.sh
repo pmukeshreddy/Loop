@@ -56,7 +56,11 @@ while read -r name remote revision; do
         git -C "$checkout" checkout --detach "$revision"
     fi
     [[ "$(git -C "$checkout" rev-parse HEAD)" == "$revision" ]]
-    git -C "$checkout" diff --exit-code HEAD
+    if [[ "$name" == prime-rl ]]; then
+        "$M0_PYTHON" -m rlm_opsd.training.prime_patch --source "$checkout" --check
+    else
+        git -C "$checkout" diff --exit-code HEAD
+    fi
 done < "$M0_LOG_DIR/sources.txt"
 
 # Initialize only the upstream public workspace members. Per-command HTTPS

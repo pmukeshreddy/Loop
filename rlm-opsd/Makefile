@@ -3,9 +3,9 @@
 PYTHON ?= .venv/bin/python
 
 # Offline dependency checks and all implemented milestone tests.
-test:
+test: prime-opsd-patch
 	$(PYTHON) scripts/check_m0.py
-	$(PYTHON) -m pytest tests -q
+	PYTHONPATH="$(PRIME_SOURCE)/src:$(PRIME_SOURCE)/packages/prime-rl-configs/src:." "$(PYTHON)" -m pytest tests -q
 
 test-m1:
 	$(PYTHON) -m pytest tests/test_harness.py tests/test_verifiers_env.py tests/test_setup_manifest.py -q
@@ -22,31 +22,38 @@ test-m4:
 test-m5:
 	$(PYTHON) -m pytest tests/test_teacher_gate.py tests/test_teacher_gate_cli.py -q
 
-.PHONY: test-m6 opsd-a opsd-a-check
+.PHONY: test-m6
 test-m6:
 	$(PYTHON) -m pytest tests/test_training_samples.py tests/test_training_teacher.py tests/test_training_runner.py -q
 
-OPSD_CONFIG ?= configs/opsd_mode_a.toml
-OPSD_OUTPUT ?= reports/opsd-a-27b
+.PHONY: test-m7 opsd opsd-check
+test-m7:
+	$(PYTHON) -m pytest tests/test_training_jsd.py tests/test_training_opsd.py tests/test_training_opsd_runner.py -q
 
-opsd-a:
+OPSD_CONFIG ?= configs/opsd.toml
+OPSD_OUTPUT ?= reports/opsd-27b
+
+opsd:
 	$(PYTHON) -m rlm_opsd.training smoke --config "$(OPSD_CONFIG)" --output "$(OPSD_OUTPUT)"
 
-opsd-a-check:
+opsd-check:
 	$(PYTHON) -m rlm_opsd.training smoke --config "$(OPSD_CONFIG)" --check
 
-.PHONY: test-m7 opsd-b opsd-b-check
-test-m7:
-	$(PYTHON) -m pytest tests/test_training_jsd.py tests/test_training_mode_b.py tests/test_training_mode_b_runner.py -q
+.PHONY: opsd-train opsd-train-check test-opsd-train prime-opsd-patch
+OPSD_TRAIN_CONFIG ?= configs/opsd_train.toml
+PRIME_SOURCE ?= .deps/prime-rl
 
-OPSD_B_CONFIG ?= configs/opsd_mode_b.toml
-OPSD_B_OUTPUT ?= reports/opsd-b-27b
+opsd-train:
+	"$(PYTHON)" -m rlm_opsd.training.prime_launch --config "$(OPSD_TRAIN_CONFIG)" --source "$(PRIME_SOURCE)"
 
-opsd-b:
-	$(PYTHON) -m rlm_opsd.training smoke --config "$(OPSD_B_CONFIG)" --output "$(OPSD_B_OUTPUT)"
+opsd-train-check:
+	"$(PYTHON)" -m rlm_opsd.training.prime_launch --config "$(OPSD_TRAIN_CONFIG)" --source "$(PRIME_SOURCE)" --check
 
-opsd-b-check:
-	$(PYTHON) -m rlm_opsd.training smoke --config "$(OPSD_B_CONFIG)" --check
+prime-opsd-patch:
+	"$(PYTHON)" -m rlm_opsd.training.prime_patch --source "$(PRIME_SOURCE)"
+
+test-opsd-train: prime-opsd-patch
+	PYTHONPATH="$(PRIME_SOURCE)/src:$(PRIME_SOURCE)/packages/prime-rl-configs/src:." "$(PYTHON)" -m pytest tests/test_prime_opsd_*.py -q
 
 GATE_CONFIG ?= configs/gate.yaml
 GATE_OUTPUT ?= reports/teacher-gate-manual_v1

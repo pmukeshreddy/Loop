@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -170,3 +171,98 @@ def test_banking_import_drops_ambiguous_rows_only_when_explicit_and_reports_them
     assert clean.import_report['raw_rows'] == 3
     with pytest.raises(ValueError, match='checksum'):
         ClassificationCorpus.from_banking_csv(path, sha256='0' * 64, revision='fixture', partition='train')
+
+
+@pytest.mark.parametrize('family', ['linear_aggregation', 'quadratic_pairs'])
+def test_seeded_label_subsets_use_the_full_corpus(family):
+    from rlm_opsd.tasks import generate, verify_answer, TaskSpec
+    from rlm_opsd.tasks.sources import ClassificationCorpus
+    source = ClassificationCorpus.from_records([
+        dict(id=str(i), text=f'Classification example number {i}', label=f'intent_{i}') for i in range(10)
+    ], name='full-label-fixture', revision='v1', license='CC0-1.0')
+    subsets = set()
+    for seed in range(40):
+        knobs = spec(family).knobs
+        knobs.pop('labels')
+        knobs['label_count'] = 3
+        recipe = TaskSpec(family, knobs, seed, 'train')
+        task = generate(recipe, source)
+        assert task == generate(recipe, source)
+        assert len(task.knobs['labels']) == 3
+        assert verify_answer(task, source) == task.answer
+        subsets.add(tuple(task.knobs['labels']))
+    assert len(subsets) > 1
+    assert set().union(*map(set, subsets)) == {f'intent_{i}' for i in range(10)}
+
+
+@pytest.mark.parametrize('count', [0, 3, True])
+def test_label_count_must_fit_the_corpus(count):
+    from rlm_opsd.tasks import generate, TaskSpec
+    knobs = spec('linear_aggregation').knobs
+    knobs.pop('labels')
+    knobs['label_count'] = count
+    with pytest.raises(ValueError, match='label_count'):
+        generate(TaskSpec('linear_aggregation', knobs, 17, 'train'), corpus())
+
+
+def test_label_count_and_explicit_labels_cannot_conflict():
+    from rlm_opsd.tasks import generate
+    with pytest.raises(ValueError, match='label_count'):
+        generate(spec('linear_aggregation', label_count=1), corpus())
+
+
+@pytest.mark.parametrize('family', ['linear_aggregation', 'quadratic_pairs'])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_varied_cutoff_applies_to_query_and_verified_answer(family, enabled):
+    from rlm_opsd.tasks import generate, verify_answer
+    tasks = [generate(spec(family, cutoff_date=cutoff, temporal_filter=enabled), corpus())
+             for cutoff in ['2022-12-31', '2023-06-30']]
+    assert tasks[0].context == tasks[1].context
+    for task, cutoff in zip(tasks, ['2022-12-31', '2023-06-30']):
+        assert task.knobs['query_params']['after'] == (cutoff if enabled else None)
+        assert (cutoff in task.query) == enabled
+        assert verify_answer(task, corpus()) == task.answer
+    if enabled:
+        assert tasks[0].answer
+        assert tasks[1].answer in (0, [])
+    else:
+        assert tasks[0].answer == tasks[1].answer
+
+
+@pytest.mark.parametrize('count', [4, 13, 24])
+def test_small_context_record_count_changes_real_records(count):
+    from rlm_opsd.tasks import generate, verify_answer
+    from rlm_opsd.tasks.codec import parse_records
+    task = generate(spec('small_context_control', records=count), corpus())
+    records = parse_records(task.context, task.knobs['encoding'])
+    quantities = [r for r in records if r['kind'] == 'quantity']
+    assert len(quantities) == count
+    assert sum(r['group'] == task.knobs['query_params']['group'] for r in quantities) == (count + 1) // 2
+    assert verify_answer(task, corpus()) == task.answer
+
+
+@pytest.mark.parametrize('family, overrides', [
+    ('sparse_retrieval', {}), ('multi_hop', {}), ('small_context_control', {}),
+    ('linear_aggregation', {'query_type': 'count'}),
+    ('linear_aggregation', {'query_type': 'most_frequent'}),
+    ('quadratic_pairs', {'pair_relation': 'both_have_any'}),
+    ('quadratic_pairs', {'pair_relation': 'cover_labels'}),
+    ('repo_qa', {'repo_query_type': 'definition'}),
+    ('repo_qa', {'repo_query_type': 'callers'}),
+    ('repo_qa', {'repo_query_type': 'config'}),
+])
+def test_each_query_type_has_seeded_wordings_with_verified_answers(family, overrides):
+    from rlm_opsd.tasks import generate, verify_answer, TaskSpec
+    wordings = set()
+    for seed in range(40):
+        knobs = spec(family).knobs
+        knobs.update(overrides)
+        recipe = TaskSpec(family, knobs, seed, 'train')
+        task = generate(recipe, corpus())
+        assert task == generate(recipe, corpus())
+        assert verify_answer(task, corpus()) == task.answer
+        # IDs, label order and the queried intent cannot masquerade as rephrasing.
+        wording = re.sub(r'[0-9a-fA-F]{16}', '<ID>', task.query)
+        wording = re.sub(r'card_arrival|exchange_rate', '<intent>', wording)
+        wordings.add(wording)
+    assert 3 <= len(wordings) <= 4

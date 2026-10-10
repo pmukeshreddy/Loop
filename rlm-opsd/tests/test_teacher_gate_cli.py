@@ -38,4 +38,4 @@ def test_make_target_and_module_help_are_runnable():
 def test_cli_requires_an_output_for_a_run_and_rejects_later_milestones():
     from rlm_opsd.eval.__main__ import main
     with pytest.raises(SystemExit):main(['teacher-gate','--config','configs/gate.yaml'])
-    with pytest.raises(SystemExit):main(['opsd-a'])
+    with pytest.raises(SystemExit):main(['opsd'])

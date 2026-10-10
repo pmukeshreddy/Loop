@@ -1,6 +1,55 @@
-# Verified dependency APIs — M0
+# Verified dependency APIs
 
 Verified on 2026-10-09 UTC against immutable source checkouts and installed files. **M0 setup code and local API checks are prepared; full Linux/CUDA installation is deferred at the user's request. The original full-install completion criterion has not been demonstrated.** See [PROGRESS.md](PROGRESS.md) for commands, failures, and unrun checks.
+
+## Native multi-step OPSD integration
+
+The source overlay in [prime-rl-opsd.patch](../patches/prime-rl-opsd.patch)
+extends the existing pin, `09e11c7527a242b9f150c7c4c71b1b96da66cb75`.
+The installed distribution remains the unmodified baseline. Each modified
+source file has before/after hashes in the
+[manifest](../patches/prime-rl-opsd.json). `scripts/check_m0.py` now checks
+the overlay independently and compares installed bytes to the pinned baseline.
+The earlier API tables describe that baseline unless explicitly superseded here.
+
+Paths in the following table are relative to pinned prime-rl. Contracts were
+read in source; executable CPU checks are distinguished from GPU execution.
+
+| Source path and symbol | Verified contract and integration |
+|---|---|
+| `src/prime_rl/entrypoints/rl.py::rl_local`, `write_subconfigs`, `main` | Native entrypoint launches inference, orchestrator, and distributed trainer from validated `RLConfig`. The project launcher executes this module and supplies the source overlay through inherited `PYTHONPATH`. CLI/native process startup on GPU: **not run**. |
+| `packages/prime-rl-configs/src/prime_rl/configs/rl.py::RLConfig` | Native shared `model`, `max_steps`, `max_async_level`, `deployment`, `weight_broadcast`, and `ckpt` settings propagate to subconfigs. Trainer uses the output root; orchestrator uses `run_default`. CPU validation covers the shipped config and final snapshot-path round-trip. The added validator requires both OPSD flags and the unscored project environment. |
+| `packages/prime-rl-configs/src/prime_rl/configs/trainer.py::OpsdConfig`, `TrainerConfig.opsd` (added) | `chunk_size`, `temperature`, `token_gate`, `gate_k` configure the existing full-vocabulary JSD. Requires a single eager dense HF LoRA run, frozen base/head/embeddings, CP/EP disabled; rejects compilation, FP8, VLM, fake data, CPU parameter offload, and router replay. |
+| `packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py::OrchestratorConfig` | Added `opsd` and `opsd_max_seq_len`; disables remote teacher scoring/generation, SFT, reward filtering and online difficulty filtering. Uses native `train.sampling`, `train.env`, `batch_size`, `seq_len`, `use_renderer`. |
+| `src/prime_rl/orchestrator/orchestrator.py::orchestrate` | Existing async scheduler supplies student trajectories. OPSD bypasses advantage computation and native interleaving, converting each original root turn through `opsd_samples`. Scheduler and transport lifecycle remain native. |
+| `src/prime_rl/orchestrator/trajectories.py::pretokenize_rollout_trajectory` | Added `require_original=False`; OPSD supplies `True` and raises on missing recorded tokens before upstream fallback can re-tokenize text or fabricate zero logprobs. Executed CPU regression. |
+| `src/prime_rl/transport/types.py::TrainingSample`, `MicroBatch` | Native msgspec array structs now have trailing optional `opsd_teacher_ids`, `opsd_teacher_positions`, `opsd_prefix_lengths`. Original-ID serialization/deserialization is CPU tested. |
+| `src/prime_rl/trainer/batch.py::prepare_sample`, `packed_samples_into_micro_bs`, `prepare_batch`, `_make_dummy_batch` | OPSD validates both sequence lengths, preserves each turn separately without packing or truncation, and carries teacher metadata. Native rank distribution fills empty slots with zero-mask dummy turns. Mixed objectives and CP padding are rejected. Executed CPU tests. |
+| `src/prime_rl/trainer/rl/data.py::DataLoader` | Native tensor conversion retains alignment metadata beside ordinary token/mask/routing tensors. |
+| `src/prime_rl/trainer/model.py::setup_model`, `apply_ac`, `setup_fsdp` | Added `opsd_config`; custom head installed before LoRA, activation checkpointing, and FSDP. OPSD enables checkpoint RNG preservation. Native FSDP wraps blocks, head/norm, and root; the untied head group uses `reshard_after_forward=False`. `optimization_dtype` and `reduce_dtype` are unchanged. Real one-/two-rank CPU FSDP tests use the same wrapping boundaries. |
+| `src/prime_rl/trainer/models/layers/lm_head.py::inject_prime_lm_head` | Native injection replaces the outer model forward with the backbone/head composition and returns the head dictionary. OPSD replaces the head while retaining the normal `lm_head.weight` state key and calls the outer wrapped model for both passes. |
+| `src/prime_rl/trainer/rl/train.py::train` | OPSD replaces normal loss setup/forward, performs frozen teacher then student JSD/backward for each microbatch, and accounts for FSDP gradient averaging with global token normalization. Native optimizer, scheduler, checkpoint/broadcast, and repeated progress loop are retained. `opsd/jsd/mean` aggregates one token-normalized step value per rank. |
+| `src/prime_rl/trainer/rl/broadcast/filesystem.py`, `src/prime_rl/trainer/weights.py::get_adapter_state_dict`, `src/prime_rl/orchestrator/scheduler.py::_apply_policy_update` | Native filesystem broadcast gathers trainable adapter shards and publishes weights. Scheduler calls `inference_pool.update_weights(weights_path, lora_name=..., step=...)`. Source verified; actual vLLM synchronization: **not run**. |
+
+The verifiers pin is unchanged. Its
+`verifiers/utils/save_utils.py::state_to_output` retains rollout `info`;
+`PrimeOpsdEnv.setup_state` adds exact student/teacher prefix IDs there.
+`verifiers.utils.env_utils.load_environment` loads the project factory
+`rlm_opsd.training.prime_env::load_environment`. That factory uses the existing
+decontaminated task loader, clears answers, disables scoring, and reuses the
+RLM harness and frozen leaf client.
+
+`rlm_opsd.training.teacher.frozen_teacher(..., allow_fsdp=True)` is used only
+by the new native step; its default still rejects sharded models in the smoke
+path. It bypasses adapter residuals, restores routing/scaling/module modes/RNG,
+and detaches teacher outputs. `rlm_opsd.training.jsd.chunked_jsd_loss` remains
+the existing objective, called inside the FSDP head while its weight is available.
+No separate dense projection or remote teacher objective was substituted.
+
+Evidence: [full CPU suite](logs/prime-mode-b/13-full-suite.log),
+[two-rank CPU gradient parity](logs/prime-mode-b/11-two-rank-cpu.log),
+[preflight blocker](logs/prime-mode-b/14-launch-check.log).
+GPU, pretrained Qwen, and vLLM results: **not run**.
 
 ## Pins and verification boundaries
 
@@ -118,7 +167,6 @@ No SFT command was run. Config classes are distributed separately in `prime-rl-c
 | `teacher_inference` | `rl.py:RLConfig`, `auto_setup_teacher_inference` line 934 | When teacher GPUs are requested, defaults to a copy of inference (or default inference config); sets teacher client/model and separate port; local single-node path |
 | `orchestrator.teacher_model.model.name`, `.client.base_url` | `orchestrator.py:TeacherModelConfig`, line 883 | Teacher scoring model and client; `base_url` is a list in the auto-configured path |
 | `trainer.loss.type` | `trainer.py:DefaultLossConfig`, line 684 | `"default"` selects sampled-token DPPO/distillation loss |
-| `trainer.loss.teacher_tau` | Same class, line 692 | Nonnegative; default 0.0; teacher coefficient |
 | `trainer.loss.adv_tau` | Same class, line 691 | Nonnegative; default 1.0; reward-advantage coefficient |
 | `trainer.loss.kl_tau` | Same class, line 693 | Default `1e-3`; residual rollout/trainer regularization remains when `adv_tau=0` |
 | `trainer.loss.dppo_mask_low`, `.dppo_mask_high` | Same class | Defaults 0.2, 0.2; probability-difference mask thresholds |
@@ -131,54 +179,13 @@ No SFT command was run. Config classes are distributed separately in `prime-rl-c
 | `orchestrator.train.env[].args.score_rollouts` | `EnvConfig.args` → environment loader → `vf.Environment` | `False` can disable rubric scoring if the environment factory forwards it; this integration is source traced, not a training-run result |
 | **`orchestrator.verification.enabled` — absent** | `OrchestratorConfig.model_fields` and source | The SPEC snippet does not load unchanged at this pin. No `verification` field exists; do not invent it. |
 
-Runtime inspection confirmed the relevant field names, `DefaultLossConfig(teacher_tau=1.0, adv_tau=0.0)`, and sampling/env argument serialization. It did not validate a complete model-specific training configuration or start a teacher server. [`RLConfig` source](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/packages/prime-rl-configs/src/prime_rl/configs/rl.py), [executed config checks](logs/m0/20-prime-source-and-smoke.log).
+Runtime inspection confirmed native configuration field names and sampling/env argument serialization. OPSD replaces the ordinary loss in the patched training step. It did not validate a complete model-specific training configuration or start a teacher server. [`RLConfig` source](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/packages/prime-rl-configs/src/prime_rl/configs/rl.py), [executed config checks](logs/m0/20-prime-source-and-smoke.log).
 
-### Teacher logprob request and future hook location
+Native remote-teacher fields belong to upstream's ordinary RL configuration.
+OPSD rejects remote teacher scoring and uses `frozen_teacher` with
+`OpsdTrainer` for smoke checks or `opsd_forward` in the native training loop.
+The current full-vocabulary JSD and alignment contracts are documented above.
 
-The precise function is `async compute_teacher_logprobs(clients: list[vf.ClientConfig], model_name: str, samples: list[TrainingSample]) -> list[list[float]]` in `src/prime_rl/orchestrator/utils.py:81`. It creates one request per sample and gathers the results. The payload is:
-
-```python
-POST f"{base}/inference/v1/generate"
-{
-    "model": model_name,
-    "token_ids": list(sample.prompt_ids) + list(sample.completion_ids),
-    "sampling_params": {
-        "max_tokens": 1,
-        "temperature": 1.0,
-        "top_p": 1.0,
-        "prompt_logprobs": 1,
-    },
-}
-```
-
-It parses `vllm.entrypoints.serve.disagg.protocol.GenerateResponse`, maps empty/unscored entries to `0.0`, and takes `next(iter(entry.values()))` for each nonempty prompt-logprob dictionary. It does not select by the requested token ID explicitly. The native flattening/order must be validated against the actual server before relying on it in training. No HTTP request was executed here.
-
-`src/prime_rl/orchestrator/orchestrator.py:581` calls the helper and line 587 assigns each returned list to `train_example.teacher_logprobs`. This is the identified **future M6 hook location**, not an implemented plugin: replace only student prefix token IDs with teacher prefix IDs, retain the suffix IDs verbatim, then map scores to student positions. Native code scores the student prompt without the privileged manual.
-
-`src/prime_rl/transport/types.py:6` defines `TrainingSample` with `prompt_ids`, `prompt_mask`, `completion_ids`, `completion_mask`, `completion_logprobs`, `completion_temperatures`, `env_name`, optional `teacher_logprobs`, `advantage`, `reward`. `src/prime_rl/orchestrator/trajectories.py:interleave_rollout` (line 252) copies token arrays; its `extend_sample` masks newly appended prompt/observation tokens false. Later root-only masking and token alignment still need their own tests.
-
-[Pinned teacher helper](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/src/prime_rl/orchestrator/utils.py#L81).
-
-### Exact sampled-token loss at this pin
-
-Source: `src/prime_rl/trainer/rl/loss.py:default_loss_fn` and `compute_loss`. Define `s = trainer_logprobs`, `b = inference_logprobs`, `t = teacher_logprobs`, `A = inputs.advantages`, and `m = inputs.loss_mask`. The implementation computes:
-
-```text
-ratio = exp(s - b)
-diff = exp(s) - exp(b)
-invalid = where(A > 0, diff > dppo_mask_high, diff < -dppo_mask_low)
-keep = m & ~invalid
-adjusted_advantage = adv_tau * A + teacher_tau * stop_gradient(t - s)
-sample_loss = sum(-keep * adjusted_advantage * ratio
-                  + kl_tau * m * (s - b)^2)
-packed_loss = sum(sample_loss over sequences) / loss_scale
-```
-
-The teacher term is included only if `teacher_logprobs is not None`. The invalid mask uses the **original** advantages before multiplying by `adv_tau` or adding the teacher term. Setting `adv_tau=0` does not remove the mask or the `kl_tau` term. The reported `teacher_kl` is the masked mean of `t - s`, a signed sampled logprob difference, not an evaluated full-vocabulary KL/JSD. This formula was source verified, **not numerically executed** in M0.
-
-`setup_loss_fn` supports `trainer.loss.type="custom"`, `trainer.loss.import_path`, and `trainer.loss.kwargs` through `CustomLossConfig`. Its `LossInputs` exposes sampled logprobs, advantages, and mask, not full-vocabulary logits. This hook alone does not supply Mode B's teacher/student logits. Full-vocabulary JSD and the optional token gate are not implemented or run.
-
-[Pinned loss implementation](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/src/prime_rl/trainer/rl/loss.py), [captured source](logs/m0/08-prime-source.log).
 # M1 additions: SPEC §2 adapter
 
 The M0 pins above remain unchanged. New source locations and signatures were
@@ -271,12 +278,12 @@ in [TASK_PIPELINE.md](TASK_PIPELINE.md).
 |---|---|
 | `rlm_opsd/tasks/__main__.py:main` | `python -m rlm_opsd.tasks {prepare,build,verify}`; `--config`, `--output` for build, `--manifest` for verify; JSON result and nonzero error exit |
 | `rlm_opsd/tasks/models.py:TaskSpec`, `Task` | Seeded generation input; separate answer-bearing audit object; `Task.manifest(context_path)` and `Task.from_manifest(row, context)` |
-| `rlm_opsd/tasks/generators.py:generate(spec, corpus=None)` | Six generated families, train/dev only; local seeded RNG; no benchmark substitution |
+| `rlm_opsd/tasks/generators.py:generate(spec, corpus=None)` | Six generated families, train/dev only; independent seeded content, label-subset and query-wording draws; four wordings per query type; resolved `query_variant` in audit knobs |
 | `rlm_opsd/tasks/verify.py:verify_answer(task, corpus=None)` | Recompute from serialized context and task criteria, using offline classification annotations or ASTs; does not consult stored answer |
 | `rlm_opsd/tasks/codec.py:render_records`, `parse_records` | Lossless plain/JSONL/CSV/log/Markdown records and whole-record list chunks |
 | `rlm_opsd/tasks/sources.py:ClassificationCorpus.from_records`, `.from_banking_csv` | Dataset/revision/license provenance; TREC exclusion; checksum and duplicate/conflicting-label checks; explicit ambiguity policy |
 | `rlm_opsd/tasks/prepare.py:checked_source`, `load_corpora`, `prepare_sources` | Checksum-pinned downloads/cache; split-specific classification imports; partial or full reserved-query/source index |
-| `rlm_opsd/tasks/build.py:plan_specs(config)` | Stable split/cell seeds; explicit family weights and eligible grid exclusions |
+| `rlm_opsd/tasks/build.py:plan_specs(config)` | Stable split/cell seeds; explicit family weights and eligible grid exclusions; `family_knobs` resolves fixed values, inclusive integer/ISO-date `min`/`max`, or nonempty `choices` independently by task seed and knob name |
 | `rlm_opsd/tasks/build.py:build_pool(config, output_dir, *, corpora, heldout=None)` | Real `ProcessPoolExecutor` with `multiprocessing.get_context('spawn')`; ordered generation, answer verification, decontamination, atomic pool write |
 | `rlm_opsd/tasks/build.py:verify_pool(manifest_path, *, corpora)` | Reload and independently verify every generated answer; benchmark answers explicitly excluded from this oracle |
 | `rlm_opsd/tasks/build.py:load_tasks(manifest_path, *, split, inspection_only=False)` | Answer-free OPSD records, explicit split, coverage/manifest-hash guard, context checks; no trainer invocation |
@@ -291,6 +298,16 @@ in [TASK_PIPELINE.md](TASK_PIPELINE.md).
 `heldout_snapshots`. Exact nested keys and generator knobs are documented in
 TASK_PIPELINE.md and exercised by the CLI and planner tests. There are no
 teacher, gate, loss or training config changes in M2.
+
+The seeded-diversity update adds dense-task `label_count` (sample from all
+corpus labels; mutually exclusive with explicit `labels`) and `cutoff_date`,
+plus small-control `records`. Query selection records `query_variant` and
+uses a separate RNG. `family_knobs` range and choice descriptors resolve
+before generation; invalid or reversed ranges fail at planning. Source pins
+and decontamination settings are unchanged. Contracts were exercised through
+the [task suite](checks/task-diversity/06-task-tests-final.log),
+[full configured build](checks/task-diversity/04-make-tasks.log) and
+[saved-context verification](checks/task-diversity/05-tasks-verify.log).
 
 ## Pinned external data schemas
 
@@ -451,8 +468,8 @@ This is M4 only: no M5 teacher-gate target, training loss or monitoring sweep.
 
 # M5 additions: teacher gate and revised OPSD architecture
 
-The user's M5 steering makes **Mode B primary**, with a local frozen-base teacher
-forward in the trainer. Mode A is optional. No teacher scoring server or teacher
+The user's M5 steering makes **OPSD primary**, with a local frozen-base teacher
+forward in the trainer. No teacher scoring server or teacher
 scoring API is part of the revised architecture. The earlier upstream remote
 teacher API catalog remains a source reference; it is not the selected path.
 The M5 endpoints generate baseline/teacher-policy turns and frozen `llm_query`
@@ -508,13 +525,14 @@ Public M5 interfaces in `rlm_opsd/eval/`:
   2 not run, 3 threshold failed, 4 inconclusive. `make teacher-gate` and
   `make teacher-gate-check` expose the entry point.
 
-## Mode B: verified adapter residual-off mechanism in pinned prime-rl
+## OPSD: verified adapter residual-off mechanism in pinned prime-rl
 
 Source pin: `09e11c7527a242b9f150c7c4c71b1b96da66cb75`. The
 [source-verification log](logs/m5/10-mode-b-source-verification.log) records the
 checkout HEAD, exact file hashes, numbered excerpts, AST assertions and equality
-with installed source bytes. No trainer import/forward/GPU test was performed;
-local PyTorch is absent.
+with installed source bytes. That original M5 audit was source-only. The table
+describes the unmodified baseline; current OPSD additions and CPU execution
+are documented above. GPU execution remains **not run**.
 
 | Pinned repository file / symbol | Verified behavior |
 |---|---|
@@ -523,198 +541,54 @@ local PyTorch is absent.
 | `src/prime_rl/trainer/models/layers/lora/multi_linear.py:61–68,137–158`: `MultiLoRALinear.__init__`, `.forward(x)` | Caches `_lora_num_tokens` and `_scaling_factors`. Computes `base_out + per_token_scaling * lora_out`; per-token scale comes from repeat_interleave of cached global scaling. |
 | `src/prime_rl/trainer/models/layers/lora/multi_moe.py:318,643,933`: forward methods of `MultiLoRAGroupedExperts`, `MultiLoRANonGatedGroupedExperts`, `MultiLoRAGptOssGroupedExperts` | Select adapter by token-count argmax, read scaling with `.item()`, multiply adapter residuals at each projection. All three variants use cached scaling references. |
 | `src/prime_rl/trainer/runs.py:66–86`: MultiRunManager initialization | Initializes both global tensors before wrapping/model use. Modules and run manager retain references. Token counts must remain valid for each forward. |
-| `src/prime_rl/trainer/lora.py:115–130`: `freeze_all_except_lora_and_specified(model, config)` | LoRA parameters and `modules_to_save` remain trainable; all others are frozen. Primary Mode B requires `modules_to_save=[]` and checks that non-LoRA weights truly remain frozen. |
+| `src/prime_rl/trainer/lora.py:115–130`: `freeze_all_except_lora_and_specified(model, config)` | LoRA parameters and `modules_to_save` remain trainable; all others are frozen. OPSD requires `modules_to_save=[]` and checks that non-LoRA weights truly remain frozen. |
 | `src/prime_rl/trainer/model.py:1122–1162`: `forward(model, input_ids, position_ids, labels=None, temperature=None, routed_experts=None, ...)` | Calls the model and exposes `PrimeLmOutput`, including full `logits` when supplied by the output head. |
 | `src/prime_rl/trainer/rl/train.py:403–444` | Sets per-microbatch LoRA token counts, then calls `forward`; the normal loop derives selected-token logprobs from logits when needed. Its existing teacher_logprobs input is not an in-trainer second teacher pass. |
 | `packages/prime-rl-configs/src/prime_rl/configs/trainer.py:377–389`; `src/prime_rl/trainer/model.py:1038–1043`; `models/layers/lm_head.py:38–74,331–342` | Exact full-logit setting: `trainer.model.fused_lm_head_token_chunk_size = "disabled"`. `VanillaOutputLinear` emits logits; the integer-chunk `FusedOutputLinear` emits only selected-token logprobs and entropy. |
 
-The source-backed residual-off sequence for later integration is:
+The baseline source exposes process-global routing/scaling tensors, whose
+cached references must be updated in place. Zero scaling alone still executes
+adapter kernels/dropout and cannot safely remove nonfinite residuals. The
+project's `frozen_teacher` adds a true computational bypass and restores all
+state in `finally`; its current contract and CPU coverage follow. GPU execution
+remains **not run**.
 
-1. Clone `get_multilora_scaling()` and save the original routing counts.
-2. Install valid teacher-layout counts with `set_lora_num_tokens(...)` and set an
-   all-zero scaling tensor using `set_multilora_scaling(...,
-   reset_reference=False)`.
-3. Run the privileged aligned teacher forward without gradients; teacher logits
-   score the exact same suffix tokens at the mapped causal positions.
-4. Restore both tensors **in place in finally**, along with any changed module
-   modes/RNG state, before student backward/checkpoint recomputation.
+# Shared frozen-teacher and smoke APIs
 
-Do not use reset_reference=True after construction: cached module references
-would continue pointing at the old tensor. Serialize forwards because the state
-is global across adapters/runs; a per-request teacher toggle is not thread-local.
+The dependency and model pins are unchanged. The shared context is
+`training/teacher.py::frozen_teacher(model, token_count, *, api=None,
+allow_fsdp=False)`. It validates dense single-adapter MultiLoRA and frozen base
+parameters, bypasses adapter forward methods under no-grad, and restores modes,
+RNG, routing, scaling and forwards even on exceptions. The native trainer
+explicitly permits FSDP; the standalone smoke remains unsharded.
 
-**Verified limit:** zero scaling removes finite adapter residuals, but does not
-skip adapter kernels or dropout. It is not an upstream computational bypass, and
-NaN/Inf residuals can still invalidate logits. A robust later implementation must
-validate finite residual/equivalence or add an explicit tested bypass, prove
-base freezing, restore state on errors, and test FSDP/compile/checkpoint behavior
-on the actual server. This source inspection does not claim those runtime tests
-passed and does not add that integration in M5.
+Pinned runtime source contracts:
 
-The user-authorized change is confined to [SPEC §6](SPEC.md#6-opsd-training):
-Mode B primary, local teacher scoring, full-vocabulary masked JSD, Mode A optional,
-generation-only endpoints. The task-independent y* and shared token-ID suffix
-remain required. Sections outside §6 were preserved byte-for-byte.
-
-# M6: shared teacher hook and optional Mode A
-
-Scope confirmed by the user: shared in-trainer teacher hook plus optional Mode A;
-JSD stays in M7. M0 source pins remain unchanged. The M5 descriptions above
-record that milestone's state; M6 now adds the tested dense-adapter bypass and
-CPU tensor execution. **Real small/27B pretrained smokes: not run.**
-
-Evidence: [source check script](logs/m6/verify_source.py),
-[signatures, hashes, config validation and primary-source URLs](logs/m6/22-source-verification.log),
-[M6 tests](logs/m6/20-m6-green.log), [full suite](logs/m6/21-full-suite.log).
-The script checks installed bytes against pinned prime-rl source before listing
-symbols. CUDA imports/loading are not established by these source checks.
-
-## Pinned runtime entry points used by the smoke
-
-All prime-rl paths below are relative to commit
-`09e11c7527a242b9f150c7c4c71b1b96da66cb75`.
-
-| File / symbol | Verified contract and M6 use |
+| prime-rl source / symbol | Contract used by the OPSD smoke |
 |---|---|
-| `src/prime_rl/trainer/model.py:416`, `get_model(config, device=torch.device('cpu'), dtype=torch.bfloat16)` | No revision argument. M6 passes the locally cached exact-revision directory as `ModelConfig.name`, device CUDA 0 and BF16. The function disables parent/subconfig caches and applies Qwen3.5 patches. Pretrained loading and hybrid attention remain unexecuted locally. |
-| `packages/prime-rl-configs/src/prime_rl/configs/trainer.py`, `ModelConfig`, `LoRAConfig` | Instantiated and validated keys: `name`, `impl='hf'`, `attn='eager'`, `seq_len`, `compile=None`, `ac=None`, `cp=1`, `ep=1`, `fused_lm_head_token_chunk_size='disabled'`; LoRA `rank`, `alpha`, `dropout=0`, `target_modules=['q_proj','k_proj','v_proj','o_proj']`, `modules_to_save=[]`. These are Python model fields; project smoke TOMLs are mapped explicitly to them. |
-| `src/prime_rl/trainer/runs.py:490`, `setup_multi_run_manager(output_dir, max_runs, device, lora_config=None)` | Initialize after a one-process NCCL process group, before constructing adapters; M6 uses `max_runs=1`. Manager initializes cached global routing/scaling tensors. M6 explicitly sets `alpha/rank` in place rather than retaining the manager's sentinel scale. |
-| `src/prime_rl/trainer/lora.py:132`, `apply_lora_to_model(model, config)` | Wraps target modules, registers adapters with the manager and calls `freeze_all_except_lora_and_specified`. M6 separately validates that only A/B parameters can require gradients and that every B starts at zero. |
-| `src/prime_rl/trainer/models/layers/lora/multi_linear.py:38`, `MultiLoRALinear(base_layer, rank, n_adapters, alpha=32.0, dropout=0.0, use_grouped_mm=True)` | M6 supports exactly this dense class with one adapter. `reset_parameters` initializes B to zero. `.use_grouped_mm=False` selects unchanged `_run_lora_for_loop` ordinary matmuls on both Ampere/Hopper; no GPU runtime success is inferred. |
-| `src/prime_rl/trainer/models/layers/lm_head.py:271`, `inject_prime_lm_head(model, chunk_size=None, fused_cross_entropy=False)` | Installs `VanillaOutputLinear`, preserves the original head weight, and patches model forward to consume `model.model(...).last_hidden_state`. M6 supplies explicit zero-based position IDs for each sequence. Actual CPU Qwen3.5 full-attention forward/backward through this head was tested. |
-| `src/prime_rl/trainer/model.py:1122`, `forward(model, input_ids, position_ids, labels=None, temperature=None, ...)` | Returns `PrimeLmOutput` including float contiguous full logits for the vanilla head. M6 uses `logits[0, causal_positions, :]` and scales by sampling temperature before log-softmax. The wrapper itself belongs to the unexecuted full CUDA import path; CPU tests invoke the real head-patched model directly. |
-| `src/prime_rl/transport/types.py`, `TrainingSample`, `MicroBatch` | Native schemas have `teacher_logprobs` but no privileged prefix/teacher-sequence fields. M6 uses a synchronous custom one-update loop around the actual upstream model/LoRA/loss functions. It does not claim integration of these prefixes into the native asynchronous transport or trainer loop. |
+| `src/prime_rl/trainer/model.py::get_model` | Accepts `ModelConfig`, device and dtype; the exact cached revision directory is supplied as the model name. Native Qwen patches are retained. |
+| `src/prime_rl/trainer/runs.py::setup_multi_run_manager` | Initializes process-global routing/scaling before adapters are constructed; smoke uses one run after a one-process NCCL group. |
+| `src/prime_rl/trainer/lora.py::apply_lora_to_model` | Wraps configured dense modules and freezes the base; `modules_to_save=[]`. |
+| `src/prime_rl/trainer/models/layers/lora/multi_linear.py::MultiLoRALinear` | One adapter, initially zero B; smoke selects the portable ordinary matmul path with `use_grouped_mm=False`. |
 
-## Exact optional sampled-token objective
+`training/samples.py::samples_from_rollout` retains original IDs, checks exact
+suffix equality, and maps root assistant targets to causal positions for each
+prefix length. It rejects missing/clipped IDs, altered prefixes and overlength
+sequences. `training/backend.py::configure_adapters` validates the initial zero-B
+student and sets scaling in place. `load_backend` owns the smoke's CUDA process
+group and closes it on failure. `training/runner.py::verify_gate` checks complete
+real paired traces, current provenance, explicit thresholds and request evidence.
+`cached_snapshot` requires all weight shards at the immutable revision.
 
-`src/prime_rl/trainer/rl/loss.py:14` defines `LossInputs(trainer_logprobs,
-inference_logprobs, teacher_logprobs, advantages, loss_mask)`;
-`LossOutputs(loss, metrics)` is at line 25 and
-`default_loss_fn(inputs, loss_config)` at line 116. Config is
-`prime_rl.configs.trainer.DefaultLossConfig` in the pinned config package.
-
-For sampled target token n, define S = student logprob, T = teacher logprob,
-I = rollout inference logprob, A = supplied reward advantage and m = loss mask.
-The pinned code computes:
-
-```text
-r = exp(S - I)
-d = exp(S) - exp(I)
-invalid = where(A > 0, d > dppo_mask_high, d < -dppo_mask_low)
-keep = m & ~invalid
-A_eff = adv_tau * A + teacher_tau * stop_gradient(T - S)
-native_loss = sum(-keep * A_eff * r + kl_tau * m * (S - I)^2)
-```
-
-The DPPO mask is computed using A **before** adding the teacher term. M6 passes
-A=0, `adv_tau=0`, `kl_tau=0`, positive `teacher_tau`, and both DPPO bounds 1,
-which prevents probability-difference clipping. After gathering only selected
-assistant positions, it divides the native sum by their total count across
-turns. Teacher and inference inputs are detached; the student receives the
-gradient through r. Empty masks safely skip optimizer updates. The pinned
-`teacher_kl` metric is the sampled T−S statistic, not full-vocabulary KL/JSD.
-
-`training/teacher.py:frozen_teacher` is a **project context manager**, not an
-upstream or PEFT API. It checks dense single-adapter/frozen-base invariants,
-saves every module's training flag and any instance forward override, preserves
-CPU/CUDA RNG via `torch.random.fork_rng`, zeroes/restores cached scale and token
-count tensors in place, and replaces each dense adapter forward temporarily
-with `base_layer(x)`. This avoids even NaN adapter computation. `finally` restores
-state before student backward. A process-global reentrant lock covers the entire
-training step. FSDP, compiled modules and other adapter classes are rejected.
-Checkpointed CPU recomputation, exception restoration, reference identity and
-unchanged base/teacher after LoRA updates are covered by executed tests.
-
-## Generation records and policy convention
-
-Pinned Verifiers `verifiers/utils/response_utils.py:parse_response_tokens`
-returns `prompt_ids`, `prompt_mask`, `completion_ids`, `completion_mask`,
-`completion_logprobs`, `is_truncated`, `overlong_prompt`. M6 rejects missing
-records, malformed alignment and true clipping flags. A normal generation
-`finish_reason='length'` is different from token-record truncation.
-The existing `RLMOpsdEnv` uses the pinned Verifiers rollout/trajectory machinery
-with rewards disabled and separate frozen leaf client.
-
-`verifiers/clients/openai_chat_completions_token_client.py:get_native_response`
-confirms `logprobs=True` and `extra_body.return_token_ids=True`.
-M6 supplies these through the already verified ordinary chat client, which
-passes extra-body keys and converts `max_tokens` to `max_completion_tokens`.
-The harness also sets the pinned template's `enable_thinking` value.
-
-`packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py` confirms
-`top_p` at request level and `top_k`, `min_p`, `repetition_penalty` in
-`extra_body`; its native training defaults neutralize top-k/min-p too.
-`configs/inference.py:565–566` sets the vLLM namespace
-`logprobs_mode='processed_logprobs'`. The upstream lock selects vLLM
-`0.21.0+cu129`. Its [SamplingParams source](https://github.com/vllm-project/vllm/blob/v0.21.0/vllm/sampling_params.py)
-defines neutral top-p 1, top-k −1/0, min-p 0, repetition penalty 1 and
-presence/frequency penalties 0. M6 sends these explicitly. Its
-[model config](https://github.com/vllm-project/vllm/blob/v0.21.0/vllm/config/model.py)
-defaults to raw logprobs, so a plain server must be configured for processed
-logprobs. The project config declares this prerequisite; it does not remotely
-verify or reconfigure the endpoint. Source bytes/hashes were retrieved in the
-linked source log. The [pinned Qwen generation config](https://huggingface.co/Qwen/Qwen3.5-27B/blob/fc05daec18b0a78c049392ed2e771dde82bdf654/generation_config.json)
-has top-k 20 and top-p 0.95, so leaving those server defaults would not match
-M6's unrestricted temperature-scaled policy.
-
-## Model pins, test environment and project entry points
-
-Small family model: [Qwen/Qwen3.5-0.8B at 2fc06364715b967f1860aea9cf38778875588b17](https://huggingface.co/Qwen/Qwen3.5-0.8B/tree/2fc06364715b967f1860aea9cf38778875588b17).
-`configs/prompts_small.yaml` pins:
-
-- `prompts/chat_template_small.jinja`: SHA256 `273d8e0e683b885071fb17e08d71e5f2a5ddfb5309756181681de4f5a1822d80`.
-- `.deps/m6-tokenizer-small/tokenizer.json`: `5f9e4d4901a92b997e463c1f46055088b6cca5ca61a6522d1b9f64c4bb81cb42`.
-- `.deps/m6-tokenizer-small/tokenizer_config.json`: `49e2b6e395f959f077f1e992b338919c0d4a9732fc6e613995e06557f843500c`.
-
-Only tokenizer/template files were downloaded; no model weights. The original
-27B revision/template remain unchanged. The small template differs from 27B;
-its separate prompt/gate configs avoid treating them as identical artifacts.
-
-`requirements-m6-local.txt` pins CPU torch 2.11.0, beartype 0.22.9, jaxtyping
-0.3.9, loguru 0.7.3, networkx 3.6.1, setuptools 80.10.2 and wadler-lindig 0.1.7.
-The existing local stack uses Transformers 5.9.0; server `uv.lock` uses torch
-2.11.0+cu128 and Transformers 5.5.0 at
-`c1c34249fa27deefbd4a377dfbf883a39baf5c6d`. M0 dependency files were not changed.
-`tests/prime_cpu.py` checks byte equality then loads actual base/linear/head/loss
-files while bypassing unrelated package initializers and the unused custom-loss
-import helper. It does not replace the LoRA or loss math. Tiny random Qwen tests
-cover full attention only, not pretrained loading/hybrid attention/CUDA.
-
-Project entry points and exact config keys:
-
-- `training/samples.py:samples_from_rollout(rollout, prefixes, *, max_seq_len)`
-  returns immutable `AlignedSample(student_ids, teacher_ids, student_positions,
-  teacher_positions, target_ids, inference_logprobs, temperature)` per root turn.
-- `training/teacher.py:frozen_teacher(model, token_count, *, api=None)` and
-  `teacher_logits(model, sample, forward_fn, *, api=None)` supply the shared hook.
-- `training/mode_a.py:sampled_loss(student, teacher, inference, *,
-  teacher_tau=1.0, loss_api=None)` calls the native objective;
-  `ModeATrainer(...).step(samples)` returns loss, assistant_tokens,
-  gradient_norm and updated. Only trainable adapter tensors enter AdamW.
-- `training/config.py:OpsdConfig.from_toml(path)` keys: `mode='a'`, `stage`,
-  `base_model`, `revision`, `prompt_config`, `gate_config`, `gate_dir`,
-  `small_smoke_dir`, `max_seq_len`, `max_tokens`, `temperature`,
-  `logprobs_mode='processed_logprobs'`, `seed`, `learning_rate`, `teacher_tau`,
-  `max_grad_norm`, `lora_rank`, `lora_alpha`. Unknown fields are rejected.
-- `training/backend.py:load_backend(config, snapshot, output)` owns its fresh
-  one-process NCCL group and tears it down. `configure_adapters` validates the
-  initial base equivalence and selects the ordinary-matmul adapter path.
-- `training/runner.py:check_readiness(config)`, `prepare_smoke(config)`,
-  async `run_smoke(config, output_dir)`: verify gate evidence/current provenance,
-  training split, cached snapshot, Linux/CUDA and small-before-27B order.
-- `training/__main__.py:main(argv=None)`: `python -m rlm_opsd.training smoke
-  --config ... --output ...`, optional read-only `--check`.
-  `make opsd-a`, `make opsd-a-check`, `make test-m6` wrap these interfaces.
-
-[OPSD_MODE_A.md](OPSD_MODE_A.md) documents execution order and artifact semantics.
-No `opsd-b`, JSD/token gate, monitoring/exit or GRPO code is implemented in M6.
+Historical source evidence: [API inspection](logs/m6/22-source-verification.log).
+Current CPU behavior is covered by `test_training_teacher.py`,
+`test_training_samples.py`, `test_training_runner.py`, and the JSD tests.
+GPU/pretrained results: **not run**.
 
 # M7: primary full-vocabulary JSD and optional token gate
 
-M7 implements SPEC §6.4–6.5 using the M6 local frozen teacher context. This
-section supersedes the earlier milestone's statement that JSD/`opsd-b` are not
-implemented. Mode B is primary and selected by default; optional Mode A remains
-available. No pinned dependency/source revision changed and no package was
+M7 implements SPEC §6.3–6.4 using the M6 local frozen teacher context. This
+section describes the sole OPSD objective. No pinned dependency/source revision changed and no package was
 installed for M7.
 
 Evidence: [initial source/signature inspection](logs/m7/01-source-api.log),
@@ -729,18 +603,16 @@ Source pin remains prime-rl `09e11c7527a242b9f150c7c4c71b1b96da66cb75`.
 `src/prime_rl/trainer/models/layers/lm_head.py:345`, `_patch_model_forward`,
 calls `model.model(input_ids=..., position_ids=..., ...)` and reads
 `outputs.last_hidden_state` before invoking `model.lm_head`. M7's
-`training/mode_b.py:backbone_hidden(model, input_ids, position_ids)` uses that
+`training/opsd.py:backbone_hidden(model, input_ids, position_ids)` uses that
 same backbone boundary with explicit positions and `use_cache=False`, returning
-`[1, sequence, hidden]`. It does **not** call the model's full forward, the
-language-model head, or the M6 `forward(...)["logits"]` path.
+`[1, sequence, hidden]`. It obtains hidden states without materializing full-sequence logits.
 
-`training/backend.py:load_backend` still uses the verified pinned `get_model`,
-run-manager initialization and `apply_lora_to_model`. For Mode A it retains
-`inject_prime_lm_head(..., chunk_size=None)`; for Mode B it leaves the ordinary
-linear head intact. `create_trainer(config, model, *, api, mode_a_forward=None)`
-selects `ModeBTrainer` or `ModeATrainer`. Mode B validates an exact `nn.Linear`
-head with frozen weight, no bias/instance forward override and no configured
-softcapping. Other head transformations, sharding and compilation are unsupported.
+`training/backend.py:load_backend` uses the pinned `get_model`, run-manager
+initialization and `apply_lora_to_model`, leaving the ordinary linear head intact.
+`create_trainer(config, model, *, api)` always constructs `OpsdTrainer`.
+The standalone trainer validates an exact `nn.Linear` head with frozen weight,
+no bias/instance forward override and no configured softcapping. Its model is
+unsharded; multi-step FSDP uses the native integration described above.
 
 Selected hidden rows are projected with installed torch 2.11.0
 `torch.nn.functional.linear(input, weight, bias=None)`. Head dtype is preserved;
@@ -806,7 +678,7 @@ on total backbone memory or measure GPU allocator peaks.
 
 ## Trainer, configuration and smoke evidence
 
-`training/mode_b.py:ModeBTrainer(model, *, hidden_fn=backbone_hidden, api=None,
+`training/opsd.py:OpsdTrainer(model, *, hidden_fn=backbone_hidden, api=None,
 learning_rate=2e-5, max_grad_norm=1.0, chunk_size=64, token_gate=False, gate_k=1.0)`
 exposes `.step(samples)`. It reuses immutable M6 `AlignedSample` records and
 `FORWARD_LOCK`/`frozen_teacher`: student backbone first, privileged frozen-base
@@ -817,36 +689,25 @@ assistant tokens. Empty inputs do not run a model or optimizer; errors clear
 gradients and restore routing before propagating. Returned metrics retain
 `loss`, `assistant_tokens`, `gradient_norm`, `updated`.
 
-Additional `OpsdConfig` keys in `training/config.py`:
+`OpsdConfig` in `training/config.py` contains `stage`, `base_model`, `revision`,
+`prompt_config`, `gate_config`, `gate_dir`, `small_smoke_dir`, `max_seq_len`,
+`max_tokens`, `temperature`, `logprobs_mode`, `seed`, `learning_rate`,
+`max_grad_norm`, `lora_rank`, `lora_alpha`, `jsd_beta=0.5`, `jsd_chunk_size=64`,
+`token_gate=False`, and `token_gate_k=1.0`. Unknown settings are rejected.
+There is no objective selector. Pins and generation conventions are unchanged.
 
-- `mode`: `"b"` default, or `"a"`.
-- `jsd_beta`: literal `0.5`; other values rejected.
-- `jsd_chunk_size`: positive integer, default 64.
-- `token_gate`: strict boolean, default false; true is rejected for Mode A.
-- `token_gate_k`: positive finite float, default 1.0.
+`training/runner.py::objective_metadata` records `kind='full_vocab_jsd'`, beta,
+temperature, token gate and slope. `smoke.json` stores this objective and the
+checkpoint hash; `run.json` stores the full configuration. `verify_small_smoke`
+requires completed pretrained small-model evidence with that exact objective,
+the pinned model/revision and valid checkpoint hash before a 27B run. Missing
+or mismatched objective metadata and CPU fixtures cannot authorize training.
 
-Existing keys remain `stage`, `base_model`, `revision`, `prompt_config`,
-`gate_config`, `gate_dir`, `small_smoke_dir`, `max_seq_len`, `max_tokens`,
-`temperature`, `logprobs_mode`, `seed`, `learning_rate`, `teacher_tau`,
-`max_grad_norm`, `lora_rank`, `lora_alpha`. Nondefault `teacher_tau` is rejected
-for Mode B because it belongs to the optional native sampled objective.
-Model/tokenizer pins and generation settings remain unchanged.
-
-`training/runner.py:objective_metadata(config)` records Mode B as
-`kind='full_vocab_jsd'`, `beta`, `token_gate`, `token_gate_k`, `temperature`.
-`smoke.json` adds this object and `mode`; `run.json` keeps the complete config
-including chunk size. `verify_small_smoke` requires real small Mode B evidence
-with the same objective and checkpoint hash before 27B Mode B. Mode A/legacy
-evidence is not a Mode B prerequisite or substitute; existing Mode A behavior
-remains compatible. Gate validity, data coverage, cached-weight and CUDA
-requirements remain mandatory, with no fixture override.
-
-New project configs are `configs/opsd_mode_b_small.toml` and
-`configs/opsd_mode_b.toml`. `python -m rlm_opsd.training smoke` defaults to the
-latter; `make opsd-b`/`opsd-b-check` accept `OPSD_B_CONFIG` and `OPSD_B_OUTPUT`.
-`make test-m7` runs the new tests. [OPSD_MODE_B.md](OPSD_MODE_B.md) documents
-execution order, artifacts and limits. M7 remains a one-update integration;
-no upstream asynchronous transport, broadcast/resume, M8 or M9 was added.
+Configs are `configs/opsd_small.toml` and `configs/opsd.toml`.
+`python -m rlm_opsd.training smoke` defaults to the latter. `make opsd` and
+`make opsd-check` accept `OPSD_CONFIG` and `OPSD_OUTPUT`; `make opsd-train`
+uses `configs/opsd_train.toml` for the native repeated loop.
+[OPSD.md](OPSD.md) and [OPSD_TRAIN.md](OPSD_TRAIN.md) document execution.
 
 ## M8 OPSD-only monitoring and two-condition exit
 
@@ -865,7 +726,7 @@ claimed. [Source inspection](logs/m8/03-source-api.log),
 | Same commit, `verifiers/clients/openai_chat_completions_client.py:OpenAIChatCompletionsClient.get_response` and sampling conversion | Structured prompt messages, model, sampling args and state. `max_tokens` is translated to provider `max_completion_tokens` at lines 278–279; HTTP tests assert the emitted limit. `return_token_ids`/`logprobs` retain original root token records. No scoring request introduced. |
 | Project `rlm_opsd/eval/gate.py:GateClient`, `rlm_opsd/harness/env.py:RLMOpsdEnv` | Separate base, checkpoint and frozen-leaf clients; returned model alias checked. Environment never sends task labels/context body to the root; actual HTTP/sandbox integration tests cover three phases. |
 | Prime-rl `09e11c7527a242b9f150c7c4c71b1b96da66cb75`, `src/prime_rl/trainer/model.py`, `models/layers/lora/base.py`, `models/layers/lora/multi_linear.py` | Installed bytes verified equal to pinned checkout. Reuses existing M6 backend/adapter initialization and M7 backbone/head boundary without modifying upstream source. |
-| Project `training/backend.py:load_backend`, `training/teacher.py:frozen_teacher`, `training/mode_b.py:backbone_hidden` | Load native single-adapter frozen-base model; use ordinary frozen head and selected hidden rows, serialize process-global routing under `FORWARD_LOCK`, bypass teacher LoRA, restore modes/routing. No optimizer step in monitoring. |
+| Project `training/backend.py:load_backend`, `training/teacher.py:frozen_teacher`, `training/opsd.py:backbone_hidden` | Load native single-adapter frozen-base model; use ordinary frozen head and selected hidden rows, serialize process-global routing under `FORWARD_LOCK`, bypass teacher LoRA, restore modes/routing. No optimizer step in monitoring. |
 | Installed torch 2.11.0, `torch/serialization.py:load(f, map_location=None, pickle_module=None, *, weights_only=None, mmap=None, **pickle_load_args)` | `map_location='cpu', weights_only=True` reads the native adapter dictionary. Validate exact parameter names, shape, dtype and finiteness before in-place copies. Verify SHA-256 first. |
 | Installed Transformers 5.9.0, `transformers/tokenization_utils_base.py:PreTrainedTokenizerBase.decode` / `.__call__` | Decode original completion IDs with `skip_special_tokens=False, clean_up_tokenization_spaces=False`; encode decoded text only for `return_offsets_mapping=True, add_special_tokens=False` and require exact ID equality. Unicode byte-piece overlap retained; special IDs mapped to `(0,0)`. Scored sequence IDs never come from this encode operation. |
 

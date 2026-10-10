@@ -55,7 +55,7 @@ Base the harness on `alexzhang13/rlm` (the paper's reference implementation) and
 
 ### 2.5 Sub-call server
 
-- Serves the frozen initial weights. It can share the teacher inference server in Mode A.
+- Serves the frozen initial weights for generation only.
 - Async-capable.
 - Logs every call: prompt chars, output chars, latency, and the turn index of the root call.
 
@@ -152,13 +152,10 @@ See `docs/TASKS.md`.
 
 ## 6. OPSD training
 
-**Primary path: Mode B, with teacher scoring inside the trainer.** The teacher is
-the same model's frozen initial base weights with the LoRA contribution disabled
-for a second forward pass. It supplies full-vocabulary logits for masked JSD.
-There is no teacher inference server and no teacher scoring API call. Inference
-endpoints are used only for generation: student rollouts, the baseline/teacher
-policy runs in §5, and `llm_query` sub-calls. Mode A is an optional sampled-token
-objective using the same local teacher-scoring mechanism.
+OPSD uses full-vocabulary JSD with teacher scoring inside the trainer. The
+teacher is the same model's frozen initial base with LoRA bypassed for a local
+no-gradient pass. Inference endpoints serve generation only: student rollouts,
+the baseline/teacher-policy runs in §5, and frozen `llm_query` sub-calls.
 
 ### 6.1 Notation and frozen-base invariant
 
@@ -186,30 +183,13 @@ objective using the same local teacher-scoring mechanism.
 - Mask = root assistant target tokens only. Exclude system/user tokens,
   observations, padding and sub-call tokens from the objective.
 
-### 6.3 Mode A: optional sampled-token objective
+### 6.3 Full-vocabulary JSD
 
-Mode A is optional, not a prerequisite for Mode B. It can reuse prime-rl's native
-sampled-token distillation loss with `teacher_tau` enabled and `adv_tau = 0`.
-Obtain teacher logprobs by gathering the recorded target token from the trainer's
-local frozen-base teacher logits after alignment. The native pinned training
-loop currently consumes `micro_batch["teacher_logprobs"]`; supplying these locally
-requires an explicit integration change.
-
-Do not configure `deployment.num_teacher_gpus`, a teacher endpoint, or an
-orchestrator teacher-logprob request for this architecture. The upstream remote
-teacher request path is source reference only, not the selected execution path.
-Record the sampled-token formula from the pinned source when implementing this
-optional mode; sampled-token values must not be reported as full-vocabulary JSD.
-Verification/rewards remain disabled during OPSD.
-
-### 6.4 Mode B: primary full-vocabulary JSD
-
-1. Forward the student sequence with its LoRA adapter active.
-2. Perform a second, no-gradient teacher forward using the same model instance,
-   the aligned privileged sequence, and the adapter contribution disabled.
-   Restore adapter/token-routing state and module training flags before student
-   backward or activation-checkpoint recomputation. Serialize this state change;
-   prime-rl's LoRA scaling state is process-global, not request-local.
+1. Run the local frozen teacher through the wrapped model with the aligned
+   privileged sequence, adapters bypassed, and gradients disabled.
+2. Restore adapter/token-routing state, RNG and module training flags, then
+   forward the student sequence with its LoRA adapter active. Serialize the
+   temporary state change because prime-rl's routing/scaling state is global.
 3. Detach teacher logits and compute `JSD_β(p_T ‖ p_S)` with β = 0.5 over the full
    vocabulary at the aligned masked positions. Normalize over selected root
    assistant positions; an empty mask contributes zero safely.
@@ -220,42 +200,30 @@ Verification/rewards remain disabled during OPSD.
    fallback and must be labelled as approximate.
 
 **Pinned adapter mechanism.** At prime-rl commit
-`09e11c7527a242b9f150c7c4c71b1b96da66cb75`, training uses custom `MultiLoRA`
-layers, not a PEFT `disable_adapter()` context manager. The source-backed
-mechanism for zeroing the adapter residual is
-`get_multilora_scaling()` / `set_multilora_scaling(tensor, reset_reference=False)`
-in `prime_rl.trainer.models.layers.lora.base`. Save a clone of the current
-scaling tensor, set an all-zero tensor in place for teacher scoring, and restore
-it in `finally`. Keep valid token counts via `set_lora_num_tokens`; adapt them to
-the teacher's packed sequence and restore the student counts too. Modules cache
-these tensor references, so replacing global references after model construction
-is not a valid toggle.
+`09e11c7527a242b9f150c7c4c71b1b96da66cb75`, training uses custom dense
+`MultiLoRA` layers. `frozen_teacher` temporarily bypasses adapter matmuls and
+dropout by calling each adapter's base layer. It restores forward methods,
+module flags, RNG and cached routing/scaling tensors in `finally`. Non-LoRA
+parameters remain frozen. Setting a scale to zero alone is insufficient when
+an adapter contains nonfinite values.
 
-Zero scaling removes finite adapter contributions from the output; upstream
-still executes adapter kernels and dropout. It is not a computational bypass,
-and zero times a nonfinite adapter result is not safe teacher output. The later
-trainer integration must either verify finite residuals/equality or add a tested
-true bypass, preserve dropout/RNG and module modes, and verify restoration,
-checkpointing, FSDP and compilation behavior. No such trainer context manager is
-implemented or GPU-validated in M5. Exact source paths and limitations are in
-`docs/VERIFIED_APIS.md`.
+**FSDP and memory.** The native trainer installs `OpsdHead` before LoRA,
+activation checkpointing and FSDP wrapping. Both passes call the outer wrapped
+model. The student head invokes `chunked_jsd_loss` while the head weight is
+available inside FSDP, with teacher tensors detached. No complete
+sequence-by-vocabulary logits are allocated. Activation checkpointing preserves
+RNG; distributed gradients normalize over the global assistant-token count,
+including empty ranks. Ordinary prime-rl losses are replaced whenever OPSD is
+enabled. Native optimizer, checkpoint, async rollout and vLLM weight-sync
+lifecycles remain in place.
 
-**Full logits.** The pinned `FusedOutputLinear` returns selected-token logprobs
-and entropy, not full-vocabulary logits. For the initial correctness path,
-`[trainer.model] fused_lm_head_token_chunk_size = "disabled"` selects
-`VanillaOutputLinear`; `prime_rl.trainer.model.forward(...)` exposes `logits`.
-A memory-bounded full-vocabulary projection path still needs implementation;
-the upstream chunked sampled-logprob head is not a JSD substitute.
+Required CPU checks cover identical distributions, teacher detachment,
+assistant-only masks, exact suffix/causal alignment, frozen-base invariance,
+state restoration on exceptions, chunked/dense gradient parity, repeated
+updates, and FSDP/checkpoint recomputation. Pretrained small-model and 27B GPU
+runs remain **not run**; see `docs/PROGRESS.md` for executed evidence.
 
-Required tests before deployment: identical distributions give zero JSD;
-teacher tensors receive no gradients; masked/non-assistant positions contribute
-zero; suffix/causal positions align across different prefix lengths; zeroed
-adapter logits match an unadapted frozen base; all adapter/routing/mode state is
-restored even on exceptions; student gradients remain valid through the second
-forward and checkpoint recomputation. Then run a small-model smoke and the 27B
-server smoke. M5 only verifies the source contract and generation-based gate.
-
-### 6.5 Optional token gate (config flag, default off)
+### 6.4 Optional token gate (config flag, default off)
 
 - Per-token weight, detached:
   `w_n = sigmoid(k * (log p_T(ŷ_n) − log p_S(ŷ_n)))`.
@@ -263,15 +231,15 @@ server smoke. M5 only verifies the source contract and generation-based gate.
 - This strengthens teacher-endorsed tokens and softens teacher rejections as a
   guard against multi-turn drift. Compare gate on/off on the same eval split.
 
-### 6.6 Optional token-category weights
+### 6.5 Optional token-category weights
 
 - Per-category loss weights for prose, code, comment and protocol tokens
   (DETECTORS.md §5).
 - Default is all 1.0. Change only based on the token-category KL report.
 
-### 6.7 Starting config (tune for 27B)
+### 6.6 Starting config (tune for 27B)
 
-- Mode B is primary; Mode A is opt-in.
+- Full-vocabulary JSD is the only OPSD objective; there is no mode selector.
 - LoRA rank in config; all non-adapter weights frozen; `modules_to_save = []`.
 - lr 2e-5; 1 rollout per task; fixed initial-base teacher; β = 0.5.
 - The mixed task pool from TASKS.md; no reward optimization or SFT stage.
@@ -285,6 +253,13 @@ Treat those as reference values, not requirements.
 ---
 
 ## 7. Monitoring
+
+Implementation note: multi-step OPSD now uses the patched pinned prime-rl
+trainer, async scheduler, FSDP2 wrapping, and native adapter synchronization;
+see `docs/OPSD_TRAIN.md`. The integrated path installs its
+chunked JSD head before FSDP, executes the frozen teacher before the student,
+and normalizes across ranks. CPU FSDP checks are separate from GPU validation;
+GPU, pretrained-model, and vLLM execution results remain **not run**.
 
 Every `eval_interval` steps, on the fixed `dev_behavior` eval split:
 

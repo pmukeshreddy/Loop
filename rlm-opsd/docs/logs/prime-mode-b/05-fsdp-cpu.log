@@ -1,0 +1,91 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_________ test_real_fsdp_cpu_forward_backward_and_teacher_restoration __________
+
+prime_api = namespace(base=<module 'prime_rl.trainer.models.layers.lora.base' from '/Users/mukeshreddy/Desktop/Refine deepswe/rlm-...shreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/prime_rl/trainer/models/layers/lm_head.py'>)
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-212/test_real_fsdp_cpu_forward_bac0')
+
+    def test_real_fsdp_cpu_forward_backward_and_teacher_restoration(prime_api, tmp_path):
+        import torch.distributed as dist
+        from torch.distributed.device_mesh import init_device_mesh
+        from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
+        from rlm_opsd.training.prime_step import install_mode_b_head, mode_b_forward
+    
+        dist.init_process_group('gloo', init_method=(tmp_path / 'rendezvous').as_uri(), rank=0, world_size=1)
+        try:
+            model = BackboneModel(prime_api, True)
+            install_mode_b_head(model, settings())
+            prime_api.lm_head._patch_model_forward(model)
+            mesh = init_device_mesh('cpu', (1,))
+            policy = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32)
+            fully_shard(model.model, mesh=mesh, mp_policy=policy)
+            fully_shard(model.lm_head, mesh=mesh, mp_policy=policy, reshard_after_forward=False)
+            fully_shard(model, mesh=mesh, mp_policy=policy)
+            optimizer = torch.optim.SGD([p for p in model.parameters() if p.requires_grad], lr=.1)
+            for empty in (False, True, False):
+                result = mode_b_forward(model, micro_batch(empty=empty), loss_scale=2., api=prime_api)
+                assert torch.isfinite(result['loss'])
+>               result['loss'].backward()
+
+tests/test_prime_mode_b_step.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.12/site-packages/torch/_tensor.py:631: in backward
+    torch.autograd.backward(
+.venv/lib/python3.12/site-packages/torch/autograd/__init__.py:381: in backward
+    _engine_run_backward(
+.venv/lib/python3.12/site-packages/torch/autograd/graph.py:869: in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+.venv/lib/python3.12/site-packages/torch/utils/checkpoint.py:1173: in unpack_hook
+    _run_fn_with_dynamo_disabled(frame.recompute_fn, *args)
+.venv/lib/python3.12/site-packages/torch/_compile.py:54: in inner
+    return disable_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:1263: in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/utils/checkpoint.py:1139: in _run_fn_with_dynamo_disabled
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/utils/checkpoint.py:1607: in recompute_fn
+    fn(*args, **kwargs)
+.venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1779: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1790: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/prime_rl/trainer/models/layers/lora/multi_linear.py:146: in forward
+    base_out = self.base_layer(x)
+               ^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1779: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1790: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Linear(in_features=8, out_features=8, bias=False)
+input = tensor([[-0.5820,  0.2832, -0.9570, -0.3086, -1.6094,  0.5977, -1.1406, -0.9883],
+        [ 0.0195, -0.4766,  0.1855, ....2236],
+        [-0.7344, -0.7578,  0.1504,  0.0039, -0.3750, -0.0713, -0.3945, -0.1787]],
+       dtype=torch.bfloat16)
+
+    def forward(self, input: Tensor) -> Tensor:
+        """
+        Runs the forward pass.
+        """
+>       return F.linear(input, self.weight, self.bias)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       RuntimeError: aten.mm.default got mixed torch.Tensor and DTensor, need to convert all torch.Tensor to DTensor before calling distributed operators!
+
+.venv/lib/python3.12/site-packages/torch/nn/modules/linear.py:134: RuntimeError
+=============================== warnings summary ===============================
+tests/test_prime_mode_b_step.py: 14 warnings
+  /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_prime_mode_b_step.py::test_real_fsdp_cpu_forward_backward_and_teacher_restoration
+1 failed, 6 deselected, 14 warnings in 2.30s

@@ -1,5 +1,168 @@
 # Progress
 
+## Seeded task diversity
+
+Date: 2026-10-09–10. [Task planning](../rlm_opsd/tasks/build.py) now samples each
+family knob independently from the task seed using fixed values, inclusive
+integer/date ranges, or explicit choices. [Configuration](../configs/tasks.yaml)
+sets needles `1–8`, hops `2–4`, dense label counts `2–8`, temporal filtering
+on/off, cutoffs from `2023-01-01` through `2023-06-28`, both pair relations,
+repo files `8–64`, and small-control quantity records `4–24`. Dense label sets
+are sampled from the full pinned corpus. Train's split multiplier is `5` and
+the small-control family weight is `3`.
+
+[Generators](../rlm_opsd/tasks/generators.py) provide four seeded wordings for
+each query type. Content, label selection and wording use independent RNGs;
+resolved labels, cutoff, record counts and query variant are recorded in the
+manifest. The independent answer verifiers and decontamination remain in the
+build path. [Usage/contracts](TASK_PIPELINE.md) and
+[verified APIs](VERIFIED_APIS.md) describe the settings and replay inputs.
+
+| Executed check | Result | Evidence |
+|---|---|---|
+| Regression tests before implementation | 35 failed, 50 passed; missing sampling, labels, cutoff, record counts and wording variants exposed | [red](checks/task-diversity/01-red.log) |
+| Initial `make test-m2` | 94 passed, including byte-identical serial/parallel manifests | [task tests](checks/task-diversity/02-task-tests.log) |
+| `make tasks` | 360 generated, independently verified and written; zero drops against the available partial held-out index | [build](checks/task-diversity/04-make-tasks.log) |
+| `make tasks-verify` | All 360 saved contexts/answers verified after reload | [verification](checks/task-diversity/05-tasks-verify.log) |
+| Post-build `make test-m2` | 94 passed | [task tests](checks/task-diversity/06-task-tests-final.log) |
+| Pool/source audit | 300 train and 60 dev tasks; all 77 corpus labels represented in train; 284 historical log files unchanged | [audit](checks/task-diversity/07-pool-audit.json), [script](checks/task-diversity/audit_pool.py) |
+| `make test` | **634 passed**, one upstream deprecation warning; M0 provenance checks also passed; exit 0 | [full suite](checks/task-diversity/08-make-test.log) |
+| Documentation links, source hashes and history preservation | Passed | [artifact audit](checks/task-diversity/09-artifact-audit.json) |
+
+The generated pool contains 72 tasks each for sparse retrieval, multi-hop,
+linear aggregation and quadratic pairs, plus 36 repo QA and 36 small-context
+controls. The [audit](checks/task-diversity/07-pool-audit.json) records actual
+sampled distributions and query variants. The prior pool was preserved at
+the [recorded backup path](checks/task-diversity/03-previous-pool.json).
+
+The source audit found **20 normalized BANKING77 utterances shared between
+the generated train/dev pools**. These upstream partitions are therefore not
+disjoint at the utterance level. This is separate from reserved-benchmark
+decontamination: coverage is still incomplete, and the normal training loader
+still rejects the candidate pool ([audit](checks/task-diversity/07-pool-audit.json)).
+Independent code review found no blocking issues; its minor observation about
+replaying resolved dense knobs was documented: regeneration uses the original
+config/TaskSpec, while manifest knobs are audit output.
+
+**GPU results: not run.** New evidence lives under `docs/checks/task-diversity`;
+historical `docs/logs` files were not edited.
+
+## Single-path OPSD cleanup
+
+Date: 2026-10-09. OPSD now has one objective: exact full-vocabulary JSD with
+the existing local frozen teacher. The alternate sampled-token implementation,
+its configs, targets, documentation and objective-specific tests were removed.
+The objective selector and sampled-loss coefficient are absent from
+`OpsdConfig`; obsolete settings are rejected instead of silently ignored.
+
+The public smoke API is now
+[`training/opsd.py::OpsdTrainer`](../rlm_opsd/training/opsd.py), with
+[`opsd.toml`](../configs/opsd.toml), [`opsd_small.toml`](../configs/opsd_small.toml),
+`make opsd` and `make opsd-check`. Native multi-step training remains
+`make opsd-train`. Its configs, transport helpers, FSDP head and reproducible
+[source patch](../patches/prime-rl-opsd.patch) use the same OPSD names.
+Evaluation imports/settings, SPEC, AGENTS, VERIFIED_APIS and
+[OPSD usage](OPSD.md) were updated.
+
+`frozen_teacher` and its state-restoration, no-gradient, nonfinite-adapter,
+concurrency and checkpoint tests are retained. Teacher invariance after updates
+is tested through `OpsdTrainer`, including the random tiny Qwen CPU graph.
+Smoke evidence records the JSD objective directly; the 27B prerequisite still
+requires matching real small-model evidence and its checkpoint hash.
+
+| Executed check | Result | Evidence |
+|---|---|---|
+| Config regression before removal | Failed because the config reintroduced the objective selector | [red](checks/opsd-single-path/01-config-red.log) |
+| First focused run | 58 passed, one teacher fixture failed because it still installed the old sampled-logprob head | [focused run](checks/opsd-single-path/02-focused.log) |
+| Teacher fixture corrected to the ordinary frozen head; teacher/JSD runner tests | 21 passed | [focused green](checks/opsd-single-path/03-focused-green.log) |
+| `make test` | **601 passed**, one dependency deprecation warning; exit 0, including provenance checks and CPU FSDP | [full result](checks/opsd-single-path/04-make-test.log) |
+| Patch, syntax, current-name/link audit and target dry runs | Passed; all **284** historical `docs/logs` files remain byte-identical | [artifact audit](checks/opsd-single-path/05-artifact-audit.log) |
+
+Independent review found stale remote-teacher guidance in VERIFIED_APIS; it
+was replaced with the current local frozen-teacher/JSD contract. No runtime
+rename or config-consumer issues were found. New execution evidence is under
+`docs/checks/opsd-single-path`; historical logs and their filenames are unchanged.
+**GPU results: not run.**
+
+## Prime-rl OPSD multi-step integration
+
+Date: 2026-10-09. **Implementation and CPU validation complete. GPU results:
+not run.** This entry supersedes earlier statements that OPSD is limited to
+the one-update smoke helper. It does not close the outstanding pretrained or
+GPU milestone criteria.
+
+The requested integration is in prime-rl's native
+`src/prime_rl/trainer/rl/train.py`, against
+`09e11c7527a242b9f150c7c4c71b1b96da66cb75`. OPSD replaces the ordinary loss
+inside the existing repeated optimizer loop. The native async rollout scheduler,
+FSDP2 setup, checkpoint managers, and vLLM adapter synchronization remain in use.
+The ignored dependency checkout is reproduced by the checked-in
+[patch](../patches/prime-rl-opsd.patch) and
+[before/after hash manifest](../patches/prime-rl-opsd.json).
+
+### What changed
+
+- [prime_step.py](../rlm_opsd/training/prime_step.py) installs a chunked JSD head
+  before LoRA/FSDP wrapping. It runs the existing frozen-teacher context first,
+  through the outer wrapped model, restores adapters/RNG, then runs the student
+  through the same model. The existing JSD implementation supplies gradients;
+  native `train.py` owns backward and optimizer/scheduler updates.
+- [prime_data.py](../rlm_opsd/training/prime_data.py) carries exact rollout IDs,
+  teacher IDs, and causal alignment through native transport and batch
+  distribution. OPSD forbids fallback re-tokenization, packing/truncation,
+  reward filters, remote teacher scoring, and SFT. Dummy ranks participate with
+  zero loss; normalization uses the global assistant-token count.
+- [prime_env.py](../rlm_opsd/training/prime_env.py) supplies the decontaminated
+  train split and exact prefixes to verifiers. It reuses the existing RLM
+  harness, metadata-only prompt, and frozen leaf endpoint.
+- [prime_launch.py](../rlm_opsd/training/prime_launch.py),
+  [configuration](../configs/opsd_train.toml), and `make opsd-train` launch native
+  prime-rl with the patched source/config paths inherited by subprocesses.
+  Preflight verifies the existing teacher gate, small-model smoke, immutable
+  cached model revision, train split, and teacher-prefix headroom.
+- Source provenance checks still verify unchanged installed wheels against the
+  pin, while separately allowing only the complete, hash-verified source patch.
+  `optimization_dtype` and `reduce_dtype` were preserved.
+
+### Executed checks
+
+| Check | Observed result | Evidence |
+|---|---|---|
+| Initial data/loss tests | Failed before implementation; passed after implementation | [red](logs/prime-mode-b/01-red.log), [green](logs/prime-mode-b/02-first-green.log) |
+| Initial launcher/config tests | Failed before implementation; passed after implementation | [red](logs/prime-mode-b/03-launch-red.log), [green](logs/prime-mode-b/04-launch-green.log) |
+| Native configuration round-trip | Exposed missing `run_default` path and snapshot renderer lookup; both corrected and covered in the full suite | [failure](logs/prime-mode-b/06-roundtrip-red.log), [full suite](logs/prime-mode-b/13-full-suite.log) |
+| Real single-rank CPU FSDP with BF16 and activation checkpointing | Repeated nonempty/empty/nonempty updates passed | [CPU FSDP](logs/prime-mode-b/08-fsdp-cpu.log) |
+| Unsupported FSDP CPU parameter offload | New rejection test failed before validator fix; passed in the full suite | [red](logs/prime-mode-b/09-offload-red.log), [full suite](logs/prime-mode-b/13-full-suite.log) |
+| Original-token enforcement in native pretokenizer | Passed after adding strict OPSD flag | [green](logs/prime-mode-b/10-token-fallback-green.log) |
+| Real two-rank CPU FSDP | Repeated updates matched independent dense global gradients/weights with unequal token counts and an empty rank | [two-rank check](logs/prime-mode-b/11-two-rank-cpu.log) |
+| `make test` | **604 passed**, 15 deprecation warnings; provenance check passed before pytest | [full suite](logs/prime-mode-b/13-full-suite.log) |
+| `make opsd-train-check` | Exit 2: required `reports/teacher-gate-manual_v1/gate.json` is absent; no model requests sent | [preflight](logs/prime-mode-b/14-launch-check.log) |
+| Artifact checks | Patch hashes/idempotence, Python and shell syntax, new documentation links, whitespace checks, and `make -n opsd-train` passed | [artifact checks](logs/prime-mode-b/15-artifact-check.log) |
+
+The first CPU FSDP attempt exposed an incorrect test fixture: its sharded toy
+backbone returned a `SimpleNamespace`, outside FSDP's supported tensor pytree.
+The fixture now wraps tensor-returning blocks in the same order as native
+`setup_fsdp`; no production guard or assertion was weakened.
+[Original failure](logs/prime-mode-b/05-fsdp-cpu.log).
+Importing the native pretokenizer initially required missing Pillow; its pinned
+upstream-lock version and msgspec are now in `requirements-m6-local.txt`.
+[Import failure](logs/prime-mode-b/07-token-fallback-red.log).
+The original provenance checker rejected the intentional patch; it now verifies
+the overlay separately from original installed bytes.
+[Original failure](logs/prime-mode-b/12-provenance-red.log).
+
+An independent code review identified the renderer round-trip, upstream token
+fallback, unsupported CPU offload, and per-microbatch JSD logging issues. These
+were corrected before the full suite. Patch reconstruction/idempotence, source
+drift rejection, native config validation, causal alignment, dense-reference
+JSD/gradients, optional token gating, activation checkpointing, and frozen
+teacher invariance are covered by the new tests.
+
+**Not run:** GPU/CUDA/NCCL training, vLLM rollout/weight-sync execution,
+pretrained small-model or 27B updates, GPU checkpoint/resume, and memory or
+throughput measurements. No gate thresholds were supplied or fabricated. See
+[OPSD_TRAIN.md](OPSD_TRAIN.md) for server commands and prerequisites.
+
 ## M0 — setup code prepared; server execution deferred
 
 Date: 2026-10-09 UTC. Scope: M0 only.
@@ -91,7 +254,7 @@ The script installs into `.venv-server`, retains the upstream runtime versions w
 
 ### Decisions and remaining work
 
-The latest upstream APIs do not match this spec, so historical prime-rl/verifiers pins preserve the required adapter/loss surface. RLM's training adapter still needs later project-specific finish-protocol, metadata, prompt, frozen-subcall, and budget adaptations; these are documented, not built. Native prime-rl teacher scoring and the sampled-token loss were inspected; no teacher-context hook or Mode B loss was implemented. The user explicitly deferred server execution, so there is no pending request for GPU-host credentials and work stops at M0 setup.
+The latest upstream APIs do not match this spec, so historical prime-rl/verifiers pins preserve the required adapter/loss surface. RLM's training adapter still needs later project-specific finish-protocol, metadata, prompt, frozen-subcall, and budget adaptations; these are documented, not built. Native prime-rl teacher scoring and the sampled-token loss were inspected; no teacher-context hook or OPSD loss was implemented. The user explicitly deferred server execution, so there is no pending request for GPU-host credentials and work stops at M0 setup.
 ## M1 — harness complete
 
 Date: 2026-10-09. Scope: SPEC §2 only, following the user's authorization to
@@ -557,7 +720,7 @@ unchanged. No M5–M9 code or make target was implemented. Work stops at M4.
 ## M5 — teacher-gate code prepared; real model gate not run
 
 Date: 2026-10-09. Scope: SPEC §5 teacher gate, plus the user's explicit update
-to SPEC §6 making Mode B primary. **The real-run M5 acceptance criterion remains
+to SPEC §6 making OPSD primary. **The real-run M5 acceptance criterion remains
 unmet.** The user previously deferred server execution in favor of finishing the
 code. The attempted operational `make teacher-gate` stopped before any request:
 no endpoint URLs, unset user-controlled gate/detector thresholds, and incomplete
@@ -595,16 +758,16 @@ untracked in its parent repository; no branch move, commit or push was made.
   regressions preceded the fix: signal the process group once, await reaping
   before a resource-limit error, and preserve initial permission failures.
 
-### User-authorized Mode B change
+### User-authorized OPSD change
 
 [SPEC §6](SPEC.md#6-opsd-training) now selects full-vocabulary masked JSD from
 two in-trainer passes on aligned rollout token IDs. The teacher uses the frozen
-initial base with the adapter contribution disabled; Mode A is optional. There
+initial base with the adapter contribution disabled. There
 is no scoring server/API. Endpoints serve generation only: student rollouts,
 teacher-gate policies and frozen leaf calls. Privileged prefixes still differ,
 while the scored suffix IDs and causal positions must align.
 
-[VERIFIED_APIS](VERIFIED_APIS.md#mode-b-verified-adapter-residual-off-mechanism-in-pinned-prime-rl)
+[VERIFIED_APIS](VERIFIED_APIS.md#opsd-verified-adapter-residual-off-mechanism-in-pinned-prime-rl)
 records exact pinned files/symbols and the full-logit config. prime-rl uses custom
 MultiLoRA, with no built-in `disable_adapter()` context. The verified mechanism
 zeros/restores cached scaling tensors in place and preserves token routing.
@@ -668,116 +831,20 @@ overridden, or teacher manual changed on fixture evidence. Existing M0 server
 limitations and M2 held-out coverage gaps persist. No M6–M9 trainer/loss/hook or
 make target was implemented. Work stops at M5 code and the requested §6 update.
 
-## M6 — shared teacher hook and optional Mode A code; pretrained smokes not run
+## M6 — shared frozen-teacher infrastructure
 
-Date: 2026-10-09. User-confirmed scope: **shared hook + optional Mode A; JSD
-stays in M7**. The implementation and local verification are complete. The
-original M6 acceptance requirement for a real small-model smoke followed by
-27B remains **unmet / not run**, under the user's earlier instruction to finish
-the code before running on an A100/H100 server. Both operational attempts
-stopped before generation. No model-performance numbers or fabricated run
-reports are presented.
-
-Final `make test`: **3 M0 checks + 427 pytest tests passed**, including all
-**53 M6 tests**. Fourteen upstream torch JIT deprecations and the existing
-Verifiers deprecation remain visible. No tests were skipped, xfailed or weakened.
-
-### Inputs, implementation and boundaries
-
-Read AGENTS.md and every listed file in order, existing progress/API evidence,
-and the pinned source. Recorded the [M6 implementation plan](superpowers/plans/2026-10-09-m6.md),
-wrote failing tests before production behavior, and obtained an independent
-review. Continued in the existing untracked shared project; no worktree,
-branch move, commit or push. SPEC, task definitions, manual/student prompts,
-27B template and all M0 dependency pins remain unchanged.
-
-- [Aligned samples](../rlm_opsd/training/samples.py): original per-turn token
-  IDs, exact teacher prefix replacement, independent causal positions, current
-  root assistant masks only. Missing/clipped IDs, inconsistent logprobs,
-  changed prefixes and overlength sequences fail. No suffix re-tokenization,
-  answer labels, correctness scoring or duplicated history targets.
-- [Shared teacher hook](../rlm_opsd/training/teacher.py): true dense MultiLoRA
-  computational bypass, frozen base, no teacher gradients, serialized forwards
-  and backward. Restores module flags, RNG, forward methods and cached global
-  routing/scaling tensors in place before checkpoint recomputation. Unsupported
-  adapter types, FSDP and compiled models are rejected.
-- [Optional Mode A](../rlm_opsd/training/mode_a.py): actual pinned native sampled
-  loss with `adv_tau=0`, positive `teacher_tau`, `kl_tau=0`, explicit unclipped
-  bounds, selected-root-token normalization and LoRA-only optimizer. Empty
-  masks do not update. No JSD or token gate was implemented.
-- [Backend](../rlm_opsd/training/backend.py) and [runner](../rlm_opsd/training/runner.py):
-  one dense adapter, one CUDA GPU/process, eager, unpadded per-turn sequences,
-  one task and one update. Uses the actual prime-rl model/LoRA/head/loss APIs
-  through a synchronous project loop. Native async transport has no teacher
-  prefix field; its schema/loop was not modified or claimed integrated.
-- Strict readiness requires a complete current real gate, normal decontaminated
-  train loader, fully cached exact model revision and Linux/CUDA. The 27B stage
-  requires a successful pinned small pretrained smoke plus checkpoint hash.
-  Outputs retain provenance, original token records, update metrics and a native
-  LoRA tensor checkpoint. Failures preserve available artifacts and attempt cleanup.
-- Generation starts from the frozen initial base and new zero-B adapters.
-  Explicit neutral sampling filters/penalties match unrestricted scoring.
-  Processed logprobs, endpoint weights and template identity are operator
-  declarations; they are not remotely attested. No teacher scoring API exists.
-  No post-update rollout/broadcast/resume support is claimed for this smoke.
-- [Small model config](../configs/opsd_mode_a_small.toml) pins Qwen3.5-0.8B at
-  `2fc06364715b967f1860aea9cf38778875588b17`; separate tokenizer/template/gate
-  configs account for its template differing from 27B. Only tokenizer artifacts
-  were downloaded. [27B config](../configs/opsd_mode_a.toml) retains its M3 pin.
-- [Usage](OPSD_MODE_A.md), [exact APIs/formula](VERIFIED_APIS.md#m6-shared-teacher-hook-and-optional-mode-a),
-  `make opsd-a`, `make opsd-a-check`, `make test-m6` are ready for later server
-  validation. Mode A remains optional; Mode B remains the primary design.
-
-### Commands and observed results
-
-Commands ran from `rlm-opsd/`; `pytest` abbreviates `.venv/bin/python -m pytest`.
-Inspection scripts and failed attempts are retained alongside successful logs.
-
-| Command / activity | Observed result | Evidence |
-|---|---|---|
-| Ordered reads/source inspection; baseline `make test` | 3 M0 checks + 374 pytest tests passed | [00 baseline](logs/m6/00-baseline.log) |
-| `uv pip install --dry-run --python .venv/bin/python ...`; inspect upstream lock; install the six CPU additions now in `requirements-m6-local.txt` | Dry run initially considered jaxtyping 0.3.7; corrected to locked 0.3.9 before installation. Torch 2.11.0 and five support packages installed | [01 resolution](logs/m6/01-torch-resolution.log), [02 install](logs/m6/02-torch-install.log) |
-| Torch/full-prime import probe | Torch CPU works; full model/loss import still encounters unavailable torchtitan/wandb. Tests isolate unchanged CPU-capable source files rather than mock the math | [03 import](logs/m6/03-torch-prime-import.log) |
-| `pytest tests/test_training_samples.py -q --tb=short` before/after implementation | 15 missing-feature failures, then 15 passed | [04 red](logs/m6/04-samples-red.log), [05 green](logs/m6/05-samples-green.log) |
-| Fetch primary HF small-model revision/tokenizer metadata; compare pinned templates | Exact small revision and separate template/config confirmed | [06 pin](logs/m6/06-small-model-pin.log) |
-| `pytest tests/test_training_teacher.py -q --tb=short` before hook/loss | Initial 10 fixture setup errors from namespace-package `__file__=None`; resolved package location through installed distribution. Corrected red run: 10 missing-feature failures | [07 initial](logs/m6/07-teacher-red.log), [07 corrected red](logs/m6/07-teacher-red-corrected.log) |
-| Inspect pinned LoRA/loss/model/config signatures, source hashes and local torch APIs | Exact source contract verified | [08 source API](logs/m6/08-source-api.log) |
-| Samples + teacher tensor tests after implementation | 25 passed, including actual upstream loss/LoRA, hand-derived gradients, frozen teacher after updates and checkpoint recomputation | [09 green](logs/m6/09-teacher-green.log) |
-| Prepare small tokenizer/template at exact revision | Hashes match; no weights downloaded | [10 tokenizer](logs/m6/10-small-tokenizer.log) |
-| `pytest tests/test_training_runner.py -q --tb=short` before/after runner/CLI | 14 missing-feature failures, then 14 passed; runner fixtures execute actual CPU optimizer work with controlled external boundaries | [11 red](logs/m6/11-runner-red.log), [12 green](logs/m6/12-runner-green.log) |
-| Random tiny Qwen3.5 CPU class/forward probe | Actual HF model graph produced finite logits; explicitly random weights, not a pretrained smoke | [13 probe](logs/m6/13-qwen-cpu-probe.log) |
-| `pytest tests/test_training_runner.py -q -k 'cached_snapshot or backend_adapter' --tb=short` | 2 regressions failed before cache-blob symlink/portable matmul fixes | [14 red](logs/m6/14-runtime-edges-red.log) |
-| Focused clipping/sampling/runtime regressions, then `make test-m6` | 3 review failures / 3 passing controls, then 45 M6 tests passed after fixes | [15 red](logs/m6/15-review-red.log), [16 green](logs/m6/16-review-green.log) |
-| Gate evidence regressions and random Qwen + pinned head integration | Initial 8 failures: fixture config path typo and missing loguru. Fixed test path, installed upstream-locked loguru 0.7.3; corrected run: 6 real evidence-validation failures / 2 passing controls including Qwen update | [17 initial](logs/m6/17-evidence-red-and-qwen.log), [18 install](logs/m6/18-loguru-install.log), [19 corrected red](logs/m6/19-evidence-red-corrected.log) |
-| `make test-m6` after gate-evidence checks | **53 passed** | [20 M6 green](logs/m6/20-m6-green.log) |
-| `make test` | **3 M0 checks + 427 pytest tests passed**, 15 visible upstream deprecation warnings | [21 full suite](logs/m6/21-full-suite.log) |
-| `.venv/bin/python docs/logs/m6/verify_source.py` | Installed/source byte equality, signatures, native model/loss config validation, both pinned tokenizer renders, exact external generation/sampling source hashes | [22 source verification](logs/m6/22-source-verification.log), [script](logs/m6/verify_source.py) |
-| `make opsd-a-check OPSD_CONFIG=configs/opsd_mode_a_small.toml`; `make opsd-a OPSD_CONFIG=configs/opsd_mode_a_small.toml OPSD_OUTPUT=reports/opsd-a-small` | Both **not_run**, exit 2: no passed small gate, cached weights or Linux/CUDA. No requests/output run directory | [23 small check](logs/m6/23-small-opsd-a-check.log), [23 small attempt](logs/m6/23-small-opsd-a.log) |
-| `make opsd-a-check OPSD_CONFIG=configs/opsd_mode_a.toml`; `make opsd-a OPSD_CONFIG=configs/opsd_mode_a.toml OPSD_OUTPUT=reports/opsd-a-27b` | Both **not_run**, exit 2: no passed 27B gate, successful small smoke, cached weights or Linux/CUDA. No requests/output run directory | [23 27B check](logs/m6/23-27b-opsd-a-check.log), [23 27B attempt](logs/m6/23-27b-opsd-a.log) |
-| Independent read-only review and follow-up | Both findings resolved test-first; no new substantive findings | [24 review](logs/m6/24-review.md) |
-| Source/input hashes, documentation links, syntax, whitespace, scope, dependency-pin and output audit; `git diff --check` and status | Final artifact audit | [25 audit](logs/m6/25-artifact-audit.log), [audit script](logs/m6/audit_artifacts.py) |
-
-### Limits and stop
-
-Local CPU tests use torch 2.11.0 and existing Transformers 5.9.0. The pinned
-Linux server stack uses torch 2.11.0+cu128 and Transformers 5.5.0 at its exact
-upstream Git revision. The tiny random Qwen test exercises full attention and
-native head/LoRA/loss, not `get_model` pretrained loading, Qwen hybrid-attention
-patches or actual A100/H100 execution. No GPU, pretrained small/27B update,
-server template/logprob parity, distributed execution or memory fit was tested.
-The M6 full-logit correctness path makes no memory-bounded projection claim.
-
-M0 server limitations, unset M5 gate/detector thresholds and M2 incomplete
-held-out coverage persist. Operational gates and both pretrained smoke reports
-were not created. No thresholds were invented, coverage bypassed or checkpoint
-success manufactured. To close the real M6 acceptance criterion later, execute
-the documented small-then-27B sequence on the prepared server after real gates
-pass. Work stops at the authorized M6 code; M7–M9 remain unimplemented.
+The aligned sample builder, frozen-teacher context, guarded model loader,
+small-model pins and real gate validation remain in use by OPSD. Their original
+CPU evidence is retained in [the historical run log](logs/m6/21-full-suite.log).
+The current JSD trainer and commands are documented in [OPSD.md](OPSD.md).
+Pretrained small/27B GPU smoke results remain **not run**. This section documents
+the retained shared infrastructure; historical logs are unchanged.
 
 ## M7 — primary full-vocabulary JSD and optional detached token gate
 
 Date: 2026-10-09. **M7 implementation is complete and locally verified.**
-Mode B is selectable and is now the default; Mode A remains optional.
+The JSD implementation and its CPU evidence are described below; current names
+are used for artifacts. Linked historical logs retain their original names.
 Final `make test`: **3 M0 checks + 501 pytest tests passed**, including
 **74 M7 tests**. Fourteen upstream torch JIT deprecation warnings and the
 existing Verifiers deprecation remain visible. No tests were skipped, xfailed,
@@ -803,27 +870,26 @@ branch move, commit or push was performed. No dependencies were installed.
   states/head references and recomputes one projection/loss chunk per backward
   iteration. It does not retain every chunk's graph, project whole sequences,
   copy the full head to FP32, or approximate the vocabulary with top-k.
-- [Mode B trainer](../rlm_opsd/training/mode_b.py): actual backbone passes under
+- [OPSD trainer](../rlm_opsd/training/opsd.py): actual backbone passes under
   the existing serialized M6 frozen-teacher context; restores adapter/routing/
   mode/RNG state before backward. Uses the frozen ordinary head and updates
   only LoRA. Tests compare values and gradients against an independent dense
   reference across multi-turn samples and activation checkpointing.
-- [Configuration](../configs/opsd_mode_b.toml),
-  [small model config](../configs/opsd_mode_b_small.toml), factory and runner
-  select Mode B end-to-end. New keys: fixed `jsd_beta=0.5`,
+- [Configuration](../configs/opsd.toml),
+  [small model config](../configs/opsd_small.toml), factory and runner
+  select OPSD end-to-end. New keys: fixed `jsd_beta=0.5`,
   `jsd_chunk_size=64`, `token_gate=false`, positive finite `token_gate_k=1.0`.
-  `make opsd-b`, `make opsd-b-check`, `make test-m7` are available. The direct
-  training CLI defaults to Mode B; Mode A targets retain explicit A configs.
-- Smoke reports include mode and objective identity. The 27B Mode B stage
-  requires real small Mode B evidence with matching beta, temperature and gate
-  settings, plus its checkpoint hash. Mode A is not a prerequisite. Existing
+  `make opsd`, `make opsd-check`, `make test-m7` are available. The direct
+  training CLI defaults to the 27B OPSD configuration.
+- Smoke reports include objective identity. The 27B OPSD stage
+  requires real small OPSD evidence with matching beta, temperature and gate
+  settings, plus its checkpoint hash. Existing
   gates, complete decontamination, cached exact weights and CUDA checks remain
   mandatory; no test override is exposed.
-- [Usage](OPSD_MODE_B.md) and [verified APIs](VERIFIED_APIS.md#m7-primary-full-vocabulary-jsd-and-optional-token-gate)
+- [Usage](OPSD.md) and [verified APIs](VERIFIED_APIS.md#m7-primary-full-vocabulary-jsd-and-optional-token-gate)
   record exact interfaces, config keys, mathematical formula and runtime limits.
   SPEC, prompts/manual, tokenizer/model pins, operational thresholds and task
-  data were preserved. The obsolete M6 test rejecting mode B now rejects
-  unknown mode C; new tests prove valid B selection and existing A behavior.
+  data were preserved.
 
 ### Commands and results
 
@@ -837,16 +903,16 @@ performance results.
 | Python `inspect`/hash/source inspection of installed torch autograd and pinned prime-rl head boundary | Signatures/source verified before custom autograd implementation | [01 source API](logs/m7/01-source-api.log) |
 | `pytest tests/test_training_jsd.py -q --tb=short`, dense stage | 22 missing-feature failures, then 22 passed | [02 red](logs/m7/02-jsd-red.log), [03 green](logs/m7/03-jsd-green.log) |
 | Same file, `-k 'chunk or low_precision_projection'`, then whole file | 17 missing-feature failures, then 39 passed. Includes independent dense gradients, finite differences, BF16/FP16, tail-vocabulary sensitivity, bounded projection and saved-tensor observations | [04 red](logs/m7/04-chunk-red.log), [05 green](logs/m7/05-chunk-green.log) |
-| `pytest tests/test_training_mode_b.py -q --tb=short`, then JSD + Mode B files | 16 missing-feature failures, then 55 passed, including actual MultiLoRA and random tiny Qwen3.5 full-attention update | [06 red](logs/m7/06-mode-b-red.log), [07 green](logs/m7/07-mode-b-green.log) |
-| `pytest tests/test_training_mode_b_runner.py -q --tb=short`, then `pytest tests/test_training_*.py -q --tb=short` | 13 missing-feature failures, then all 121 M6/M7 training tests passed | [08 red](logs/m7/08-runner-red.log), [09 green](logs/m7/09-training-green.log) |
+| JSD trainer tests, then combined numerical/model tests | 16 missing-feature failures, then 55 passed, including actual MultiLoRA and random tiny Qwen3.5 full-attention update | [06 red](logs/m7/06-mode-b-red.log), [07 green](logs/m7/07-mode-b-green.log) |
+| Smoke runner tests, then combined training tests | 13 missing-feature failures, then all 121 M6/M7 training tests passed | [08 red](logs/m7/08-runner-red.log), [09 green](logs/m7/09-training-green.log) |
 | First `make test` before review regressions were collected | 3 M0 checks + 495 pytest tests passed; superseded by final suite | [10 regression](logs/m7/10-full-suite.log) |
 | Independent review; targeted Python overflow-stage reproduction | Finite logits/settings can overflow normalization before JSD multiplication; dense/chunked APIs previously returned NaN | [11 investigation](logs/m7/11-overflow-investigation.log), [19 review](logs/m7/19-review.md) |
 | `pytest tests/test_training_jsd.py -q -k normalization_overflow --tb=short`; then `make test-m7` | 4 regression failures before normalized-logprob checks; then 72 M7 tests passed | [12 red](logs/m7/12-overflow-red.log), [13 green](logs/m7/13-m7-green.log) |
 | `pytest tests/test_training_jsd.py -q -k unrepresentable_scalars --tb=short`; then `make test-m7` | 2 regression failures before working-precision scalar checks; then **74 passed** | [14 red](logs/m7/14-scalar-red.log), [15 final M7](logs/m7/15-m7-final.log) |
 | `.venv/bin/python docs/logs/m7/verify_source.py` | Pinned/installed byte equality, torch/project signatures, both B configs and hand-derived binary-distribution value/gradient verified | [16 source verification](logs/m7/16-source-verification.log), [script](logs/m7/verify_source.py) |
 | Final `make test` after all fixes | **3 M0 checks + 501 pytest tests passed**, 15 visible upstream warnings | [17 final suite](logs/m7/17-full-suite-final.log) |
-| `make opsd-b-check OPSD_B_CONFIG=configs/opsd_mode_b_small.toml`; `make opsd-b OPSD_B_CONFIG=configs/opsd_mode_b_small.toml OPSD_B_OUTPUT=reports/opsd-b-small` | Both **not_run**, exit 2: missing real small gate, cached weights and Linux/CUDA; no requests or run directory | [18 small check](logs/m7/18-small-opsd-b-check.log), [18 small attempt](logs/m7/18-small-opsd-b.log) |
-| `make opsd-b-check OPSD_B_CONFIG=configs/opsd_mode_b.toml`; `make opsd-b OPSD_B_CONFIG=configs/opsd_mode_b.toml OPSD_B_OUTPUT=reports/opsd-b-27b` | Both **not_run**, exit 2: missing real 27B gate, small B smoke, cached weights and Linux/CUDA; no requests or run directory | [18 27B check](logs/m7/18-27b-opsd-b-check.log), [18 27B attempt](logs/m7/18-27b-opsd-b.log) |
+| Small-model smoke preflight and attempted run | Both **not_run**, exit 2: missing real small gate, cached weights and Linux/CUDA; no requests or run directory | [18 small check](logs/m7/18-small-opsd-b-check.log), [18 small attempt](logs/m7/18-small-opsd-b.log) |
+| 27B smoke preflight and attempted run | Both **not_run**, exit 2: missing real 27B gate, small OPSD smoke, cached weights and Linux/CUDA; no requests or run directory | [18 27B check](logs/m7/18-27b-opsd-b-check.log), [18 27B attempt](logs/m7/18-27b-opsd-b.log) |
 | Python immutable-input/source hashes, syntax/whitespace, relative links, scope and output audit; `git diff --check`/status | Final artifact verification | [20 audit](logs/m7/20-artifact-audit.log), [audit script](logs/m7/audit_artifacts.py) |
 
 ### Limits and stop
@@ -865,7 +931,7 @@ cover full attention with Transformers 5.9.0; pinned server loading/hybrid
 attention and A100/H100 execution remain unverified. Existing M0/M2/M5 runtime,
 coverage and gate limitations persist. No teacher scoring API was introduced.
 
-**Not run:** real pretrained small/27B Mode B updates, gate-on/off behavior
+**Not run:** real pretrained small/27B OPSD updates, gate-on/off behavior
 comparison on the fixed dev split, peak GPU memory, monitoring/exit or GRPO.
 No pretrained smoke report was created or fixture relabelled as real evidence.
 M7's implemented/tested/config-selectable criterion is met; predeployment server

@@ -59,9 +59,9 @@ rlm_opsd/
   prompts/     # builders for x (student) and y* (teacher), token alignment
   tasks/       # generators, manifest, held-out loaders, decontamination
   detectors/   # behavior detectors, token-category KL, reports
-  training/    # prime-rl configs, teacher-context hook, losses (Mode A, Mode B, gate)
+  training/    # prime-rl configs, frozen-teacher context, full-vocabulary JSD and token gate
   eval/        # teacher gate, three-way comparison, retention, exit check
-configs/       # model.yaml, harness.yaml, tasks.yaml, gate.yaml, opsd_mode_a.toml, opsd_mode_b.toml, exit.yaml, grpo.toml
+configs/       # harness.yaml, tasks.yaml, gate.yaml, opsd.toml, opsd_small.toml, opsd_train.toml, exit.yaml
 prompts/       # student_system.md, teacher_manual.md (source of truth, versioned)
 docs/          # SPEC, TASKS, DETECTORS, VERIFIED_APIS, PROGRESS
 tests/
@@ -79,11 +79,16 @@ Each milestone ends with passing tests and an entry in `docs/PROGRESS.md` coveri
 | M3 | Prompts (SPEC §3) | x and y\* builders work; the token alignment test passes; a test confirms no answers appear in y\*. |
 | M4 | Detectors (DETECTORS.md) | Every detector passes on hand-labeled fixture trajectories. |
 | M5 | Teacher gate (SPEC §5) | `make teacher-gate` produces a report from real runs. |
-| M6 | OPSD Mode A (SPEC §6.3) | The teacher-context hook is in place and a smoke run completes, first on a small model from the same family, then on the 27B. |
-| M7 | OPSD Mode B (SPEC §6.4–6.5) | Full-vocabulary JSD loss and the optional token gate are implemented, tested, and selectable by config. |
+| M6 | OPSD frozen teacher and smoke (SPEC §6.1–6.3) | The teacher-context hook is in place and a JSD smoke run completes, first on a small model from the same family, then on the 27B. |
+| M7 | OPSD (SPEC §6.3–6.4) | Full-vocabulary JSD loss and the optional token gate are implemented, tested, and selectable by config. |
 | M8 | OPSD monitoring and exit (SPEC §7–8) | `make eval-behavior` reports behavior/KL; `make exit-check` compares student behavior to teacher-as-policy and retention to base, using real runs and user-set tolerances. No GRPO-pool readiness in M8. |
 | M9 | Pre-GRPO readiness and handoff (SPEC §9) | Before any GRPO step, report GRPO-pool pass@k/entropy and check the user-set mixed pass/fail fraction. Then the GRPO config loads the OPSD checkpoint and runs a smoke step. |
 
 ## Make targets
 
-`make test`, `make tasks`, `make teacher-gate`, `make opsd-a`, `make opsd-b`, `make eval-behavior`, `make exit-check`, `make grpo-smoke`.
+`make test`, `make tasks`, `make teacher-gate`, `make opsd`, `make opsd-check`, `make eval-behavior`, `make exit-check`, `make grpo-smoke`.
+
+Multi-step OPSD: `make opsd-train`, with CPU-only preflight
+`make opsd-train-check`; see `docs/OPSD_TRAIN.md`. Upstream edits are preserved
+in `patches/prime-rl-opsd.patch` against the existing pin. `make test` verifies
+the patch separately from the unchanged installed distribution's provenance.

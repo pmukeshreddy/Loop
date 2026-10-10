@@ -1,0 +1,59 @@
+............F..............................................              [100%]
+=================================== FAILURES ===================================
+________ test_random_tiny_qwen35_graph_with_pinned_output_head_and_lora ________
+
+prime_api = namespace(base=<module 'prime_rl.trainer.models.layers.lora.base' from '/Users/mukeshreddy/Desktop/Refine deepswe/rlm-...shreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/prime_rl/trainer/models/layers/lm_head.py'>)
+
+    def test_random_tiny_qwen35_graph_with_pinned_output_head_and_lora(prime_api):
+        """Real model classes, random tiny weights; NOT either pretrained smoke."""
+        from transformers import Qwen3_5Config,Qwen3_5ForConditionalGeneration
+        from rlm_opsd.training.teacher import teacher_logits
+        from rlm_opsd.training.opsd import OpsdTrainer
+        torch.manual_seed(23)
+        cfg=Qwen3_5Config(text_config=dict(vocab_size=16,hidden_size=16,intermediate_size=32,
+            num_hidden_layers=1,num_attention_heads=2,num_key_value_heads=1,head_dim=8,
+            layer_types=['full_attention'],use_cache=False,rope_parameters={'rope_type':'default',
+                'rope_theta':10000.0,'partial_rotary_factor':1.0,'mrope_section':[1,1,2]}),
+            vision_config=dict(depth=1,hidden_size=16,intermediate_size=32,num_heads=2,
+                               out_hidden_size=16,num_position_embeddings=16))
+        cfg._attn_implementation='eager'
+        model=Qwen3_5ForConditionalGeneration(cfg)
+        prime_api.lm_head.inject_prime_lm_head(model,chunk_size=None)
+        attention=model.model.language_model.layers[0].self_attn
+        base=attention.q_proj
+        attention.q_proj=prime_api.MultiLoRALinear(base,rank=2,n_adapters=1,alpha=4,
+                                                 dropout=0.0,use_grouped_mm=False)
+        for p in model.parameters():p.requires_grad_(False)
+        for p in [*attention.q_proj.lora_A,*attention.q_proj.lora_B]:p.requires_grad_(True)
+        sample=build()[0];teacher_before=teacher_logits(model,sample,forward,api=prime_api)
+>       trainer=OpsdTrainer(model,api=prime_api,learning_rate=0.01)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_training_teacher.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+rlm_opsd/training/opsd.py:50: in __init__
+    _head_weight(model)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+model = Qwen3_5ForConditionalGeneration(
+  (model): Qwen3_5Model(
+    (visual): Qwen3_5VisionModel(
+      (patch_embed): Qwen3... Qwen3_5TextRotaryEmbedding()
+    )
+  )
+  (lm_head): VanillaOutputLinear(in_features=16, out_features=16, bias=False)
+)
+
+    def _head_weight(model):
+        head = getattr(model, 'lm_head', None)
+        if (type(head) is not nn.Linear or head.bias is not None
+                or 'forward' in head.__dict__ or head.weight.requires_grad):
+>           raise ValueError('OPSD requires a frozen ordinary linear head without bias')
+E           ValueError: OPSD requires a frozen ordinary linear head without bias
+
+rlm_opsd/training/opsd.py:28: ValueError
+----------------------------- Captured stdout call -----------------------------
+[2m23:43:19[0m [1m   INFO[0m [1m[22mInjecting vanilla LM head[0m[0m
+=========================== short test summary info ============================
+FAILED tests/test_training_teacher.py::test_random_tiny_qwen35_graph_with_pinned_output_head_and_lora
+1 failed, 58 passed in 11.85s

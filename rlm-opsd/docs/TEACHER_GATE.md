@@ -5,7 +5,7 @@ The gate compares the pinned initial model generating with x (`before`) and y*
 settings, task order and per-task seed. Leaf requests use a separate client to
 the frozen initial model; it can share the generation endpoint with the root.
 These are generation requests, not teacher scoring for OPSD. The revised
-[SPEC §6](SPEC.md#6-opsd-training) makes Mode B in-trainer teacher scoring primary.
+[SPEC §6](SPEC.md#6-opsd-training) makes OPSD in-trainer teacher scoring primary.
 
 Run from `rlm-opsd/`:
 

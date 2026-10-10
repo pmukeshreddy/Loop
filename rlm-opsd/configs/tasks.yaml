@@ -11,16 +11,32 @@ families:
   linear_aggregation: 1
   quadratic_pairs: 1
   repo_qa: 1
-  small_context_control: 1
+  small_context_control: 3
 splits:
-  train: 1
+  train: 5
   dev_behavior: 1
 direct_read_max_chars: 16384
-labels: [card_arrival, card_payment_fee_charged, cash_withdrawal_charge, exchange_rate]
+# Knobs are sampled independently for each task from its derived seed.
+# min/max are inclusive; quote ISO dates to keep them strings in YAML.
 family_knobs:
-  sparse_retrieval: {needles: 4}
-  multi_hop: {hops: 3}
-  quadratic_pairs: {users: 24, pair_relation: both_have_any}
+  sparse_retrieval:
+    needles: {min: 1, max: 8}
+  multi_hop:
+    hops: {min: 2, max: 4}
+  linear_aggregation:
+    label_count: {min: 2, max: 8}
+    temporal_filter: {choices: [true, false]}
+    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
+  quadratic_pairs:
+    users: 24
+    label_count: {min: 2, max: 8}
+    temporal_filter: {choices: [true, false]}
+    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
+    pair_relation: {choices: [both_have_any, cover_labels]}
+  repo_qa:
+    files: {min: 8, max: 64}
+  small_context_control:
+    records: {min: 4, max: 24}
 decontamination:
   ngram_size: 5
   overlap_threshold: 0.8

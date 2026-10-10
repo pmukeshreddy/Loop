@@ -11,6 +11,7 @@ import torch
 
 from prime_cpu import prime_api, TinyModel, forward
 from test_training_samples import prefixes, rollout
+from test_training_opsd import BackboneModel
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -18,16 +19,16 @@ ROOT=Path(__file__).resolve().parents[1]
 def config(stage='small'):
     from rlm_opsd.training.config import OpsdConfig
     suffix='_small' if stage=='small' else ''
-    return OpsdConfig.from_toml(ROOT/f'configs/opsd_mode_a{suffix}.toml')
+    return OpsdConfig.from_toml(ROOT/f'configs/opsd{suffix}.toml')
 
 
-def test_configs_keep_mode_a_optional_and_require_valid_pins_and_limits():
+def test_configs_require_valid_pins_and_limits():
     from rlm_opsd.training.config import OpsdConfig
     for stage in ('small','27b'):
         cfg=config(stage)
-        assert cfg.stage==stage and cfg.mode=='a' and cfg.learning_rate==2e-5
+        assert cfg.stage==stage and cfg.learning_rate==2e-5
         for values in ({'revision':'0'*40},{'temperature':0},{'lora_rank':0},
-                       {'mode':'c'},{'teacher_endpoint':'https://example.org'},
+                       {'teacher_endpoint':'https://example.org'},
                        {'modules_to_save':['lm_head']},{'max_steps':2},
                        {'logprobs_mode':'raw_logprobs'}):
             with pytest.raises(ValueError):OpsdConfig.model_validate({**cfg.model_dump(),**values})
@@ -71,11 +72,11 @@ def test_large_smoke_requires_successful_pinned_small_smoke_with_checkpoint(tmp_
 @pytest.mark.parametrize('fault',[None,'missing_tokens','forward','cleanup'])
 def test_smoke_runner_runs_real_cpu_step_and_saves_honest_evidence(tmp_path,monkeypatch,prime_api,fault):
     import rlm_opsd.training.runner as module
-    from rlm_opsd.training.mode_a import ModeATrainer
-    cfg=config();model=TinyModel(prime_api);closed=[]
+    from rlm_opsd.training.opsd import OpsdTrainer, backbone_hidden
+    cfg=config();model=BackboneModel(prime_api);closed=[]
     def broken(*args,**kwargs):raise RuntimeError('injected model failure')
-    trainer=ModeATrainer(model,forward_fn=broken if fault=='forward' else forward,
-                         api=prime_api,loss_api=prime_api.loss,learning_rate=0.01)
+    trainer=OpsdTrainer(model,hidden_fn=broken if fault=='forward' else backbone_hidden,
+                        api=prime_api,learning_rate=0.01)
     def close():
         closed.append(True)
         if fault=='cleanup':raise RuntimeError('injected cleanup failure')
@@ -107,11 +108,11 @@ def test_smoke_runner_runs_real_cpu_step_and_saves_honest_evidence(tmp_path,monk
 def test_cli_and_make_reject_unready_real_run_without_output(tmp_path):
     output=tmp_path/'unrun'
     result=subprocess.run([str(ROOT/'.venv/bin/python'),'-m','rlm_opsd.training','smoke',
-        '--config',str(ROOT/'configs/opsd_mode_a_small.toml'),'--output',str(output)],
+        '--config',str(ROOT/'configs/opsd_small.toml'),'--output',str(output)],
         cwd=ROOT,text=True,capture_output=True)
     assert result.returncode==2 and json.loads(result.stdout)['status']=='not_run'
     assert not output.exists()
-    command=subprocess.run(['make','-n','opsd-a'],cwd=ROOT,text=True,capture_output=True)
+    command=subprocess.run(['make','-n','opsd'],cwd=ROOT,text=True,capture_output=True)
     assert command.returncode==0 and 'rlm_opsd.training smoke' in command.stdout
 
 

@@ -1,8 +1,11 @@
 from collections import Counter
 from concurrent.futures import ProcessPoolExecutor
+import copy
+from datetime import date, timedelta
 import json
 import multiprocessing
 from pathlib import Path
+import random
 import tempfile
 
 from .codec import ENCODINGS
@@ -10,6 +13,37 @@ from .decontam import HeldoutIndex, decontaminate
 from .generators import generate
 from .models import FAMILIES, Task, TaskSpec, canonical, digest
 from .verify import verify_answer
+
+
+def _sample_knobs(settings, seed):
+    """Resolve each knob independently of config order and worker scheduling."""
+    sampled = {}
+    for name, value in settings.items():
+        rng = random.Random(f'{seed}:knob:{name}')
+        if not isinstance(value, dict):
+            sampled[name] = copy.deepcopy(value)
+        elif set(value) == {'choices'}:
+            choices = value['choices']
+            if not isinstance(choices, list) or not choices:
+                raise ValueError(f'knob {name}: choices must be a nonempty list')
+            sampled[name] = copy.deepcopy(rng.choice(choices))
+        elif set(value) == {'min', 'max'}:
+            low, high = value['min'], value['max']
+            if type(low) is int and type(high) is int and low <= high:
+                sampled[name] = rng.randint(low, high)
+            elif isinstance(low, str) and isinstance(high, str):
+                try:
+                    start, end = date.fromisoformat(low), date.fromisoformat(high)
+                    if start > end:
+                        raise ValueError('reversed date range')
+                    sampled[name] = str(start + timedelta(days=rng.randint(0, (end - start).days)))
+                except ValueError as exc:
+                    raise ValueError(f'knob {name}: invalid ISO date range') from exc
+            else:
+                raise ValueError(f'knob {name}: min/max must be ordered integers or ISO dates')
+        else:
+            raise ValueError(f'knob {name}: use min/max or choices')
+    return sampled
 
 
 def plan_specs(config):
@@ -48,8 +82,8 @@ def plan_specs(config):
                         knobs = dict(target_chars=bucket, structure=structure, encoding=encoding,
                                      direct_read_max_chars=config['direct_read_max_chars'])
                         if config.get('labels'):
-                            knobs['labels'] = config['labels']
-                        knobs.update(config.get('family_knobs', {}).get(family, {}))
+                            knobs['labels'] = copy.deepcopy(config['labels'])
+                        knobs.update(_sample_knobs(config.get('family_knobs', {}).get(family, {}), seed))
                         specs.append(TaskSpec(family=family, knobs=knobs, seed=seed, split=split))
     return specs, excluded
 

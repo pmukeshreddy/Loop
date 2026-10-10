@@ -2,7 +2,7 @@
 import torch
 from torch.nn import functional as F
 
-from rlm_opsd.training.mode_b import backbone_hidden, _head_weight, _selected_hidden
+from rlm_opsd.training.opsd import backbone_hidden, _head_weight, _selected_hidden
 from rlm_opsd.training.teacher import FORWARD_LOCK, checked_adapters, frozen_teacher, prime_lora_api
 from .preflight import sha256
 

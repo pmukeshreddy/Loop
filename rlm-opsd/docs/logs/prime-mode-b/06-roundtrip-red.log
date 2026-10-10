@@ -1,0 +1,67 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________ test_shipped_configuration_parses_and_check_never_launches_gpu ________
+
+    def test_shipped_configuration_parses_and_check_never_launches_gpu():
+        from rlm_opsd.training.prime_launch import load_launch_config
+        config, smoke = load_launch_config(ROOT / 'configs/opsd_train.toml')
+        assert config.trainer.opsd and config.max_steps > 1
+        assert config.trainer.model.seq_len > config.orchestrator.seq_len
+        assert smoke.stage == '27b'
+>       assert config.orchestrator.output_dir == config.output_dir / 'run_default'
+E       AssertionError: assert PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/opsd-train-27b') == (PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/opsd-train-27b') / 'run_default')
+E        +  where PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/opsd-train-27b') = OrchestratorConfig(train=TrainConfig(env=[TrainEnvConfig(id='rlm_opsd.training.prime_env', name='rlm-opsd', args={}, e...eed=42, heartbeat=None, use_renderer=True, env_install_prerelease=False, experimental=OrchestratorExperimentalConfig()).output_dir
+E        +    where OrchestratorConfig(train=TrainConfig(env=[TrainEnvConfig(id='rlm_opsd.training.prime_env', name='rlm-opsd', args={}, e...eed=42, heartbeat=None, use_renderer=True, env_install_prerelease=False, experimental=OrchestratorExperimentalConfig()) = RLConfig(trainer=TrainerConfig(model=ModelConfig(name='Qwen/Qwen3.5-27B', trust_remote_code=False, vlm=None, seq_len=1...train_gpus=4, num_infer_gpus=2, num_teacher_gpus=None), slurm=None, dry_run=False, experimental=RLExperimentalConfig()).orchestrator
+E        +  and   PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/opsd-train-27b') = RLConfig(trainer=TrainerConfig(model=ModelConfig(name='Qwen/Qwen3.5-27B', trust_remote_code=False, vlm=None, seq_len=1...train_gpus=4, num_infer_gpus=2, num_teacher_gpus=None), slurm=None, dry_run=False, experimental=RLExperimentalConfig()).output_dir
+
+tests/test_prime_mode_b_launch.py:74: AssertionError
+__________ test_snapshot_preparation_survives_native_config_roundtrip __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x115396360>
+tmp_path = PosixPath('/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-213/test_snapshot_preparation_surv0')
+
+    def test_snapshot_preparation_survives_native_config_roundtrip(monkeypatch, tmp_path):
+        from prime_rl.configs.rl import RLConfig
+        from rlm_opsd.training.prime_launch import load_launch_config, prepare_config
+        from rlm_opsd.training import runner
+        from rlm_opsd.eval import GateConfig
+        from rlm_opsd.harness.config import HarnessConfig
+        import rlm_opsd.tasks.build as tasks
+        from types import SimpleNamespace
+    
+        config, smoke = load_launch_config(ROOT / 'configs/opsd_train.toml')
+        # External evidence and weight cache boundaries only; native configuration stays real.
+        gate = SimpleNamespace(manifest_path=tmp_path / 'manifest.jsonl',
+            harness_config=ROOT / 'configs/harness.yaml', request_timeout_s=300,
+            frozen_endpoint=SimpleNamespace(served_model='frozen-base', base_url='http://localhost:9000/v1', api_key_var=None))
+        monkeypatch.setattr(runner, 'verify_gate', lambda _: (gate, SimpleNamespace(harness_config=HarnessConfig.from_yaml(gate.harness_config))))
+        monkeypatch.setattr(runner, 'verify_small_smoke', lambda _: None)
+        snapshot = tmp_path / smoke.revision
+        monkeypatch.setattr(runner, 'cached_snapshot', lambda _: snapshot)
+        monkeypatch.setattr(tasks, 'load_tasks', lambda *a, **k: iter([{'info': {'query': 'count', 'context': 'abc'}}]))
+        prepared = prepare_config(config, smoke)
+        encoded = prepared.model_dump(mode='json', exclude_none=True)
+>       again = RLConfig.model_validate(encoded)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RLConfig
+E       orchestrator
+E         Value error, orchestrator.use_renderer=True with renderer.name='auto' but '/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-213/test_snapshot_preparation_surv0/fc05daec18b0a78c049392ed2e771dde82bdf654' is not in renderers.base.MODEL_RENDERER_MAP, so it would silently fall back to DefaultRenderer. Pick one: (a) [orchestrator.renderer] name='default' — for fine-tunes / vendored mirrors with custom chat templates (DefaultRenderer calls apply_chat_template); pair with tool_parser=<name> if the env uses tools. (b) [orchestrator.renderer] name=<model-specific renderer> — if '/private/var/folders/dg/q33wrg0s54zgfpb8k02g2mf40000gn/T/pytest-of-mukeshreddy/pytest-213/test_snapshot_preparation_surv0/fc05daec18b0a78c049392ed2e771dde82bdf654' is template-identical to a mapped family (and ideally also add it upstream to renderers.base.MODEL_RENDERER_MAP). (c) orchestrator.use_renderer=false — opt out of the renderer client entirely. [type=value_error, input_value={'train': {'env': [{'id':...lse, 'experimental': {}}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/value_error
+
+tests/test_prime_mode_b_launch.py:102: ValidationError
+=============================== warnings summary ===============================
+tests/test_prime_mode_b_launch.py::test_shipped_configuration_parses_and_check_never_launches_gpu
+tests/test_prime_mode_b_launch.py::test_snapshot_preparation_survives_native_config_roundtrip
+  /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/pydantic/main.py:732: FutureWarning: '[orchestrator.sampling]' is deprecated, use '[orchestrator.train.sampling]' instead. Auto-translating for now, but this will be removed in a future release.
+    return cls.__pydantic_validator__.validate_python(
+
+tests/test_prime_mode_b_launch.py::test_shipped_configuration_parses_and_check_never_launches_gpu
+tests/test_prime_mode_b_launch.py::test_snapshot_preparation_survives_native_config_roundtrip
+  /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/pydantic/main.py:732: FutureWarning: 'max_tokens' is deprecated, use 'max_completion_tokens' instead. Auto-translating for now, but this will be removed in a future release.
+    return cls.__pydantic_validator__.validate_python(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_prime_mode_b_launch.py::test_shipped_configuration_parses_and_check_never_launches_gpu
+FAILED tests/test_prime_mode_b_launch.py::test_snapshot_preparation_survives_native_config_roundtrip
+2 failed, 10 deselected, 4 warnings in 3.98s

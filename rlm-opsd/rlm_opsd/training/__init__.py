@@ -1,1 +1,1 @@
-"""M6 local teacher scoring and optional sampled-token OPSD."""
+"""OPSD full-vocabulary JSD training with a local frozen teacher."""

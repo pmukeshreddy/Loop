@@ -1,8 +1,8 @@
 """Test-only isolation of byte-identical pinned CPU-capable prime-rl modules.
 
 The full package imports torchtitan/CUDA at models/__init__.py. These tests load
-the unchanged base/linear/loss files while bypassing those package initializers.
-No replacement LoRA forward or loss formula is supplied by this helper.
+the unchanged base/linear/head files while bypassing those package initializers.
+No replacement LoRA forward is supplied by this helper.
 """
 import hashlib
 import importlib.util
@@ -24,12 +24,6 @@ def prime_api(monkeypatch):
         module=ModuleType('prime_rl.'+name)
         module.__path__=[str(directory/name.replace('.','/'))]
         monkeypatch.setitem(sys.modules,module.__name__,module)
-    # default_loss_fn never calls import_object; avoid its unrelated wandb import.
-    utilities=ModuleType('prime_rl.utils.utils')
-    def unexpected_import(*args):raise AssertionError('custom-loss imports are outside this fixture')
-    utilities.import_object=unexpected_import
-    monkeypatch.setitem(sys.modules,utilities.__name__,utilities)
-
     def load(relative):
         path=directory/(relative.replace('.','/')+'.py')
         assert hashlib.sha256(path.read_bytes()).digest()==hashlib.sha256(
@@ -43,11 +37,10 @@ def prime_api(monkeypatch):
 
     base=load('trainer.models.layers.lora.base')
     linear=load('trainer.models.layers.lora.multi_linear')
-    loss=load('trainer.rl.loss')
     lm_head=load('trainer.models.layers.lm_head')
     base.set_lora_num_tokens(torch.tensor([4],dtype=torch.int32))
     base.set_multilora_scaling(torch.tensor([2.0]))
-    return SimpleNamespace(base=base,MultiLoRALinear=linear.MultiLoRALinear,loss=loss,lm_head=lm_head)
+    return SimpleNamespace(base=base,MultiLoRALinear=linear.MultiLoRALinear,lm_head=lm_head)
 
 
 class TinyModel(nn.Module):

@@ -1,4 +1,4 @@
-"""Primary in-trainer OPSD with exact, chunk-projected full-vocabulary JSD."""
+"""OPSD correctness trainer with exact, chunked full-vocabulary JSD."""
 import math
 
 import torch
@@ -25,7 +25,7 @@ def _head_weight(model):
     head = getattr(model, 'lm_head', None)
     if (type(head) is not nn.Linear or head.bias is not None
             or 'forward' in head.__dict__ or head.weight.requires_grad):
-        raise ValueError('Mode B requires a frozen ordinary linear head without bias')
+        raise ValueError('OPSD requires a frozen ordinary linear head without bias')
     config = getattr(model, 'config', None)
     for cfg in (config, getattr(config, 'text_config', None)):
         if getattr(cfg, 'final_logit_softcapping', None):
@@ -35,13 +35,13 @@ def _head_weight(model):
 
 def _selected_hidden(hidden, positions):
     if hidden.ndim != 3 or hidden.shape[0] != 1:
-        raise ValueError('Mode B requires one unpadded sequence')
+        raise ValueError('OPSD requires one unpadded sequence')
     if any(type(p) is not int or p < 0 or p >= hidden.shape[1] for p in positions):
         raise ValueError('causal hidden position out of bounds')
     return hidden[0, list(positions), :]
 
 
-class ModeBTrainer:
+class OpsdTrainer:
     def __init__(self, model, *, hidden_fn=backbone_hidden, api=None, learning_rate=2e-5,
                  max_grad_norm=1.0, chunk_size=64, token_gate=False, gate_k=1.0):
         self.model, self.hidden_fn = model, hidden_fn
@@ -92,7 +92,7 @@ class ModeBTrainer:
                         chunk_size=self.chunk_size, temperature=sample.temperature,
                         token_gate=self.token_gate, gate_k=self.gate_k) * (targets.numel() / count)
                     if not torch.isfinite(loss):
-                        raise ValueError('nonfinite Mode B loss')
+                        raise ValueError('nonfinite OPSD loss')
                     loss.backward()
                     loss_value += float(loss.detach())
                 norm = torch.nn.utils.clip_grad_norm_(self.parameters, self.max_grad_norm, error_if_nonfinite=True)

@@ -18,6 +18,64 @@ TAGS = {
 }
 
 
+QUERY_WORDINGS = {
+    'sparse_retrieval': (
+        'Find the current values associated with these exact parcel IDs: {keys}.',
+        'Look up each parcel ID in {keys} and report its current value. Match IDs exactly.',
+        'Retrieve the current value for every parcel in {keys}, using exact ID matches.',
+        'For the parcel IDs {keys}, extract their current values; ignore IDs that only partially match.',
+    ),
+    'multi_hop': (
+        'Starting at {start}, follow exactly {hops} target links. What is the terminal value?',
+        'Traverse {hops} target links from {start} and return the terminal value at the final node.',
+        'What terminal value do you reach after exactly {hops} target-link steps beginning at {start}?',
+        'Begin with node {start}. Take exactly {hops} target links, then report that node’s terminal value.',
+    ),
+    'count': (
+        'How many entries{date_clause} express the intent {label}?',
+        'Count the entries{date_clause} whose intent is {label}.',
+        'Give the number of entries{date_clause} classified as {label}.',
+        'Among entries{date_clause}, what is the total count for intent {label}?',
+    ),
+    'most_frequent': (
+        'Which intent is most frequent among entries{date_clause}?',
+        'Find the intent expressed by the largest number of entries{date_clause}.',
+        'Among entries{date_clause}, report the intent with the highest count.',
+        'Classify the entries{date_clause} and name their most common intent.',
+    ),
+    'pairs': (
+        'Using entries{date_clause}, list all distinct user pairs where {condition}: {labels}.',
+        'Find every distinct pair of users for which {condition}: {labels}. Use entries{date_clause}.',
+        'Consider entries{date_clause}. Which distinct user pairs satisfy this condition: {condition}: {labels}?',
+        'From entries{date_clause}, enumerate the distinct pairs of users such that {condition}: {labels}.',
+    ),
+    'small_context_control': (
+        'What is the sum of the quantities for {group}?',
+        'Add all quantities belonging to {group} and return the total.',
+        'Report the total of the quantity values in {group}.',
+        'For group {group}, calculate the sum of its quantities.',
+    ),
+    'definition': (
+        'Which file defines function {symbol}?',
+        'Find the file containing the definition of function {symbol}.',
+        'Return the path of the file where function {symbol} is defined.',
+        'Locate the definition of function {symbol} and report its file path.',
+    ),
+    'callers': (
+        'List file:function for every function that calls {symbol}.',
+        'Which functions call {symbol}? Return a list of file:function entries.',
+        'Find all functions invoking {symbol} and list each as file:function.',
+        'Return every caller of {symbol} as a list of file:function entries.',
+    ),
+    'config': (
+        'What is the value assigned to {symbol}?',
+        'Look up the assignment to {symbol} and return its value.',
+        'Find the configured value of {symbol}.',
+        'Report the value stored in configuration constant {symbol}.',
+    ),
+}
+
+
 def generate(spec, corpus=None):
     if spec.split not in ('train', 'dev_behavior'):
         raise ValueError('heldout tasks must be imported, never generated as training tasks')
@@ -35,6 +93,12 @@ def generate(spec, corpus=None):
         raise ValueError('small context must be below the direct-read limit')
     if spec.family == 'repo_qa' and k['structure'] != 'list':
         raise ValueError('repo QA requires list-of-files context')
+    # Rewording a query must not consume the context-generation RNG stream.
+    query_rng = random.Random(f'{spec.seed}:query-wording')
+    def phrase(kind, **params):
+        k['query_variant'] = query_rng.randrange(len(QUERY_WORDINGS[kind]))
+        return QUERY_WORDINGS[kind][k['query_variant']].format(**params)
+
     uid = f'{rng.getrandbits(64):016x}'
     records, answer, refs = [], None, []
     source = 'rlm-opsd synthetic-v1; CC0-1.0'
@@ -45,7 +109,8 @@ def generate(spec, corpus=None):
         records = [dict(kind='fact', key=key, value=value) for key, value in zip(keys, values)]
         records += [dict(kind='fact', key=key + '-old', value=f'{rng.getrandbits(48):012x}') for key in keys]
         k['query_params'] = dict(keys=keys)
-        query = 'Return the current values for these exact parcel IDs, in order: ' + canonical(keys)
+        query = phrase(family, keys=canonical(keys))
+        query += ' Return the value for one ID, or a list of values in ID order for multiple IDs.'
         answer = values[0] if len(values) == 1 else values
     elif family == 'multi_hop':
         nodes = [f'node-{uid}-{i}' for i in range(k['hops'] + 1)]
@@ -54,11 +119,18 @@ def generate(spec, corpus=None):
         records.append(dict(kind='terminal', key=nodes[-1], value=answer))
         records.append(dict(kind='terminal', key=nodes[0], value='decoy'))
         k['query_params'] = dict(start=nodes[0], hops=k['hops'])
-        query = f"Starting at {nodes[0]}, follow exactly {k['hops']} target links. What is the terminal value?"
+        query = phrase(family, start=nodes[0], hops=k['hops'])
     elif family in ('linear_aggregation', 'quadratic_pairs'):
         if corpus is None:
             raise ValueError('classification corpus required')
-        labels = k.get('labels') or sorted(set(corpus.labels_by_text.values()))
+        all_labels = sorted(set(corpus.labels_by_text.values()))
+        if 'label_count' in k:
+            count = k['label_count']
+            if k.get('labels') or type(count) is not int or not 1 <= count <= len(all_labels):
+                raise ValueError('label_count must fit the corpus and cannot be combined with explicit labels')
+            labels = sorted(random.Random(f'{spec.seed}:labels').sample(all_labels, count))
+        else:
+            labels = k.get('labels') or all_labels
         if not set(labels) <= set(corpus.labels_by_text.values()):
             raise ValueError('unknown label in requested label set')
         available = [row for row in corpus.records if row['label'] in labels]
@@ -87,7 +159,7 @@ def generate(spec, corpus=None):
         k['source_fingerprint'] = corpus.fingerprint
         refs = corpus.refs_for(r['text'] for r in records)
         source = f'{corpus.name}@{corpus.revision}; {corpus.license}; generated user IDs/dates'
-        after = '2023-03-31' if k.get('temporal_filter', True) else None
+        after = str(date.fromisoformat(k.get('cutoff_date', '2023-03-31'))) if k.get('temporal_filter', True) else None
         filtered = [(r, label) for r, label in zip(records, annotations) if after is None or r['date'] > after]
         date_clause = f' dated strictly after {after}' if after else ''
         if family == 'linear_aggregation':
@@ -96,11 +168,12 @@ def generate(spec, corpus=None):
             k['query_params'] = dict(operation=operation, label=label, after=after)
             if operation == 'count':
                 answer = sum(category == label for _, category in filtered)
-                query = f'How many entries{date_clause} express the intent {label}?'
+                query = phrase(operation, date_clause=date_clause, label=label)
             elif operation == 'most_frequent':
                 counts = Counter(category for _, category in filtered)
                 answer = sorted(counts, key=lambda category: (-counts[category], category))[0] if counts else 'NONE'
-                query = f'Which intent is most frequent among entries{date_clause}? Break ties lexicographically; return NONE if empty.'
+                query = phrase(operation, date_clause=date_clause)
+                query += ' Break ties lexicographically; return NONE if empty.'
             else:
                 raise ValueError('invalid aggregation query type')
             query += ' Allowed intents: ' + ', '.join(labels) + '.'
@@ -120,14 +193,17 @@ def generate(spec, corpus=None):
             else:
                 raise ValueError('invalid pair relation')
             answer = [f'({a}, {b})' for a, b in pairs]
-            query = f'Using entries{date_clause}, list all distinct user pairs where {condition}: {canonical(selected)}. '
-            query += 'Return each as (smaller ID, larger ID), sorted numerically; do not repeat a pair.'
+            query = phrase('pairs', date_clause=date_clause, condition=condition, labels=canonical(selected))
+            query += ' Return each as (smaller ID, larger ID), sorted numerically; do not repeat a pair.'
     elif family == 'small_context_control':
         group = f'group-{uid}'
-        records = [dict(kind='quantity', group=group if i % 2 == 0 else 'other', value=rng.randrange(1, 100)) for i in range(8)]
+        count = k.get('records', 8)
+        if type(count) is not int or count < 1:
+            raise ValueError('records must be a positive integer')
+        records = [dict(kind='quantity', group=group if i % 2 == 0 else 'other', value=rng.randrange(1, 100)) for i in range(count)]
         answer = sum(r['value'] for r in records[::2])
         k['query_params'] = dict(group=group)
-        query = f'What is the sum of the quantities for {group}?'
+        query = phrase(family, group=group)
     else:
         symbol = f'compute_{uid}'
         code_files = {
@@ -137,14 +213,15 @@ def generate(spec, corpus=None):
         }
         operation = k.get('repo_query_type', rng.choice(['definition', 'callers', 'config']))
         if operation == 'definition':
-            query, answer = f'Which file defines function {symbol}?', 'core.py'
+            answer = 'core.py'
         elif operation == 'callers':
-            query, answer = f'List file:function for every function that calls {symbol}.', ['app.py:run']
+            answer = ['app.py:run']
         elif operation == 'config':
             symbol = f'LIMIT_{uid.upper()}'
-            query, answer = f'What is the value assigned to {symbol}?', code_files['settings.py'].split('=')[1].strip()
+            answer = code_files['settings.py'].split('=')[1].strip()
         else:
             raise ValueError('invalid repo query type')
+        query = phrase(operation, symbol=symbol)
         k['query_params'] = dict(operation=operation, symbol=symbol)
         file_count = k.get('files', 16)
         if file_count < 3:

@@ -1,0 +1,23 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_primary_mode_b_configs_accept_gate_switch_and_reject_invalid_objectives _
+
+    def test_primary_mode_b_configs_accept_gate_switch_and_reject_invalid_objectives():
+        from rlm_opsd.training.config import OpsdConfig
+        for stage in ('small','27b'):
+            cfg=config(stage)
+            assert cfg.mode=='b' and cfg.jsd_beta==.5 and not cfg.token_gate
+            assert cfg.jsd_chunk_size>0
+            values=cfg.model_dump();values.pop('mode')
+            values.pop('teacher_tau')
+>           assert 'mode' not in OpsdConfig.model_validate(values).model_dump()
+E           AssertionError: assert 'mode' not in {'base_model': 'Qwen/Qwen3.5-0.8B', 'gate_config': PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/confi...xPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/teacher-gate-small-manual_v1'), 'jsd_beta': 0.5, ...}
+E            +  where {'base_model': 'Qwen/Qwen3.5-0.8B', 'gate_config': PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/confi...xPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/teacher-gate-small-manual_v1'), 'jsd_beta': 0.5, ...} = model_dump()
+E            +    where model_dump = OpsdConfig(mode='b', stage='small', base_model='Qwen/Qwen3.5-0.8B', revision='2fc06364715b967f1860aea9cf38778875588b17... max_grad_norm=1.0, lora_rank=16, lora_alpha=32.0, jsd_beta=0.5, jsd_chunk_size=64, token_gate=False, token_gate_k=1.0).model_dump
+E            +      where OpsdConfig(mode='b', stage='small', base_model='Qwen/Qwen3.5-0.8B', revision='2fc06364715b967f1860aea9cf38778875588b17... max_grad_norm=1.0, lora_rank=16, lora_alpha=32.0, jsd_beta=0.5, jsd_chunk_size=64, token_gate=False, token_gate_k=1.0) = model_validate({'base_model': 'Qwen/Qwen3.5-0.8B', 'gate_config': PosixPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/confi...xPath('/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/reports/teacher-gate-small-manual_v1'), 'jsd_beta': 0.5, ...})
+E            +        where model_validate = <class 'rlm_opsd.training.config.OpsdConfig'>.model_validate
+
+tests/test_training_mode_b_runner.py:34: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_training_mode_b_runner.py::test_primary_mode_b_configs_accept_gate_switch_and_reject_invalid_objectives
+1 failed in 2.54s

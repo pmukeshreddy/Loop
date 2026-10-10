@@ -17,7 +17,7 @@ def config_file(tmp_path):
     retention=tmp_path/'retention.jsonl'
     retention.write_text(json.dumps(dict(id='general-1',prompt='What is two plus two?',answer='4',answer_type='exact'))+'\n')
     adapter=tmp_path/'adapter.pt';adapter.write_bytes(b'fixture checkpoint placeholder')
-    data=dict(training_config=str(ROOT/'configs/opsd_mode_b.toml'),checkpoint=str(adapter),
+    data=dict(training_config=str(ROOT/'configs/opsd.toml'),checkpoint=str(adapter),
         checkpoint_sha256=sha256(adapter),checkpoint_step=10,eval_interval=10,run_label='HTTP CPU FIXTURE',
         student_endpoint=dict(base_url='http://127.0.0.1:1/v1',served_model='fixture-student',api_key_var=None),
         endpoint_checkpoint_sha256=sha256(adapter),review_per_family=1,kl_top_k=3,temperature=1.,seed=417)
@@ -57,7 +57,7 @@ async def http_run(tmp_path,monkeypatch,prime,*,fault=None):
     from rlm_opsd.eval import prepare_gate
     from rlm_opsd.prompts import ChatRenderer
     from rlm_opsd.eval.preflight import sha256
-    from test_training_mode_b import BackboneModel
+    from test_training_opsd import BackboneModel
     path,gate_path=config_file(tmp_path);gate=load_config(gate_path);plan=prepare_gate(gate)
     tokenizer=ChatRenderer(plan.prompt_config).tokenizer;template=ChatRenderer(plan.prompt_config).template
     requests=[];attempt=0

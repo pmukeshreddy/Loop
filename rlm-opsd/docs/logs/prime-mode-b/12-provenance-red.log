@@ -1,0 +1,431 @@
+test_imports_and_config_contracts (__main__.M0LocalChecks.test_imports_and_config_contracts) ... /Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/verifiers/v1/types.py:9: DeprecationWarning: 'importlib.abc.Traversable' is deprecated and slated for removal in Python 3.14
+  from importlib.abc import Traversable
+ok
+test_installed_provenance_and_source_bytes (__main__.M0LocalChecks.test_installed_provenance_and_source_bytes) ... diff --git a/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py b/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
+index ce155cf1..09ab7b06 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py
+@@ -929,6 +929,18 @@ class OrchestratorConfig(BaseConfig):
+     # The optimizer configuration (per-run LR for multi-run training)
+     optim: OptimizerConfig = OptimizerConfig()
+ 
++    opsd_mode_b: bool = False
++    opsd_max_seq_len: int | None = Field(default=None, gt=0)
++
++    @model_validator(mode='after')
++    def validate_opsd_mode_b(self):
++        if self.opsd_mode_b:
++            if self.teacher_model or self.teacher_rollout_model or self.use_sft_loss:
++                raise ValueError('Mode B uses local frozen-teacher scoring and student rollouts without SFT')
++            if self.rollouts_per_example != 1 or self.buffer.online_difficulty_filtering or self.filters:
++                raise ValueError('Mode B requires one rollout per task without reward/advantage filters')
++        return self
++
+     # The teacher model configuration (optional)
+     teacher_model: Annotated[
+         TeacherModelConfig | None,
+diff --git a/packages/prime-rl-configs/src/prime_rl/configs/rl.py b/packages/prime-rl-configs/src/prime_rl/configs/rl.py
+index b55d1314..e319930c 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/rl.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/rl.py
+@@ -983,4 +983,17 @@ class RLConfig(BaseConfig):
+                     self.slurm.template_path = templates_dir / "multi_node_rl.sbatch.j2"
+         return self
+ 
++    @model_validator(mode='after')
++    def validate_opsd_integration(self):
++        if (self.trainer.opsd is not None) != self.orchestrator.opsd_mode_b:
++            raise ValueError('Mode B must be enabled on both trainer and orchestrator')
++        if self.trainer.opsd is not None:
++            if self.teacher_inference or self.orchestrator.teacher_model or self.orchestrator.teacher_rollout_model:
++                raise ValueError('Mode B forbids remote teacher scoring or teacher-generated rollouts')
++            self.orchestrator.opsd_max_seq_len = self.trainer.model.seq_len
++            for env in self.orchestrator.train.env:
++                if env.id != 'rlm_opsd.training.prime_env' or env.args.get('score_rollouts', False):
++                    raise ValueError('Mode B requires the unscored RLM OPSD environment')
++        return self
++
+     ### Warnings
+diff --git a/packages/prime-rl-configs/src/prime_rl/configs/trainer.py b/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
+index a076d1e2..fcf48e25 100644
+--- a/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
++++ b/packages/prime-rl-configs/src/prime_rl/configs/trainer.py
+@@ -771,6 +771,13 @@ class TrainerExperimentalConfig(BaseConfig):
+     """Experimental features for the trainer."""
+ 
+ 
++class OpsdModeBConfig(BaseConfig):
++    chunk_size: int = Field(default=64, gt=0)
++    temperature: float = Field(default=1., gt=0, allow_inf_nan=False)
++    token_gate: bool = False
++    gate_k: float = Field(default=1., gt=0, allow_inf_nan=False)
++
++
+ class TrainerConfig(BaseConfig):
+     """Configures the RL trainer"""
+ 
+@@ -785,6 +792,26 @@ class TrainerConfig(BaseConfig):
+ 
+     # The loss configuration
+     loss: LossConfig = DefaultLossConfig()
++    opsd: OpsdModeBConfig | None = None
++
++    @model_validator(mode='after')
++    def validate_opsd_mode_b(self):
++        if self.opsd is None:
++            return self
++        if self.model.lora is None or self.model.lora.modules_to_save:
++            raise ValueError('Mode B requires LoRA with all base weights frozen')
++        if self.max_concurrent_runs != 1 or self.model.cp != 1 or self.model.ep != 1:
++            raise ValueError('Mode B supports one run with FSDP data sharding; CP/EP are unsupported')
++        if self.model.fsdp_cpu_offload:
++            raise ValueError('Mode B does not support FSDP parameter CPU offload')
++        if (self.model.compile is not None or self.model.fp8 or self.model.vlm is not None
++                or self.model.impl != 'hf' or self.enable_router_replay):
++            raise ValueError('Mode B requires eager dense text HF models without FP8/router replay')
++        if self.data.fake is not None:
++            raise ValueError('Mode B requires original aligned rollout data')
++        if any(name in self.model.lora.target_modules for name in ('lm_head', 'embed_tokens')):
++            raise ValueError('Mode B requires a frozen ordinary output head and embeddings')
++        return self
+ 
+     # The optimizer configuration
+     optim: OptimizerConfig = AdamWConfig()
+diff --git a/src/prime_rl/orchestrator/orchestrator.py b/src/prime_rl/orchestrator/orchestrator.py
+index 1fef6049..f961a8d6 100644
+--- a/src/prime_rl/orchestrator/orchestrator.py
++++ b/src/prime_rl/orchestrator/orchestrator.py
+@@ -429,7 +429,12 @@ async def orchestrate(config: OrchestratorConfig):
+             # Compute advantages (in-place)
+             num_rollouts = len(train_rollouts)
+             num_unique_examples = len({(r["env_name"], r["example_id"]) for r in train_rollouts})
+-            compute_advantages(train_rollouts, config.rollouts_per_example, config.advantage)
++            if config.opsd_mode_b:
++                for rollout in train_rollouts:
++                    rollout['advantage'] = 0.
++                    rollout['reward'] = 0.
++            else:
++                compute_advantages(train_rollouts, config.rollouts_per_example, config.advantage)
+ 
+             # Apply rollout filters — sets rollout["filters"] and rollout["is_filtered"]
+             apply_filters(rollout_filters, train_rollouts)
+@@ -499,6 +504,7 @@ async def orchestrate(config: OrchestratorConfig):
+                         tokenizer,
+                         processor=processor,
+                         renderer=renderer,
++                        require_original=config.opsd_mode_b,
+                     )
+                     for rollout in train_rollouts
+                 )
+@@ -525,6 +531,10 @@ async def orchestrate(config: OrchestratorConfig):
+ 
+         # Process rollouts in parallel
+         def process_rollout(rollout: vf.RolloutOutput, rollout_idx: int) -> list[TrainingSample] | None:
++            if config.opsd_mode_b:
++                from rlm_opsd.training.prime_data import mode_b_samples
++
++                return mode_b_samples(rollout, max_seq_len=config.opsd_max_seq_len or config.seq_len)
+             return interleave_rollout(
+                 rollout,
+                 vlm_cache=vlm_cache,
+diff --git a/src/prime_rl/orchestrator/trajectories.py b/src/prime_rl/orchestrator/trajectories.py
+index 94412eb8..7deda6e5 100644
+--- a/src/prime_rl/orchestrator/trajectories.py
++++ b/src/prime_rl/orchestrator/trajectories.py
+@@ -219,6 +219,7 @@ def pretokenize_rollout_trajectory(
+     tokenizer: PreTrainedTokenizer,
+     processor=None,
+     renderer=None,
++    require_original: bool = False,
+ ) -> bool:
+     """Populate missing step tokens from prompt/completion messages.
+ 
+@@ -231,6 +232,8 @@ def pretokenize_rollout_trajectory(
+     for step_idx, step in enumerate(output["trajectory"]):
+         if step["tokens"] is not None:
+             continue
++        if require_original:
++            raise ValueError('Mode B requires original recorded rollout token IDs; re-tokenization is forbidden')
+ 
+         if renderer is not None:
+             step["tokens"] = _tokenize_step_with_renderer(step, renderer, tools=tools)
+diff --git a/src/prime_rl/trainer/batch.py b/src/prime_rl/trainer/batch.py
+index e900aa46..c72b6564 100644
+--- a/src/prime_rl/trainer/batch.py
++++ b/src/prime_rl/trainer/batch.py
+@@ -8,6 +8,10 @@ def prepare_sample(training_example: TrainingSample, seq_len: int) -> MicroBatch
+     Prepare a problem for sequence packing training.
+     Tokenize and prepare tensors.
+     """
++    if training_example.opsd_teacher_ids is not None:
++        from rlm_opsd.training.prime_data import validate_mode_b_sample
++
++        validate_mode_b_sample(training_example, seq_len)
+     input_ids = training_example.prompt_ids + training_example.completion_ids
+     loss_mask = training_example.prompt_mask + training_example.completion_mask
+     inference_logprobs = [0.0] * len(training_example.prompt_ids) + training_example.completion_logprobs
+@@ -82,6 +86,9 @@ def prepare_sample(training_example: TrainingSample, seq_len: int) -> MicroBatch
+         pixel_values_shape=training_example.pixel_values_shape,
+         image_grid_thw=training_example.image_grid_thw,
+         sft_loss=training_example.sft_loss,
++        opsd_teacher_ids=training_example.opsd_teacher_ids,
++        opsd_teacher_positions=training_example.opsd_teacher_positions,
++        opsd_prefix_lengths=training_example.opsd_prefix_lengths,
+     )
+ 
+ 
+@@ -109,7 +116,7 @@ def packed_samples_into_micro_bs(
+ 
+     for idx, sample in samples:
+         # Multimodal samples cannot be packed - each becomes its own micro batch
+-        if _is_multimodal_sample(sample):
++        if _is_multimodal_sample(sample) or sample.opsd_teacher_ids is not None:
+             sample.lora_num_tokens = [0] * num_loras
+             sample.lora_num_tokens[idx] = len(sample.input_ids)
+             micro_batches.append(sample)
+@@ -118,7 +125,7 @@ def packed_samples_into_micro_bs(
+         # Try to find a bin that can fit this sequence (only pack text-only samples)
+         for bin_content in micro_batches:
+             # Don't pack into multimodal micro batches
+-            if _is_multimodal_sample(bin_content):
++            if _is_multimodal_sample(bin_content) or bin_content.opsd_teacher_ids is not None:
+                 continue
+             # Check if sequence fits in this bin
+             if (
+@@ -165,6 +172,8 @@ def pad_micro_batch(micro_batch: MicroBatch, pad_to_multiple_of: int) -> MicroBa
+         The padded micro batch.
+     """
+ 
++    if micro_batch.opsd_teacher_ids is not None and pad_to_multiple_of != 1:
++        raise ValueError('Mode B requires context parallelism disabled and unpadded sequences')
+     padding_size = (pad_to_multiple_of - (len(micro_batch.input_ids) % pad_to_multiple_of)) % pad_to_multiple_of
+ 
+     if len(micro_batch.env_names) != len(micro_batch.input_ids):
+@@ -200,6 +209,8 @@ def _make_dummy_batch(source: MicroBatch) -> MicroBatch:
+     dummy = copy.deepcopy(source)
+     dummy.advantages = [0.0] * len(dummy.input_ids)
+     dummy.loss_mask = [False] * len(dummy.input_ids)
++    if dummy.opsd_teacher_ids is not None:
++        dummy.opsd_teacher_positions = []
+     return dummy
+ 
+ 
+@@ -229,6 +240,9 @@ def prepare_batch(
+     a text-only batch, the all-gather will hang. We separate micro batches by modality
+     and distribute them so that at each step index, all ranks see the same modality.
+     """
++    modes = {rollout.opsd_teacher_ids is not None for rollout in rollouts}
++    if len(modes) > 1:
++        raise ValueError('cannot mix Mode B and ordinary training samples in a distributed batch')
+     all_samples = [(idx, prepare_sample(rollout, seq_len)) for idx, rollout in zip(idxs, rollouts)]
+ 
+     micro_batches = packed_samples_into_micro_bs(all_samples, seq_len, num_loras)
+diff --git a/src/prime_rl/trainer/model.py b/src/prime_rl/trainer/model.py
+index 910a978a..673ff955 100644
+--- a/src/prime_rl/trainer/model.py
++++ b/src/prime_rl/trainer/model.py
+@@ -879,7 +879,7 @@ def reshard_module(model: nn.Module):
+             module.reshard()
+ 
+ 
+-def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig):
++def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig, *, preserve_rng_state: bool = False):
+     logger = get_logger()
+     language_model = get_language_model(model)
+     target_list = sorted(frozenset(ac_config.targets))
+@@ -899,7 +899,7 @@ def apply_ac(model: nn.Module, ac_config: ActivationCheckpointConfig):
+         else:
+             if ac_config.mode == "selective":
+                 fallback_layer_types.add(type(transformer_block).__name__)
+-            transformer_block = checkpoint_wrapper(transformer_block, preserve_rng_state=False)
++            transformer_block = checkpoint_wrapper(transformer_block, preserve_rng_state=preserve_rng_state)
+             full_layers += 1
+ 
+         language_model.layers.register_module(layer_name, transformer_block)
+@@ -1007,6 +1007,7 @@ def setup_model(
+     parallel_dims: ParallelDims,
+     loading_from_checkpoint_later: bool = False,
+     fused_cross_entropy: bool | str = False,
++    opsd_config=None,
+ ) -> nn.Module:
+     if config.attn == "flash_attention_3" and not is_flash_attn_3_available():
+         raise ValueError(
+@@ -1041,6 +1042,10 @@ def setup_model(
+         lm_head_chunk_size = config.fused_lm_head_token_chunk_size
+ 
+     inject_prime_lm_head(model, chunk_size=lm_head_chunk_size, fused_cross_entropy=fused_cross_entropy)
++    if opsd_config is not None:
++        from rlm_opsd.training.prime_step import install_mode_b_head
++
++        install_mode_b_head(model, opsd_config)
+ 
+     if config.fp8:
+         replace_linear_with_fp8_blockwise_linear(model)
+@@ -1064,7 +1069,7 @@ def setup_model(
+ 
+     # the right order is AC -> Compile -> FSDP
+     if config.ac is not None:
+-        apply_ac(model, config.ac)
++        apply_ac(model, config.ac, preserve_rng_state=opsd_config is not None)
+     if config.compile is not None:
+         apply_compile(model, config.compile)
+ 
+diff --git a/src/prime_rl/trainer/rl/data.py b/src/prime_rl/trainer/rl/data.py
+index 6342132e..8bb6a79f 100644
+--- a/src/prime_rl/trainer/rl/data.py
++++ b/src/prime_rl/trainer/rl/data.py
+@@ -228,4 +228,7 @@ class DataLoader:
+             if micro_batch.routed_experts is not None
+             else None,
+             sft_loss=micro_batch.sft_loss,
++            opsd_teacher_ids=micro_batch.opsd_teacher_ids,
++            opsd_teacher_positions=micro_batch.opsd_teacher_positions,
++            opsd_prefix_lengths=micro_batch.opsd_prefix_lengths,
+         )
+diff --git a/src/prime_rl/trainer/rl/train.py b/src/prime_rl/trainer/rl/train.py
+index fc03e89f..d18b614f 100644
+--- a/src/prime_rl/trainer/rl/train.py
++++ b/src/prime_rl/trainer/rl/train.py
+@@ -143,14 +143,14 @@ def train(config: TrainerConfig):
+     # Initialize the model and tokenizer
+     logger.info(f"Initializing model ({config.model})")
+     loading_from_ckpt_later = config.ckpt and checkpoint_step is not None
+-    model = setup_model(config.model, parallel_dims, loading_from_ckpt_later)
++    model = setup_model(config.model, parallel_dims, loading_from_ckpt_later, opsd_config=config.opsd)
+ 
+     logger.info(f"Initializing tokenizer ({config.tokenizer})")
+     tokenizer = setup_tokenizer(config.tokenizer)
+ 
+     # Set up the loss function
+     logger.info(f"Setting up loss function ({config.loss})")
+-    loss_fn = setup_loss_fn(config.loss)
++    loss_fn = setup_loss_fn(config.loss) if config.opsd is None else None
+ 
+     # Set up the optimizer
+     logger.info(f"Initializing optimizer ({config.optim})")
+@@ -341,6 +341,12 @@ def train(config: TrainerConfig):
+         # Normalize by the local number of unmasked tokens in the batch (per-batch length normalization)
+         loss_scale = sum(micro_batch["loss_mask"].sum().item() for micro_batch in micro_batches)
+         loss_scale = max(loss_scale, 1)
++        if config.opsd is not None:
++            from rlm_opsd.training.prime_step import global_loss_scale
++
++            local_tokens = sum(mb['loss_mask'].sum().item() for mb in micro_batches)
++            loss_scale = global_loss_scale(local_tokens, device=torch.device('cuda', world.local_rank),
++                                          group=parallel_dims.get_mesh('dp').get_group())
+ 
+         logger.debug(f"Starting forward and backward pass ({batch_size=})")
+         tensors = Tensors()  # Used to accumulate tensor statistics across micro-batches and ranks for logging
+@@ -350,6 +356,16 @@ def train(config: TrainerConfig):
+         cp_size = parallel_dims.cp
+ 
+         for micro_step, micro_batch in enumerate(micro_batches):
++            if config.opsd is not None:
++                from rlm_opsd.training.prime_step import mode_b_forward
++
++                with maybe_record_function('forward'), maybe_activation_offloading(config.model.ac_offloading):
++                    out = mode_b_forward(model, micro_batch, loss_scale=loss_scale)
++                with maybe_record_function('backward'):
++                    out['loss'].backward()
++                tensors['loss'].append(out['loss'].detach().cpu().unsqueeze(0))
++                tensors['entropy/all'].append(out['entropy'].detach().cpu())
++                continue
+             input_ids = micro_batch["input_ids"].to("cuda")
+             position_ids = micro_batch["position_ids"].to("cuda")
+             advantages = micro_batch["advantages"].to("cuda")
+@@ -514,6 +530,11 @@ def train(config: TrainerConfig):
+                 micro_step_message += f" | Max Vio: {tensors['max_vio'][-1].mean().item():.4f}"
+             logger.debug(micro_step_message)
+ 
++        if config.opsd is not None:
++            # Each rank contributes its token-sum / (global_tokens / DP size).
++            # One scalar per rank makes the metrics' rank mean the token mean.
++            tensors['opsd/jsd'].append(torch.cat(tensors['loss']).sum().reshape(1))
++
+         # Optionally, clip the gradients
+         grad_norm: torch.Tensor | None = None
+         if config.optim.max_norm is not None:
+diff --git a/src/prime_rl/transport/types.py b/src/prime_rl/transport/types.py
+index f90af1a3..89788ea8 100644
+--- a/src/prime_rl/transport/types.py
++++ b/src/prime_rl/transport/types.py
+@@ -28,6 +28,9 @@ class TrainingSample(msgspec.Struct, array_like=True, gc=False, omit_defaults=Tr
+     mm_token_type_ids: list[int] | None = None
+ 
+     sft_loss: bool = False  # When True, trainer uses SFT loss instead of RL loss for this sample
++    opsd_teacher_ids: list[int] | None = None
++    opsd_teacher_positions: list[int] | None = None
++    opsd_prefix_lengths: list[int] | None = None
+ 
+ 
+ class TrainingBatch(msgspec.Struct, array_like=True, gc=False, omit_defaults=True):
+@@ -62,3 +65,6 @@ class MicroBatch(msgspec.Struct, array_like=True, gc=False, omit_defaults=True):
+     mm_token_type_ids: list[int] | None = None
+ 
+     sft_loss: bool = False  # When True, trainer uses SFT loss instead of RL loss for this batch
++    opsd_teacher_ids: list[int] | None = None
++    opsd_teacher_positions: list[int] | None = None
++    opsd_prefix_lengths: list[int] | None = None
+ERROR
+test_upstream_subprocess_repl_offline (__main__.M0LocalChecks.test_upstream_subprocess_repl_offline) ... ok
+
+======================================================================
+ERROR: test_installed_provenance_and_source_bytes (__main__.M0LocalChecks.test_installed_provenance_and_source_bytes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/scripts/check_m0.py", line 40, in test_installed_provenance_and_source_bytes
+    subprocess.run(["git", "-C", str(checkout), "diff", "--exit-code", "HEAD"], check=True)
+  File "/Users/mukeshreddy/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['git', '-C', '/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.deps/prime-rl', 'diff', '--exit-code', 'HEAD']' returned non-zero exit status 1.
+
+----------------------------------------------------------------------
+Ran 3 tests in 3.377s
+
+FAILED (errors=1)
+
+rlm.core.rlm.RLM(backend: Literal['openai', 'portkey', 'openrouter', 'vercel', 'vllm', 'anthropic', 'azure_openai', 'gemini'] = 'openai', backend_kwargs: dict[str, typing.Any] | None = None, environment: Literal['local', 'ipython', 'docker', 'modal', 'prime', 'daytona', 'e2b'] = 'local', environment_kwargs: dict[str, typing.Any] | None = None, depth: int = 0, max_depth: int = 1, max_iterations: int = 30, max_budget: float | None = None, max_timeout: float | None = None, max_tokens: int | None = None, max_errors: int | None = None, custom_system_prompt: str | None = None, other_backends: list[typing.Literal['openai', 'portkey', 'openrouter', 'vercel', 'vllm', 'anthropic', 'azure_openai', 'gemini']] | None = None, other_backend_kwargs: list[dict[str, typing.Any]] | None = None, logger: rlm.logger.rlm_logger.RLMLogger | None = None, verbose: bool = False, persistent: bool = False, custom_tools: dict[str, typing.Any] | None = None, custom_sub_tools: dict[str, typing.Any] | None = None, compaction: bool = False, compaction_threshold_pct: float = 0.85, max_concurrent_subcalls: int = 4, on_subcall_start: collections.abc.Callable[[int, str, str], None] | None = None, on_subcall_complete: collections.abc.Callable[[int, str, float, str | None], None] | None = None, on_iteration_start: collections.abc.Callable[[int, int], None] | None = None, on_iteration_complete: collections.abc.Callable[[int, int, float], None] | None = None, sampling_args: dict[str, typing.Any] | None = None, sub_sampling_args: dict[str, typing.Any] | None = None, orchestrator: bool = True, user_prologue: str | None = None)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/rlm/core/rlm.py 41
+
+rlm.core.rlm.RLM.completion(self, prompt: str | dict[str, typing.Any], root_prompt: str | None = None) -> rlm.core.types.RLMChatCompletion
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/rlm/core/rlm.py 326
+
+rlm_train.env.RLMTrainEnv(backend_factory: 'Callable[[], ReplBackend] | None' = None, max_iterations: 'int' = 30, sub_model: 'str | None' = None, sub_sampling_args: 'dict[str, Any] | None' = None, custom_system_prompt: 'str | None' = None, rubric: 'vf.Rubric | None' = None, sub_llm_fn: 'Callable[[str, Any], Any] | None' = None, sub_llm_fn_batched: 'Callable[[list[str], Any], Any] | None' = None, user_prologue: 'str | None' = None, bootstrap_code: 'str | None' = None, orchestrator: 'bool' = True, **kwargs: 'Any')
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/rlm_train/env.py 31
+
+rlm_train.repl.subprocess.SubprocessReplBackend(python: 'str | None' = None, worker_module: 'str' = 'rlm_train.worker', startup_timeout: 'float' = 30.0, request_timeout: 'float' = 1200.0)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/rlm_train/repl/subprocess.py 22
+
+verifiers.envs.environment.Environment(dataset: 'Dataset | DatasetBuilder | None' = None, eval_dataset: 'Dataset | DatasetBuilder | None' = None, system_prompt: str | None = None, few_shot: list[verifiers.types.SystemMessage | verifiers.types.UserMessage | verifiers.types.AssistantMessage | verifiers.types.ToolMessage | verifiers.types.TextMessage] | None = None, parser: verifiers.parsers.parser.Parser | None = None, rubric: verifiers.rubrics.rubric.Rubric | None = None, sampling_args: dict[str, typing.Any] | None = None, message_type: Union[Literal['chat', 'completion'], object] = <object object at 0x10a6c2ca0>, tool_defs: list[verifiers.types.Tool] | None = None, max_workers: int = 512, env_id: str | None = None, env_args: dict | None = None, map_kwargs: dict = {}, max_seq_len: int | None = None, score_rollouts: bool = True, pass_threshold: float = 0.5, **kwargs)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/verifiers/envs/environment.py 93
+
+verifiers.envs.multiturn_env.MultiTurnEnv(max_turns: int = -1, timeout_seconds: float | None = None, **kwargs)
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/verifiers/envs/multiturn_env.py 39
+
+verifiers.utils.env_utils.load_environment(env_id: str, **env_args) -> verifiers.envs.environment.Environment
+/Users/mukeshreddy/Desktop/Refine deepswe/rlm-opsd/.venv/lib/python3.12/site-packages/verifiers/utils/env_utils.py 12
+
+prime_rl.configs.rl.SingleNodeDeploymentConfig: ['gpus_per_node', 'type', 'num_train_gpus', 'num_infer_gpus', 'num_teacher_gpus']
+
+prime_rl.configs.trainer.DefaultLossConfig: ['type', 'dppo_mask_low', 'dppo_mask_high', 'adv_tau', 'teacher_tau', 'kl_tau']
+
+prime_rl.configs.trainer.LoRAConfig: ['rank', 'alpha', 'dropout', 'target_modules', 'modules_to_save']
+
+prime_rl.configs.orchestrator.TrainSamplingConfig: ['temperature', 'repetition_penalty', 'max_completion_tokens', 'min_tokens', 'seed', 'extra_body']
+
+prime_rl.configs.orchestrator.TrainEnvConfig: ['id', 'name', 'args', 'extra_env_kwargs', 'address', 'num_workers', 'ratio', 'max_retries', 'max_total_completion_tokens', 'timeout', 'sampling']
+
+prime_rl.configs.trainer.TrainerConfig: ['model', 'tokenizer', 'data', 'loss', 'optim', 'scheduler', 'ckpt', 'weight_broadcast', 'rollout_transport', 'log', 'wandb', 'output_dir', 'matmul_precision', 'max_steps', 'max_async_level', 'enable_router_replay', 'memory_profiler_path', 'bench', 'gc', 'trace_path', 'dist_timeout_seconds', 'heartbeat', 'metrics_server', 'max_concurrent_runs', 'experimental']
+
+prime_rl.configs.orchestrator.OrchestratorConfig: ['train', 'client', 'model', 'tokenizer', 'renderer', 'optim', 'teacher_model', 'teacher_rollout_model', 'use_sft_loss', 'eval', 'buffer', 'advantage', 'filters', 'log', 'wandb', 'prime_monitor', 'collect_inference_metrics', 'ckpt', 'weight_broadcast', 'rollout_transport', 'output_dir', 'tasks_per_minute', 'batch_size', 'token_batch_size', 'oversampling_factor', 'max_inflight_rollouts', 'rollouts_per_example', 'seq_len', 'num_train_workers', 'max_steps', 'max_off_policy_steps', 'max_error_reschedule_attempts', 'max_async_level', 'strict_async_level', 'bench', 'seed', 'heartbeat', 'use_renderer', 'env_install_prerelease', 'experimental']
+psutil==7.2.2: installed version matches explicit pin
+PyYAML==6.0.3: installed version matches explicit pin
+
+rlms==0.1.3: d04208afbad29ca675ab13478c40ee8bebc84bfe; 32 installed Python files match
+{"url": "https://github.com/alexzhang13/rlm.git", "vcs_info": {"commit_id": "d04208afbad29ca675ab13478c40ee8bebc84bfe", "requested_revision": "d04208afbad29ca675ab13478c40ee8bebc84bfe", "vcs": "git"}}
+
+rlm-train==0.1.0: d04208afbad29ca675ab13478c40ee8bebc84bfe; 8 installed Python files match
+{"subdirectory": "training", "url": "https://github.com/alexzhang13/rlm.git", "vcs_info": {"commit_id": "d04208afbad29ca675ab13478c40ee8bebc84bfe", "requested_revision": "d04208afbad29ca675ab13478c40ee8bebc84bfe", "vcs": "git"}}
+
+verifiers==0.1.15.dev7: 58b119fa1b24eff85b74a75ccf3e132523b3c6c3; 212 installed Python files match
+{"url": "https://github.com/PrimeIntellect-ai/verifiers.git", "vcs_info": {"commit_id": "58b119fa1b24eff85b74a75ccf3e132523b3c6c3", "requested_revision": "58b119fa1b24eff85b74a75ccf3e132523b3c6c3", "vcs": "git"}}

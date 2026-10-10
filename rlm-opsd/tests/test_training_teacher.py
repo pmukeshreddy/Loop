@@ -8,11 +8,11 @@ from prime_cpu import prime_api, TinyModel, forward
 from test_training_samples import build, rollout
 
 
-def test_random_tiny_qwen35_graph_with_pinned_output_head_and_lora(prime_api):
+def test_random_tiny_qwen35_graph_with_frozen_head_and_pinned_lora(prime_api):
     """Real model classes, random tiny weights; NOT either pretrained smoke."""
     from transformers import Qwen3_5Config,Qwen3_5ForConditionalGeneration
-    from rlm_opsd.training.teacher import teacher_logits
-    from rlm_opsd.training.mode_a import ModeATrainer
+    from rlm_opsd.training.teacher import frozen_teacher
+    from rlm_opsd.training.opsd import OpsdTrainer, backbone_hidden
     torch.manual_seed(23)
     cfg=Qwen3_5Config(text_config=dict(vocab_size=16,hidden_size=16,intermediate_size=32,
         num_hidden_layers=1,num_attention_heads=2,num_key_value_heads=1,head_dim=8,
@@ -22,19 +22,22 @@ def test_random_tiny_qwen35_graph_with_pinned_output_head_and_lora(prime_api):
                            out_hidden_size=16,num_position_embeddings=16))
     cfg._attn_implementation='eager'
     model=Qwen3_5ForConditionalGeneration(cfg)
-    prime_api.lm_head.inject_prime_lm_head(model,chunk_size=None)
     attention=model.model.language_model.layers[0].self_attn
     base=attention.q_proj
     attention.q_proj=prime_api.MultiLoRALinear(base,rank=2,n_adapters=1,alpha=4,
                                              dropout=0.0,use_grouped_mm=False)
     for p in model.parameters():p.requires_grad_(False)
     for p in [*attention.q_proj.lora_A,*attention.q_proj.lora_B]:p.requires_grad_(True)
-    sample=build()[0];teacher_before=teacher_logits(model,sample,forward,api=prime_api)
-    trainer=ModeATrainer(model,forward_fn=forward,api=prime_api,loss_api=prime_api.loss,learning_rate=0.01)
+    sample=build()[0]
+    ids=torch.tensor([sample.teacher_ids]);positions=torch.arange(ids.shape[1])[None,:]
+    with frozen_teacher(model,ids.shape[1],api=prime_api):
+        teacher_before=model.lm_head(backbone_hidden(model,ids,positions)).detach()
+    trainer=OpsdTrainer(model,api=prime_api,learning_rate=0.01)
     result=trainer.step([sample])
     assert result['updated'] and result['gradient_norm']>0
     assert torch.count_nonzero(attention.q_proj.lora_B[0])>0
-    teacher_after=teacher_logits(model,sample,forward,api=prime_api)
+    with frozen_teacher(model,ids.shape[1],api=prime_api):
+        teacher_after=model.lm_head(backbone_hidden(model,ids,positions)).detach()
     torch.testing.assert_close(teacher_after,teacher_before,rtol=0,atol=0)
     assert all(p.grad is None for p in model.parameters() if not p.requires_grad)
 
@@ -118,33 +121,14 @@ def test_teacher_second_pass_preserves_student_backward_and_dropout_rng(prime_ap
         else:assert p.grad is None and q.grad is None
 
 
-def test_mode_a_uses_native_formula_and_detaches_teacher_and_inference(prime_api):
-    from rlm_opsd.training.mode_a import sampled_loss
-    student=torch.tensor([math.log(.2),math.log(.3)],requires_grad=True)
-    teacher=torch.tensor([math.log(.4),math.log(.1)],requires_grad=True)
-    inference=student.detach().clone().requires_grad_()
-    result=sampled_loss(student,teacher,inference,loss_api=prime_api.loss)
-    assert result.loss.item()==pytest.approx(math.log(1.5))
-    result.loss.backward()
-    torch.testing.assert_close(student.grad,torch.tensor([-math.log(2),math.log(3)]))
-    assert teacher.grad is None and inference.grad is None
-
-
-def test_aligned_logits_select_only_current_assistant_targets(prime_api):
-    from rlm_opsd.training.teacher import selected_logits
-    values=torch.randn(1,8,16,requires_grad=True)
-    selected=selected_logits({'logits':values},(5,))
-    selected.sum().backward()
-    assert values.grad[0,5].tolist()==[1]*16
-    assert values.grad[0,[0,1,2,3,4,6,7]].abs().sum()==0
-
-
-def test_mode_a_step_updates_only_lora_and_base_teacher_stays_fixed(prime_api):
-    from rlm_opsd.training.mode_a import ModeATrainer
+def test_opsd_step_updates_only_lora_and_base_teacher_stays_fixed(prime_api):
+    from rlm_opsd.training.opsd import OpsdTrainer
     from rlm_opsd.training.teacher import frozen_teacher
-    torch.manual_seed(3);model=TinyModel(prime_api)
+    from test_training_opsd import BackboneModel
+    from rlm_opsd.training.opsd import backbone_hidden
+    torch.manual_seed(3);model=BackboneModel(prime_api)
     before={name:p.detach().clone() for name,p in model.named_parameters()}
-    trainer=ModeATrainer(model,forward_fn=forward,api=prime_api,loss_api=prime_api.loss,learning_rate=0.01)
+    trainer=OpsdTrainer(model,api=prime_api,learning_rate=0.01)
     sample=build()[0]
     result=trainer.step([sample])
     assert result['updated'] and result['assistant_tokens']==2 and math.isfinite(result['loss'])
@@ -155,18 +139,19 @@ def test_mode_a_step_updates_only_lora_and_base_teacher_stays_fixed(prime_api):
         if not p.requires_grad:assert torch.equal(before[name],p) and p.grad is None
     assert changed and all('lora_' in name for name in changed)
     ids=torch.tensor([sample.teacher_ids]);positions=torch.arange(ids.shape[1])[None,:]
-    expected=model.projection.base_layer(model.features(ids,positions)).detach()
+    expected=model.model.adapter.base_layer(model.model.embedding(ids).cumsum(1)/(positions[...,None]+1)).detach()
     with frozen_teacher(model,len(sample.teacher_ids),api=prime_api):
-        torch.testing.assert_close(forward(model,ids,positions)['logits'],expected,rtol=0,atol=0)
+        torch.testing.assert_close(backbone_hidden(model,ids,positions),expected,rtol=0,atol=0)
 
 
 def test_empty_mask_step_makes_no_update(prime_api):
-    from rlm_opsd.training.mode_a import ModeATrainer
-    model=TinyModel(prime_api);before={n:p.detach().clone() for n,p in model.named_parameters()}
+    from rlm_opsd.training.opsd import OpsdTrainer
+    from test_training_opsd import BackboneModel
+    model=BackboneModel(prime_api);before={n:p.detach().clone() for n,p in model.named_parameters()}
     value=rollout()
     for s in value['trajectory']:s['tokens']['completion_mask']=[0,0]
     def must_not_forward(*args,**kwargs):raise AssertionError('empty mask should not run a model')
-    trainer=ModeATrainer(model,forward_fn=must_not_forward,api=prime_api,loss_api=prime_api.loss)
+    trainer=OpsdTrainer(model,hidden_fn=must_not_forward,api=prime_api)
     result=trainer.step(build(value))
     assert result==dict(loss=0.0,assistant_tokens=0,gradient_norm=0.0,updated=False)
     assert all(torch.equal(before[n],p) for n,p in model.named_parameters())
