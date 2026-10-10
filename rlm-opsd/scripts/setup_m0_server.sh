@@ -86,6 +86,8 @@ m0_uv pip install --python "$M0_ENV/bin/python" \
     -r requirements-m0-server-additions.lock
 m0_uv pip install --python "$M0_ENV/bin/python" \
     --constraint "$M0_LOG_DIR/runtime-constraints.txt" -r requirements-m1.txt
+m0_uv pip install --python "$M0_ENV/bin/python" \
+    --constraint "$M0_LOG_DIR/runtime-constraints.txt" 'bitsandbytes==0.49.0' 'accelerate==1.13.0'
 m0_uv pip install --python "$M0_ENV/bin/python" 'pip==25.3'
 
 # Replace editable project wheels with the exact pinned artifacts used by the

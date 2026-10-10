@@ -153,7 +153,7 @@ See `docs/TASKS.md`.
 ## 6. OPSD training
 
 OPSD uses full-vocabulary JSD with teacher scoring inside the trainer. The
-teacher is the same model's frozen initial base with LoRA bypassed for a local
+teacher is the same model's frozen NF4-quantized initial base with LoRA bypassed for a local
 no-gradient pass. Inference endpoints serve generation only: student rollouts,
 the baseline/teacher-policy runs in §5, and frozen `llm_query` sub-calls.
 
@@ -165,6 +165,10 @@ the baseline/teacher-policy runs in §5, and frozen `llm_query` sub-calls.
 - All non-LoRA parameters remain frozen, including embeddings and the output
   head. `modules_to_save` must be empty; otherwise disabling LoRA would expose
   updated weights instead of the fixed initial teacher.
+- Transformer linear base weights use double-quantized 4-bit NF4 storage and
+  on-demand BF16 computation. Embeddings, norms, convolution parameters and the
+  chunked JSD head remain frozen in BF16. Smoke and multi-step training both use
+  this QLoRA path; there is no dense-base training mode.
 - The loss covers root assistant tokens only. Teacher computation runs without
   gradients; only the student pass contributes gradients.
 

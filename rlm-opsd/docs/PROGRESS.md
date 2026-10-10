@@ -1052,3 +1052,42 @@ files remain under their existing ignore rules. No milestone code changed.
 Staged source/document whitespace checks pass. Raw historical logs and CSVs
 retain their captured whitespace/line endings; they are excluded from that
 formatting check. Removed one extra EOF blank line from `eval/metrics.py`.
+
+
+## QLoRA conversion
+
+Converted the existing smoke and native multi-step loaders to double-quantized
+NF4 transformer linear weights with BF16 computation. Embeddings, norms,
+convolution parameters and the chunked JSD head remain frozen in BF16. Only
+prime-rl MultiLoRA parameters train; the loss, teacher bypass, FSDP wrapping,
+rollout transport and adapter synchronization are preserved. The native weight
+export now writes adapters over the pinned base; DCP retains full training state.
+Old dense-base smoke evidence no longer satisfies the QLoRA prerequisite.
+
+Executed checks:
+
+- `make test`: **3 dependency/source checks and 638 tests passed**, with 33
+  visible upstream deprecation/future warnings. Includes source-patch
+  reconstruction, NF4 smoke updates with token gate on/off, frozen-base and
+  teacher invariance, native adapter export/reload, and two-rank FSDP/DCP resume.
+  [Full test log](checks/qlora/make-test.log).
+- Final targeted run of `tests/test_training_qlora.py` and
+  `tests/test_training_runner.py` after strengthening checkpoint coverage:
+  **28 passed**, with 26 visible upstream warnings. Both enabled and disabled
+  activation checkpointing reproduce the uninterrupted next update exactly
+  after reloading native AppState model/optimizer/scheduler state into a fresh
+  NF4 model; an empty-mask rank participates. The prerequisite fixtures also
+  carry valid NF4/objective metadata so unrelated failures cannot mask their
+  intended assertions. [Checkpoint reload log](checks/qlora/checkpoint-reload.log).
+- Source patch verification reports `already_applied`. Source/document
+  whitespace check passes excluding the unified patch artifact's required
+  blank context lines.
+
+All training checks above use randomly initialized tiny CPU models. Gloo tests
+required local socket access outside the sandbox. CUDA/NCCL, pretrained Qwen3.5
+training, live vLLM synchronization and 27B memory/throughput are **not run**.
+Dependencies and source contracts are recorded in [VERIFIED_APIS](VERIFIED_APIS.md#qlora-storage-and-checkpoint-contracts).
+
+Before publishing to `pmukeshreddy/Loop` on `main`, reran `make test` against
+the final tree: **3 dependency/source checks and 639 tests passed**, with 35
+visible upstream warnings. [Pre-push test log](checks/qlora/pre-push-test.log).

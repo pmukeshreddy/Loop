@@ -84,6 +84,7 @@ def verify_small_smoke(config):
     root=config.small_smoke_dir
     record=json.loads((root/'smoke.json').read_text())
     if (record.get('status')!='completed' or record.get('kind')!='pretrained_model_smoke'
+            or record.get('base_quantization')!='nf4'
             or record.get('stage')!='small'
             or (record.get('base_model'),record.get('revision'))!=MODEL_PINS['small']
             or record.get('metrics',{}).get('updated') is not True
@@ -193,7 +194,7 @@ async def run_smoke(config,output_dir):
                   config=config.model_dump(mode='json'),provenance=plan.provenance)
     write_json(output/'run.json',metadata)
     result=dict(status='error',kind='not_loaded',stage=config.stage,base_model=config.base_model,
-                revision=config.revision,objective=objective_metadata(config))
+                revision=config.revision,base_quantization='nf4',objective=objective_metadata(config))
     backend=None;cancelled=None
     try:
         rollout=await collect_rollout(config,plan,output)

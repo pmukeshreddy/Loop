@@ -217,8 +217,31 @@ index e900aa46..b9549320 100644
      all_samples = [(idx, prepare_sample(rollout, seq_len)) for idx, rollout in zip(idxs, rollouts)]
  
      micro_batches = packed_samples_into_micro_bs(all_samples, seq_len, num_loras)
+diff --git a/src/prime_rl/trainer/ckpt.py b/src/prime_rl/trainer/ckpt.py
+index 296554e0..c0bcdac4 100644
+--- a/src/prime_rl/trainer/ckpt.py
++++ b/src/prime_rl/trainer/ckpt.py
+@@ -392,6 +392,18 @@ class WeightCheckpointManager:
+         step_path = self.get_step_path(step)
+         step_path.mkdir(parents=True, exist_ok=True)
+ 
++        if getattr(model, 'is_loaded_in_4bit', False):
++            # NF4 training state belongs in DCP. Portable weights are adapters
++            # over the pinned base, as in the native rollout broadcast path.
++            state_dict = self.get_run_adapter_state_dict()
++            if self.world.is_master:
++                save_state_dict(state_dict, step_path, self.config.save_format, save_sharded=False, adapter=True)
++                save_lora_config(model, step_path, rank=self.lora_config.rank,
++                                 alpha=self.lora_config.alpha, dropout=self.lora_config.dropout)
++            self.mark_stable(step)
++            bisect.insort(self.ckpt_steps, step)
++            return
++
+         # Gather all weights on master rank
+         self.logger.debug("Gathering weights on master rank for weight checkpoint")
+         start_time = time.perf_counter()
 diff --git a/src/prime_rl/trainer/model.py b/src/prime_rl/trainer/model.py
-index 910a978a..0be545c4 100644
+index 910a978a..14366908 100644
 --- a/src/prime_rl/trainer/model.py
 +++ b/src/prime_rl/trainer/model.py
 @@ -879,7 +879,7 @@ def reshard_module(model: nn.Module):
@@ -247,7 +270,36 @@ index 910a978a..0be545c4 100644
  ) -> nn.Module:
      if config.attn == "flash_attention_3" and not is_flash_attn_3_available():
          raise ValueError(
-@@ -1041,6 +1042,10 @@ def setup_model(
+@@ -1020,10 +1021,17 @@ def setup_model(
+     logger = get_logger()
+ 
+     # 1. We load to meta device by default
+-    model = get_model(config, device=torch.device("meta"), dtype=DTYPE_MAP[config.optimization_dtype])
++    model = get_model(config, device=torch.device("meta"),
++                      dtype=torch.bfloat16 if opsd_config is not None else DTYPE_MAP[config.optimization_dtype])
+     configure_moe_ep_backend(model, config)
+ 
+-    possible_to_load_to_meta = can_reinit_empty_buffers(model)
++    if opsd_config is not None:
++        from rlm_opsd.training.qlora import load_nf4_weights
++
++        model = load_nf4_weights(model, config, torch.device('cuda', torch.cuda.current_device()))
++        possible_to_load_to_meta = False
++    else:
++        possible_to_load_to_meta = can_reinit_empty_buffers(model)
+ 
+     if config.debug.random_init and not possible_to_load_to_meta:
+         raise ValueError(
+@@ -1031,7 +1039,7 @@ def setup_model(
+         )
+ 
+     # 1a. We load to CPU if we cannot reinit empty buffers
+-    if not possible_to_load_to_meta:
++    if not possible_to_load_to_meta and opsd_config is None:
+         logger.warning("Cannot load model to meta device only, loading to CPU instead.")
+         model = get_model(config, device=torch.device("cpu"), dtype=DTYPE_MAP[config.optimization_dtype])
+         configure_moe_ep_backend(model, config)
+@@ -1041,6 +1049,10 @@ def setup_model(
          lm_head_chunk_size = config.fused_lm_head_token_chunk_size
  
      inject_prime_lm_head(model, chunk_size=lm_head_chunk_size, fused_cross_entropy=fused_cross_entropy)
@@ -258,7 +310,19 @@ index 910a978a..0be545c4 100644
  
      if config.fp8:
          replace_linear_with_fp8_blockwise_linear(model)
-@@ -1064,7 +1069,7 @@ def setup_model(
+@@ -1048,6 +1060,11 @@ def setup_model(
+     # Apply LoRA before FSDP setup
+     if config.lora is not None:
+         apply_lora_to_model(model, config.lora)
++        if opsd_config is not None:
++            # Preserve optimizer precision without casting packed NF4 bytes.
++            for parameter in model.parameters():
++                if parameter.requires_grad:
++                    parameter.data = parameter.data.to(DTYPE_MAP[config.optimization_dtype])
+ 
+     if config.freeze_moe_router:
+         freeze_moe_router(model)
+@@ -1064,7 +1081,7 @@ def setup_model(
  
      # the right order is AC -> Compile -> FSDP
      if config.ac is not None:

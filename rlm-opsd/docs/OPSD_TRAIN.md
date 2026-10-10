@@ -5,6 +5,14 @@ scheduler, FSDP2 trainer, optimizer/scheduler, checkpoints, and vLLM LoRA update
 The integration applies to **09e11c7527a242b9f150c7c4c71b1b96da66cb75**.
 `make opsd` remains the separate one-update pretrained smoke.
 
+Both commands now load frozen transformer linear weights as double-quantized
+4-bit NF4 through bitsandbytes 0.49.0, with on-demand BF16 computation. Embeddings,
+norms, convolution parameters and the JSD head remain frozen in BF16. Only
+MultiLoRA parameters train. The teacher bypasses adapters over that same fixed
+quantized base. Generation servers retain their existing base and receive the
+same native adapter updates; NF4 introduces the usual quantization difference
+between trainer and generation weights.
+
 ## Commands
 
 From `rlm-opsd/`, after preparing the pinned Linux runtime:
@@ -46,7 +54,12 @@ the pinned template to native tokenizers and vLLM. It validates the final
 configuration again after serialization, including native `run_default` paths.
 For native checkpoint resume, set `[ckpt] resume_step = -1` in a config using the
 same output directory and training settings. Full optimizer/scheduler state is
-enabled in the shipped config. Resume on GPU is **not run**.
+enabled in the shipped config. DCP stores packed NF4 parameters, quantization
+buffers and adapters; the loader reconstructs the NF4 model before restoring
+that state. Portable weight checkpoints contain `adapter_model.safetensors`
+and `adapter_config.json` over the pinned original base. They no longer export
+the dense base. Older dense-base training checkpoints are incompatible; start
+a new output directory. Resume on GPU is **not run**.
 
 ## Data and loss integration
 
@@ -61,7 +74,7 @@ enabled in the shipped config. Resume on GPU is **not run**.
   zero-mask dummy turns so every FSDP rank performs the same forward/backward
   schedule. Both sequences must fit their limits; teacher-prefix headroom is
   checked across the train split before launch.
-- `trainer/model.py::setup_model` installs the OPSD head before LoRA,
+- `trainer/model.py::setup_model` loads NF4 before installing the OPSD head, LoRA,
   activation checkpointing, and FSDP. Both passes call the outer wrapped model.
   The frozen teacher runs first; adapter forward methods, routing, scaling,
   module modes, and RNG are restored before the student pass.
@@ -82,7 +95,11 @@ MultiLoRA, FSDP data sharding, and optional activation checkpointing. Compilatio
 FP8, context/expert parallelism, FSDP parameter CPU offload, multimodal models,
 fake rollouts, trainable base modules, and remote teacher/SFT configurations
 are rejected. Existing `optimization_dtype` and `reduce_dtype` defaults are
-preserved. The optional smoke implementation retains its unsharded guard.
+preserved for adapters and gradient reduction. Packed NF4 uses BF16 containers
+without numeric dtype conversion; scales are checkpointed buffers. FSDP shards
+the packed parameters using its existing wrapping. The smoke retains its
+unsharded guard. Initial loading holds a quantized model per trainer GPU before
+sharding; hardware fit has not been measured.
 
 ## Reproducible source patch
 

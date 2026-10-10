@@ -69,3 +69,36 @@ class TinyModel(nn.Module):
 
 def forward(model,input_ids,position_ids):
     return model(input_ids=input_ids,position_ids=position_ids)
+
+
+@pytest.fixture
+def prime_checkpoint(prime_api, monkeypatch):
+    """Real checkpoint/export code; isolate unused CUDA/MoE and loader imports."""
+    package = sys.modules['prime_rl.trainer.models.layers.lora']
+    for name in ('MultiLoRAModule', 'get_lora_num_tokens', 'get_multilora_scaling',
+                 'set_lora_num_tokens', 'set_multilora_scaling'):
+        setattr(package, name, getattr(prime_api.base, name))
+    package.MultiLoRALinear = prime_api.MultiLoRALinear
+    monkeypatch.setattr(sys.modules['prime_rl.trainer.models'], 'PreTrainedModelPrimeRL',
+                        type('PreTrainedModelPrimeRL', (nn.Module,), {}), raising=False)
+    # These classes are only imported, never instantiated by these dense tests.
+    for module_name, classes in {
+        'prime_rl.trainer.models.layers.moe': ['GptOssGroupedExperts', 'GroupedExperts', 'NonGatedGroupedExperts'],
+        'prime_rl.trainer.models.layers.lora.multi_moe': ['MultiLoRAGptOssGroupedExperts',
+            'MultiLoRAGroupedExperts', 'MultiLoRANonGatedGroupedExperts'],
+        'prime_rl.trainer.optim': ['CPUOffloadOptimizer'],
+        'torchdata.stateful_dataloader': ['StatefulDataLoader'],
+        'wandb': [],
+    }.items():
+        module = ModuleType(module_name)
+        for name in classes:
+            setattr(module, name, type(name, (), {}))
+        monkeypatch.setitem(sys.modules, module_name, module)
+    for name in ('lora', 'weights', 'ckpt'):
+        full_name = 'prime_rl.trainer.' + name
+        path = Path(__file__).resolve().parents[1] / '.deps/prime-rl/src/prime_rl/trainer' / (name + '.py')
+        spec = importlib.util.spec_from_file_location(full_name, path)
+        module = importlib.util.module_from_spec(spec)
+        monkeypatch.setitem(sys.modules, full_name, module)
+        spec.loader.exec_module(module)
+    return module

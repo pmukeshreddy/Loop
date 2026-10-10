@@ -12,6 +12,7 @@ import torch
 from prime_cpu import prime_api
 from test_training_opsd import BackboneModel
 from test_training_samples import prefixes, rollout
+from test_training_qlora import nf4_model, attach_adapter
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -48,12 +49,13 @@ def test_trainer_factory_runs_full_vocabulary_jsd(prime_api):
     assert 0<=result['loss']<=.693148
 
 
-@pytest.mark.parametrize('fault',[None,'wrong_objective','missing_objective','gate','slope','beta','temperature'])
+@pytest.mark.parametrize('fault',[None,'wrong_objective','missing_objective','gate','slope','beta','temperature','dense_base'])
 def test_opsd_large_requires_small_opsd_with_same_objective(tmp_path,fault):
     from rlm_opsd.training.runner import verify_small_smoke,objective_metadata
     cfg=config('27b').model_copy(update={'small_smoke_dir':tmp_path})
     small=config();checkpoint=tmp_path/'adapter.pt';checkpoint.write_bytes(b'unit proof fixture')
     record=dict(status='completed',kind='pretrained_model_smoke',stage='small',
+        base_quantization='nf4',
         base_model=small.base_model,revision=small.revision,objective=objective_metadata(small),
         metrics={'updated':True,'assistant_tokens':2},checkpoint='adapter.pt',
         checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest())
@@ -63,6 +65,7 @@ def test_opsd_large_requires_small_opsd_with_same_objective(tmp_path,fault):
     elif fault=='slope':record['objective']['token_gate_k']=2.
     elif fault=='beta':record['objective']['beta']=.3
     elif fault=='temperature':record['objective']['temperature']=.5
+    elif fault=='dense_base':record.pop('base_quantization')
     (tmp_path/'smoke.json').write_text(json.dumps(record))
     if fault is None:verify_small_smoke(cfg)
     else:
@@ -70,11 +73,12 @@ def test_opsd_large_requires_small_opsd_with_same_objective(tmp_path,fault):
 
 
 @pytest.mark.parametrize('gate',[False,True])
-def test_runner_preserves_opsd_objective_and_runs_real_cpu_update(tmp_path,monkeypatch,prime_api,gate):
+def test_runner_preserves_opsd_objective_and_runs_real_cpu_update(tmp_path,monkeypatch,prime_api,gate,nf4_model):
     import rlm_opsd.training.runner as module
     from rlm_opsd.training.backend import create_trainer
     cfg=config().model_copy(update={'token_gate':gate,'jsd_chunk_size':1})
-    model=BackboneModel(prime_api);trainer=create_trainer(cfg,model,api=prime_api)
+    model=nf4_model;attach_adapter(model,prime_api);model.train()
+    trainer=create_trainer(cfg,model,api=prime_api)
     plan=SimpleNamespace(prefixes=prefixes(),snapshot=tmp_path,
                          provenance={'source':'CPU FIXTURE; NOT PRETRAINED MODEL RESULTS'})
     monkeypatch.setattr(module,'prepare_smoke',lambda cfg:plan)
@@ -85,6 +89,7 @@ def test_runner_preserves_opsd_objective_and_runs_real_cpu_update(tmp_path,monke
     monkeypatch.setattr(module,'collect_rollout',collect)
     output=tmp_path/'run';result=asyncio.run(module.run_smoke(cfg,output))
     assert result['status']=='completed' and result['kind']=='cpu_tensor_fixture'
+    assert result['base_quantization']=='nf4'
     assert result['objective']['kind']=='full_vocab_jsd' and result['objective']['token_gate']==gate
     assert result['metrics']['updated'] and 0<=result['metrics']['loss']<=.693148
     weights=torch.load(output/'adapter.pt',weights_only=True)

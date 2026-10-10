@@ -4,7 +4,13 @@ For multi-step training through prime-rl's async rollout/FSDP/vLLM loop, use
 [`make opsd-train`](OPSD_TRAIN.md). This page documents the earlier one-update
 smoke, which remains available as `make opsd`.
 
-OPSD uses the same frozen initial base as
+Both paths use QLoRA: frozen transformer linear weights are stored in 4-bit
+NF4 with double quantization and dequantized on demand for BF16 computation.
+Embeddings, norms, convolution parameters and the chunked JSD output head stay
+frozen in BF16. Only the existing prime-rl LoRA adapters train. There is no
+precision mode selector or dense-base training alternative.
+
+OPSD uses the same frozen quantized initial base as
 the teacher, with adapters bypassed for a second local backbone forward. No
 teacher scoring server or scoring API is used.
 
@@ -108,6 +114,7 @@ this prerequisite. Changing chunk size alone does not change the objective.
 
 Outputs preserve M6's provenance, generation requests, original tokens, native
 LoRA tensor checkpoint and errors. `smoke.json` records the
+`base_quantization` (`nf4`); older dense-base smoke evidence is rejected. It also records the
 `objective` (`full_vocab_jsd`, beta, temperature, token gate and slope). Complete
 settings, including chunk size, remain in `run.json`. A CPU runner test reports
 `cpu_tensor_fixture`; a real pretrained smoke would report

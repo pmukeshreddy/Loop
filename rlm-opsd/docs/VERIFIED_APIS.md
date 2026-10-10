@@ -817,3 +817,47 @@ inconclusive; request/cleanup failures are errors. Existing outputs are refused.
 commands send no model requests; `exit-check` itself generates retention.
 The checkpoint driver invokes monitoring each step; M8 does not extend the
 M6/M7 smoke into an asynchronous training loop or implement M9.
+
+
+## QLoRA storage and checkpoint contracts
+
+Verified against installed bitsandbytes **0.49.0**, Accelerate **1.13.0**,
+local Transformers **5.9.0**, and prime-rl
+`09e11c7527a242b9f150c7c4c71b1b96da66cb75` (reviewed overlay). Also checked
+the server-pinned Transformers **5.5.0** source at
+[`c1c34249`](https://github.com/huggingface/transformers/blob/c1c34249fa27deefbd4a377dfbf883a39baf5c6d/src/transformers/integrations/bitsandbytes.py)
+and its [quantizer](https://github.com/huggingface/transformers/blob/c1c34249fa27deefbd4a377dfbf883a39baf5c6d/src/transformers/quantizers/quantizer_bnb_4bit.py)
+for the same loading/configuration contracts:
+
+- `transformers/integrations/bitsandbytes.py::replace_with_bnb_linear` and
+  `quantizers/quantizer_bnb_4bit.py::Bnb4BitHfQuantizer`: HF `from_pretrained`
+  loads quantized weights using `BitsAndBytesConfig(load_in_4bit=True,
+  bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
+  bnb_4bit_compute_dtype=torch.bfloat16,
+  bnb_4bit_quant_storage=torch.bfloat16, llm_int8_skip_modules=["lm_head"])`.
+  `device_map={"": str(device)}` keeps the quantized model on the rank's device.
+- `bitsandbytes/nn/modules.py::Linear4bit` and
+  `fix_4bit_weight_quant_state_from_module`: native forward may replace the
+  weight parameter after FSDP gathers it. OPSD instead wraps the loaded layer
+  in `rlm_opsd/training/qlora.py::NF4Linear`, holding packed data in an ordinary
+  frozen BF16 parameter and scales/codebooks in persistent buffers.
+- `bitsandbytes/functional.py::QuantState`, `dequantize_4bit` and
+  `autograd/_functions.py::MatMul4Bit`: the double-quantized state consists of
+  NF4 shape/block size, compressed absmax, codebook, offset, and nested FP32
+  absmax/codebook. `matmul_4bit` dequantizes for BF16 forward and input-gradient
+  computation, retaining packed weights rather than a dense base copy.
+- Patched `trainer/model.py::setup_model`: NF4 loading precedes MultiLoRA,
+  activation checkpointing and FSDP. Only adapters are cast to the configured
+  optimizer dtype; native FSDP still computes in BF16. NF4 resumes initialize
+  quantization metadata before restoring native DCP state.
+- `trainer/ckpt.py::AppState`: native `get_state_dict`/`set_state_dict` stores
+  and restores packed weights, registered quantization buffers, adapters,
+  optimizer and scheduler. `WeightCheckpointManager.save` exports only adapter
+  weights/config for the quantized model. Existing
+  `trainer/rl/broadcast/filesystem.py::FileSystemWeightBroadcast` continues
+  gathering adapter tensors via `MultiRunManager.get_state_dict_for_run`.
+
+The packed floating storage convention follows the
+[bitsandbytes FSDP-QLoRA contract](https://huggingface.co/docs/bitsandbytes/fsdp_qlora).
+Local execution evidence is in [the QLoRA test log](checks/qlora/make-test.log).
+CUDA/NCCL and pretrained-model training remain **not run**.

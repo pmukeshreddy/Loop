@@ -52,11 +52,12 @@ def test_fixture_gate_cannot_authorize_real_training():
 
 @pytest.mark.parametrize('fault',['missing','fixture','wrong_model','failed','missing_checkpoint','hash'])
 def test_large_smoke_requires_successful_pinned_small_smoke_with_checkpoint(tmp_path,fault):
-    from rlm_opsd.training.runner import verify_small_smoke
+    from rlm_opsd.training.runner import verify_small_smoke, objective_metadata
     cfg=config('27b').model_copy(update={'small_smoke_dir':tmp_path})
     checkpoint=tmp_path/'adapter.pt';checkpoint.write_bytes(b'unit-test checkpoint fixture')
     small=config()
     record=dict(status='completed',kind='pretrained_model_smoke',stage='small',
+        base_quantization='nf4',objective=objective_metadata(small),
         base_model=small.base_model,revision=small.revision,
         metrics={'updated':True,'assistant_tokens':2},checkpoint='adapter.pt',
         checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest())

@@ -32,7 +32,7 @@ def configure_adapters(model, *, rank, alpha, api):
     adapters=checked_adapters(model,api)
     for adapter in adapters:
         if any(torch.count_nonzero(p) for p in adapter.lora_B):
-            raise ValueError('initial student must equal generation endpoint base: LoRA B must be zero')
+            raise ValueError('initial student adapter must be disabled: LoRA B must be zero')
     # Use the pinned ordinary matmul path on both Ampere and Hopper. The
     # grouped kernel selected automatically by rank/width has stricter hardware needs.
     for adapter in adapters:adapter.use_grouped_mm=False
@@ -55,6 +55,7 @@ def load_backend(config,snapshot,output):
     from prime_rl.trainer.lora import apply_lora_to_model
     from prime_rl.trainer.runs import setup_multi_run_manager
     from .teacher import prime_lora_api
+    from .qlora import load_nf4_weights
 
     if dist.is_initialized():raise ValueError('smoke owns its process group; use a fresh process')
     torch.cuda.set_device(0)
@@ -67,8 +68,8 @@ def load_backend(config,snapshot,output):
     try:
         dist.init_process_group('nccl',init_method='file://'+str(Path(output).resolve()/'rendezvous'),rank=0,world_size=1)
         setup_multi_run_manager(Path(output),1,torch.device('cuda',0),lora)
-        model=get_model(model_config,device=torch.device('cuda',0),dtype=torch.bfloat16)
-        model=model.to('cuda:0')
+        model=get_model(model_config,device=torch.device('meta'),dtype=torch.bfloat16)
+        model=load_nf4_weights(model,model_config,torch.device('cuda',0))
         apply_lora_to_model(model,lora)
         api=prime_lora_api()
         configure_adapters(model,rank=lora.rank,alpha=lora.alpha,api=api)
