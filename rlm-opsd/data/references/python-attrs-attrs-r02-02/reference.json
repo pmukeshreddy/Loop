@@ -1,0 +1,138 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2614,8 +2614,8 @@\n         elif (\n             \"name\" in changes\n             and \"alias\" not in changes\n-            # Don't auto-generate alias if the user picked picked the old one.\n-            and self.alias is not None\n+            # Preserve explicit aliases, even if they match the old default.\n+            and self.alias_is_default\n         ):\n             # Name changed, alias was auto-generated -- update it.\n             _OBJ_SETATTR.__get__(new)(\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 864846 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['files', 'm', 'src']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 code searches without printing the whole repository context. The verified repair targets Attribute.evolve rather than generated constructor code, connecting the constructor symptom to metadata changes during field transformation.",
+   "persistent_state": "Across seven turns, the execution reused repository and source variables while investigating the distinction between field names, explicit aliases, and automatically derived aliases. That distinction is necessary to preserve explicit aliases while allowing default aliases to follow renames."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise unified-diff output requirement. The question states the required behavior without identifying the defective symbol or prescribing the implementation. The verified patch uses existing alias-provenance metadata to correct the rename condition, and the task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "Constructor failures must be connected to field-transformer metadata changes, alias provenance, and reconstruction rather than treated as defects in the generated signature alone.",
+   "persistent_state": "The investigation needs to retain the distinction between storage names, constructor aliases, and alias provenance while following declarations through metadata copying, transformation, initializer generation, and instance reconstruction."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Attribute.from_counting_attr",
+    "why": "Records whether an alias originated from an explicit declaration."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Attribute.evolve",
+    "why": "Copies field metadata and determines whether a renamed field receives a new alias."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_transform_attrs",
+    "why": "Populates aliases before invoking the field transformer."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::evolve",
+    "why": "Reconstructs instances using field aliases as constructor keyword names."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The injected condition mistakes a populated alias for an automatically generated alias. It does not change declarations or generated APIs directly.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions involving renamed fields and constructor aliases. Repair the underlying alias-handling regression: renaming a field through a field transformer must preserve a user-supplied constructor alias, even when that alias happens to equal the old automatically derived alias. Automatically derived aliases must continue to track field renames. Return a unified diff against the repository's production files, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2590,9 +2590,9 @@\n             \"name\" in changes\n             and \"alias\" not in changes\n             # Don't auto-generate alias if the user picked picked the old one.\n-            and self.alias_is_default\n+            and self.alias is not None\n         ):\n             # Name changed, alias was auto-generated -- update it.\n             _OBJ_SETATTR.__get__(new)(\n"
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r02-02",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_hooks.py::TestTransformHook::test_hook_evolve_name_keeps_explicit_alias"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1378
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_hooks.py::TestTransformHook::test_hook_evolve_name_keeps_explicit_alias"
+  ],
+  "ground_truth_symbols": [
+   "src/attr/_make.py::Attribute.evolve"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1377,
+  "stability_runs": 3
+ }
+}

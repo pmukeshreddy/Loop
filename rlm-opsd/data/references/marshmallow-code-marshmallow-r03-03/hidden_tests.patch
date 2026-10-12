@@ -1,0 +1,40 @@
+--- /dev/null
++++ b/tests/test_tuple_nested_selection_acceptance.py
+@@ -0,0 +1,37 @@
++from marshmallow import EXCLUDE, Schema, fields
++
++
++class SelectionLeaf(Schema):
++    name = fields.Str()
++    age = fields.Int()
++    city = fields.Str()
++
++
++class SelectionBatch(Schema):
++    pair = fields.Tuple((fields.Nested(SelectionLeaf, only=("name", "age")), fields.Nested(SelectionLeaf)))
++    wrapped = fields.List(fields.Dict(keys=fields.Str(), values=fields.Tuple((fields.Nested(SelectionLeaf),))))
++    scalar = fields.Tuple((fields.Int(),))
++
++
++PAIR = ({"name": "A", "age": 7, "city": "X"}, {"name": "B", "age": 8, "city": "Y"})
++
++
++def test_tuple_only_and_loading():
++    schema = SelectionBatch(only=("pair.age",))
++    assert schema.dump({"pair": PAIR}) == {"pair": ({"age": 7}, {"age": 8})}
++    assert schema.load({"pair": [{"age": "7"}, {"age": "8"}]}) == {"pair": ({"age": 7}, {"age": 8})}
++
++
++def test_tuple_exclude_preserves_child_only():
++    schema = SelectionBatch(exclude=("pair.age",))
++    assert schema.dump({"pair": PAIR}) == {"pair": ({"name": "A"}, {"name": "B", "city": "Y"})}
++
++
++def test_deep_wrappers_and_instance_isolation():
++    payload = {"wrapped": [{"slot": (PAIR[0],)}], "scalar": (3,)}
++    first = SelectionBatch(only=("wrapped.age", "scalar"))
++    second = SelectionBatch(only=("wrapped.name",))
++    assert first.dump(payload) == {"wrapped": [{"slot": ({"age": 7},)}], "scalar": (3,)}
++    assert second.dump(payload) == {"wrapped": [{"slot": ({"name": "A"},)}]}
++    assert first.load({"wrapped": [{"slot": [{"age": "7"}]}], "scalar": ["3"]}, unknown=EXCLUDE) == {"wrapped": [{"slot": ({"age": 7},)}], "scalar": (3,)}
++    assert SelectionBatch(exclude=("wrapped.age",)).dump(payload) == {"wrapped": [{"slot": ({"name": "A", "city": "X"},)}], "scalar": (3,)}

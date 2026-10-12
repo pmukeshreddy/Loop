@@ -1,0 +1,119 @@
+{
+ "answer": "--- a/src/attr/setters.py\n+++ b/src/attr/setters.py\n@@ -12,13 +12,33 @@\n     \"\"\"\n     Run all *setters* and return the return value of the last one.\n \n+    Lists and tuples are expanded recursively in left-to-right order. Empty\n+    sequences contribute no hooks. If there are no hooks, return the supplied\n+    value unchanged.\n+\n+    Each hook receives the original instance and attribute and the preceding\n+    hook's return value. Non-callable leaves raise `TypeError` when the pipeline\n+    is created.\n+\n     .. versionadded:: 20.1.0\n     \"\"\"\n+    hooks = []\n+\n+    def add_hooks(items):\n+        for setter in items:\n+            if isinstance(setter, (list, tuple)):\n+                add_hooks(setter)\n+            elif callable(setter):\n+                hooks.append(setter)\n+            else:\n+                raise TypeError(\"All setters must be callable.\")\n+\n+    add_hooks(setters)\n \n     def wrapped_pipe(instance, attrib, new_value):\n         rv = new_value\n \n-        for setter in setters:\n+        for setter in hooks:\n             rv = setter(instance, attrib, rv)\n \n         return rv\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 1645 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the small, single-file context without sub-calls to produce a focused production patch. The implementation requires reasoning about recursive flattening, left-to-right execution, preservation of callback arguments, empty-pipeline identity, and eager validation."
+  },
+  "notes": "This is a natural, precisely specified API enhancement with a clear unified-diff deliverable. Naming the API and required behavior does not leak its implementation. The verified patch and supplied tests support the requested nested ordering, identity behavior, and creation-time rejection of invalid leaves. The task is distinct from the accepted class-construction and keyword-only investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The complete setter-pipeline implementation fits in one small file. The task requires reasoning about recursive sequence expansion, callback order, identity behavior, and when validation occurs, without investigating the class builder."
+  },
+  "context": {
+   "files": [
+    "src/attr/setters.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::pipe",
+    "why": "Owns pipeline construction, callback ordering, and return-value propagation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_setters_nested_pipe.py\n@@ -0,0 +1,36 @@\n+import pytest\n+\n+from attr import setters\n+\n+\n+def test_nested_order():\n+    events = []\n+    inst = object()\n+    field = object()\n+\n+    def add(instance, attrib, value):\n+        assert instance is inst\n+        assert attrib is field\n+        events.append((\"add\", value))\n+        return value + 1\n+\n+    def double(instance, attrib, value):\n+        assert instance is inst\n+        assert attrib is field\n+        events.append((\"double\", value))\n+        return value * 2\n+\n+    hook = setters.pipe([add, (double, [], [add])], double)\n+    assert hook(inst, field, 2) == 14\n+    assert events == [(\"add\", 2), (\"double\", 3), (\"add\", 6), (\"double\", 7)]\n+\n+\n+def test_empty_nested_identity():\n+    value = object()\n+    assert setters.pipe([], ((), []))(None, None, value) is value\n+\n+\n+@pytest.mark.parametrize(\"bad\", [42, None, setters.NO_OP])\n+def test_bad_leaf_is_rejected_eagerly(bad):\n+    with pytest.raises(TypeError):\n+        setters.pipe([lambda i, a, v: v, (bad,)])\n",
+  "include_failure_log": false,
+  "notes": "Acceptance checks only the new nested-sequence behavior and existing hook calling convention. No particular TypeError message is required.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Extend attr.setters.pipe to accept nested lists and tuples of hooks alongside its existing variadic callable arguments. Expand lists and tuples recursively, preserving left-to-right order; empty sequences contribute no hooks. Each hook must still receive the original instance and Attribute and the preceding hook's return value. A pipeline containing no hooks must return the supplied value unchanged. Reject any non-callable leaf, including NO_OP, with TypeError when pipe is created, not when the returned hook is invoked. Keep existing callable-only usage compatible. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r02-00",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[42]",
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[None]",
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[bad2]",
+   "tests/test_setters_nested_pipe.py::test_empty_nested_identity",
+   "tests/test_setters_nested_pipe.py::test_nested_order"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1383
+   },
+   "patch_files": [
+    "src/attr/setters.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[42]",
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[None]",
+   "tests/test_setters_nested_pipe.py::test_bad_leaf_is_rejected_eagerly[bad2]",
+   "tests/test_setters_nested_pipe.py::test_empty_nested_identity",
+   "tests/test_setters_nested_pipe.py::test_nested_order"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

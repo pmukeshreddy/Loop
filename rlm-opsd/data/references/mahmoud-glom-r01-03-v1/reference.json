@@ -1,0 +1,212 @@
+{
+ "answer": "--- a/glom/core.py\n+++ b/glom/core.py\n@@ -1467,6 +1467,9 @@\n \n     def __floordiv__(self, arg):\n         return _t_child(self, '#', arg)\n+\n+    def __rfloordiv__(self, arg):\n+        return _t_child(self, 'r//', arg)\n \n     def __truediv__(self, arg):\n         return _t_child(self, '/', arg)\n@@ -1624,8 +1627,10 @@\n                     cur = cur - arg\n                 elif op == '*':\n                     cur = cur * arg\n-                #elif op == '#':\n-                #    cur = cur // arg  # TODO: python 2 friendly approach?\n+                elif op == '#':\n+                    cur = cur // arg\n+                elif op == 'r//':\n+                    cur = arg // cur\n                 elif op == '/':\n                     cur = cur / arg\n                 elif op == '%':\n@@ -1726,6 +1731,10 @@\n     i = 0\n     while i < len(path):\n         op, arg = path[i], path[i + 1]\n+        # A reflected division becomes the left operand of subsequent\n+        # operations, rather than extending its denominator.\n+        if i and path[i - 2] == 'r//' and op not in ('_', '~', 'r//'):\n+            prepr = ['('] + prepr + [')']\n         if op == '.':\n             prepr.append('.' + arg)\n         elif op == '[':\n@@ -1743,17 +1752,33 @@\n             prepr.append(\".__star__()\")\n         elif op == 'X':\n             prepr.append(\".__starstar__()\")\n+        elif op == 'r//':\n+            denominator = \"\".join(prepr)\n+            if any(o in tuple('+-*/%:&|^~_') + ('#', 'r//')\n+                   for o in path[:i:2]):\n+                denominator = '(' + denominator + ')'\n+            numerator = bbrepr(arg)\n+            if type(arg) is TType and any(\n+                    o in tuple('+-*/%:&|^~_') + ('#', 'r//')\n+                    for o in arg.__ops__[1::2]):\n+                numerator = '(' + numerator + ')'\n+            prepr = [numerator + ' // ' + denominator]\n         elif op in ('_', '~'):  # unary arithmetic operators\n-            if any([o in path[:i] for o in '+-/%:&|^~_']):\n+            if any([o in path[:i] for o in tuple('+-/%:&|^~_') + ('#', 'r//')]):\n                 prepr = ['('] + prepr + [')']\n             prepr = ['-' if op == '_' else op] + prepr\n         else:  # binary arithmetic operators\n             formatted_arg = bbrepr(arg)\n             if type(arg) is TType:\n                 arg_path = arg.__ops__\n-                if any([o in arg_path for o in '+-/%:&|^~_']):\n+                if any([o in arg_path for o in tuple('+-/%:&|^~_') + ('#', 'r//')]):\n                     formatted_arg = '(' + formatted_arg + ')'\n-            prepr.append(' ' + ('**' if op == ':' else op) + ' ')\n+            if op == '#' and any(\n+                    o in tuple('+-*/%:&|^~_') + ('#', 'r//')\n+                    for o in path[:i:2]) and not (i and path[i - 2] == 'r//'):\n+                prepr = ['('] + prepr + [')']\n+            symbol = '**' if op == ':' else '//' if op == '#' else op\n+            prepr.append(' ' + symbol + ' ')\n             prepr.append(formatted_arg)\n         i += 2\n     return \"\".join(prepr)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 10,
+   "context_searches": 26,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "m",
+    "m2",
+    "new",
+    "patch"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 11,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 405797 chars; 26 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch coordinates reflected operand order with forward floor division and grouping rules, while relying on existing operand evaluation and error wrapping. The reference constructed the final diff in a reused variable and inspected it before finishing.",
+   "inspect_locate": "The reference used 26 targeted context searches without printing the whole context. The resulting patch connects expression construction, arithmetic execution, and representation formatting in separate parts of the core module."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. Its examples specify public behavior rather than disclose internal defective symbols or the fix. Although it overlaps the accepted forward-floor-division task, reflected division adds materially different construction, operand-order, original-target evaluation, and representation requirements; it is not merely a cosmetic variation or duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must coordinate reflected expression construction, reversed arithmetic execution, and representation grouping. Its pieces must agree on operand order, preserve original-target evaluation for Spec numerators, and retain the existing path-error metadata.",
+   "inspect_locate": "The large core module contains separate sites for constructing T expressions, evaluating their operands, executing arithmetic, formatting representations, and dispatching explicit specs inside Fill and Call. The task requires connecting these sites rather than merely adding a Python operator method."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::TType",
+    "why": "Defines expression-building arithmetic methods but has no reflected floor-division method."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::_t_eval",
+    "why": "Separates the original target from the accumulated value, evaluates recorded arguments, and wraps arithmetic failures with full-path metadata."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::_format_t",
+    "why": "Currently formats binary operations by appending an operand; reflected division needs reversed display order and grouping around subsequent operations."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Spec.glomit",
+    "why": "Supplies explicit numerator-spec evaluation and its existing mode-sensitive semantics."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::arg_val",
+    "why": "Provides original-target argument evaluation while preserving literal values."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Call.glomit",
+    "why": "Evaluates positional and keyword argument containers through arg_val."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Fill.glomit",
+    "why": "Establishes the container-filling mode in which explicit reflected expressions must remain executable."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/glom/test/test_reflected_floordiv.py\n@@ -0,0 +1,79 @@\n+import pytest\n+\n+from glom import Call, Fill, Path, PathAccessError, Spec, T, glom\n+\n+\n+@pytest.mark.parametrize('numerator, denominator', [\n+    (10, 3), (10, -3), (-10, 3), (-10, -3),\n+    (10.5, 3), (10, -3.0), (-10.5, 3.0), (0, 2),\n+])\n+def test_reflected_python_semantics(numerator, denominator):\n+    expression = numerator // T\n+    expected = numerator // denominator\n+    result = glom(denominator, expression)\n+    assert result == expected\n+    assert type(result) is type(expected)\n+\n+\n+def test_spec_numerator_uses_original_target():\n+    target = {'n': 29, 'd': 4}\n+    expression = Spec('n') // (T['d'] + 1)\n+    assert glom(target, expression) == 5\n+    assert glom(target, expression * 3 - 2) == 13\n+\n+\n+def test_accumulated_denominator_and_later_operands():\n+    target = {'d': 4, 'offset': 3}\n+    expression = (100 // (T['d'] + 1)) // 2 + T['offset']\n+    assert glom(target, expression) == 13\n+    assert glom(4, 100 // (10 // T)) == 50\n+\n+\n+def test_reflected_fill_and_call_arguments():\n+    target = {'n': 29, 'd': 4}\n+    expression = Spec(T['n']) // (T['d'] + 1)\n+    assert glom(target, Fill({'q': expression, 'next': [expression + 1]})) == {\n+        'q': 5, 'next': [6]}\n+    def collect(*args, **kwargs):\n+        return args, kwargs\n+    assert glom(target, Call(collect, args=(expression,),\n+                             kwargs={'q': 10 // T['d']})) == ((5,), {'q': 2})\n+\n+\n+@pytest.mark.parametrize('numerator, denominator, error_type', [\n+    (10, 0, ZeroDivisionError),\n+    (10.0, 0.0, ZeroDivisionError),\n+    (10, 'bad', TypeError),\n+    ('bad', 2, TypeError),\n+])\n+def test_reflected_error_metadata(numerator, denominator, error_type):\n+    expression = (numerator // (T['d'] * 1)) + 7\n+    with pytest.raises(PathAccessError) as caught:\n+        glom({'d': denominator}, expression)\n+    error = caught.value\n+    assert type(error.exc) is error_type\n+    assert error.part_idx == 2\n+    assert error.path == Path(expression)\n+    assert error.path.items() == Path(expression).items()\n+    assert glom({'d': denominator}, expression, default='fallback') == 'fallback'\n+\n+\n+@pytest.mark.parametrize('target', [7, -7, 7.5, -7.5])\n+def test_forward_floor_division_remains_supported(target):\n+    assert glom(target, T // 2) == target // 2\n+    assert glom(target, T // (T + 1)) == target // (target + 1)\n+    assert glom(target, (T // 2) + 3) == target // 2 + 3\n+\n+\n+@pytest.mark.parametrize('build, expected', [\n+    (lambda: 10 // T, '10 // T'),\n+    (lambda: 10 // (T + 1), '10 // (T + 1)'),\n+    (lambda: (10 // T) + 1, '(10 // T) + 1'),\n+    (lambda: -(10 // T), '-(10 // T)'),\n+    (lambda: T + (10 // T), 'T + (10 // T)'),\n+    (lambda: T // 2, 'T // 2'),\n+    (lambda: T + (T // 2), 'T + (T // 2)'),\n+    (lambda: -(T // 2), '-(T // 2)'),\n+])\n+def test_floor_division_representation(build, expected):\n+    assert repr(build()) == expected\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot does not yet contain the accepted forward-floor-division implementation. Accordingly, the question explicitly includes that prerequisite rather than using a feature-enabling setup_patch as though it were a regression. The new hidden-test artifact verifies the substantive reflected extension as well as the forward prerequisite. Applying only the original accepted patch cannot satisfy this task: reflected expression construction, execution, original-target Spec numerator evaluation, and reversed representation grouping are all newly required. No private operation encoding is imposed by the tests.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Extend T expressions with reflected floor division so that `numerator // T_expression` produces an executable glom spec. A literal numerator remains a value; an explicit `Spec` numerator is evaluated against the original target of the T expression, not against the denominator. The denominator is the accumulated result of the right-hand T expression. Apply Python floor-division semantics, including negative numbers and floating-point operands. The result must allow further T arithmetic and evaluate correctly inside Fill containers and Call's positional and keyword arguments.\n\nBoth operand orders must work in this snapshot: ensure forward `T_expression // divisor` also executes floor division, with explicit expression operands evaluated against the original target. Arithmetic TypeError and ZeroDivisionError must become PathAccessError instances retaining the underlying exception, the complete expression path, and the zero-based index of the failing operation, even when later operations follow it.\n\nRepresentations must display `//` and preserve operand order and grouping. Require exactly `10 // T`, `10 // (T + 1)`, and `(10 // T) + 1` for those respective expressions; unary negation and use as another expression's operand must render as `-(10 // T)` and `T + (10 // T)`. Forward expressions must likewise render as `T // 2`, `T + (T // 2)`, and `-(T // 2)`. Leave unrelated operators' behavior unchanged. Return a unified diff against production files only, without modifying tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate and combine_verify_finish across expression construction, argument evaluation, execution, and representation. Persistent state is useful for maintaining the distinction between original target, accumulated denominator, and numerator, which ordinary forward arithmetic does not require.",
+  "change_type": "constraint",
+  "description": "After applying the accepted floor-division patch, add reflected floor division: `numerator // T_expression`. Implement `TType.__rfloordiv__` in glom/core.py and connect its recorded operation to `_t_eval` and `_format_t`. The numerator may be a literal or an explicit `Spec`, evaluated against the original target, while the denominator is the accumulated value of the right-hand T expression. Require Python semantics for negative and floating-point values, subsequent T arithmetic, and use inside Fill and Call arguments. Normalize arithmetic TypeError and ZeroDivisionError as PathAccessError with the complete expression path and operation index. Representations must preserve operand order and grouping, including `10 // T`, `10 // (T + 1)`, and `(10 // T) + 1`. Deliver a unified diff without modifying tests.",
+  "expected_answer_change": "The patch must add a new reflected operator method and operation handling, rather than reuse the forward floor-division patch unchanged. Correctness depends on evaluating the numerator against the original target, dividing it by the accumulated denominator, and grouping the entire reflected expression before later operations.",
+  "why_substantive": "The accepted task only activates an already-recorded forward operation. Reflected division currently has no public entry point and requires a distinct operation encoding, reversed operand execution, and formatting that places the accumulated expression on the right rather than appending an operator and argument."
+ },
+ "task_id": "mahmoud-glom-r01-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "glom/test/test_reflected_floordiv.py::test_accumulated_denominator_and_later_operands",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-(10 // T) + 1]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>--(10 // T)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>--(T // 2)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-10 // (T + 1)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-10 // T]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T + (10 // T)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T + (T // 2)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T // 2]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[-7.5]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[-7]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[7.5]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[7]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10-0-ZeroDivisionError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10-bad-TypeError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10.0-0.0-ZeroDivisionError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[bad-2-TypeError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_fill_and_call_arguments",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10--3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10-3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10.5-3.0]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[0-2]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10--3.0]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10--3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10-3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10.5-3]",
+   "glom/test/test_reflected_floordiv.py::test_spec_numerator_uses_original_target"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 27,
+   "full_suite": {
+    "failed": 0,
+    "passed": 227
+   },
+   "patch_files": [
+    "glom/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "glom/test/test_reflected_floordiv.py::test_accumulated_denominator_and_later_operands",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-(10 // T) + 1]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>--(10 // T)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>--(T // 2)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-10 // (T + 1)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-10 // T]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T + (10 // T)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T + (T // 2)]",
+   "glom/test/test_reflected_floordiv.py::test_floor_division_representation[<lambda>-T // 2]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[-7.5]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[-7]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[7.5]",
+   "glom/test/test_reflected_floordiv.py::test_forward_floor_division_remains_supported[7]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10-0-ZeroDivisionError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10-bad-TypeError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[10.0-0.0-ZeroDivisionError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_error_metadata[bad-2-TypeError]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_fill_and_call_arguments",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10--3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10-3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[-10.5-3.0]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[0-2]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10--3.0]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10--3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10-3]",
+   "glom/test/test_reflected_floordiv.py::test_reflected_python_semantics[10.5-3]",
+   "glom/test/test_reflected_floordiv.py::test_spec_numerator_uses_original_target"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 200,
+  "stability_runs": 3
+ }
+}

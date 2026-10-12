@@ -1,0 +1,149 @@
+{
+ "answer": "--- a/lark/lexer.py\n+++ b/lark/lexer.py\n@@ -593,13 +593,6 @@\n         terminals, self.callback = _create_unless(self.terminals, self.g_regex_flags, self.re, self.use_bytes)\n         assert all(self.callback.values())\n \n-        for type_, f in self.user_callbacks.items():\n-            if type_ in self.callback:\n-                # Already a callback there, probably UnlessCallback\n-                self.callback[type_] = CallChain(self.callback[type_], f, lambda t: t.type == type_)\n-            else:\n-                self.callback[type_] = f\n-\n         return Scanner(terminals, self.g_regex_flags, self.re, self.use_bytes)\n \n     @property\n@@ -627,7 +620,7 @@\n \n             ignored = type_ in self.ignore_types\n             t = None\n-            if not ignored or type_ in self.callback:\n+            if not ignored or type_ in self.callback or type_ in self.user_callbacks:\n                 t = Token(type_, value, line_ctr.char_pos, line_ctr.line, line_ctr.column)\n             line_ctr.feed(value, type_ in self.newline_types)\n             if t is not None:\n@@ -636,6 +629,11 @@\n                 t.end_pos = line_ctr.char_pos\n                 if t.type in self.callback:\n                     t = self.callback[t.type](t)\n+                # Dispatch once, after UnlessCallback has resolved embedded literals.\n+                # Keep ignored tokens' callback behavior tied to the scanner type.\n+                if not ignored or t.type == type_:\n+                    if t.type in self.user_callbacks:\n+                        t = self.user_callbacks[t.type](t)\n                 if not ignored:\n                     if not isinstance(t, Token):\n                         raise LexError(\"Callbacks must return a token (returned %r)\" % t)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0012626693081708594,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 20,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "lexer"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 791973 chars; 20 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['files', 'lexer']; hand-copied literals 2"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch reconciles internal retagging with single user-callback dispatch while retaining coordinate assignment and return-token validation. The final diff was computed and inspected before submission.",
+   "inspect_locate": "The reference used 20 targeted searches without printing the whole context. The task requires connecting embedded-literal recognition, callback installation, callback composition, and token emission rather than locating a single named symbol.",
+   "persistent_state": "The reference reused the files and lexer variables across turns, although the supplied established-behaviors list does not separately credit persistent_state."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise dispatch semantics and a clear production-only unified-diff format. Naming UnlessCallback describes the relevant existing mechanism without identifying the defective production function or prescribing a patch. The basic and contextual requirements are closely related compatibility checks, and the investigation does not duplicate an accepted task. The rationale's claim that contextual lexing constructs BasicLexer instances through another module is imprecise, but does not undermine the demonstrated need to inspect and reconcile multiple lexer paths."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The diff must reconcile callback composition and dispatch while preserving the existing coordinate-update and return-token validation paths.",
+   "inspect_locate": "Literal recognition, callback installation, callback chaining, and token emission are separate parts of lexer.py, and contextual lexing constructs multiple BasicLexer instances through another module.",
+   "persistent_state": "A correct implementation must retain the distinction between the scanner's initial regex type, the UnlessCallback retagging result, and the type returned by the selected user callback. Those identities are reused when deciding dispatch and preventing cascades."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::_create_unless",
+    "why": "Matching literal terminals can be removed from the scanner and represented by regex retagging callbacks."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::BasicLexer._build_scanner",
+    "why": "User callbacks are composed with scanner-generated callbacks here."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::BasicLexer.next_token",
+    "why": "The current emission path performs a single callback lookup using the scanner's token type."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::ContextualLexer.__init__",
+    "why": "Contextual lexing creates restricted BasicLexer instances that must receive the same corrected dispatch behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_literal_lexer_callbacks.py\n@@ -0,0 +1,40 @@\n+import pytest\n+\n+from lark import Lark\n+\n+\n+@pytest.mark.parametrize(\"lexer\", [\"basic\", \"contextual\"])\n+@pytest.mark.parametrize(\"change_type\", [False, True])\n+def test_retagged_literal_callback(lexer, change_type):\n+    events = []\n+    def keyword(t):\n+        events.append((\"KEYWORD\", str(t)))\n+        return t.update(type=\"NAME\" if change_type else \"KEYWORD\", value=\"literal\")\n+    def name(t):\n+        events.append((\"NAME\", str(t)))\n+        return t.update(value=\"identifier\")\n+    parser = Lark(\n+        'start: (KEYWORD | NAME)+\\nKEYWORD: \"if\"\\nNAME: /[a-z]+/\\n%ignore \" \"',\n+        parser=\"lalr\", lexer=lexer,\n+        lexer_callbacks={\"KEYWORD\": keyword, \"NAME\": name},\n+    )\n+    tree = parser.parse(\"if word\")\n+    assert events == [(\"KEYWORD\", \"if\"), (\"NAME\", \"word\")]\n+    assert [(t.type, str(t)) for t in tree.children] == [\n+        (\"NAME\" if change_type else \"KEYWORD\", \"literal\"),\n+        (\"NAME\", \"identifier\"),\n+    ]\n+\n+\n+def test_retagging_without_literal_callback():\n+    events = []\n+    def name(t):\n+        events.append(str(t))\n+        return t\n+    parser = Lark(\n+        'start: (KEYWORD | NAME)+\\nKEYWORD: \"if\"\\nNAME: /[a-z]+/\\n%ignore \" \"',\n+        parser=\"lalr\", lexer=\"basic\", lexer_callbacks={\"NAME\": name},\n+    )\n+    tree = parser.parse(\"if word\")\n+    assert events == [\"word\"]\n+    assert tree.children == [\"if\", \"word\"]\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests use equal-priority overlapping literal and regex terminals. They check literal dispatch, regex dispatch, absence of callback cascades, and the no-literal-callback case. Existing position and callback tests should continue to pass.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Explicit lexer callbacks should work for literal tokens even when the basic scanner embeds those literals in a regex terminal. For non-ignored tokens, if `UnlessCallback` retags a regex match as a literal terminal, invoke that literal terminal's configured `lexer_callbacks` callback exactly once, and do not invoke the regex terminal's user callback. If the literal has no configured callback, return the retagged token unchanged. A user callback changing the token type must not trigger another user callback. Preserve ordinary regex callback behavior and token coordinates, and make this work with both `lexer='basic'` and `lexer='contextual'`. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lark-parser-lark-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[False-basic]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[False-contextual]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[True-basic]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[True-contextual]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[False-basic]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[False-contextual]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[True-basic]",
+   "tests/test_literal_lexer_callbacks.py::test_retagged_literal_callback[True-contextual]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

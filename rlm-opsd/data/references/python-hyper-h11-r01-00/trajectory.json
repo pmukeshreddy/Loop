@@ -1,0 +1,91 @@
+{
+  "task_id": "python-hyper-h11-r01-00",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 10228,
+    "context_lengths": [
+      5270,
+      3494,
+      1464
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nfor i,c in enumerate(context):\n print(i,len(c),c[:220])\nprint(\"middle\",context[1][1400:2100])\nprint(\"end\",context[-1][-900:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nfor i,c in enumerate(context):\n print(i,len(c),c[:220])\nprint(\"middle\",context[1][1400:2100])\nprint(\"end\",context[-1][-900:])"
+      ],
+      "stdout_raw_chars": 2314,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 3\n0 5270 # File: h11/_receivebuffer.py\nimport re\nimport sys\nfrom typing import List, Optional, Union\n\n__all__ = [\"ReceiveBuffer\"]\n\n\n# Operations we want to support:\n# - find next \\r\\n or \\r\\n\\r\\n (\\n or \\n\\n are also acceptable),\n1 3494 # File: h11/tests/test_receivebuffer.py\nimport re\nfrom typing import Tuple\n\nimport pytest\n\nfrom .._receivebuffer import ReceiveBuffer\n\n\ndef test_receivebuffer() -> None:\n    b = ReceiveBuffer()\n    assert not b\n    asser\n2 1464 # Log: pytest run on the current branch\n................................................F.........F............. [ 92%]\n......                                                                   [100%]\n====================\nmiddle _extract_next_line() == b\"6789aaa123\\r\\n\"\n    assert b.maybe_extract_next_line() is None\n    assert bytes(b) == b\"\"\n\n    ################################################################\n    # maybe_extract_lines\n    ################################################################\n\n    b += b\"123\\r\\na: b\\r\\nfoo:bar\\r\\n\\r\\ntrailing\"\n    lines = b.maybe_extract_lines()\n    assert lines == [b\"123\", b\"a: b\", b\"foo:bar\"]\n    assert bytes(b) == b\"trailing\"\n\n    assert b.maybe_extract_lines() is None\n\n    b += b\"\\r\\n\\r\"\n    assert b.maybe_extract_lines() is None\n\n    assert b.maybe_extract_at_most(100) == b\"trailing\\r\\n\\r\"\n    assert not b\n\n    # Empty body case (as happens at the end of chunked enc\nend pected\nE   assert [] == [EndOfMessage...Headers([])>)]\nE     \nE     Right contains one more item: EndOfMessage(headers=<Headers([])>)\nE     Use -v to get more diff\n----------------------------- Captured stdout call -----------------------------\nTest 1\nTest 2\n______________________________ test_receivebuffer ______________________________\nh11/tests/test_receivebuffer.py:58: in test_receivebuffer\n    assert b.maybe_extract_next_line() == b\"12\\r345\\n\\r\\n\"\nE   AssertionError: assert bytearray(b'1...89aaa123\\r\\n') == b'12\\r345\\n\\r\\n'\nE     \nE     Left contains 12 more items, first extra item: 54\nE     Use -v to get more diff\n=========================== short test summary info ============================\nFAILED h11/tests/test_io.py::test_ChunkedReader - assert [] == [EndOfMessage....\nFAILED h11/tests/test_receivebuffer.py::test_receivebuffer - AssertionError: ...\n2 failed, 76 passed in 0.18s\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfiles = {}\nfor c in context:\n if c.startswith(\"# File: \"):\n  header,body=c.split(\"\\n\",1);files[header[8:]]=body\nold=files[\"h11/_receivebuffer.py\"]\nprint(old[:2900])\nprint(\"--- remainder ---\")\nprint(old[2900:])\nprint(\"--- tests ---\")\nprint(files[\"h11/tests/test_receivebuffer.py\"][:1650])\nprint(\"--- log ---\")\nprint(context[2][:700])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "files = {}\nfor c in context:\n if c.startswith(\"# File: \"):\n  header,body=c.split(\"\\n\",1);files[header[8:]]=body\nold=files[\"h11/_receivebuffer.py\"]\nprint(old[:2900])\nprint(\"--- remainder ---\")\nprint(old[2900:])\nprint(\"--- tests ---\")\nprint(files[\"h11/tests/test_receivebuffer.py\"][:1650])\nprint(\"--- log ---\")\nprint(context[2][:700])"
+      ],
+      "stdout_raw_chars": 7638,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "import re\nimport sys\nfrom typing import List, Optional, Union\n\n__all__ = [\"ReceiveBuffer\"]\n\n\n# Operations we want to support:\n# - find next \\r\\n or \\r\\n\\r\\n (\\n or \\n\\n are also acceptable),\n#   or wait until there is one\n# - read at-most-N bytes\n# Goals:\n# - on average, do this fast\n# - worst case, do this in O(n) where n is the number of bytes processed\n# Plan:\n# - store bytearray, offset, how far we've searched for a separator token\n# - use the how-far-we've-searched data to avoid rescanning\n# - while doing a stream of uninterrupted processing, advance offset instead\n#   of constantly copying\n# WARNING:\n# - I haven't benchmarked or profiled any of this yet.\n#\n# Note that starting in Python 3.4, deleting the initial n bytes from a\n# bytearray is amortized O(n), thanks to some excellent work by Antoine\n# Martin:\n#\n#     https://bugs.python.org/issue19087\n#\n# This means that if we only supported 3.4+, we could get rid of the code here\n# involving self._start and self.compress, because it's doing exactly the same\n# thing that bytearray now does internally.\n#\n# BUT unfortunately, we still support 2.7, and reading short segments out of a\n# long buffer MUST be O(bytes read) to avoid DoS issues, so we can't actually\n# delete this code. Yet:\n#\n#     https://pythonclock.org/\n#\n# (Two things to double-check first though: make sure PyPy also has the\n# optimization, and benchmark to make sure it's a win, since we do have a\n# slightly clever thing where we delay calling compress() until we've\n# processed a whole event, which could in theory be slightly more efficient\n# than the internal bytearray support.)\nblank_line_regex = re.compile(b\"\\n\\r?\\n\", re.MULTILINE)\n\n\nclass ReceiveBuffer:\n    def __init__(self) -> None:\n        self._data = bytearray()\n        self._next_line_search = 0\n        self._multiple_lines_search = 0\n\n    def __iadd__(self, byteslike: Union[bytes, bytearray]) -> \"ReceiveBuffer\":\n        self._data += byteslike\n        return self\n\n    def __bool__(self) -> bool:\n        return bool(len(self))\n\n    def __len__(self) -> int:\n        return len(self._data)\n\n    # for @property unprocessed_data\n    def __bytes__(self) -> bytes:\n        return bytes(self._data)\n\n    def _extract(self, count: int) -> bytearray:\n        # extracting an initial slice of the data buffer and return it\n        out = self._data[:count]\n        del self._data[:count]\n\n        self._next_line_search = 0\n        self._multiple_lines_search = 0\n\n        return out\n\n    def maybe_extract_at_most(self, count: int) -> Optional[bytearray]:\n        \"\"\"\n        Extract a fixed number of bytes from the buffer.\n        \"\"\"\n        out = self._data[:count]\n        if not out:\n            return None\n\n        return self._extract(count)\n\n    def maybe_extract_next_line(self) -> Optional[bytearray]:\n        \"\"\"\n        Extract the first line, if it is completed in the buffer.\n     \n--- remainder ---\n   \"\"\"\n        # Only search in buffer space that we've not already looked at.\n        search_start_index = self._next_line_search\n        partial_idx = self._data.find(b\"\\r\\n\", search_start_index)\n\n        if partial_idx == -1:\n            self._next_line_search = len(self._data)\n            return None\n\n        # + 2 is to compensate len(b\"\\r\\n\")\n        idx = partial_idx + 2\n\n        return self._extract(idx)\n\n    def maybe_extract_lines(self) -> Optional[List[bytearray]]:\n        \"\"\"\n        Extract everything up to the first blank line, and return a list of lines.\n        \"\"\"\n        # Handle the case where we have an immediate empty line.\n        if self._data[:1] == b\"\\n\":\n            self._extract(1)\n            return []\n\n        if self._data[:2] == b\"\\r\\n\":\n            self._extract(2)\n            return []\n\n        # Only search in buffer space that we've not already looked at.\n        match = blank_line_regex.search(self._data, self._multiple_lines_search)\n        if match is None:\n            self._multiple_lines_search = max(0, len(self._data) - 2)\n            return None\n\n        # Truncate the buffer and return it.\n        idx = match.span(0)[-1]\n        out = self._extract(idx)\n        lines = out.split(b\"\\n\")\n\n        for line in lines:\n            if line.endswith(b\"\\r\"):\n                del line[-1]\n\n        assert lines[-2] == lines[-1] == b\"\"\n\n        del lines[-2:]\n\n        return lines\n\n    # In theory we should wait until `\\r\\n` before starting to validate\n    # incoming data. However it's interesting to detect (very) invalid data\n    # early given they might not even contain `\\r\\n` at all (hence only\n    # timeout will get rid of them).\n    # This is not a 100% effective detection but more of a cheap sanity check\n    # allowing for early abort in some useful cases.\n    # This is especially interesting when peer is messing up with HTTPS and\n    # sent us a TLS stream where we were expecting plain HTTP given all\n    # versions of TLS so far start handshake with a 0x16 message type code.\n    def is_next_line_obviously_invalid_request_line(self) -> bool:\n        try:\n            # HTTP header line must not contain non-printable characters\n            # and should not start with a space\n            return self._data[0] < 0x21\n        except IndexError:\n            return False\n\n--- tests ---\nimport re\nfrom typing import Tuple\n\nimport pytest\n\nfrom .._receivebuffer import ReceiveBuffer\n\n\ndef test_receivebuffer() -> None:\n    b = ReceiveBuffer()\n    assert not b\n    assert len(b) == 0\n    assert bytes(b) == b\"\"\n\n    b += b\"123\"\n    assert b\n    assert len(b) == 3\n    assert bytes(b) == b\"123\"\n\n    assert bytes(b) == b\"123\"\n\n    assert b.maybe_extract_at_most(2) == b\"12\"\n    assert b\n    assert len(b) == 1\n    assert bytes(b) == b\"3\"\n\n    assert bytes(b) == b\"3\"\n\n    assert b.maybe_extract_at_most(10) == b\"3\"\n    assert bytes(b) == b\"\"\n\n    assert b.maybe_extract_at_most(10) is None\n    assert not b\n\n    ################################################################\n    # maybe_extract_until_next\n    ################################################################\n\n    b += b\"123\\n456\\r\\n789\\r\\n\"\n\n    assert b.maybe_extract_next_line() == b\"123\\n456\\r\\n\"\n    assert bytes(b) == b\"789\\r\\n\"\n\n    assert b.maybe_extract_next_line() == b\"789\\r\\n\"\n    assert bytes(b) == b\"\"\n\n    b += b\"12\\r\"\n    assert b.maybe_extract_next_line() is None\n    assert bytes(b) == b\"12\\r\"\n\n    b += b\"345\\n\\r\"\n    assert b.maybe_extract_next_line() is None\n    assert bytes(b) == b\"12\\r345\\n\\r\"\n\n    # here we stopped at the middle of b\"\\r\\n\" delimiter\n\n    b += b\"\\n6789aaa123\\r\\n\"\n    assert b.maybe_extract_next_line() == b\"12\\r345\\n\\r\\n\"\n    assert b.maybe_extract_next_line() == b\"6789aaa123\\r\\n\"\n    assert b.maybe_extract_next_line() is None\n    assert bytes(b) == b\"\"\n\n    ################################################################\n    # maybe_extract_lines\n    ################################################################\n\n    b +=\n--- log ---\n# Log: pytest run on the current branch\n................................................F.........F............. [ 92%]\n......                                                                   [100%]\n=================================== FAILURES ===================================\n______________________________ test_ChunkedReader ______________________________\nh11/tests/test_io.py:405: in test_ChunkedReader\n    t_body_reader(ChunkedReader, b\"0\\r\\n\\r\\n\", [EndOfMessage()])\nh11/tests/test_io.py:373: in t_body_reader\n    assert normalize_data_events(events) == expected\nE   assert [] == [EndOfMessage...Headers([])>)]\nE     \nE     Right contains one more item: EndOfMessage(headers=<Headers([])>)\nE \n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\npath = \"h11/_receivebuffer.py\"\nbefore = '            self._next_line_search = len(self._data)\\n'\nafter = ('            # Recheck the last byte in case a CRLF is split across appends.\\n'\n         '            self._next_line_search = max(0, len(self._data) - 1)\\n')\nassert old.count(before) == 1\nnew = old.replace(before, after)\nast.parse(new)\nassert old == context[0].split(\"\\n\", 1)[1]\nassert new != old\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\"+path, tofile=\"b/\"+path))\nprint(patch)\n# Verify the boundary indices from the failing test without executing repository code.\ndata = bytearray(b\"12\\r\")\nsearch = max(0, len(data)-1)\nassert data.find(b\"\\r\\n\", search) == -1\ndata += b\"345\\n\\r\"\nsearch = max(0, len(data)-1)\ndata += b\"\\n6789aaa123\\r\\n\"\nidx = data.find(b\"\\r\\n\", search) + 2\nassert data[:idx] == b\"12\\r345\\n\\r\\n\"\ntail = data[idx:]\nassert tail == b\"6789aaa123\\r\\n\"\nassert tail.find(b\"\\r\\n\", 0) + 2 == len(tail)\nassert max(0, len(b\"\")-1) == 0\nprint(\"Diff and boundary checks confirmed.\")\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\npath = \"h11/_receivebuffer.py\"\nbefore = '            self._next_line_search = len(self._data)\\n'\nafter = ('            # Recheck the last byte in case a CRLF is split across appends.\\n'\n         '            self._next_line_search = max(0, len(self._data) - 1)\\n')\nassert old.count(before) == 1\nnew = old.replace(before, after)\nast.parse(new)\nassert old == context[0].split(\"\\n\", 1)[1]\nassert new != old\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\"+path, tofile=\"b/\"+path))\nprint(patch)\n# Verify the boundary indices from the failing test without executing repository code.\ndata = bytearray(b\"12\\r\")\nsearch = max(0, len(data)-1)\nassert data.find(b\"\\r\\n\", search) == -1\ndata += b\"345\\n\\r\"\nsearch = max(0, len(data)-1)\ndata += b\"\\n6789aaa123\\r\\n\"\nidx = data.find(b\"\\r\\n\", search) + 2\nassert data[:idx] == b\"12\\r345\\n\\r\\n\"\ntail = data[idx:]\nassert tail == b\"6789aaa123\\r\\n\"\nassert tail.find(b\"\\r\\n\", 0) + 2 == len(tail)\nassert max(0, len(b\"\")-1) == 0\nprint(\"Diff and boundary checks confirmed.\")"
+      ],
+      "stdout_raw_chars": 481,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/h11/_receivebuffer.py\n+++ b/h11/_receivebuffer.py\n@@ -93,7 +93,8 @@\n         partial_idx = self._data.find(b\"\\r\\n\", search_start_index)\n \n         if partial_idx == -1:\n-            self._next_line_search = len(self._data)\n+            # Recheck the last byte in case a CRLF is split across appends.\n+            self._next_line_search = max(0, len(self._data) - 1)\n             return None\n \n         # + 2 is to compensate len(b\"\\r\\n\")\n\nDiff and boundary checks confirmed.\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/h11/_receivebuffer.py\n+++ b/h11/_receivebuffer.py\n@@ -93,7 +93,8 @@\n         partial_idx = self._data.find(b\"\\r\\n\", search_start_index)\n \n         if partial_idx == -1:\n-            self._next_line_search = len(self._data)\n+            # Recheck the last byte in case a CRLF is split across appends.\n+            self._next_line_search = max(0, len(self._data) - 1)\n             return None\n \n         # + 2 is to compensate len(b\"\\r\\n\")\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 47.9291796250036
+  }
+}

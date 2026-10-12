@@ -1,0 +1,117 @@
+--- /dev/null
++++ b/tests/test_dict_duplicate_keys.py
+@@ -0,0 +1,114 @@
++import pytest
++
++from marshmallow import ValidationError, fields
++
++
++DUPLICATE = "Duplicate key."
++INTEGER = "Not a valid integer."
++
++
++@pytest.mark.parametrize("convert_values", [False, True])
++def test_duplicate_keeps_first_entry(convert_values):
++    field = fields.Dict(
++        keys=fields.Int(), values=fields.Int() if convert_values else None
++    )
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"01": "10", "1": "20", "2": "30"})
++    assert exc.value.messages == {"1": {"key": [DUPLICATE]}}
++    expected = {1: 10, 2: 30} if convert_values else {1: "10", 2: "30"}
++    assert exc.value.valid_data == expected
++
++
++@pytest.mark.parametrize("message", ["Key already present.", ["Collision."]])
++def test_duplicate_message_override(message):
++    field = fields.Dict(keys=fields.Int(), error_messages={"duplicate": message})
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"01": "first", "1": "second"})
++    expected = [message] if isinstance(message, str) else message
++    assert exc.value.messages == {"1": {"key": expected}}
++    assert exc.value.valid_data == {1: "first"}
++
++
++def test_equal_converted_keys_need_not_have_the_same_type():
++    key_field = fields.Function(
++        deserialize=lambda raw: 1 if raw == "integer" else 1.0
++    )
++    field = fields.Dict(keys=key_field)
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"integer": "first", "float": "second"})
++    assert exc.value.messages == {"float": {"key": [DUPLICATE]}}
++    assert exc.value.valid_data == {1: "first"}
++
++
++def test_all_later_duplicates_are_errors():
++    field = fields.Dict(keys=fields.Int(), values=fields.Int())
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"01": "10", "1": "20", "001": "40", "2": "30"})
++    assert exc.value.messages == {
++        "1": {"key": [DUPLICATE]},
++        "001": {"key": [DUPLICATE]},
++    }
++    assert exc.value.valid_data == {1: 10, 2: 30}
++
++
++def test_first_key_reserves_slot_even_when_its_value_is_invalid():
++    field = fields.Dict(keys=fields.Int(), values=fields.Int())
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"01": "bad", "1": "20", "2": "30"})
++    assert exc.value.messages == {
++        "01": {"value": [INTEGER]},
++        "1": {"key": [DUPLICATE]},
++    }
++    assert exc.value.valid_data == {2: 30}
++
++
++def test_partial_values_do_not_overwrite_first_entry():
++    field = fields.Dict(keys=fields.Int(), values=fields.List(fields.Int()))
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize(
++            {"01": ["10", "bad"], "1": ["20", "bad"], "2": ["30"]}
++        )
++    assert exc.value.messages == {
++        "01": {"value": {1: [INTEGER]}},
++        "1": {"key": [DUPLICATE], "value": {1: [INTEGER]}},
++    }
++    assert exc.value.valid_data == {1: [10], 2: [30]}
++
++
++def test_values_are_validated_even_for_failed_keys():
++    field = fields.Dict(keys=fields.Int(), values=fields.Int())
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize({"01": "10", "1": "bad", "bad": "bad", "2": "30"})
++    assert exc.value.messages == {
++        "1": {"key": [DUPLICATE], "value": [INTEGER]},
++        "bad": {"key": [INTEGER], "value": [INTEGER]},
++    }
++    assert exc.value.valid_data == {1: 10, 2: 30}
++
++
++@pytest.mark.parametrize("container", ["list", "tuple"])
++def test_duplicate_errors_and_partial_results_in_containers(container):
++    child = fields.Dict(keys=fields.Int(), values=fields.Int())
++    field = fields.List(child) if container == "list" else fields.Tuple((child,))
++    with pytest.raises(ValidationError) as exc:
++        field.deserialize([{"01": "10", "1": "20", "2": "30"}])
++    assert exc.value.messages == {0: {"1": {"key": [DUPLICATE]}}}
++    assert exc.value.valid_data == [{1: 10, 2: 30}]
++
++
++def test_duplicate_tracking_is_per_call():
++    field = fields.Dict(keys=fields.Int(), values=fields.Int())
++    with pytest.raises(ValidationError):
++        field.deserialize({"01": "10", "1": "20"})
++    assert field.deserialize({"1": "40"}) == {1: 40}
++
++
++def test_serialization_still_allows_converted_key_overwrites():
++    field = fields.Dict(keys=fields.Int(), values=fields.Int())
++    obj = {"items": {"01": "10", "1": "20", "2": "30"}}
++    assert field.serialize("items", obj) == {1: 20, 2: 30}
++
++
++def test_without_key_conversion_distinct_raw_keys_remain_distinct():
++    field = fields.Dict(values=fields.Int())
++    assert field.deserialize({"01": "10", "1": "20"}) == {"01": 10, "1": 20}

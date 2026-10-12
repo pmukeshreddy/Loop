@@ -1,0 +1,47 @@
+--- a/jsonschema/_utils.py
++++ b/jsonschema/_utils.py
+@@ -188,6 +188,18 @@
+     Covers all keywords related to unevaluatedItems: items, prefixItems, if,
+     then, else, contains, unevaluatedItems, allOf, oneOf, anyOf
+     """
++    # Reference traversal may evolve the validator to another dialect.
++    # Import locally since the keyword modules also import these utilities.
++    from jsonschema import _legacy_keywords
++
++    if (
++        validator.VALIDATORS.get("items")
++        is _legacy_keywords.items_draft6_draft7_draft201909
++    ):
++        return _legacy_keywords.find_evaluated_item_indexes_by_schema(
++            validator, instance, schema,
++        )
++
+     if validator.is_type(schema, "boolean"):
+         return []
+     evaluated_indexes = []
+--- a/jsonschema/_legacy_keywords.py
++++ b/jsonschema/_legacy_keywords.py
+@@ -246,6 +246,14 @@
+     Covers all keywords related to unevaluatedItems: items, prefixItems, if,
+     then, else, contains, unevaluatedItems, allOf, oneOf, anyOf
+     """
++    # Reference traversal may evolve the validator to another dialect.
++    from jsonschema import _keywords
++
++    if validator.VALIDATORS.get("items") is _keywords.items:
++        return _utils.find_evaluated_item_indexes_by_schema(
++            validator, instance, schema,
++        )
++
+     if validator.is_type(schema, "boolean"):
+         return []
+     evaluated_indexes = []
+@@ -281,7 +289,7 @@
+         if "additionalItems" in schema:
+             return list(range(len(instance)))
+ 
+-        if validator.is_type(schema["items"], "object"):
++        if not validator.is_type(schema["items"], "array"):
+             return list(range(len(instance)))
+         evaluated_indexes += list(range(len(schema["items"])))
+ 

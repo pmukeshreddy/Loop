@@ -1,0 +1,40 @@
+--- /dev/null
++++ b/tests/test_rule_repr_roundtrip.py
+@@ -0,0 +1,37 @@
++from lark.grammar import Rule, RuleOptions, Terminal, NonTerminal
++
++
++NAMESPACE = {c.__name__: c for c in (Rule, RuleOptions, Terminal, NonTerminal)}
++
++
++def check_roundtrip(rule):
++    restored = eval(repr(rule), NAMESPACE)
++    assert restored is not rule
++    assert restored.origin == rule.origin
++    assert restored.order == rule.order
++    assert restored.alias == rule.alias
++    assert len(restored.expansion) == len(rule.expansion)
++    for expected, actual in zip(rule.expansion, restored.expansion):
++        assert type(actual) is type(expected)
++        assert actual.name == expected.name
++        if isinstance(expected, Terminal):
++            assert actual.filter_out == expected.filter_out
++    for field in ('keep_all_tokens', 'expand1', 'priority',
++                  'template_source', 'empty_indices'):
++        assert getattr(restored.options, field) == getattr(rule.options, field)
++
++
++def test_roundtrip_with_filtered_terminals_and_all_options():
++    options = RuleOptions(
++        keep_all_tokens=True, expand1=True, priority=-3,
++        template_source='item', empty_indices=(True, False, False, True),
++    )
++    rule = Rule(NonTerminal('start'),
++                [Terminal('_SEP', True), Terminal('WORD'), NonTerminal('item')],
++                order=4, alias='renamed_start', options=options)
++    check_roundtrip(rule)
++
++
++def test_roundtrip_empty_and_default_rules():
++    check_roundtrip(Rule(NonTerminal('empty'), []))
++    check_roundtrip(Rule(NonTerminal('start'), [Terminal('A')], order=2))

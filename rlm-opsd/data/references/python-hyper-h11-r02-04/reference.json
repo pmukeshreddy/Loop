@@ -1,0 +1,129 @@
+{
+ "answer": "--- a/h11/_readers.py\n+++ b/h11/_readers.py\n@@ -167,7 +167,7 @@\n                 raise LocalProtocolError(\n                     f\"malformed chunk footer: {data!r} (expected {self._bytes_to_discard!r})\"\n                 )\n-            self._bytes_to_discard = b\"\"\n+            self._bytes_to_discard = self._bytes_to_discard[len(data) :]\n             if self._bytes_to_discard:\n                 return None\n             # else, fall through and read some more\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.005415767885111869,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 324977 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 11 targeted searches without printing the whole context. Relating incremental delivery, buffer consumption, and the chunk-footer reader state was useful for distinguishing this defect from delimiter extraction and chunk boundary-marker regressions."
+  },
+  "notes": "The request is a natural, repository-dependent regression repair with a precise unified-diff deliverable. It specifies observable behavior without revealing the defective symbol or fix. The verified patch preserves unconsumed footer bytes while retaining malformed-byte validation and leaving Data event boundary policy unchanged. This investigation is distinct from the accepted ReceiveBuffer delimiter and chunk boundary-marker tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The symptom depends on byte-at-a-time delivery and appears through body-reader test helpers. Locating the consumption schedule, buffer extraction behavior, and chunk-footer state distinguishes this defect from chunk-start metadata and delimiter-search problems."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::ChunkedReader.__call__",
+    "why": "Footer matching must retain the unconsumed suffix across calls."
+   },
+   {
+    "path": "h11/_receivebuffer.py",
+    "symbol": "h11/_receivebuffer.py::ReceiveBuffer.maybe_extract_at_most",
+    "why": "Extraction can return fewer bytes than requested when only part of the footer is buffered."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": "h11/tests/test_io.py::t_body_reader",
+    "why": "The helper exercises whole-input and byte-at-a-time schedules."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": "h11/tests/test_io.py::test_ChunkedReader",
+    "why": "Existing cases cover valid footers and individually malformed footer bytes."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "This regression concerns footer consumption, not the already-discussed chunk_start behavior when a header arrives before its payload.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a chunked-body regression under incremental delivery. Valid chunk footers must work even when their bytes arrive separately, and malformed footer bytes must still be rejected. Restore the existing behavior without changing Data event boundary-marker policy or tests. Deliver a unified diff against the non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "stream_fragmentation_analysis",
+  "setup_patch": "--- a/h11/_readers.py\n+++ b/h11/_readers.py\n@@ -165,7 +165,7 @@ class ChunkedReader:\n                 raise LocalProtocolError(\n                     f\"malformed chunk footer: {data!r} (expected {self._bytes_to_discard!r})\"\n                 )\n-            self._bytes_to_discard = self._bytes_to_discard[len(data) :]\n+            self._bytes_to_discard = b\"\"\n             if self._bytes_to_discard:\n                 return None\n             # else, fall through and read some more\n"
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r02-04",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_io.py::test_ChunkedReader"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_readers.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_io.py::test_ChunkedReader"
+  ],
+  "ground_truth_symbols": [
+   "h11/_readers.py::ChunkedReader.__call__"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 77,
+  "stability_runs": 3
+ }
+}

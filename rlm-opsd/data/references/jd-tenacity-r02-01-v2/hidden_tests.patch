@@ -1,0 +1,87 @@
+--- /dev/null
++++ b/tests/test_wait_addition_order.py
+@@ -0,0 +1,84 @@
++import pytest
++
++from tenacity import RetryCallState, Retrying, wait_combine, wait_fixed
++
++
++@pytest.mark.parametrize(
++    "build,expected,total",
++    [
++        (lambda a, b, c: a + wait_combine(b), ["a", "b"], 3.0),
++        (lambda a, b, c: wait_combine(a) + b, ["a", "b"], 3.0),
++        (lambda a, b, c: (a + wait_combine(b)) + c, ["a", "b", "c"], 6.0),
++        (lambda a, b, c: a + (wait_combine(b) + c), ["a", "b", "c"], 6.0),
++        (lambda a, b, c: c + (a + wait_combine(b)), ["c", "a", "b"], 6.0),
++        (
++            lambda a, b, c: sum([wait_combine(a), wait_combine(b), wait_combine(c)]),
++            ["a", "b", "c"],
++            6.0,
++        ),
++    ],
++)
++def test_wait_addition_evaluation_order(build, expected, total):
++    state = RetryCallState(Retrying(), None, (), {})
++    calls = []
++
++    def callback(name, value):
++        def invoke(rs, /):
++            assert rs is state
++            calls.append(name)
++            return value
++
++        return invoke
++
++    combined = build(callback("a", 1), callback("b", 2), callback("c", 3))
++    assert calls == []
++    for _ in range(2):
++        calls.clear()
++        result = combined(state)
++        assert result == total
++        assert isinstance(result, float)
++        assert calls == expected
++
++
++@pytest.mark.parametrize(
++    "build",
++    [
++        lambda left, right: left + wait_combine(right),
++        lambda left, right: wait_combine(left) + right,
++        lambda left, right: (left + wait_combine(right)) + right,
++        lambda left, right: left + (wait_combine(right) + right),
++    ],
++)
++def test_left_exception_stops_wait_addition(build):
++    state = RetryCallState(Retrying(), None, (), {})
++    calls = []
++    error = ValueError("left failed")
++
++    def left(rs, /):
++        assert rs is state
++        calls.append("left")
++        raise error
++
++    def right(rs, /):
++        assert rs is state
++        calls.append("right")
++        return 2
++
++    combined = build(left, right)
++    assert calls == []
++    with pytest.raises(ValueError) as caught:
++        combined(state)
++    assert caught.value is error
++    assert calls == ["left"]
++
++
++def test_zero_identity_and_nonzero_integer_rejection():
++    strategy = wait_fixed(3)
++    state = RetryCallState(Retrying(), None, (), {})
++    assert 0 + strategy is strategy
++    assert sum([strategy]) is strategy
++    assert sum([]) == 0
++    assert sum([strategy, wait_fixed(4)])(state) == 7.0
++    for number in (-1, 1, 5):
++        with pytest.raises(TypeError):
++            number + strategy

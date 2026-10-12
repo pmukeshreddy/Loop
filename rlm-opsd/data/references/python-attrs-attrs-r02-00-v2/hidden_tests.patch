@@ -1,0 +1,135 @@
+--- /dev/null
++++ b/tests/test_transformed_setattr_sequences.py
+@@ -0,0 +1,132 @@
++import pytest
++
++import attr
++
++
++@pytest.mark.parametrize("decorate", [attr.s, attr.define])
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("sequence", [list, tuple])
++def test_transformed_sequence_order_and_initialization(decorate, slots, sequence):
++    calls = []
++
++    def first(instance, attribute, value):
++        calls.append(("first", instance, attribute, value))
++        return value + 2
++
++    def second(instance, attribute, value):
++        calls.append(("second", instance, attribute, value))
++        return value * 3
++
++    def transform(cls, fields):
++        return [a.evolve(on_setattr=sequence([first, second])) for a in fields]
++
++    @decorate(slots=slots, field_transformer=transform)
++    class C:
++        x = attr.ib(converter=int)
++
++    obj = C("4")
++    assert obj.x == 4
++    assert calls == []
++    attribute = attr.fields(C).x
++    assert callable(attribute.on_setattr)
++    obj.x = 5
++    assert obj.x == 21
++    assert calls == [
++        ("first", obj, attribute, 5),
++        ("second", obj, attribute, 7),
++    ]
++
++
++@pytest.mark.parametrize("decorate", [attr.s, attr.define])
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("sequence", [list, tuple])
++def test_empty_transformed_sequence_overrides_class_hook(decorate, slots, sequence):
++    calls = []
++
++    def class_hook(instance, attribute, value):
++        calls.append((attribute.name, value))
++        return value + 100
++
++    def transform(cls, fields):
++        return [
++            a.evolve(on_setattr=sequence()) if a.name == "x" else a
++            for a in fields
++        ]
++
++    @decorate(slots=slots, on_setattr=class_hook, field_transformer=transform)
++    class C:
++        x = attr.ib()
++        y = attr.ib()
++
++    token = object()
++    obj = C(token, 1)
++    assert calls == []
++    assert callable(attr.fields(C).x.on_setattr)
++    obj.x = token
++    assert obj.x is token
++    assert calls == []
++    obj.y = 2
++    assert obj.y == 102
++    assert calls == [("y", 2)]
++
++
++@pytest.mark.parametrize("sequence", [list, tuple])
++@pytest.mark.parametrize("bad", [None, 42, "hook", attr.setters.NO_OP, [], ()])
++@pytest.mark.parametrize("slots", [False, True])
++def test_invalid_transformed_member_rejected_during_decoration(sequence, bad, slots):
++    def hook(instance, attribute, value):
++        return value
++
++    def transform(cls, fields):
++        return [a.evolve(on_setattr=sequence([hook, bad])) for a in fields]
++
++    class C:
++        x = attr.ib()
++
++    with pytest.raises(TypeError):
++        attr.s(C, slots=slots, field_transformer=transform)
++
++
++@pytest.mark.parametrize("slots", [False, True])
++def test_standalone_transformed_no_op_remains_opt_out(slots):
++    def class_hook(instance, attribute, value):
++        raise AssertionError("The opted-out field must not run the class hook")
++
++    def transform(cls, fields):
++        return [a.evolve(on_setattr=attr.setters.NO_OP) for a in fields]
++
++    @attr.s(slots=slots, on_setattr=class_hook, field_transformer=transform)
++    class C:
++        x = attr.ib()
++
++    obj = C(1)
++    obj.x = 2
++    assert obj.x == 2
++    assert attr.fields(C).x.on_setattr is attr.setters.NO_OP
++
++
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("sequence", [list, tuple])
++def test_final_inherited_and_added_fields_receive_pipelines(slots, sequence):
++    def hook(instance, attribute, value):
++        return value + 1
++
++    @attr.s(slots=slots)
++    class Base:
++        x = attr.ib()
++
++    def transform(cls, fields):
++        x = fields[0].evolve(on_setattr=sequence([hook]))
++        y = x.evolve(name="y", inherited=False)
++        return [x, y]
++
++    @attr.s(slots=slots, collect_by_mro=True, field_transformer=transform)
++    class Child(Base):
++        pass
++
++    obj = Child(1, 2)
++    assert (obj.x, obj.y) == (1, 2)
++    obj.x = 10
++    obj.y = 20
++    assert (obj.x, obj.y) == (11, 21)
++    assert all(callable(a.on_setattr) for a in attr.fields(Child))

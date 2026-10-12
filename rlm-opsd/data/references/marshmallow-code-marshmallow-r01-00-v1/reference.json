@@ -1,0 +1,168 @@
+{
+ "answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -579,17 +579,32 @@\n \n             if isinstance(nested, Schema):\n                 self._schema = copy.copy(nested)\n-                # Respect only and exclude and many passed from parent and re-initialize fields\n+                # Field.__deepcopy__ is shallow, so isolate the field tree and\n+                # discard cached nested schemas before applying new options.\n+                self._schema.declared_fields = {\n+                    name: self._copy_field(field)\n+                    for name, field in nested.declared_fields.items()\n+                }\n                 set_class = typing.cast(\"type[set]\", self._schema.set_class)\n-                if self.only is not None:\n-                    if self._schema.only is not None:\n-                        original = self._schema.only\n-                    else:  # only=None -> all fields\n-                        original = self._schema.fields.keys()\n-                    self._schema.only = set_class(self.only) & set_class(original)\n-                if self.exclude:\n-                    original = self._schema.exclude\n-                    self._schema.exclude = set_class(self.exclude) | set_class(original)\n+                original_only = self._schema.only\n+                original_exclude = self._schema.exclude\n+                self._schema.only = self.only\n+                self._schema.exclude = set_class(self.exclude)\n+                # Apply dotted selections to child fields before intersecting\n+                # the flattened top-level selection with the instance's only.\n+                self._schema._normalize_nested_options()\n+                if original_only is not None:\n+                    if self._schema.only is None:\n+                        self._schema.only = set_class(original_only)\n+                    else:\n+                        self._schema.only = set_class(self._schema.only) & set_class(\n+                            original_only\n+                        )\n+                elif self._schema.only is not None:\n+                    self._schema.only = set_class(self._schema.only) & set_class(\n+                        nested.fields\n+                    )\n+                self._schema.exclude |= set_class(original_exclude)\n                 if self.many is not None:\n                     self._schema.many = self.many\n                 self._schema._init_fields()\n@@ -611,6 +626,28 @@\n                     dump_only=self._nested_normalized_option(\"dump_only\"),\n                 )\n         return self._schema\n+\n+    @staticmethod\n+    def _copy_field(field: Field) -> Field:\n+        \"\"\"Copy a bound field tree without sharing nested schema caches.\"\"\"\n+        field = copy.copy(field)\n+        field.parent = None\n+        field.name = None\n+        field.root = None\n+        if isinstance(field, Nested):\n+            field._schema = None\n+        elif isinstance(field, List):\n+            field.inner = Nested._copy_field(field.inner)\n+        elif isinstance(field, Tuple):\n+            field.tuple_fields = [\n+                Nested._copy_field(child) for child in field.tuple_fields\n+            ]\n+        elif isinstance(field, Mapping):\n+            if field.key_field is not None:\n+                field.key_field = Nested._copy_field(field.key_field)\n+            if field.value_field is not None:\n+                field.value_field = Nested._copy_field(field.value_field)\n+        return field\n \n     def _nested_normalized_option(self, option_name: str) -> list[str]:\n         nested_field = f\"{self.name}.\"\n--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -972,11 +972,10 @@\n         for key, options in iter(nested_options.items()):\n             new_options = self.set_class(options)\n             original_options = getattr(self.declared_fields[key], option_name, ())\n-            if original_options:\n-                if set_operation == \"union\":\n-                    new_options |= self.set_class(original_options)\n-                if set_operation == \"intersection\":\n-                    new_options &= self.set_class(original_options)\n+            if set_operation == \"union\" and original_options:\n+                new_options |= self.set_class(original_options)\n+            if set_operation == \"intersection\" and original_options is not None:\n+                new_options &= self.set_class(original_options)\n             setattr(self.declared_fields[key], option_name, new_options)\n \n     def _init_fields(self) -> None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0013696702705596846,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 35,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "f",
+    "files",
+    "m",
+    "newf",
+    "news",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 15555,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 35 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The requested contracts form one coherent change: dotted selections must respect existing restrictions while preserving source-instance state and wrapper independence. The reference execution constructed its final diff in a variable and inspected it before finishing, supporting consolidation of these obligations into one deliverable.",
+   "inspect_locate": "The reference execution used 35 targeted context searches without printing the whole repository context. The implementation requires connecting Nested's instance-construction branch, schema dotted-option normalization, field copying, and cached nested schemas."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise unified-diff output format. It specifies observable behavior without prescribing a fix or solver operations. Although related to the accepted List isolation task, it addresses a distinct capability and failure path: dotted selections on supplied schema instances, including selection intersection and warm-cache isolation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must satisfy several related contracts together: dotted selection, intersection with existing selections, independent wrappers, and preservation of the source instance even after its nested schemas have been used. The final diff needs exact source context and a check that none of these obligations is lost.",
+   "inspect_locate": "The repository context contains large field and schema modules. Implementing this capability requires connecting Nested's class and instance construction branches with schema-level dotted-option normalization, field initialization, Field's copying semantics, and the existing instance-selection tests."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Nested.schema",
+    "why": "The instance branch intersects requested only paths with already-normalized top-level names, unlike the class branch that passes the paths through Schema construction."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field.__deepcopy__",
+    "why": "Field deepcopy performs a shallow copy, which matters when isolating option changes and already-cached nested schemas from the supplied instance."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._normalize_nested_options",
+    "why": "Applies dotted restrictions to child fields and flattens top-level selections before field initialization."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema.__apply_nested_option",
+    "why": "Defines how nested only restrictions intersect with existing child-field selections."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._init_fields",
+    "why": "Builds the active serialization fields from normalized only and exclude options."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestNestedField.test_nested_schema_only_and_exclude",
+    "why": "Establishes the existing contract for applying flat selections and exclusions to a supplied schema instance."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_nested_instance_dotted_only.py\n@@ -0,0 +1,88 @@\n+import pytest\n+\n+from marshmallow import Schema, fields\n+\n+\n+class ProfileSchema(Schema):\n+    name = fields.String()\n+    age = fields.Integer()\n+\n+\n+class ChildSchema(Schema):\n+    profile = fields.Nested(ProfileSchema)\n+    tag = fields.String()\n+    id = fields.Integer()\n+\n+\n+PAYLOAD = {\n+    \"profile\": {\"name\": \"Ada\", \"age\": 37},\n+    \"tag\": \"kept\",\n+    \"id\": 9,\n+}\n+\n+\n+def dump_child(field, payload=PAYLOAD):\n+    return field.serialize(\"child\", {\"child\": payload})\n+\n+\n+@pytest.mark.parametrize(\"warm\", [False, True])\n+def test_dotted_only_matches_class_without_mutating_source(warm):\n+    source = ChildSchema()\n+    if warm:\n+        assert source.dump(PAYLOAD) == PAYLOAD\n+    profile = source.fields[\"profile\"]\n+    expected = {\"profile\": {\"name\": \"Ada\"}}\n+    assert dump_child(fields.Nested(ChildSchema, only=(\"profile.name\",))) == expected\n+    selected = fields.Nested(source, only=(\"profile.name\",))\n+    assert dump_child(selected) == expected\n+    assert source.only is None\n+    assert source.exclude == set()\n+    assert profile.only is None\n+    assert profile.exclude == ()\n+    assert set(source.fields) == {\"profile\", \"tag\", \"id\"}\n+    assert source.dump(PAYLOAD) == PAYLOAD\n+    assert dump_child(selected) == expected\n+\n+\n+@pytest.mark.parametrize(\"warm\", [False, True])\n+def test_dotted_only_intersects_existing_nested_selection(warm):\n+    source = ChildSchema(only=(\"profile.name\", \"tag\"))\n+    original = {\"profile\": {\"name\": \"Ada\"}, \"tag\": \"kept\"}\n+    if warm:\n+        assert source.dump(PAYLOAD) == original\n+    selected = fields.Nested(\n+        source, only=(\"profile.name\", \"profile.age\", \"id\")\n+    )\n+    assert dump_child(selected) == {\"profile\": {\"name\": \"Ada\"}}\n+    assert set(source.only) == {\"profile\", \"tag\"}\n+    assert set(source.fields[\"profile\"].only) == {\"name\"}\n+    assert source.dump(PAYLOAD) == original\n+    disjoint = fields.Nested(source, only=(\"profile.age\",))\n+    assert dump_child(disjoint) == {\"profile\": {}}\n+    assert dump_child(selected) == {\"profile\": {\"name\": \"Ada\"}}\n+    assert source.dump(PAYLOAD) == original\n+\n+\n+@pytest.mark.parametrize(\"warm\", [False, True])\n+def test_two_wrappers_keep_independent_nested_selections(warm):\n+    source = ChildSchema()\n+    if warm:\n+        source.dump(PAYLOAD)\n+    name = fields.Nested(source, only=(\"profile.name\",))\n+    age = fields.Nested(source, only=(\"profile.age\",))\n+    assert dump_child(name) == {\"profile\": {\"name\": \"Ada\"}}\n+    assert dump_child(age) == {\"profile\": {\"age\": 37}}\n+    assert dump_child(name) == {\"profile\": {\"name\": \"Ada\"}}\n+    assert source.dump(PAYLOAD) == PAYLOAD\n+\n+\n+def test_dotted_only_respects_instance_top_level_options_and_many():\n+    source = ChildSchema(many=True, only=(\"profile\", \"tag\"), exclude=(\"tag\",))\n+    original = [{\"profile\": {\"name\": \"Ada\", \"age\": 37}}]\n+    assert source.dump([PAYLOAD]) == original\n+    selected = fields.Nested(source, only=(\"profile.name\", \"tag\", \"id\"))\n+    assert dump_child(selected, [PAYLOAD]) == [{\"profile\": {\"name\": \"Ada\"}}]\n+    assert source.many is True\n+    assert set(source.only) == {\"profile\", \"tag\"}\n+    assert source.exclude == {\"tag\"}\n+    assert source.dump([PAYLOAD]) == original\n",
+  "include_failure_log": false,
+  "notes": "Use the pinned source as-is; List._bind_to_schema already contains its child-copy boundary. This task adds support for an existing discrepancy rather than injecting another regression. The new hidden test file checks cold and previously-used source instances, nested and top-level selection intersection, disjoint child selections, independent wrappers, and preservation of exclude and many. On the current snapshot, dotted only paths are discarded by the instance branch's top-level intersection, so every hidden test case fails on its selected dump. Run the existing suite as well to protect the established binding and selection contracts.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make dotted `only` selections work when `fields.Nested` receives an existing schema instance. For a `Child` schema with a `profile = fields.Nested(Profile)` field, where `Profile` declares `name` and `age`, both `fields.Nested(Child, only=(\"profile.name\",))` and `fields.Nested(Child(), only=(\"profile.name\",))` should serialize just `profile.name`.\n\nRestrictions already present on a supplied instance must remain authoritative: requested selections intersect with its existing selections at both the top level and within nested fields, including producing an empty nested object when those child selections are disjoint. Preserve the existing `exclude` and `many` behavior. Applying a selection must not alter the supplied instance's options or subsequent dumps, whether or not it has already been used to dump data. Two Nested fields using the same supplied instance with different selections must also remain independent.\n\nReturn a unified diff against the repository source files, without changing existing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate through a comparison of two constructor branches, followed by combine_verify_finish to verify nested selection and source-instance preservation together. Focused reading of Nested.schema and schema option normalization is more useful than investigating every container's binding implementation.",
+  "change_type": "dependency",
+  "description": "With the List child-copy regression already repaired, investigate a separate discrepancy between schema-class and schema-instance arguments to Nested. Define a child schema containing a Nested field named profile, whose schema declares name and age. Compare fields.Nested(Child, only=(\"profile.name\",)) with fields.Nested(Child(), only=(\"profile.name\",)). Require both to dump only profile.name, while leaving the supplied Child instance's selections and subsequent dumps unchanged. Return a unified diff without changing existing tests. Focus on src/marshmallow/fields.py::Nested.schema and src/marshmallow/schema.py::Schema._normalize_nested_options, Schema.__apply_nested_option, and Schema._init_fields; use tests/test_fields.py::TestNestedField.test_nested_schema_only_and_exclude as the existing instance-selection contract.",
+  "expected_answer_change": "The patch must make dotted selection normalization work for an existing schema instance, preserve intersection with that instance's original selection, and avoid mutating the supplied instance while applying nested options. The verified behavior should match the schema-class branch for profile.name and retain the original Child instance's unmodified dump behavior.",
+  "why_substantive": "The List binding boundary is no longer defective. The new problem occurs in Nested's schema-instance branch: dotted only paths are intersected with top-level field names before they are normalized. Repairing that branch also requires considering the mutable declared fields shared by a shallow schema copy, rather than adding a child copy to List._bind_to_schema."
+ },
+ "task_id": "marshmallow-code-marshmallow-r01-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_intersects_existing_nested_selection[False]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_intersects_existing_nested_selection[True]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_matches_class_without_mutating_source[False]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_matches_class_without_mutating_source[True]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_respects_instance_top_level_options_and_many",
+   "tests/test_nested_instance_dotted_only.py::test_two_wrappers_keep_independent_nested_selections[False]",
+   "tests/test_nested_instance_dotted_only.py::test_two_wrappers_keep_independent_nested_selections[True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1195
+   },
+   "patch_files": [
+    "src/marshmallow/fields.py",
+    "src/marshmallow/schema.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_intersects_existing_nested_selection[False]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_intersects_existing_nested_selection[True]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_matches_class_without_mutating_source[False]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_matches_class_without_mutating_source[True]",
+   "tests/test_nested_instance_dotted_only.py::test_dotted_only_respects_instance_top_level_options_and_many",
+   "tests/test_nested_instance_dotted_only.py::test_two_wrappers_keep_independent_nested_selections[False]",
+   "tests/test_nested_instance_dotted_only.py::test_two_wrappers_keep_independent_nested_selections[True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,68 @@
+--- a/src/cachetools/_cached.py
++++ b/src/cachetools/_cached.py
+@@ -30,9 +30,9 @@
+             with lock:
+                 try:
+                     cache[k] = v
+                 except ValueError:
+-                    pass  # value too large
++                    raise
+                 return v
+         finally:
+             with lock:
+                 pending.remove(k)
+@@ -72,9 +72,9 @@
+                 # stored a value for this key while we were calling
+                 # func(), prefer the cached value.
+                 return cache.setdefault(k, v)
+             except ValueError:
+-                return v  # value too large
++                raise
+ 
+     def cache_clear():
+         nonlocal hits, misses
+         with lock:
+@@ -105,9 +105,9 @@
+         v = func(*args, **kwargs)
+         try:
+             cache[k] = v
+         except ValueError:
+-            pass  # value too large
++            raise
+         return v
+ 
+     def cache_clear():
+         nonlocal hits, misses
+@@ -165,9 +165,9 @@
+             with lock:
+                 try:
+                     cache[k] = v
+                 except ValueError:
+-                    pass  # value too large
++                    raise
+                 return v
+         finally:
+             with lock:
+                 pending.remove(k)
+@@ -198,9 +198,9 @@
+                 # stored a value for this key while we were calling
+                 # func(), prefer the cached value.
+                 return cache.setdefault(k, v)
+             except ValueError:
+-                return v  # value too large
++                raise
+ 
+     def cache_clear():
+         with lock:
+             cache.clear()
+@@ -218,9 +218,9 @@
+         v = func(*args, **kwargs)
+         try:
+             cache[k] = v
+         except ValueError:
+-            pass  # value too large
++            raise
+         return v
+ 
+     wrapper.cache_clear = lambda: cache.clear()
+     return wrapper

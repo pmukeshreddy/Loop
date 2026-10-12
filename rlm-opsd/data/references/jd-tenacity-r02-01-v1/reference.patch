@@ -1,0 +1,40 @@
+--- a/tenacity/wait.py
++++ b/tenacity/wait.py
+@@ -259,6 +259,11 @@
+     It allows for a custom multiplier and an ability to restrict the upper
+     limit of the random interval to some maximum value.
+ 
++    The keyword-only ``jitter_mode`` defaults to ``"full"``, which samples
++    uniformly between the minimum and the exponential upper bound. With
++    ``"equal"``, the lower bound is the greater of the minimum and half the
++    exponential upper bound. Other modes raise ``ValueError``.
++
+     Example::
+ 
+         wait_random_exponential(multiplier=0.5,  # initial window 0.5s
+@@ -270,9 +275,25 @@
+ 
+     """
+ 
++    def __init__(
++        self,
++        multiplier: float = 1,
++        max: _utils.time_unit_type = _utils.MAX_WAIT,
++        exp_base: float = 2,
++        min: _utils.time_unit_type = 0,
++        *,
++        jitter_mode: typing.Literal["full", "equal"] = "full",
++    ) -> None:
++        if jitter_mode not in ("full", "equal"):
++            raise ValueError("jitter_mode must be 'full' or 'equal'")
++        super().__init__(multiplier=multiplier, max=max, exp_base=exp_base, min=min)
++        self.jitter_mode = jitter_mode
++
+     @override
+     def __call__(self, retry_state: "RetryCallState") -> float:
+         high = super().__call__(retry_state=retry_state)
++        if self.jitter_mode == "equal":
++            return random.uniform(max(self.min, high / 2), high)
+         return random.uniform(self.min, high)
+ 
+ 

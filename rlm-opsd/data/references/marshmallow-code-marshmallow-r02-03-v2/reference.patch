@@ -1,0 +1,131 @@
+--- a/src/marshmallow/error_store.py
++++ b/src/marshmallow/error_store.py
+@@ -10,14 +10,21 @@
+ 
+ 
+ class ErrorStore:
+-    def __init__(self):
++    def __init__(self, *, index_errors=True):
+         #: Dictionary of errors stored during serialization
+         self.errors = {}
++        self.index_errors = index_errors
++        # Keep record identities independently of the public error format.
++        self.error_indices: set[int] = set()
+ 
+     def store_error(self, messages, field_name=SCHEMA, index=None):
+         # field error  -> store/merge error messages under field name key
+         # schema error -> if string or list, store/merge under _schema key
+         #              -> if dict, store/merge with other top-level keys
++        if index is not None:
++            self.error_indices.add(index)
++        if not self.index_errors:
++            index = None
+         messages = copy_containers(messages)
+         if field_name != SCHEMA or not isinstance(messages, dict):
+             messages = {field_name: messages}
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -620,7 +620,6 @@
+         :return: The deserialized data as `dict_class` instance or list of `dict_class`
+         instances if `many` is `True`.
+         """
+-        index = index if self.opts.index_errors else None
+         if many:
+             if not is_sequence_but_not_string(data):
+                 error_store.store_error([self.error_messages["type"]], index=index)
+@@ -864,7 +863,7 @@
+         :param postprocess: Whether to run post_load methods..
+         :return: Deserialized data
+         """
+-        error_store = ErrorStore()
++        error_store = ErrorStore(index_errors=self.opts.index_errors)
+         errors: dict[str, list[str]] = {}
+         many = self.many if many is None else bool(many)
+         unknown = self.unknown if unknown is None else unknown
+@@ -902,6 +901,8 @@
+             # Run schema-level validation
+             if self._hooks[VALIDATES_SCHEMA]:
+                 field_errors = bool(error_store.errors)
++                # Snapshot before any schema hook can add errors.
++                field_error_indices = error_store.error_indices.copy()
+                 self._invoke_schema_validators(
+                     error_store=error_store,
+                     pass_collection=True,
+@@ -911,6 +912,7 @@
+                     partial=partial,
+                     unknown=unknown,
+                     field_errors=field_errors,
++                    field_error_indices=field_error_indices,
+                 )
+                 self._invoke_schema_validators(
+                     error_store=error_store,
+@@ -921,6 +923,7 @@
+                     partial=partial,
+                     unknown=unknown,
+                     field_errors=field_errors,
++                    field_error_indices=field_error_indices,
+                 )
+             errors = error_store.errors
+             # Run post processors
+@@ -1152,7 +1155,7 @@
+                                 data=value,
+                                 field_name=data_key,
+                                 error_store=error_store,
+-                                index=(idx if self.opts.index_errors else None),
++                                index=idx,
+                             )
+                             if validated_value is missing:
+                                 item.pop(field_name, None)
+@@ -1181,20 +1184,35 @@
+         many: bool,
+         partial: bool | types.StrSequenceOrSet | None,
+         field_errors: bool = False,
++        field_error_indices: set[int] | None = None,
+         unknown: types.UnknownOption | None,
+     ):
+         for attr_name, hook_many, validator_kwargs in self._hooks[VALIDATES_SCHEMA]:
+             if hook_many != pass_collection:
+                 continue
+             validator = getattr(self, attr_name)
+-            if field_errors and validator_kwargs["skip_on_field_errors"]:
++            skip_on_field_errors = validator_kwargs["skip_on_field_errors"]
++            if (
++                field_errors
++                and skip_on_field_errors
++                and (not many or pass_collection)
++            ):
+                 continue
+             pass_original = validator_kwargs.get("pass_original", False)
+ 
+             if many and not pass_collection:
+-                for idx, (item, orig) in enumerate(
++                items = (
+                     zip(data, original_data, strict=True)
+-                ):
++                    if pass_original
++                    else ((item, None) for item in data)
++                )
++                for idx, (item, orig) in enumerate(items):
++                    if (
++                        skip_on_field_errors
++                        and field_error_indices is not None
++                        and idx in field_error_indices
++                    ):
++                        continue
+                     self._run_validator(
+                         validator,
+                         item,
+--- a/src/marshmallow/decorators.py
++++ b/src/marshmallow/decorators.py
+@@ -111,7 +111,10 @@
+     an additional argument to the method.
+ 
+     If ``skip_on_field_errors=True``, this validation method will be skipped whenever
+-    validation errors have been detected when validating fields.
++    validation errors have been detected when validating fields. With ``many=True``,
++    an item-level validator skips only the records with field errors; a
++    ``pass_collection=True`` validator skips the entire collection if any record
++    has field errors. Errors from schema validators do not affect this decision.
+ 
+     .. versionchanged:: 3.0.0b1 ``skip_on_field_errors`` defaults to `True`.
+     .. versionchanged:: 3.0.0 ``partial`` and ``many`` are always passed as keyword arguments to

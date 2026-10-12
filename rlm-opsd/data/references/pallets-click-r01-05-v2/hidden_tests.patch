@@ -1,0 +1,122 @@
+--- /dev/null
++++ b/tests/test_declining_default_map.py
+@@ -0,0 +1,119 @@
++import pytest
++
++import click
++from click.core import UNSET
++
++
++def make_param(kind, **kwargs):
++    if kind == "option":
++        return click.Option(["--item"], type=int, **kwargs)
++    return click.Argument(["item"], type=int, required=False, **kwargs)
++
++
++@pytest.mark.parametrize("kind", ["option", "argument"])
++@pytest.mark.parametrize("inherited", [False, True])
++@pytest.mark.parametrize("callable_default", [False, True])
++def test_factory_can_decline(kind, inherited, callable_default):
++    calls = {"map": 0, "default": 0}
++
++    def factory():
++        calls["map"] += 1
++        return UNSET if calls["map"] == 1 else 99
++
++    def declared():
++        calls["default"] += 1
++        return 17
++
++    param = make_param(kind, default=declared if callable_default else 17)
++    cmd = click.Command("leaf", params=[param], add_help_option=False)
++    mapping = {"item": factory}
++    parent = click.Context(click.Group("root"), default_map={"leaf": mapping})
++    extra = {"parent": parent} if inherited else {"default_map": mapping}
++
++    with cmd.make_context("leaf", [], **extra) as ctx:
++        assert ctx.params["item"] == 17
++        assert ctx.get_parameter_source("item") is click.ParameterSource.DEFAULT
++    assert calls == {"map": 1, "default": int(callable_default)}
++    assert mapping["item"] is factory
++
++    with cmd.make_context("leaf", [], **extra) as ctx:
++        assert ctx.params["item"] == 99
++        assert ctx.get_parameter_source("item") is click.ParameterSource.DEFAULT_MAP
++    assert calls == {"map": 2, "default": int(callable_default)}
++
++
++@pytest.mark.parametrize("kind", ["option", "argument"])
++@pytest.mark.parametrize("value", [UNSET, None, 23])
++@pytest.mark.parametrize("as_factory", [False, True])
++def test_map_results(kind, value, as_factory):
++    calls = []
++
++    def factory():
++        calls.append(True)
++        return value
++
++    param = make_param(kind, default=17)
++    cmd = click.Command("leaf", params=[param], add_help_option=False)
++    entry = factory if as_factory else value
++    with cmd.make_context("leaf", [], default_map={"item": entry}) as ctx:
++        assert ctx.params["item"] == (17 if value is UNSET else value)
++        source = (
++            click.ParameterSource.DEFAULT
++            if value is UNSET
++            else click.ParameterSource.DEFAULT_MAP
++        )
++        assert ctx.get_parameter_source("item") is source
++    assert len(calls) == int(as_factory)
++
++
++@pytest.mark.parametrize("kind", ["option", "argument"])
++@pytest.mark.parametrize("use_cli", [False, True])
++def test_higher_precedence_skips_factory(kind, use_cli, monkeypatch):
++    def factory():
++        pytest.fail("default-map factory must not run")
++
++    monkeypatch.setenv("CLICK_DECLINING_MAP_TEST", "31")
++    param = make_param(kind, default=17, envvar="CLICK_DECLINING_MAP_TEST")
++    cmd = click.Command("leaf", params=[param], add_help_option=False)
++    args = (["--item", "41"] if kind == "option" else ["41"]) if use_cli else []
++    with cmd.make_context("leaf", args, default_map={"item": factory}) as ctx:
++        assert ctx.params["item"] == (41 if use_cli else 31)
++        source = (
++            click.ParameterSource.COMMANDLINE
++            if use_cli
++            else click.ParameterSource.ENVIRONMENT
++        )
++        assert ctx.get_parameter_source("item") is source
++
++
++@pytest.mark.parametrize("mode", ["bool", "multi", "activation", "negative"])
++def test_declining_factory_keeps_lazy_flag_defaults(mode):
++    calls = []
++
++    class Activation:
++        def __init__(self):
++            pytest.fail("a callable flag value must not be invoked")
++
++    def factory():
++        calls.append(True)
++        return UNSET
++
++    if mode == "bool":
++        param = click.Option(["--item"], is_flag=True)
++        expected = False
++    elif mode == "multi":
++        param = click.Option(["--item"], flag_value="on", multiple=True)
++        expected = ()
++    elif mode == "negative":
++        param = click.Option(["--item"], flag_value=False, default=True)
++        expected = True
++    else:
++        param = click.Option(
++            ["--item"], flag_value=Activation, default=True, type=click.UNPROCESSED
++        )
++        expected = Activation
++    cmd = click.Command("leaf", params=[param], add_help_option=False)
++    with cmd.make_context("leaf", [], default_map={"item": factory}) as ctx:
++        assert ctx.params["item"] == expected
++        assert ctx.get_parameter_source("item") is click.ParameterSource.DEFAULT
++    assert calls == [True]

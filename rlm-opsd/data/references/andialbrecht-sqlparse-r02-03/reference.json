@@ -1,0 +1,164 @@
+{
+ "answer": "--- a/sqlparse/sql.py\n+++ b/sqlparse/sql.py\n@@ -559,7 +559,14 @@\n     M_OPEN = T.Keyword, 'WHERE'\n     M_CLOSE = T.Keyword, (\n         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n+        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\n+\n+\n+class Qualify(TokenList):\n+    \"\"\"A QUALIFY clause.\"\"\"\n+    M_OPEN = T.Keyword, 'QUALIFY'\n+    M_CLOSE = T.Keyword, (\n+        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n \n \n class Over(TokenList):\n--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -361,6 +361,21 @@\n         eidx = tlist.token_index(end)\n         tlist.group_tokens(sql.Where, tidx, eidx)\n         tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n+\n+\n+@recurse(sql.Qualify)\n+def group_qualify(tlist):\n+    tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN)\n+    while token:\n+        eidx, end = tlist.token_next_by(m=sql.Qualify.M_CLOSE, idx=tidx)\n+\n+        if end is None:\n+            end = tlist._groupable_tokens[-1]\n+        else:\n+            end = tlist.tokens[eidx - 1]\n+        eidx = tlist.token_index(end)\n+        tlist.group_tokens(sql.Qualify, tidx, eidx)\n+        tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN, idx=tidx)\n \n \n @recurse()\n@@ -454,6 +469,7 @@\n         group_over,\n         group_functions,\n         group_where,\n+        group_qualify,\n         group_period,\n         group_arrays,\n         group_identifier,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002159597819160235,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 17,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "g",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 17 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 'g', 's']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The production diff combines a public token-tree class, adjusted WHERE boundaries, and a recursive grouping pass. The final computed diff was inspected after construction; the supplied verification covers boundaries, nested clauses, round-tripping, statement type, and parent relationships.",
+   "inspect_locate": "The 17 targeted searches located the clause classes, recursive grouping machinery, grouping schedule, and WHERE boundaries needed for a coordinated implementation.",
+   "persistent_state": "The execution reused files, g, and s across six turns while reconciling changes in sql.py and engine/grouping.py, including clause markers and the grouping insertion point."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise clause boundaries and a clear production-only unified-diff deliverable. Naming the requested public class specifies the API rather than leaking an implementation. The task requires reasoning across token-tree and grouping conventions, and is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a multi-file production diff. Its hunks and the combined behavior need checking against the existing token-tree conventions, especially nested delimiters and parent relationships.",
+   "inspect_locate": "QUALIFY is already lexically recognized, but adding a navigable clause requires finding the clause classes, grouping schedule, recursive clause grouping, and WHERE boundary contract.",
+   "persistent_state": "The implementation must retain and reconcile the exact class markers, grouping insertion point, and clause-boundary rules across coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/keywords.py",
+    "symbol": "sqlparse/keywords.py::KEYWORDS_SNOWFLAKE",
+    "why": "QUALIFY already has a keyword classification, so this capability belongs in grouping rather than in a new lexical rule."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Where",
+    "why": "Existing clause classes define opening and closing markers, and WHERE needs an additional boundary."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group_where",
+    "why": "Recursive WHERE grouping demonstrates the current clause-range and groupable-token conventions."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group",
+    "why": "The new transformation must participate in the fixed grouping schedule."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Parenthesis._groupable_tokens",
+    "why": "Nested clauses must not consume enclosing delimiters when no closing keyword exists."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_qualify.py\n@@ -0,0 +1,61 @@\n+import pytest\n+\n+import sqlparse\n+from sqlparse import sql, tokens as T\n+\n+\n+def walk(node):\n+    yield node\n+    for child in getattr(node, 'tokens', ()):\n+        yield from walk(child)\n+\n+\n+@pytest.mark.parametrize('tail', [\n+    'order by a',\n+    'limit 2',\n+    'union select 2',\n+    'union all select 2',\n+    'except select 2',\n+    'intersect select 2',\n+])\n+def test_qualify_boundaries(tail):\n+    source = 'select a from t where a > 0 qualify a = 1 ' + tail\n+    stmt, = sqlparse.parse(source)\n+    assert str(stmt) == source\n+    where = stmt.token_next_by(i=sql.Where)[1]\n+    clause = stmt.token_next_by(i=sql.Qualify)[1]\n+    assert str(where) == 'where a > 0 '\n+    assert isinstance(clause, sql.Qualify)\n+    assert str(clause) == 'qualify a = 1 '\n+    assert clause.parent is stmt\n+    assert clause.token_first().match(T.Keyword, 'QUALIFY')\n+    for node in walk(stmt):\n+        for child in getattr(node, 'tokens', ()):\n+            assert child.parent is node\n+\n+\n+def test_qualify_at_end():\n+    source = 'select a from t qualify a = 1'\n+    stmt, = sqlparse.parse(source)\n+    assert isinstance(stmt.tokens[-1], sql.Qualify)\n+    assert str(stmt.tokens[-1]) == 'qualify a = 1'\n+    assert str(stmt) == source\n+    assert stmt.get_type() == 'SELECT'\n+\n+\n+def test_nested_qualify():\n+    source = ('select * from (select a from t where a > 0 '\n+              'qualify a = 1) q qualify b = 2 order by b')\n+    stmt, = sqlparse.parse(source)\n+    assert str(stmt) == source\n+    clauses = [node for node in walk(stmt) if isinstance(node, sql.Qualify)]\n+    assert len(clauses) == 2\n+    assert sorted(str(node) for node in clauses) == [\n+        'qualify a = 1', 'qualify b = 2 ']\n+    inner = next(node for node in clauses if str(node) == 'qualify a = 1')\n+    assert isinstance(inner.parent, sql.Parenthesis)\n+    assert inner.parent.tokens[-1].match(T.Punctuation, ')')\n+    assert isinstance(stmt.token_next_by(i=sql.Qualify)[1], sql.Qualify)\n+    for node in walk(stmt):\n+        for child in getattr(node, 'tokens', ()):\n+            assert child.parent is node\n",
+  "include_failure_log": false,
+  "notes": "The new acceptance file tests only the public class and observable parse behavior described in the question. The existing suite must remain passing. No formatter-specific QUALIFY layout is requested.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Add navigable QUALIFY clauses to the parsed token tree. Introduce a public sqlparse.sql.Qualify TokenList subclass and group each QUALIFY clause at both statement level and inside parentheses. Its range starts at QUALIFY and includes all following tokens up to, but not including, ORDER BY, LIMIT, UNION, UNION ALL, EXCEPT, or INTERSECT; whitespace before a terminating keyword remains in the clause. Without such a keyword, consume the rest of the current groupable token range, excluding enclosing parenthesis delimiters. Existing Where groups must stop before QUALIFY instead of swallowing it. Preserve SQL round-tripping, statement-type detection, and correct parent relationships. Deliver a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_qualify.py::test_nested_qualify",
+   "tests/test_qualify.py::test_qualify_at_end",
+   "tests/test_qualify.py::test_qualify_boundaries[except select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[intersect select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[limit 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[order by a]",
+   "tests/test_qualify.py::test_qualify_boundaries[union all select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[union select 2]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 516
+   },
+   "patch_files": [
+    "sqlparse/sql.py",
+    "sqlparse/engine/grouping.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_qualify.py::test_nested_qualify",
+   "tests/test_qualify.py::test_qualify_at_end",
+   "tests/test_qualify.py::test_qualify_boundaries[except select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[intersect select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[limit 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[order by a]",
+   "tests/test_qualify.py::test_qualify_boundaries[union all select 2]",
+   "tests/test_qualify.py::test_qualify_boundaries[union select 2]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

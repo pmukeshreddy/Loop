@@ -1,0 +1,95 @@
+--- /dev/null
++++ b/tests/test_wait_addition_order.py
+@@ -0,0 +1,92 @@
++import pytest
++
++from tenacity.wait import wait_base, wait_fixed
++
++
++class RecordingWait(wait_base):
++    def __init__(self, name, events, state, value):
++        self.name = name
++        self.events = events
++        self.state = state
++        self.value = value
++
++    def __call__(self, incoming, /):
++        assert incoming is self.state
++        self.events.append(self.name)
++        return self.value
++
++
++def policy(name, events, state, value, error=None):
++    def call(incoming, /):
++        assert incoming is state
++        events.append(name)
++        if error is not None:
++            raise error
++        return value
++
++    return call
++
++
++@pytest.mark.parametrize("shape", ["flat", "forward", "left", "right", "both"])
++def test_addition_evaluates_policies_in_operand_order(shape):
++    state = object()
++    events = []
++    first = policy("first", events, state, 1)
++    second = RecordingWait("second", events, state, 2)
++    last = RecordingWait("last", events, state, 8)
++    if shape == "flat":
++        combined = first + second
++        expected = ["first", "second"]
++        total = 3.0
++    elif shape == "forward":
++        combined = second + first
++        expected = ["second", "first"]
++        total = 3.0
++    elif shape == "left":
++        combined = (first + second) + last
++        expected = ["first", "second", "last"]
++        total = 11.0
++    elif shape == "right":
++        combined = first + (second + last)
++        expected = ["first", "second", "last"]
++        total = 11.0
++    else:
++        third = policy("third", events, state, 4)
++        combined = (first + second) + (third + last)
++        expected = ["first", "second", "third", "last"]
++        total = 15.0
++    assert events == []
++    for _ in range(2):
++        events.clear()
++        assert combined(state) == total
++        assert events == expected
++
++
++@pytest.mark.parametrize("nested", [False, True])
++def test_left_exception_stops_remaining_operands(nested):
++    state = object()
++    events = []
++    error = RuntimeError("wait failed")
++    first = policy("first", events, state, 1, error=error)
++    second = RecordingWait("second", events, state, 2)
++    combined = first + second
++    if nested:
++        combined = combined + RecordingWait("last", events, state, 8)
++    with pytest.raises(RuntimeError) as caught:
++        combined(state)
++    assert caught.value is error
++    assert events == ["first"]
++
++
++def test_integer_zero_identity_and_sum():
++    state = object()
++    strategy = wait_fixed(2)
++    assert 0 + strategy is strategy
++    assert sum([strategy]) is strategy
++    assert sum([strategy, wait_fixed(3)])(state) == 5.0
++
++
++@pytest.mark.parametrize("number", [-2, -1, 1, 2])
++def test_nonzero_integers_rejected_at_addition(number):
++    with pytest.raises(TypeError):
++        number + wait_fixed(2)

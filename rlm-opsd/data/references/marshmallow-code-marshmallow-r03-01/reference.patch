@@ -1,0 +1,190 @@
+--- a/src/marshmallow/fields.py
++++ b/src/marshmallow/fields.py
+@@ -13,6 +13,7 @@
+ import typing
+ import uuid
+ from collections.abc import Mapping as _Mapping
++from contextvars import ContextVar
+ from enum import Enum as EnumType
+ 
+ try:
+@@ -81,10 +82,19 @@
+     "Url",
+ ]
+ 
++_post_dump_suppressed: ContextVar[bool] = ContextVar(
++    "marshmallow_field_post_dump_suppressed", default=False
++)
++
+ _InternalT = typing.TypeVar("_InternalT")
+ _ProcessorT = typing.TypeVar(
+     "_ProcessorT",
+-    bound=types.PostLoadCallable | types.PreLoadCallable | types.Validator,
++    bound=(
++        types.PostLoadCallable
++        | types.PreLoadCallable
++        | types.PostDumpCallable
++        | types.Validator
++    ),
+ )
+ 
+ 
+@@ -96,6 +106,7 @@
+     validate: types.Validator | typing.Iterable[types.Validator] | None
+     pre_load: types.PreLoadCallable | typing.Iterable[types.PreLoadCallable] | None
+     post_load: types.PostLoadCallable | typing.Iterable[types.PostLoadCallable] | None
++    post_dump: types.PostDumpCallable | typing.Iterable[types.PostDumpCallable] | None
+     required: bool
+     allow_none: bool | None
+     load_only: bool
+@@ -147,6 +158,10 @@
+     :param post_load: Callable or collection of callables that are applied to the
+         deserialized value after validation. Each callable receives the value
+         and returns a transformed value.
++    :param post_dump: Callable or collection of callables applied in order to the
++        serialized value, including dump defaults and ``None``, but not missing
++        values. Each callable receives the value and returns a transformed value.
++        For nested and container fields, these run after child serialization.
+     :param required: Raise a :exc:`ValidationError` if the field value
+         is not supplied during deserialization.
+     :param allow_none: Set this to `True` if `None` should be considered a valid value during
+@@ -203,6 +218,9 @@
+         post_load: (
+             types.PostLoadCallable | typing.Iterable[types.PostLoadCallable] | None
+         ) = None,
++        post_dump: (
++            types.PostDumpCallable | typing.Iterable[types.PostDumpCallable] | None
++        ) = None,
+         required: bool = False,
+         allow_none: bool | None = None,
+         load_only: bool = False,
+@@ -219,6 +237,7 @@
+         self.validators = self._normalize_processors(validate, param="validate")
+         self.pre_load = self._normalize_processors(pre_load, param="pre_load")
+         self.post_load = self._normalize_processors(post_load, param="post_load")
++        self.post_dump = self._normalize_processors(post_dump, param="post_dump")
+ 
+         # If allow_none is None and load_default is None
+         # None should be considered valid by default
+@@ -337,7 +356,30 @@
+                 return value
+         else:
+             value = None
+-        return self._serialize(value, attr, obj, **kwargs)
++        return self._serialize_with_processors(value, attr, obj, **kwargs)
++
++    def _serialize_with_processors(
++        self, value, attr, obj, *, _apply_post_dump: bool = True, **kwargs
++    ):
++        """Serialize a runtime value, then apply field-local dump processors.
++
++        Suppression is context-local so Enum choice preparation also skips
++        processors in container children and nested schemas.
++        """
++        token = None
++        if not _apply_post_dump:
++            token = _post_dump_suppressed.set(True)
++        try:
++            result = self._serialize(value, attr, obj, **kwargs)
++            if not _post_dump_suppressed.get():
++                for processor in self.post_dump:
++                    if result is missing_:
++                        break
++                    result = processor(result)
++            return result
++        finally:
++            if token is not None:
++                _post_dump_suppressed.reset(token)
+ 
+     # If value is None, None may be returned
+     @typing.overload
+@@ -775,7 +817,10 @@
+     def _serialize(self, value, attr, obj, **kwargs) -> list[_InternalT] | None:
+         if value is None:
+             return None
+-        return [self.inner._serialize(each, attr, obj, **kwargs) for each in value]
++        return [
++            self.inner._serialize_with_processors(each, attr, obj, **kwargs)
++            for each in value
++        ]
+ 
+     def _deserialize(self, value, attr, data, **kwargs) -> list[_InternalT | None]:
+         if not utils.is_collection(value):
+@@ -859,7 +904,7 @@
+             return None
+ 
+         return tuple(
+-            field._serialize(each, attr, obj, **kwargs)
++            field._serialize_with_processors(each, attr, obj, **kwargs)
+             for field, each in zip(self.tuple_fields, value, strict=True)
+         )
+ 
+@@ -1668,7 +1713,8 @@
+             keys = {k: k for k in value}
+         else:
+             keys = {
+-                k: self.key_field._serialize(k, None, None, **kwargs) for k in value
++                k: self.key_field._serialize_with_processors(k, None, None, **kwargs)
++                for k in value
+             }
+ 
+         # Serialize values
+@@ -1679,7 +1725,9 @@
+                     result[keys[k]] = v
+         else:
+             for k, v in value.items():
+-                result[keys[k]] = self.value_field._serialize(v, None, None, **kwargs)
++                result[keys[k]] = self.value_field._serialize_with_processors(
++                    v, None, None, **kwargs
++                )
+ 
+         return result
+ 
+@@ -1952,7 +2000,12 @@
+         if by_value is False:
+             self.field: Field = String()
+             self.choices_text = ", ".join(
+-                str(self.field._serialize(m, None, None)) for m in enum.__members__
++                str(
++                    self.field._serialize_with_processors(
++                        m, None, None, _apply_post_dump=False
++                    )
++                )
++                for m in enum.__members__
+             )
+         # Serialization by value
+         else:
+@@ -1967,7 +2020,12 @@
+                         "marshmallow.fields.Field."
+                     ) from error
+             self.choices_text = ", ".join(
+-                str(self.field._serialize(m.value, None, None)) for m in enum
++                str(
++                    self.field._serialize_with_processors(
++                        m.value, None, None, _apply_post_dump=False
++                    )
++                )
++                for m in enum
+             )
+             if "allow_none" not in kwargs and any(m.value is None for m in enum):
+                 self.allow_none = True
+@@ -1981,7 +2039,7 @@
+             val = value.value
+         else:
+             val = value.name
+-        return self.field._serialize(val, attr, obj, **kwargs)
++        return self.field._serialize_with_processors(val, attr, obj, **kwargs)
+ 
+     def _deserialize(self, value, attr, data, **kwargs) -> _EnumT:
+         if isinstance(value, self.enum):
+--- a/src/marshmallow/types.py
++++ b/src/marshmallow/types.py
+@@ -30,6 +30,8 @@
+ PreLoadCallable = typing.Callable[[typing.Any], typing.Any]
+ #: Type for field-level post-load functions
+ PostLoadCallable = typing.Callable[[T], T]
++#: Type for field-level post-dump functions
++PostDumpCallable = typing.Callable[[typing.Any], typing.Any]
+ 
+ 
+ class SchemaValidator(typing.Protocol):

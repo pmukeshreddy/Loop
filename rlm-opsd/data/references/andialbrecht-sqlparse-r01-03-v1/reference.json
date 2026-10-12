@@ -1,0 +1,166 @@
+{
+ "answer": "--- a/sqlparse/lexer.py\n+++ b/sqlparse/lexer.py\n@@ -106,7 +106,8 @@\n     def get_tokens(self, text, encoding=None):\n         \"\"\"\n         Return an iterable of (tokentype, value) pairs generated from\n-        `text`. If `unfiltered` is set to `True`, the filtering mechanism\n+        `text`, using the syntax configuration at the time of this call.\n+        If `unfiltered` is set to `True`, the filtering mechanism\n         is bypassed even if filters are defined.\n \n         Also preprocess the text, i.e. expand tabs and strip it if\n@@ -116,53 +117,69 @@\n \n         ``stack`` is the initial stack (default: ``['root']``)\n         \"\"\"\n-        if isinstance(text, TextIOBase):\n-            text = text.read()\n+        # Capture syntax now, not when the returned generator is first\n+        # advanced. Copy dictionaries as well as the rule sequence so edits\n+        # to a caller-owned keyword dictionary cannot change this stream.\n+        regex_rules = tuple(self._SQL_REGEX)\n+        keyword_dicts = tuple(kwdict.copy() for kwdict in self._keywords)\n \n-        if isinstance(text, str):\n-            pass\n-        elif isinstance(text, bytes):\n-            if encoding:\n-                text = text.decode(encoding)\n+        def generate(text):\n+            if isinstance(text, TextIOBase):\n+                text = text.read()\n+\n+            if isinstance(text, str):\n+                pass\n+            elif isinstance(text, bytes):\n+                if encoding:\n+                    text = text.decode(encoding)\n+                else:\n+                    try:\n+                        text = text.decode('utf-8')\n+                    except UnicodeDecodeError:\n+                        text = text.decode('unicode-escape')\n             else:\n-                try:\n-                    text = text.decode('utf-8')\n-                except UnicodeDecodeError:\n-                    text = text.decode('unicode-escape')\n-        else:\n-            raise TypeError(f\"Expected text or file-like object, got {type(text)!r}\")\n+                raise TypeError(f\"Expected text or file-like object, got {type(text)!r}\")\n \n-        delimited_spans = keywords.find_delimited_spans(text)\n-        span_openers = delimited_spans.openers\n+            delimited_spans = keywords.find_delimited_spans(text)\n+            span_openers = delimited_spans.openers\n \n-        iterable = enumerate(text)\n-        for pos, char in iterable:\n-            # Only positions the lexer actually reaches may open a\n-            # dollar-quoted literal or a multiline comment; a delimiter\n-            # inside a string literal or behind a \"--\" comment is skipped\n-            # along with its surrounding token and never resolved.\n-            if pos in span_openers:\n-                resolved = delimited_spans.resolve(pos)\n-                if resolved is not None:\n-                    end, ttype = resolved\n-                    yield ttype, text[pos:end]\n-                    consume(iterable, end - pos - 1)\n-                    continue\n+            iterable = enumerate(text)\n+            for pos, char in iterable:\n+                # Only positions the lexer actually reaches may open a\n+                # dollar-quoted literal or a multiline comment; a delimiter\n+                # inside a string literal or behind a \"--\" comment is skipped\n+                # along with its surrounding token and never resolved.\n+                if pos in span_openers:\n+                    resolved = delimited_spans.resolve(pos)\n+                    if resolved is not None:\n+                        end, ttype = resolved\n+                        yield ttype, text[pos:end]\n+                        consume(iterable, end - pos - 1)\n+                        continue\n \n-            for rexmatch, action in self._SQL_REGEX:\n-                m = rexmatch(text, pos)\n+                for rexmatch, action in regex_rules:\n+                    m = rexmatch(text, pos)\n \n-                if not m:\n-                    continue\n-                elif isinstance(action, tokens._TokenType):\n-                    yield action, m.group()\n-                elif action is keywords.PROCESS_AS_KEYWORD:\n-                    yield self.is_keyword(m.group())\n+                    if not m:\n+                        continue\n+                    elif isinstance(action, tokens._TokenType):\n+                        yield action, m.group()\n+                    elif action is keywords.PROCESS_AS_KEYWORD:\n+                        value = m.group()\n+                        val = value.upper()\n+                        for kwdict in keyword_dicts:\n+                            if val in kwdict:\n+                                yield kwdict[val], value\n+                                break\n+                        else:\n+                            yield tokens.Name, value\n \n-                consume(iterable, m.end() - pos - 1)\n-                break\n-            else:\n-                yield tokens.Error, char\n+                    consume(iterable, m.end() - pos - 1)\n+                    break\n+                else:\n+                    yield tokens.Error, char\n+\n+        return generate(text)\n \n \n def tokenize(sql, encoding=None):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6674 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 6,674-character lexer context supports a local implementation task requiring reasoning about generator execution timing, configuration capture, dictionary aliasing, and mutation between yields. The reference execution used no sub-calls, consistent with solving directly."
+  },
+  "notes": "This is a natural, precisely scoped API-behavior change with an explicit production-only unified-diff format. The requirements constrain observable behavior without prescribing an implementation or solver workflow. Naming the affected public methods identifies the requested API scope rather than revealing a hidden defect. The task is materially distinct from the accepted optional-lexer task: it concerns snapshot isolation within token iterators, not routing entry-point calls to a selected lexer. Preservation requirements are related compatibility constraints, not unrelated padding."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused lexer module is under 16,000 characters and contains the configuration mutators, keyword lookup, and token generator. Solving the task requires reasoning about when generator bodies execute, dictionary aliasing and lookup precedence, and mutations between yields; broad repository exploration or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "sqlparse/lexer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.get_tokens",
+    "why": "Its body currently executes only upon consumption, and tokenization reads the instance's regex rules and keyword lookup state while yielding."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.is_keyword",
+    "why": "Defines case-insensitive, first-dictionary-wins classification and preserves the input token value."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.add_keywords",
+    "why": "Stores the supplied dictionary by reference, so external dictionary edits can alter outstanding token iterators."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.set_SQL_REGEX",
+    "why": "Replaces the compiled rule sequence that existing iterators currently consult."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.clear",
+    "why": "Replaces both syntax configuration collections, exposing whether an iterator retains its creation-time configuration."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_lexer_configuration_capture.py\n@@ -0,0 +1,127 @@\n+from io import StringIO\n+\n+import pytest\n+\n+from sqlparse import keywords, tokens as T\n+from sqlparse.lexer import Lexer\n+\n+\n+RULES = [\n+    (r'\\s+', T.Whitespace),\n+    (r'[a-z]+', keywords.PROCESS_AS_KEYWORD),\n+    (r'\\d+', T.Number.Integer),\n+]\n+TEXT = 'alpha beta omega 7'\n+ORIGINAL = [\n+    (T.Keyword, 'alpha'), (T.Whitespace, ' '),\n+    (T.Keyword.DML, 'beta'), (T.Whitespace, ' '),\n+    (T.Name, 'omega'), (T.Whitespace, ' '),\n+    (T.Number.Integer, '7'),\n+]\n+\n+\n+def configured():\n+    mapping = {'ALPHA': T.Keyword, 'BETA': T.Keyword.DML}\n+    lexer = Lexer()\n+    lexer.clear()\n+    lexer.set_SQL_REGEX(RULES)\n+    lexer.add_keywords(mapping)\n+    lexer.add_keywords({'BETA': T.Keyword.DDL})\n+    return lexer, mapping\n+\n+\n+@pytest.mark.parametrize('started', [False, True])\n+@pytest.mark.parametrize('mutation', ['clear', 'regex', 'add', 'dictionary'])\n+def test_configuration_is_fixed_at_call_time(started, mutation):\n+    lexer, mapping = configured()\n+    stream = iter(lexer.get_tokens(TEXT))\n+    prefix = [next(stream)] if started else []\n+    assert prefix == (ORIGINAL[:1] if started else [])\n+    updated = list(ORIGINAL)\n+    if mutation == 'clear':\n+        lexer.clear()\n+        updated = [(T.Error, c) for c in TEXT]\n+    elif mutation == 'regex':\n+        lexer.set_SQL_REGEX([\n+            (r'\\s+', T.Whitespace),\n+            (r'[a-z]+', T.Literal),\n+            (r'\\d+', T.Number.Float),\n+        ])\n+        updated = [\n+            (T.Literal, 'alpha'), (T.Whitespace, ' '),\n+            (T.Literal, 'beta'), (T.Whitespace, ' '),\n+            (T.Literal, 'omega'), (T.Whitespace, ' '),\n+            (T.Number.Float, '7'),\n+        ]\n+    elif mutation == 'add':\n+        lexer.add_keywords({'OMEGA': T.Keyword.DDL})\n+        updated[4] = (T.Keyword.DDL, 'omega')\n+    else:\n+        mapping['ALPHA'] = T.Keyword.DDL\n+        del mapping['BETA']\n+        mapping['OMEGA'] = T.Keyword\n+        updated[0] = (T.Keyword.DDL, 'alpha')\n+        updated[2] = (T.Keyword.DDL, 'beta')\n+        updated[4] = (T.Keyword, 'omega')\n+    assert list(lexer.get_tokens(TEXT)) == updated\n+    assert prefix + list(stream) == ORIGINAL\n+\n+\n+class RecordingInput(StringIO):\n+    def __init__(self, value):\n+        super().__init__(value)\n+        self.reads = 0\n+\n+    def read(self, *args, **kwargs):\n+        self.reads += 1\n+        return super().read(*args, **kwargs)\n+\n+\n+def test_input_is_read_lazily_but_syntax_is_captured_immediately():\n+    lexer, mapping = configured()\n+    source = RecordingInput('alpha')\n+    stream = iter(lexer.get_tokens(source))\n+    assert source.reads == 0\n+    source.seek(0)\n+    source.write('beta')\n+    source.truncate()\n+    source.seek(0)\n+    mapping['BETA'] = T.Keyword\n+    assert next(stream) == (T.Keyword.DML, 'beta')\n+    assert source.reads == 1\n+    assert list(stream) == []\n+    assert source.reads == 1\n+    source.seek(0)\n+    assert list(lexer.get_tokens(source)) == [(T.Keyword, 'beta')]\n+\n+\n+@pytest.mark.parametrize('data, encoding', [\n+    (b'caf\\xc3\\xa9', None),\n+    (b'caf\\xe9', 'latin-1'),\n+    (b'caf\\xe9', None),\n+])\n+def test_encoding_with_a_captured_keyword_dictionary(data, encoding):\n+    lexer = Lexer()\n+    lexer.clear()\n+    lexer.set_SQL_REGEX([(r'\\w+', keywords.PROCESS_AS_KEYWORD)])\n+    mapping = {'CAF\u00c9': T.Keyword}\n+    lexer.add_keywords(mapping)\n+    stream = lexer.get_tokens(data, encoding)\n+    mapping.clear()\n+    assert list(stream) == [(T.Keyword, 'caf\u00e9')]\n+    assert list(lexer.get_tokens(data, encoding)) == [(T.Name, 'caf\u00e9')]\n+\n+\n+@pytest.mark.parametrize('started', [False, True])\n+def test_delimited_spans_survive_configuration_changes(started):\n+    text = '$tag$body;more$tag$ /* note; */ alpha'\n+    baseline, _ = configured()\n+    expected = list(baseline.get_tokens(text))\n+    assert [value for _, value in expected] == [\n+        '$tag$body;more$tag$', ' ', '/* note; */', ' ', 'alpha',\n+    ]\n+    lexer, _ = configured()\n+    stream = iter(lexer.get_tokens(text))\n+    prefix = [next(stream)] if started else []\n+    lexer.clear()\n+    assert prefix + list(stream) == expected\n",
+  "include_failure_log": false,
+  "notes": "This is a new implementation task against the unchanged snapshot, not the original public-API lexer-selection change. The acceptance tests use independent Lexer instances and never mutate the default singleton. They exercise each configuration mutation both before first consumption and after one token, verify that new iterators observe updates, distinguish dictionary copying from merely retaining dictionary references, and guard deferred file reading, decoding, and built-in delimited spans. The required production change is temporal isolation within the lexer rather than propagation of a selected instance through public entry points.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make token iterators independent of later syntax changes to their Lexer. Each call to Lexer.get_tokens must retain the regex rules and keyword classifications in effect when that call returns, even if the iterator has not yet been consumed. Lexer.clear, Lexer.set_SQL_REGEX, Lexer.add_keywords, and edits to an already-added keyword dictionary must not affect that iterator, including changes between successive next() calls. Iterators created after a change must use the updated configuration. Preserve keyword-dictionary precedence, case-insensitive lookup, original token values, lazy reading of file-like inputs, existing byte-decoding behavior, and built-in recognition of dollar-quoted literals and multiline comments. Keep the existing public signatures; do not add lexer arguments to sqlparse's entry points. Return a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from multi-file API propagation to focused temporal-state analysis in Lexer.get_tokens, Lexer.is_keyword, and the configuration mutators. A direct module read followed by interleaved iterator probes is more useful than broad repository exploration.",
+  "change_type": "constraint",
+  "description": "Make sqlparse/lexer.py::Lexer.get_tokens capture its syntax configuration when called, rather than consulting mutable instance state as the returned iterator is consumed. A token iterator created before Lexer.clear, Lexer.set_SQL_REGEX, Lexer.add_keywords, or mutation of an already-added keyword dictionary must retain the original regex rules and keyword classifications, including when mutations occur between successive next() calls. New iterators must see the updated configuration. Preserve lazy input reading, encoding handling, and built-in delimited-span recognition. Deliver a production-only unified diff; do not add lexer arguments to the public entry points.",
+  "expected_answer_change": "The repair must snapshot the compiled regex sequence and keyword mappings at get_tokens call time and ensure keyword actions use that snapshot rather than the live Lexer.is_keyword state. Because get_tokens currently contains yield statements, simply copying configuration at the top of its existing body would capture it too late. Verification must cover mutation before first consumption, mutation midway through consumption, and unchanged lazy file reading.",
+  "why_substantive": "The accepted task isolates calls that select different Lexer instances, but does not isolate an iterator from subsequent mutation of its own instance. This variation requires investigating generator execution timing and mutable keyword dictionaries, not propagating an instance through public APIs."
+ },
+ "task_id": "andialbrecht-sqlparse-r01-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[add-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[add-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[clear-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[clear-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[dictionary-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[dictionary-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[regex-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[regex-True]",
+   "tests/test_lexer_configuration_capture.py::test_delimited_spans_survive_configuration_changes[False]",
+   "tests/test_lexer_configuration_capture.py::test_delimited_spans_survive_configuration_changes[True]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xc3\\xa9-None]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xe9-None]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xe9-latin-1]",
+   "tests/test_lexer_configuration_capture.py::test_input_is_read_lazily_but_syntax_is_captured_immediately"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 522
+   },
+   "patch_files": [
+    "sqlparse/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[add-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[add-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[clear-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[clear-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[dictionary-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[dictionary-True]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[regex-False]",
+   "tests/test_lexer_configuration_capture.py::test_configuration_is_fixed_at_call_time[regex-True]",
+   "tests/test_lexer_configuration_capture.py::test_delimited_spans_survive_configuration_changes[False]",
+   "tests/test_lexer_configuration_capture.py::test_delimited_spans_survive_configuration_changes[True]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xc3\\xa9-None]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xe9-None]",
+   "tests/test_lexer_configuration_capture.py::test_encoding_with_a_captured_keyword_dictionary[caf\\xe9-latin-1]",
+   "tests/test_lexer_configuration_capture.py::test_input_is_read_lazily_but_syntax_is_captured_immediately"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

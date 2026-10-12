@@ -1,0 +1,50 @@
+--- a/voluptuous/schema_builder.py
++++ b/voluptuous/schema_builder.py
+@@ -1335,6 +1335,12 @@
+         ... def foo(arg1, arg2):
+         ...   return arg1 * arg2
+ 
++    Positional schemas apply to the leading positional parameters, including
++    positional-only parameters. Named schemas may also target keyword-only
++    parameters and override positional schemas for the same name. Only
++    explicitly supplied arguments are validated; omitted defaults are left
++    untouched.
++
+     Set restriction for returned value:
+ 
+         >>> @validate(arg=int, __return__=int)
+@@ -1348,7 +1354,16 @@
+         returns_defined = False
+         returns = None
+ 
+-        schema_args_dict = _args_to_dict(func, a)
++        signature = inspect.signature(func)
++        positional_names = [
++            name
++            for name, parameter in signature.parameters.items()
++            if parameter.kind in (
++                inspect.Parameter.POSITIONAL_ONLY,
++                inspect.Parameter.POSITIONAL_OR_KEYWORD,
++            )
++        ]
++        schema_args_dict = dict(zip(positional_names, a))
+         schema_arguments = _merge_args_with_kwargs(schema_args_dict, kw)
+ 
+         if RETURNS_KEY in schema_arguments:
+@@ -1365,10 +1380,12 @@
+ 
+         @wraps(func)
+         def func_wrapper(*args, **kwargs):
+-            args_dict = _args_to_dict(func, args)
+-            arguments = _merge_args_with_kwargs(args_dict, kwargs)
+-            validated_arguments = input_schema(arguments)
+-            output = func(**validated_arguments)
++            # Bind before validation so invalid calls cannot run validators.
++            # Do not apply defaults: only caller-supplied values are validated.
++            bound = signature.bind(*args, **kwargs)
++            validated_arguments = input_schema(bound.arguments)
++            bound.arguments = validated_arguments
++            output = func(*bound.args, **bound.kwargs)
+             return output_schema(output)
+ 
+         return func_wrapper

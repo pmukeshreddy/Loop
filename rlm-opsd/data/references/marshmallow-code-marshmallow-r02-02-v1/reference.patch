@@ -1,0 +1,35 @@
+--- a/src/marshmallow/fields.py
++++ b/src/marshmallow/fields.py
+@@ -1612,7 +1612,10 @@
+     def mapping_type(self) -> type[_MappingT]: ...
+ 
+     #: Default error messages.
+-    default_error_messages = {"invalid": "Not a valid mapping type."}
++    default_error_messages = {
++        "invalid": "Not a valid mapping type.",
++        "duplicate": "Duplicate key.",
++    }
+ 
+     def __init__(
+         self,
+@@ -1696,11 +1699,19 @@
+             keys = {k: k for k in value}
+         else:
+             keys = {}
++            seen_keys = set()
+             for key in value:
+                 try:
+-                    keys[key] = self.key_field.deserialize(key, **kwargs)
++                    deser_key = self.key_field.deserialize(key, **kwargs)
+                 except ValidationError as error:
+                     errors[key]["key"] = error.messages
++                else:
++                    if deser_key in seen_keys:
++                        errors[key]["key"] = self.make_error("duplicate").messages
++                    else:
++                        # Reserve the key even if its value fails validation.
++                        seen_keys.add(deser_key)
++                        keys[key] = deser_key
+ 
+         # Deserialize values
+         result = self.mapping_type()

@@ -1,0 +1,22 @@
+--- a/lark/lexer.py
++++ b/lark/lexer.py
+@@ -370,13 +370,17 @@
+         # This function recursively tries less and less groups until it's successful.
+         mres = []
+         while terminals:
+-            pattern = u'|'.join(u'(?P<%s>%s)' % (t.name, t.pattern.to_regexp()) for t in terminals[:max_size])
++            batch = terminals[:max_size]
++            pattern = u'|'.join(u'(?P<%s>%s)' % (t.name, t.pattern.to_regexp()) for t in batch)
+             if self.use_bytes:
+                 pattern = pattern.encode('latin-1')
+             try:
+                 mre = self.re_.compile(pattern, self.g_regex_flags)
+             except AssertionError:  # Yes, this is what Python provides us.. :/
+-                return self._build_mres(terminals, max_size // 2)
++                if len(batch) == 1:
++                    raise
++                # Keep earlier batches when only a later batch needs splitting.
++                return mres + self._build_mres(terminals, len(batch) // 2)
+ 
+             mres.append(mre)
+             terminals = terminals[max_size:]

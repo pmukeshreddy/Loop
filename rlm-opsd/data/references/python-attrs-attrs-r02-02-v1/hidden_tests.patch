@@ -1,0 +1,127 @@
+--- /dev/null
++++ b/tests/test_constructor_alias_collisions.py
+@@ -0,0 +1,124 @@
++# SPDX-License-Identifier: MIT
++
++import pytest
++
++import attr
++
++
++def added(name, alias=None):
++    return attr.Attribute(
++        name=name,
++        default=attr.NOTHING,
++        validator=None,
++        repr=True,
++        cmp=None,
++        hash=None,
++        init=True,
++        inherited=False,
++        alias=alias,
++    )
++
++
++class TestTransformHook:
++    @pytest.mark.parametrize("slots", [False, True])
++    @pytest.mark.parametrize("kw_only", [False, True])
++    def test_renamed_inherited_collision(self, slots, kw_only):
++        @attr.s(slots=slots)
++        class Base:
++            _token = attr.ib(alias="token")
++
++        def hook(cls, fields):
++            return [
++                fields[0].evolve(name="retained"),
++                fields[1].evolve(name="_token", kw_only=kw_only),
++            ]
++
++        with pytest.raises(ValueError) as exc:
++            @attr.s(slots=slots, field_transformer=hook)
++            class Child(Base):
++                other = attr.ib()
++
++        for name in ("token", "retained", "_token"):
++            assert name in str(exc.value)
++
++    @pytest.mark.parametrize("alias", [None, "token"])
++    def test_added_collision(self, alias):
++        def hook(cls, fields):
++            return [*fields, added("_added" if alias else "_token", alias)]
++
++        with pytest.raises(ValueError) as exc:
++            @attr.s(field_transformer=hook)
++            class C:
++                stored = attr.ib(alias="token")
++
++        for name in ("token", "stored", "_added" if alias else "_token"):
++            assert name in str(exc.value)
++
++    def test_modified_alias_collision(self):
++        def hook(cls, fields):
++            return [fields[0], fields[1].evolve(alias="token", kw_only=True)]
++
++        with pytest.raises(ValueError) as exc:
++            @attr.s(field_transformer=hook)
++            class C:
++                _token = attr.ib()
++                other = attr.ib()
++
++        for name in ("token", "_token", "other"):
++            assert name in str(exc.value)
++
++    @pytest.mark.parametrize("excluded", [0, 1])
++    @pytest.mark.parametrize("default", [attr.NOTHING, 7, attr.Factory(lambda: 7)])
++    def test_non_init_fields_do_not_collide(self, excluded, default):
++        def hook(cls, fields):
++            return [
++                a.evolve(init=False, default=default) if i == excluded else a
++                for i, a in enumerate(fields)
++            ]
++
++        @attr.s(field_transformer=hook)
++        class C:
++            first = attr.ib(alias="token")
++            second = attr.ib(alias="token", kw_only=True)
++
++        c = C(token=3)
++        names = ("first", "second")
++        assert getattr(c, names[1 - excluded]) == 3
++        if default is attr.NOTHING:
++            assert not hasattr(c, names[excluded])
++        else:
++            assert getattr(c, names[excluded]) == 7
++
++    def test_removed_collision_is_ignored(self):
++        def hook(cls, fields):
++            return fields[:1]
++
++        @attr.s(field_transformer=hook)
++        class C:
++            first = attr.ib(alias="token")
++            second = attr.ib(alias="token")
++
++        assert C(token=3).first == 3
++        assert [a.name for a in attr.fields(C)] == ["first"]
++
++    def test_collision_resolved_by_transformer(self):
++        def hook(cls, fields):
++            return [fields[0], fields[1].evolve(alias="other")]
++
++        @attr.s(field_transformer=hook)
++        class C:
++            first = attr.ib(alias="token")
++            second = attr.ib(alias="token")
++
++        c = C(token=3, other=4)
++        assert (c.first, c.second) == (3, 4)
++
++    def test_no_transformer_collision(self):
++        with pytest.raises(ValueError) as exc:
++            @attr.s
++            class C:
++                first = attr.ib(alias="token")
++                second = attr.ib(alias="token")
++
++        for name in ("token", "first", "second"):
++            assert name in str(exc.value)

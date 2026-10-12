@@ -1,0 +1,178 @@
+{
+ "answer": "--- a/voluptuous/schema_builder.py\n+++ b/voluptuous/schema_builder.py\n@@ -1335,6 +1335,12 @@\n         ... def foo(arg1, arg2):\n         ...   return arg1 * arg2\n \n+    Positional schemas apply to the leading positional parameters, including\n+    positional-only parameters. Named schemas may also target keyword-only\n+    parameters and override positional schemas for the same name. Only\n+    explicitly supplied arguments are validated; omitted defaults are left\n+    untouched.\n+\n     Set restriction for returned value:\n \n         >>> @validate(arg=int, __return__=int)\n@@ -1348,7 +1354,16 @@\n         returns_defined = False\n         returns = None\n \n-        schema_args_dict = _args_to_dict(func, a)\n+        signature = inspect.signature(func)\n+        positional_names = [\n+            name\n+            for name, parameter in signature.parameters.items()\n+            if parameter.kind in (\n+                inspect.Parameter.POSITIONAL_ONLY,\n+                inspect.Parameter.POSITIONAL_OR_KEYWORD,\n+            )\n+        ]\n+        schema_args_dict = dict(zip(positional_names, a))\n         schema_arguments = _merge_args_with_kwargs(schema_args_dict, kw)\n \n         if RETURNS_KEY in schema_arguments:\n@@ -1365,10 +1380,12 @@\n \n         @wraps(func)\n         def func_wrapper(*args, **kwargs):\n-            args_dict = _args_to_dict(func, args)\n-            arguments = _merge_args_with_kwargs(args_dict, kwargs)\n-            validated_arguments = input_schema(arguments)\n-            output = func(**validated_arguments)\n+            # Bind before validation so invalid calls cannot run validators.\n+            # Do not apply defaults: only caller-supplied values are validated.\n+            bound = signature.bind(*args, **kwargs)\n+            validated_arguments = input_schema(bound.arguments)\n+            bound.arguments = validated_arguments\n+            output = func(*bound.args, **bound.kwargs)\n             return output_schema(output)\n \n         return func_wrapper\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "hits",
+    "old",
+    "path",
+    "pos",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 113551 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference assembled and inspected a production-only unified diff that coordinates schema-to-parameter mapping, binding before validation, transformed invocation, and return validation. The final artifact was computed and checked before submission; the execution summary does not independently demonstrate repository test execution.",
+   "inspect_locate": "The reference execution used 12 targeted searches across 113,551 characters without printing the whole context. Locating the decorator, argument helpers, and existing tests was useful for establishing repository-specific schema precedence, omitted-default handling, and return-validation conventions."
+  },
+  "notes": "This is a natural, non-trivial feature request with precise behavioral requirements and an explicit output format. Naming the public decorator identifies the feature surface rather than revealing a hidden defect or prescribing the implementation. The solution requires repository-specific reasoning, and the task is substantively distinct from both its parent and the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must consistently handle schema-to-parameter mapping, invalid call bindings, transformed argument invocation, omitted defaults, and return validation. Its hunks must be assembled against exact source text and checked together against that behavior matrix.",
+   "inspect_locate": "The selected source and test modules exceed the direct-solve context limit, but the relevant evidence is concentrated in the decorator, its argument-conversion helpers, and the existing decorator tests. Locating those sections establishes the schema naming, partial-validation, and return-validation conventions without reviewing unrelated validators."
+  },
+  "context": {
+   "files": [
+    "voluptuous/schema_builder.py",
+    "voluptuous/tests/tests.py",
+    "voluptuous/error.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::validate",
+    "why": "Builds input and output schemas, validates the merged argument dictionary, and currently invokes the decorated function using only keyword arguments."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::_args_to_dict",
+    "why": "Maps positional schemas and supplied positional values through co_argcount and co_varnames, without enforcing Python call-binding rules."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::_merge_args_with_kwargs",
+    "why": "Establishes named-schema override behavior but also silently overwrites duplicated positional-and-keyword call arguments."
+   },
+   {
+    "path": "voluptuous/tests/tests.py",
+    "symbol": null,
+    "why": "The existing decorator tests establish positional and named schema support, partial input validation, and return-only and combined return validation."
+   },
+   {
+    "path": "voluptuous/error.py",
+    "symbol": "voluptuous/error.py::MultipleInvalid",
+    "why": "Provides the observable input-validation exception and named argument path checked by the acceptance tests."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_validate_parameter_kinds.py\n@@ -0,0 +1,114 @@\n+import pytest\n+\n+from voluptuous import Coerce, Invalid, validate\n+\n+\n+def test_named_schemas_for_positional_and_keyword_only():\n+    @validate(x=int, y=int, __return__=int)\n+    def add(x, /, *, y):\n+        return x + y\n+\n+    assert add(2, y=3) == 5\n+\n+\n+def test_positional_schema_mapping_and_transformed_invocation():\n+    token = object()\n+\n+    @validate(Coerce(int), y=Coerce(int), __return__=tuple)\n+    def collect(x, /, z, *, y):\n+        return x, z, y\n+\n+    assert collect('2', token, y='3') == (2, token, 3)\n+    assert collect('4', z=token, y='5') == (4, token, 5)\n+\n+\n+def test_keyword_schema_overrides_positional_schema():\n+    @validate(str, x=Coerce(int), y=Coerce(int))\n+    def add(x, /, *, y):\n+        return x + y\n+\n+    assert add('2', y='3') == 5\n+\n+\n+def test_keyword_only_function_and_named_input_errors():\n+    @validate(y=int)\n+    def only(*, y):\n+        return y\n+\n+    assert only(y=4) == 4\n+    with pytest.raises(Invalid) as exc:\n+        only(y='bad')\n+    assert exc.value.path == ['y']\n+\n+\n+def test_defaults_are_not_added_to_validation_input():\n+    left, middle, right = object(), object(), object()\n+    seen = []\n+\n+    def convert(value):\n+        seen.append(value)\n+        return int(value)\n+\n+    @validate(x=convert, z=convert, y=convert)\n+    def collect(x=left, /, z=middle, *, y=right):\n+        return x, z, y\n+\n+    result = collect()\n+    assert result[0] is left\n+    assert result[1] is middle\n+    assert result[2] is right\n+    assert seen == []\n+\n+    assert collect(y='3') == (left, middle, 3)\n+    assert seen == ['3']\n+    seen.clear()\n+    assert collect(z='2', y='3') == (left, 2, 3)\n+    assert sorted(seen) == ['2', '3']\n+    seen.clear()\n+    assert collect('1', '2', y='3') == (1, 2, 3)\n+    assert sorted(seen) == ['1', '2', '3']\n+\n+\n+@pytest.mark.parametrize(\n+    'args, kwargs',\n+    [\n+        ((), {'z': 2, 'y': 3}),\n+        ((1,), {'y': 3}),\n+        ((1, 2), {}),\n+        ((1, 2), {'z': 4, 'y': 3}),\n+        ((1, 2, 3), {'y': 4}),\n+        ((1, 2), {'y': 3, 'extra': 4}),\n+        ((), {'x': 1, 'z': 2, 'y': 3}),\n+        ((1, 2, 3), {}),\n+    ],\n+)\n+def test_invalid_bindings_run_no_validation_or_body(args, kwargs):\n+    events = []\n+\n+    def record(value):\n+        events.append('validator')\n+        raise AssertionError('validator must not run')\n+\n+    @validate(x=record, z=record, y=record, __return__=record)\n+    def target(x, /, z, *, y):\n+        events.append('body')\n+        return x + z + y\n+\n+    with pytest.raises(TypeError):\n+        target(*args, **kwargs)\n+    assert events == []\n+\n+\n+def test_return_only_validation_with_positional_only_input():\n+    @validate(__return__=Coerce(int))\n+    def good(x, /, *, y):\n+        return str(x + y)\n+\n+    assert good(2, y=3) == 5\n+\n+    @validate(__return__=int)\n+    def bad(x, /, *, y):\n+        return 'bad'\n+\n+    with pytest.raises(Invalid):\n+        bad(2, y=3)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the unmodified snapshot, not a dispatch regression. The hidden patch adds a new test file under the existing test directory rather than editing tests.py. It checks valid positional-only and keyword-only calls, positional schema mapping, named overrides, transformed values, partial schemas, omitted defaults, binding-error precedence, named input errors, and return-only validation. The current implementation fails the acceptance suite because it reconstructs supplied positional-only arguments as keywords and runs input validation before rejecting invalid bindings. Existing decorator tests remain the compatibility checks for ordinary signatures. No variadic behavior or exact TypeError wording is required. The focused files are still above 16,000 characters, so this task does not claim direct_solve; semantic delegation is unnecessary once the relevant decorator sections are located.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Extend Voluptuous's `validate` decorator to support functions with positional-only and keyword-only parameters. For example, `@validate(x=int, y=int, __return__=int)` should work on `def add(x, /, *, y): return x + y`.\n\nKeep the existing schema conventions: positional decorator schemas correspond to the leading positional parameter names, including positional-only parameters; named schemas may target any declared parameter and override a positional schema for the same name. Validate only arguments explicitly supplied by the caller, leaving omitted defaults untouched and passing unschematized arguments through. The wrapped function must receive the transformed argument values through a valid Python call, and `__return__` must still validate and optionally transform its result, including when no input schemas are provided.\n\nReject invalid Python argument bindings with `TypeError` before any input validator, function body, or return validator runs. This includes missing required arguments, duplicate positional-and-keyword arguments, unexpected keywords, excess positional arguments, and violations of positional-only or keyword-only restrictions. Functions containing `*args` or `**kwargs` are outside this extension's scope. Preserve existing behavior for valid calls to ordinary non-variadic functions.\n\nDeliver a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from broad combinator impact analysis to a caller-layer implementation task. Focused inspection of validate and its existing tests is appropriate, followed by a signature-based acceptance matrix covering valid calls, transformed arguments, missing or duplicate arguments, omitted defaults, and invalid return values. Sub-calls are unnecessary unless reviewing that matrix becomes large.",
+  "change_type": "dependency",
+  "description": "Investigate callable validation through the validate decorator rather than combinator dispatch. Extend voluptuous/schema_builder.py::validate to correctly decorate functions with positional-only and keyword-only parameters, such as def f(x, /, *, y): return x + y, with @validate(x=int, y=int, __return__=int). Preserve the existing convention that positional decorator schemas correspond to leading positional parameter names and that omitted defaulted arguments are not validated merely because they have defaults. Correctly invoke the wrapped function after validation, retain return-value validation, and reject invalid Python argument bindings before running validators. Add acceptance tests alongside test_schema_decorator_match_with_args, test_schema_decorator_partial_match_called_with_kwargs, and the return-validation tests in voluptuous/tests/tests.py. Variadic parameters may be explicitly excluded from this extension.",
+  "expected_answer_change": "The answer depends on Python signature binding and on preserving transformed values when reconstructing positional-only arguments and keyword-only arguments. A successful implementation must replace or augment the _args_to_dict/_merge_args_with_kwargs pipeline with signature-aware binding, avoid applying omitted defaults, and invoke the function using valid positional and keyword argument collections before applying output_schema.",
+  "why_substantive": "This changes the caller and the required deliverable: the problem is how function arguments are bound, validated, and reconstructed. _args_to_dict reads co_argcount and validate.func_wrapper invokes every supplied argument as a keyword, so supporting these signatures requires investigating the decorator's binding pipeline rather than the callable-versus-hook dispatch order. It does not duplicate the listed required-configuration or mapping-candidate regressions."
+ },
+ "task_id": "alecthomas-voluptuous-r01-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_defaults_are_not_added_to_validation_input",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args0-kwargs0]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args1-kwargs1]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args2-kwargs2]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args3-kwargs3]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args4-kwargs4]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args5-kwargs5]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args6-kwargs6]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args7-kwargs7]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_keyword_schema_overrides_positional_schema",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_named_schemas_for_positional_and_keyword_only",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_positional_schema_mapping_and_transformed_invocation",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_return_only_validation_with_positional_only_input"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 13,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/schema_builder.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_defaults_are_not_added_to_validation_input",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args0-kwargs0]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args1-kwargs1]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args2-kwargs2]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args3-kwargs3]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args4-kwargs4]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args5-kwargs5]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args6-kwargs6]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_invalid_bindings_run_no_validation_or_body[args7-kwargs7]",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_keyword_schema_overrides_positional_schema",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_named_schemas_for_positional_and_keyword_only",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_positional_schema_mapping_and_transformed_invocation",
+   "voluptuous/tests/test_validate_parameter_kinds.py::test_return_only_validation_with_positional_only_input"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

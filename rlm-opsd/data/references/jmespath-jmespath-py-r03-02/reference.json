@@ -1,0 +1,189 @@
+{
+ "answer": [
+  "avg",
+  "max",
+  "max_by",
+  "min",
+  "min_by",
+  "not_null",
+  "to_number",
+  "type"
+ ],
+ "answer_format": "ordered_list",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "[\"avg\", \"max\", \"max_by\", \"min\", \"min_by\", \"not_null\", \"to_number\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.003665313522248059,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "audit",
+    "classes",
+    "files",
+    "ft",
+    "parsed",
+    "registered"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 24017,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 24017 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 6 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "A selected-context sub-call reviewed the function inventory and null-return behavior. The task requires semantic coverage beyond explicit return statements, including empty inputs, conversion failure, and implicit returns.",
+   "combine_verify_finish": "The sub-call result was incorporated into a programmatically constructed final list, which was inspected before completion. Deduplication and alphabetical ordering directly satisfy the requested output.",
+   "inspect_locate": "The reference execution used six targeted searches without printing the whole repository context. Registration, signature validation, and expression-reference handling are relevant to establishing which built-ins and inputs qualify."
+  },
+  "notes": "This is a natural, repository-dependent nullable-result audit with a precise output format. The question neither reveals the answer nor prescribes solver operations. Determining the complete set requires reviewing registered functions and their valid-input behavior rather than performing a single lookup. The related accepted null-elision task concerns a proposed policy change, not this inventory of current behavior."
+ },
+ "spec": {
+  "answer_format": "ordered_list",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "chunked_subcalls": "All registered built-ins need semantic review. Nullability can arise from empty collections, conversion failure, unrestricted arguments, expression-reference values, or an implicit return, so looking for an explicit 'return None' is insufficient.",
+   "combine_verify_finish": "The reviewed function groups must be combined into one deduplicated, alphabetically sorted public-name list.",
+   "inspect_locate": "The inventory must start from actual function registration and follow signature validation and expression-reference construction, rather than treating every Python method as a callable built-in."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::FunctionRegistry._populate_function_table",
+    "why": "Defines the inventory of registered public built-ins."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions",
+    "why": "Signatures and implementation branches jointly determine which successful calls can return None."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.visit_expref",
+    "why": "Expression references are valid function arguments and are not ordinary JSON values."
+   }
+  ],
+  "expected_answer": [
+   "avg",
+   "max",
+   "max_by",
+   "min",
+   "min_by",
+   "not_null",
+   "to_number",
+   "type"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "An executable verifier can enumerate the registry and exercise canonical JSON values, empty collections, failed numeric conversions, and real expression references through public search calls. In particular, unrestricted signatures must also be exercised with an expression reference.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "For a nullable-result audit, list every registered built-in function in this snapshot that can return Python `None` without raising an exception for at least one signature-valid call. Consider ordinary finite JSON data, including null and empty collections, and expression-reference arguments evaluated over that data. Do not use custom functions or Python-specific input classes. Include implicit `None` returns as well as explicit ones. Return the public function names as an alphabetically sorted JSON list.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r03-02",
+ "truth": {
+  "answer": [
+   "avg",
+   "max",
+   "max_by",
+   "min",
+   "min_by",
+   "not_null",
+   "to_number",
+   "type"
+  ],
+  "kind": "oracle",
+  "normalized": [
+   "avg",
+   "max",
+   "max_by",
+   "min",
+   "min_by",
+   "not_null",
+   "to_number",
+   "type"
+  ],
+  "output_tail": "{\"answer\": [\"avg\", \"max\", \"max_by\", \"min\", \"min_by\", \"not_null\", \"to_number\", \"type\"]}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "avg",
+    "max",
+    "max_by",
+    "min",
+    "min_by",
+    "not_null",
+    "to_number",
+    "type"
+   ],
+   "predicted": [
+    "avg",
+    "max",
+    "max_by",
+    "min",
+    "min_by",
+    "not_null",
+    "to_number",
+    "type"
+   ]
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

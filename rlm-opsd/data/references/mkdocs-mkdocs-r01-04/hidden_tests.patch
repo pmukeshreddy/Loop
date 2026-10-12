@@ -1,0 +1,60 @@
+--- /dev/null
++++ b/mkdocs/tests/test_schema_inheritance_tests.py
+@@ -0,0 +1,57 @@
++from mkdocs.config import base
++from mkdocs.config import config_options as c
++
++
++class Root:
++    root = c.Type(str, default='root')
++    common = c.Type(int, default=1)
++
++
++class Left(Root):
++    left = c.Type(str, default='left')
++
++
++class Right(Root):
++    right = c.Type(str, default='right')
++    common = c.Type(int, default=2)
++
++
++class Leaf(Left, Right):
++    root = c.Type(str, default='leaf')
++    final = c.Type(bool, default=True)
++
++
++def test_plain_schema_uses_reverse_mro_and_preserves_positions():
++    schema = dict(base.get_schema(Leaf))
++    assert list(schema) == ['root', 'common', 'right', 'left', 'final']
++    assert schema['root'] is Leaf.root
++    assert schema['common'] is Right.common
++    assert schema['right'] is Right.right
++    assert schema['left'] is Left.left
++    assert schema['final'] is Leaf.final
++    assert base.get_schema(Leaf) is base.get_schema(Leaf)
++
++
++def test_non_options_shadow_inherited_options():
++    class Shadow(Leaf):
++        common = 'not an option'
++        right = None
++
++    assert [name for name, _ in base.get_schema(Shadow)] == ['root', 'left', 'final']
++
++
++def test_config_subclass_retains_schema_behavior():
++    class Parent(base.Config):
++        first = c.Type(str, default='first')
++        second = c.Type(int, default=2)
++
++    class Child(Parent):
++        first = c.Type(str, default='override')
++        third = c.Type(bool, default=True)
++
++    schema = dict(base.get_schema(Child))
++    assert list(schema) == ['first', 'second', 'third']
++    config = Child()
++    assert config.first == 'override'
++    assert config.second == 2
++    assert config.third is True

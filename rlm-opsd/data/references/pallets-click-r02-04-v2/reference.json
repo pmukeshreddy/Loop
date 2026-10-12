@@ -1,0 +1,174 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -1077,9 +1077,17 @@\n         self.deprecated = deprecated\n \n     def to_info_dict(self, ctx: Context) -> dict[str, t.Any]:\n+        params = []\n+\n+        for param in self.get_params(ctx):\n+            info = param.to_info_dict()\n+            default = param.get_default(ctx, call=False)\n+            info[\"default\"] = None if default is UNSET else default\n+            params.append(info)\n+\n         return {\n             \"name\": self.name,\n-            \"params\": [param.to_info_dict() for param in self.get_params(ctx)],\n+            \"params\": params,\n             \"help\": self.help,\n             \"epilog\": self.epilog,\n             \"short_help\": self.short_help,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009451173520712155,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "k",
+    "methods"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution assembled and inspected the final diff. The patch combines existing subclass-provided metadata with context-aware get_default results and normalizes unresolved UNSET values, while leaving standalone introspection unchanged. The execution summary does not show repository test runs, so it supports final-artifact inspection rather than an additional claim of runtime verification.",
+   "inspect_locate": "The reference execution used 11 targeted searches without printing the whole repository context. Locating command-level introspection, recursive context construction, and parameter default resolution was useful for determining where to apply the change without altering standalone parameter metadata."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise production-only diff format. Naming get_default and disabling callable evaluation specifies the required behavioral contract rather than leaking an implementation patch. The edge cases constrain one coherent change, and the task is substantively distinct from its parent and the accepted default-resolution tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve standalone parameter dictionaries and subclass metadata while consistently exposing effective defaults for options, arguments, and nested commands. Checking the assembled diff against these distinct contracts and the exact source context is useful before delivering it.",
+   "inspect_locate": "The large core module contains separate documentation traversal, child-context construction, default-map lookup, and lazy option-default resolution paths. The implementation requires locating and connecting these paths while distinguishing command-level introspection from standalone parameter introspection."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Command.to_info_dict",
+    "why": "Currently collects context-free parameter dictionaries despite receiving a context."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.to_info_dict",
+    "why": "Delegates documentation construction to the context's command."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Group.to_info_dict",
+    "why": "Traverses child commands with child contexts, establishing the ownership of nested effective defaults."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context._make_sub_context",
+    "why": "Constructs child contexts whose initialization inherits the corresponding nested default map."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.get_default",
+    "why": "Resolves map overrides, including explicit None, and supports preserving callable factories with call=False."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.get_default",
+    "why": "Adds lazy flag-default derivation and distinguishes factories from callable activation objects."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.to_info_dict",
+    "why": "Defines the standalone metadata contract and hides unresolved UNSET values."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_info_context_defaults.py\n@@ -0,0 +1,133 @@\n+import pytest\n+\n+import click\n+from click.core import UNSET\n+\n+\n+@pytest.mark.parametrize(\"kind\", [click.Option, click.Argument])\n+@pytest.mark.parametrize(\"mapped, expected\", [(None, None), (\"007\", \"007\"), (UNSET, 12)])\n+def test_info_context_defaults(kind, mapped, expected):\n+    decl = [\"--value\"] if kind is click.Option else [\"value\"]\n+    param = kind(decl, type=int, default=12)\n+    command = click.Command(\"cmd\", params=[param], add_help_option=False)\n+    default_map = {\"value\": mapped}\n+    ctx = click.Context(command, default_map=default_map)\n+    standalone = param.to_info_dict()\n+\n+    info = command.to_info_dict(ctx)[\"params\"][0]\n+    assert info == {**standalone, \"default\": expected}\n+    assert ctx.to_info_dict()[\"command\"][\"params\"][0] == info\n+    assert param.to_info_dict() == standalone\n+    assert param.default == 12\n+    assert default_map[\"value\"] is mapped\n+\n+\n+@pytest.mark.parametrize(\"kind\", [click.Option, click.Argument])\n+@pytest.mark.parametrize(\"in_map\", [False, True])\n+def test_info_factories_remain_lazy(kind, in_map):\n+    def factory():\n+        raise AssertionError(\"introspection executed a factory\")\n+\n+    decl = [\"--value\"] if kind is click.Option else [\"value\"]\n+    declared = 12 if in_map else factory\n+    param = kind(decl, type=int, default=declared)\n+    command = click.Command(\"cmd\", params=[param], add_help_option=False)\n+    default_map = {\"value\": factory} if in_map else {}\n+    ctx = click.Context(command, default_map=default_map)\n+\n+    assert command.to_info_dict(ctx)[\"params\"][0][\"default\"] is factory\n+    assert ctx.to_info_dict()[\"command\"][\"params\"][0][\"default\"] is factory\n+    assert param.to_info_dict()[\"default\"] is declared\n+    assert param.default is declared\n+\n+\n+def test_info_option_lazy_defaults():\n+    def activation():\n+        raise AssertionError(\"introspection executed a flag value\")\n+\n+    params = [\n+        click.Option([\"--enabled\"], is_flag=True),\n+        click.Option([\"--disabled\"], is_flag=True),\n+        click.Option([\"--mode\"], flag_value=activation, default=False),\n+        click.Option([\"--many\"], flag_value=\"x\", multiple=True),\n+        click.Option([\"--count\"], count=True),\n+        click.Option([\"--missing\"]),\n+        click.Argument([\"absent\"], required=False),\n+    ]\n+    command = click.Command(\"cmd\", params=params, add_help_option=False)\n+    ctx = click.Context(command, default_map={\"disabled\": None, \"mode\": True})\n+    before = [param.to_info_dict() for param in params]\n+\n+    actual = [item[\"default\"] for item in command.to_info_dict(ctx)[\"params\"]]\n+    assert actual == [False, None, activation, (), 0, None, None]\n+    assert [param.to_info_dict() for param in params] == before\n+    assert before[1][\"default\"] is False\n+    assert before[2][\"default\"] is False\n+\n+\n+def test_info_nested_context_defaults():\n+    def factory():\n+        raise AssertionError(\"nested introspection executed a factory\")\n+\n+    def option(default):\n+        return click.Option([\"--value\"], default=default)\n+\n+    leaf = click.Command(\n+        \"leaf\",\n+        params=[\n+            option(3),\n+            click.Argument([\"target\"], default=\"declared\"),\n+            click.Option([\"--dynamic\"], default=\"declared\"),\n+        ],\n+        add_help_option=False,\n+    )\n+    branch = click.Group(\n+        \"branch\", params=[option(2)], commands=[leaf], add_help_option=False\n+    )\n+    sibling = click.Command(\"sibling\", params=[option(4)], add_help_option=False)\n+    root = click.Group(\n+        \"root\", params=[option(1)], commands=[branch, sibling], add_help_option=False\n+    )\n+    ctx = click.Context(\n+        root,\n+        default_map={\n+            \"value\": 10,\n+            \"branch\": {\n+                \"value\": 20,\n+                \"leaf\": {\"value\": 30, \"target\": None, \"dynamic\": factory},\n+            },\n+        },\n+    )\n+\n+    info = ctx.to_info_dict()[\"command\"]\n+    assert info[\"params\"][0][\"default\"] == 10\n+    branch_info = info[\"commands\"][\"branch\"]\n+    assert branch_info[\"params\"][0][\"default\"] == 20\n+    leaf_info = branch_info[\"commands\"][\"leaf\"]\n+    assert [p[\"default\"] for p in leaf_info[\"params\"]] == [30, None, factory]\n+    assert info[\"commands\"][\"sibling\"][\"params\"][0][\"default\"] == 4\n+    assert root.params[0].to_info_dict()[\"default\"] == 1\n+    assert branch.params[0].to_info_dict()[\"default\"] == 2\n+    assert leaf.params[0].to_info_dict()[\"default\"] == 3\n+    assert leaf.params[1].to_info_dict()[\"default\"] == \"declared\"\n+    assert leaf.params[2].to_info_dict()[\"default\"] == \"declared\"\n+\n+\n+def test_info_uses_parameter_default_override():\n+    class ContextOption(click.Option):\n+        def get_default(self, ctx, call=True):\n+            assert call is False\n+            return ctx.info_name\n+\n+        def to_info_dict(self):\n+            info = super().to_info_dict()\n+            info[\"custom\"] = \"retained\"\n+            return info\n+\n+    param = ContextOption([\"--value\"], default=\"declared\")\n+    command = click.Command(\"cmd\", params=[param], add_help_option=False)\n+    ctx = click.Context(command, info_name=\"documentation\")\n+    info = command.to_info_dict(ctx)[\"params\"][0]\n+    assert info[\"default\"] == \"documentation\"\n+    assert info[\"custom\"] == \"retained\"\n+    assert param.to_info_dict()[\"default\"] == \"declared\"\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the unmodified snapshot, not the original help-rendering probe. Acceptance tests are supplied in a new test file as required by the task schema, rather than appended to tests/test_defaults.py. The tests cover options and arguments, explicit None and UNSET map entries, unconverted map defaults, callable identity and non-evaluation, lazy option defaults, nested context inheritance, standalone behavior, and subclass hooks.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make Click's structured documentation reflect context-specific defaults. In the parameter dictionaries returned by Command.to_info_dict(ctx), each default field should report that parameter's effective default for the supplied context, using its get_default behavior with callable evaluation disabled. This must also work when documentation is obtained through Context.to_info_dict() or recursively through Group.to_info_dict(ctx), using each nested command's own context and inherited default_map.\n\nExplicit None entries in default_map must override declared defaults. Missing entries and entries containing the internal UNSET sentinel must retain the existing default-resolution rules, including lazy option defaults; any unresolved UNSET must be exposed as None. Preserve callable default factories and callable flag activation values as the original objects without executing them. Do not type-convert defaults or use parsed parameter values or environment values instead. Preserve all other parameter metadata, including metadata supplied by subclasses, and honor overridden get_default methods. Standalone Parameter.to_info_dict() and Option.to_info_dict() must remain context-free and retain their current behavior, without changing declared defaults or default maps.\n\nReturn a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across the introspection and context-inheritance chain, followed by combine_verify_finish across option, argument, and nested-group cases. Targeted cross-layer tests are useful because a locally correct default lookup can still use the wrong subcommand context during traversal.",
+  "change_type": "dependency",
+  "description": "Extend context-based documentation introspection in src/click/core.py so Command.to_info_dict(ctx), reached through Context.to_info_dict and Group.to_info_dict, reports each parameter's effective context default rather than always its declared default. Resolve defaults through Parameter.get_default or Option.get_default with call=False, honor explicit None in default_map, hide UNSET as None, and preserve callable factories without executing them. Keep standalone Parameter.to_info_dict and Option.to_info_dict context-free and unchanged. Add tests in tests/test_defaults.py covering options, arguments, nested group default maps, and callable map entries.",
+  "expected_answer_change": "The answer becomes an implementation and acceptance tests for context-aware default fields in command information dictionaries. Correct results depend on inherited nested default maps, the distinction between absent keys and explicit None, lazy option-default derivation, and non-evaluation of factories. Standalone parameter dictionaries must continue to describe declared defaults.",
+  "why_substantive": "This changes a different consumer of defaults: structured documentation traversal rather than help-extra rendering. Investigation must follow Group.to_info_dict, Context._make_sub_context, Command.to_info_dict, and the default-resolution methods to determine which context owns each effective default. The accepted task's three failing help tests do not establish this contract."
+ },
+ "task_id": "pallets-click-r02-04-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_info_context_defaults.py::test_info_context_defaults[007-007-Argument]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[007-007-Option]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[None-None-Argument]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[None-None-Option]",
+   "tests/test_info_context_defaults.py::test_info_factories_remain_lazy[True-Argument]",
+   "tests/test_info_context_defaults.py::test_info_factories_remain_lazy[True-Option]",
+   "tests/test_info_context_defaults.py::test_info_nested_context_defaults",
+   "tests/test_info_context_defaults.py::test_info_option_lazy_defaults",
+   "tests/test_info_context_defaults.py::test_info_uses_parameter_default_override"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 9,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2004
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_info_context_defaults.py::test_info_context_defaults[007-007-Argument]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[007-007-Option]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[None-None-Argument]",
+   "tests/test_info_context_defaults.py::test_info_context_defaults[None-None-Option]",
+   "tests/test_info_context_defaults.py::test_info_factories_remain_lazy[True-Argument]",
+   "tests/test_info_context_defaults.py::test_info_factories_remain_lazy[True-Option]",
+   "tests/test_info_context_defaults.py::test_info_nested_context_defaults",
+   "tests/test_info_context_defaults.py::test_info_option_lazy_defaults",
+   "tests/test_info_context_defaults.py::test_info_uses_parameter_default_override"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,196 @@
+{
+ "answer": "--- a/src/marshmallow/error_store.py\n+++ b/src/marshmallow/error_store.py\n@@ -10,14 +10,21 @@\n \n \n class ErrorStore:\n-    def __init__(self):\n+    def __init__(self, *, index_errors=True):\n         #: Dictionary of errors stored during serialization\n         self.errors = {}\n+        self.index_errors = index_errors\n+        # Keep record identities independently of the public error format.\n+        self.error_indices: set[int] = set()\n \n     def store_error(self, messages, field_name=SCHEMA, index=None):\n         # field error  -> store/merge error messages under field name key\n         # schema error -> if string or list, store/merge under _schema key\n         #              -> if dict, store/merge with other top-level keys\n+        if index is not None:\n+            self.error_indices.add(index)\n+        if not self.index_errors:\n+            index = None\n         messages = copy_containers(messages)\n         if field_name != SCHEMA or not isinstance(messages, dict):\n             messages = {field_name: messages}\n--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -620,7 +620,6 @@\n         :return: The deserialized data as `dict_class` instance or list of `dict_class`\n         instances if `many` is `True`.\n         \"\"\"\n-        index = index if self.opts.index_errors else None\n         if many:\n             if not is_sequence_but_not_string(data):\n                 error_store.store_error([self.error_messages[\"type\"]], index=index)\n@@ -864,7 +863,7 @@\n         :param postprocess: Whether to run post_load methods..\n         :return: Deserialized data\n         \"\"\"\n-        error_store = ErrorStore()\n+        error_store = ErrorStore(index_errors=self.opts.index_errors)\n         errors: dict[str, list[str]] = {}\n         many = self.many if many is None else bool(many)\n         unknown = self.unknown if unknown is None else unknown\n@@ -902,6 +901,8 @@\n             # Run schema-level validation\n             if self._hooks[VALIDATES_SCHEMA]:\n                 field_errors = bool(error_store.errors)\n+                # Snapshot before any schema hook can add errors.\n+                field_error_indices = error_store.error_indices.copy()\n                 self._invoke_schema_validators(\n                     error_store=error_store,\n                     pass_collection=True,\n@@ -911,6 +912,7 @@\n                     partial=partial,\n                     unknown=unknown,\n                     field_errors=field_errors,\n+                    field_error_indices=field_error_indices,\n                 )\n                 self._invoke_schema_validators(\n                     error_store=error_store,\n@@ -921,6 +923,7 @@\n                     partial=partial,\n                     unknown=unknown,\n                     field_errors=field_errors,\n+                    field_error_indices=field_error_indices,\n                 )\n             errors = error_store.errors\n             # Run post processors\n@@ -1152,7 +1155,7 @@\n                                 data=value,\n                                 field_name=data_key,\n                                 error_store=error_store,\n-                                index=(idx if self.opts.index_errors else None),\n+                                index=idx,\n                             )\n                             if validated_value is missing:\n                                 item.pop(field_name, None)\n@@ -1181,20 +1184,35 @@\n         many: bool,\n         partial: bool | types.StrSequenceOrSet | None,\n         field_errors: bool = False,\n+        field_error_indices: set[int] | None = None,\n         unknown: types.UnknownOption | None,\n     ):\n         for attr_name, hook_many, validator_kwargs in self._hooks[VALIDATES_SCHEMA]:\n             if hook_many != pass_collection:\n                 continue\n             validator = getattr(self, attr_name)\n-            if field_errors and validator_kwargs[\"skip_on_field_errors\"]:\n+            skip_on_field_errors = validator_kwargs[\"skip_on_field_errors\"]\n+            if (\n+                field_errors\n+                and skip_on_field_errors\n+                and (not many or pass_collection)\n+            ):\n                 continue\n             pass_original = validator_kwargs.get(\"pass_original\", False)\n \n             if many and not pass_collection:\n-                for idx, (item, orig) in enumerate(\n+                items = (\n                     zip(data, original_data, strict=True)\n-                ):\n+                    if pass_original\n+                    else ((item, None) for item in data)\n+                )\n+                for idx, (item, orig) in enumerate(items):\n+                    if (\n+                        skip_on_field_errors\n+                        and field_error_indices is not None\n+                        and idx in field_error_indices\n+                    ):\n+                        continue\n                     self._run_validator(\n                         validator,\n                         item,\n--- a/src/marshmallow/decorators.py\n+++ b/src/marshmallow/decorators.py\n@@ -111,7 +111,10 @@\n     an additional argument to the method.\n \n     If ``skip_on_field_errors=True``, this validation method will be skipped whenever\n-    validation errors have been detected when validating fields.\n+    validation errors have been detected when validating fields. With ``many=True``,\n+    an item-level validator skips only the records with field errors; a\n+    ``pass_collection=True`` validator skips the entire collection if any record\n+    has field errors. Errors from schema validators do not affect this decision.\n \n     .. versionchanged:: 3.0.0b1 ``skip_on_field_errors`` defaults to `True`.\n     .. versionchanged:: 3.0.0 ``partial`` and ``many`` are always passed as keyword arguments to\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0011828970518470005,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "edits",
+    "files",
+    "new_schema",
+    "p",
+    "patch",
+    "schema",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 29335,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 19 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution constructed and inspected a final patch. The required changes must reconcile record-local skipping with collection-wide skipping, preserve a field-error snapshot across schema hooks, and maintain preprocessing cardinality and original-input pairing contracts.",
+   "inspect_locate": "The execution used 19 targeted searches and two scoped sub-calls. The task requires connecting deserialization, decorated field validation, error storage, and schema-hook dispatch, particularly because public errors omit record indices when index_errors is disabled."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. It specifies observable behavior without revealing the implementation or prescribing solver operations. Although it retains the parent task's preprocessing compatibility requirements, record-local field-error tracking and schema-hook isolation constitute a substantive new change rather than a cosmetic variation or duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production patch must reconcile per-record skip decisions with collection-wide skipping, unchanged original-input pairing, cardinality-changing preprocessing, and public error formatting. Its coordinated changes must preserve a field-error snapshot that later schema errors cannot contaminate.",
+   "inspect_locate": "Record-level skip decisions require tracing deserialization errors, decorated field validators, error storage, and the two schema-validator dispatch passes. The public error dictionary loses record indices when index_errors is disabled, so dispatch code alone does not provide sufficient evidence."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._deserialize",
+    "why": "Produces per-record deserialization errors but suppresses their public indices when index_errors is disabled."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_field_validators",
+    "why": "Decorated field validators provide a second source of errors that must influence only the affected record."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._do_load",
+    "why": "Separates preprocessing, deserialization, field validation, and schema validation, and captures the existing collection-wide field-error flag."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_schema_validators",
+    "why": "Currently skips entire item-level hooks on any field error and strictly pairs every item-level hook with original input."
+   },
+   {
+    "path": "src/marshmallow/error_store.py",
+    "symbol": "src/marshmallow/error_store.py::ErrorStore.store_error",
+    "why": "Merges error messages into their public layout; flattened messages cannot reliably recover record-level error provenance."
+   },
+   {
+    "path": "src/marshmallow/decorators.py",
+    "symbol": "src/marshmallow/decorators.py::validates_schema",
+    "why": "Defines the metadata controlling collection dispatch, original-input arguments, and field-error skipping."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_record_local_schema_skip.py\n@@ -0,0 +1,249 @@\n+import pytest\n+\n+from marshmallow import Schema, ValidationError, fields, pre_load, validates, validates_schema\n+\n+\n+def invoke(schema, data, method, many=True):\n+    if method == \"validate\":\n+        return schema.validate(data, many=many)\n+    with pytest.raises(ValidationError) as exc:\n+        schema.load(data, many=many)\n+    return exc.value.messages\n+\n+\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+def test_record_local_skip(indexed, method):\n+    events = {name: [] for name in (\"one\", \"two\", \"forced\", \"collection\", \"always\")}\n+\n+    class Batch(Schema):\n+        tag = fields.Str()\n+        number = fields.Int(required=True)\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @validates(\"number\")\n+        def reject_number(self, value, **kwargs):\n+            if value == 13:\n+                raise ValidationError(\"field rejection\")\n+\n+        @validates_schema\n+        def one(self, data, **kwargs):\n+            events[\"one\"].append(data.get(\"tag\"))\n+            raise ValidationError(\"one\")\n+\n+        @validates_schema\n+        def two(self, data, **kwargs):\n+            events[\"two\"].append(data.get(\"tag\"))\n+            raise ValidationError(\"two\")\n+\n+        @validates_schema(skip_on_field_errors=False)\n+        def forced(self, data, **kwargs):\n+            events[\"forced\"].append(data.get(\"tag\"))\n+            raise ValidationError(\"forced\")\n+\n+        @validates_schema(pass_collection=True)\n+        def collection(self, data, **kwargs):\n+            events[\"collection\"].append(\"called\")\n+\n+        @validates_schema(pass_collection=True, skip_on_field_errors=False)\n+        def always(self, data, **kwargs):\n+            events[\"always\"].append(\"called\")\n+            raise ValidationError(\"collection failure\")\n+\n+    raw = [\n+        {\"tag\": \"a\", \"number\": 1},\n+        {\"tag\": \"b\", \"number\": \"invalid\"},\n+        {\"tag\": \"c\", \"number\": 13},\n+        {\"tag\": \"d\", \"number\": 2},\n+        {\"tag\": \"e\"},\n+        {\"tag\": \"f\", \"number\": 3, \"unknown\": True},\n+        None,\n+    ]\n+    schema = Batch()\n+    errors = invoke(schema, raw, method)\n+    assert events[\"one\"] == [\"a\", \"d\"]\n+    assert events[\"two\"] == [\"a\", \"d\"]\n+    assert events[\"forced\"] == [\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", None]\n+    assert events[\"collection\"] == []\n+    assert events[\"always\"] == [\"called\"]\n+    if indexed:\n+        for idx in (0, 3):\n+            assert sorted(errors[idx][\"_schema\"]) == [\"forced\", \"one\", \"two\"]\n+        for idx in (1, 2, 4):\n+            assert \"number\" in errors[idx]\n+        assert \"unknown\" in errors[5]\n+        assert sorted(errors[6][\"_schema\"]) == [\"Invalid input type.\", \"forced\"]\n+        assert errors[\"_schema\"] == [\"collection failure\"]\n+    else:\n+        assert not any(isinstance(key, int) for key in errors)\n+        assert sorted(errors[\"_schema\"]) == sorted(\n+            [\"collection failure\", \"Invalid input type.\"] + [\"forced\"] * 7\n+            + [\"one\", \"two\"] * 2\n+        )\n+\n+    for calls in events.values():\n+        calls.clear()\n+    invoke(schema, [{\"tag\": \"a\", \"number\": 1}, {\"tag\": \"b\", \"number\": 2}], method)\n+    assert events[\"one\"] == [\"a\", \"b\"]\n+    assert events[\"two\"] == [\"a\", \"b\"]\n+    assert events[\"collection\"] == [\"called\"]\n+\n+\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+@pytest.mark.parametrize(\"mode\", [\"filter\", \"expand\"])\n+def test_count_changes_use_processed_records(indexed, method, mode):\n+    events = {\"selected\": [], \"forced\": []}\n+\n+    class Batch(Schema):\n+        tag = fields.Str()\n+        number = fields.Int(required=True)\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @pre_load(pass_collection=True)\n+        def reshape(self, data, **kwargs):\n+            result = data[1:]\n+            if mode == \"expand\":\n+                result = result + [{\"tag\": \"e\", \"number\": 3}, {\"tag\": \"f\", \"number\": \"bad\"}]\n+            return result\n+\n+        @validates(\"number\")\n+        def reject_number(self, value, **kwargs):\n+            if value == 13:\n+                raise ValidationError(\"field rejection\")\n+\n+        @validates_schema\n+        def selected(self, data, **kwargs):\n+            events[\"selected\"].append(data[\"tag\"])\n+            raise ValidationError(\"selected\")\n+\n+        @validates_schema(skip_on_field_errors=False)\n+        def forced(self, data, **kwargs):\n+            events[\"forced\"].append(data[\"tag\"])\n+\n+    raw = [\n+        {\"tag\": \"drop\", \"number\": \"bad\"},\n+        {\"tag\": \"a\", \"number\": 1},\n+        {\"tag\": \"b\", \"number\": \"bad\"},\n+        {\"tag\": \"c\", \"number\": 13},\n+        {\"tag\": \"d\", \"number\": 2},\n+    ]\n+    errors = invoke(Batch(), raw, method)\n+    selected = [\"a\", \"d\"] + ([\"e\"] if mode == \"expand\" else [])\n+    assert events[\"selected\"] == selected\n+    assert events[\"forced\"] == [\"a\", \"b\", \"c\", \"d\"] + ([\"e\", \"f\"] if mode == \"expand\" else [])\n+    if indexed:\n+        expected = {0, 1, 2, 3} | ({4, 5} if mode == \"expand\" else set())\n+        assert set(errors) == expected\n+        assert errors[0][\"_schema\"] == [\"selected\"]\n+        assert errors[3][\"_schema\"] == [\"selected\"]\n+        if mode == \"expand\":\n+            assert errors[4][\"_schema\"] == [\"selected\"]\n+    else:\n+        assert set(errors) == {\"number\", \"_schema\"}\n+        assert errors[\"_schema\"] == [\"selected\"] * len(selected)\n+\n+\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+def test_pass_original_remains_positional(indexed, method):\n+    events = {\"selected\": [], \"forced\": []}\n+\n+    class Batch(Schema):\n+        tag = fields.Str()\n+        number = fields.Int(required=True)\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @pre_load(pass_collection=True)\n+        def reverse(self, data, **kwargs):\n+            return list(reversed(data))\n+\n+        @validates_schema(pass_original=True)\n+        def selected(self, data, original, **kwargs):\n+            events[\"selected\"].append((data[\"tag\"], original[\"tag\"]))\n+\n+        @validates_schema(pass_original=True, skip_on_field_errors=False)\n+        def forced(self, data, original, **kwargs):\n+            events[\"forced\"].append((data[\"tag\"], original[\"tag\"]))\n+\n+    raw = [\n+        {\"tag\": \"a\", \"number\": 1},\n+        {\"tag\": \"b\", \"number\": \"bad\"},\n+        {\"tag\": \"c\", \"number\": 2},\n+    ]\n+    invoke(Batch(), raw, method)\n+    assert events[\"selected\"] == [(\"c\", \"a\"), (\"a\", \"c\")]\n+    assert events[\"forced\"] == [(\"c\", \"a\"), (\"b\", \"b\"), (\"a\", \"c\")]\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"filter\", \"expand\"])\n+@pytest.mark.parametrize(\"skip\", [True, False])\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+def test_pass_original_keeps_strict_length_check(mode, skip, method):\n+    class Batch(Schema):\n+        number = fields.Int()\n+\n+        @pre_load(pass_collection=True)\n+        def reshape(self, data, **kwargs):\n+            return data[:-1] if mode == \"filter\" else data + [{\"number\": 3}]\n+\n+        @validates_schema(pass_original=True, skip_on_field_errors=skip)\n+        def check(self, data, original, **kwargs):\n+            pass\n+\n+    with pytest.raises(ValueError):\n+        getattr(Batch(), method)([{\"number\": 1}, {\"number\": 2}], many=True)\n+\n+\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+def test_nested_and_container_errors_skip_only_parent_record(indexed, method):\n+    calls = []\n+\n+    class Child(Schema):\n+        number = fields.Int(required=True)\n+\n+    class Parent(Schema):\n+        tag = fields.Str()\n+        child = fields.Nested(Child, required=True)\n+        values = fields.List(fields.Int(), required=True)\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @validates_schema\n+        def check(self, data, **kwargs):\n+            calls.append(data[\"tag\"])\n+\n+    raw = [\n+        {\"tag\": \"a\", \"child\": {\"number\": 1}, \"values\": [1]},\n+        {\"tag\": \"b\", \"child\": {\"number\": \"bad\"}, \"values\": [1]},\n+        {\"tag\": \"c\", \"child\": {\"number\": 1}, \"values\": [\"bad\"]},\n+    ]\n+    assert invoke(Parent(), raw, method)\n+    assert calls == [\"a\"]\n+\n+\n+@pytest.mark.parametrize(\"method\", [\"load\", \"validate\"])\n+def test_single_record_skip_is_unchanged(method):\n+    calls = []\n+\n+    class Single(Schema):\n+        number = fields.Int(required=True)\n+\n+        @validates_schema\n+        def selected(self, data, **kwargs):\n+            calls.append(\"selected\")\n+\n+        @validates_schema(skip_on_field_errors=False)\n+        def forced(self, data, **kwargs):\n+            calls.append(\"forced\")\n+\n+    assert invoke(Single(), {\"number\": \"bad\"}, method, many=False)\n+    assert calls == [\"forced\"]\n",
+  "include_failure_log": false,
+  "notes": "Implementation task against the supplied snapshot, with a new acceptance-test file rather than a setup defect. Tests cover both public loading entry points, indexed and flattened errors, multiple schema hooks that raise errors, collection-wide skipping, schema-instance reuse, filtering and expansion, strict original-input pairing, nested/container errors, and unchanged single-record skipping. Callback assertions concern each hook's record order, not relative ordering among different hook methods. The original accepted patch alone cannot pass these tests because it retains collection-wide skipping for item-level hooks.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Change `validates_schema` skipping for collection loads. Under `many=True`, an item-level hook with `skip_on_field_errors=True` should skip only deserialized records that incurred deserialization or decorated field-validator errors; it should still validate unaffected records, once each in output order. Deserialization errors include invalid record types, missing required fields, unknown fields, and errors inside nested or container fields. With `skip_on_field_errors=False`, the hook must run on every deserialized record, including partial records with field errors.\n\nCollection-level schema hooks must retain their collection-wide skip rule. Errors raised by any schema hook must not influence whether another schema hook runs. Apply the same decisions through both `load` and `validate`, independently of `Meta.index_errors`; public error messages must still honor that option. A collection `pre_load` hook may filter or expand the input: item-level schema hooks that do not request original input must operate on the resulting records without a length constraint. Hooks with `pass_original=True` must retain strict positional pairing with the original input and its length-mismatch behavior when invoked. Keep single-record skipping unchanged.\n\nReturn a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Expands inspect_locate into tracing error provenance through deserialization, field validation, and schema dispatch. combine_verify_finish must reconcile private per-record bookkeeping with public merged errors and unchanged collection-level behavior. Selective investigation of ErrorStore and the two field-error producers is useful because no single dispatch method contains enough information to implement the contract.",
+  "change_type": "constraint",
+  "description": "Change skip_on_field_errors semantics for item-level validates_schema hooks under many=True: skip only records that incurred deserialization or field-validator errors, while still validating unaffected records. Collection-level schema validators must retain the existing collection-wide skip rule, and skip_on_field_errors=False must continue to run on every deserialized record. Errors from schema validators must not cause subsequent schema validators to be skipped. Require the same callback decisions with Meta.index_errors=True and False, including when a collection pre_load hook changes record count. Keep the existing pass_original positional-pairing behavior. Return a production-file unified diff. Relevant symbols are Schema._deserialize, Schema._invoke_field_validators, Schema._do_load, and Schema._invoke_schema_validators in src/marshmallow/schema.py, ErrorStore.store_error in src/marshmallow/error_store.py, and validates_schema in src/marshmallow/decorators.py.",
+  "expected_answer_change": "The implementation must retain failing output-record identities or indices independently of the public error-message layout, capture that information before schema validation starts, and use it only for item-level skip decisions. Collection-level dispatch must still receive the original global field-error snapshot. Verification must show that unaffected records are validated even when another record fails, and that disabling public error indices does not alter which callbacks run.",
+  "why_substantive": "The seed explicitly preserves the global skip_on_field_errors behavior. This variation changes that contract and requires record-level error provenance rather than merely changing how validators iterate. Flattened error dictionaries cannot identify failing records when index_errors=False, so the seed patch cannot satisfy the new requirement."
+ },
+ "task_id": "marshmallow-code-marshmallow-r02-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-load-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-load-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-validate-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-validate-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-load-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-load-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-validate-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-validate-True]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[load-False]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[load-True]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[validate-True]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[load-False]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[load-True]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[validate-True]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[load-False]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[load-True]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[validate-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 20,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1218
+   },
+   "patch_files": [
+    "src/marshmallow/error_store.py",
+    "src/marshmallow/schema.py",
+    "src/marshmallow/decorators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-load-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-load-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-validate-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[expand-validate-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-load-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-load-True]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-validate-False]",
+   "tests/test_record_local_schema_skip.py::test_count_changes_use_processed_records[filter-validate-True]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[load-False]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[load-True]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_nested_and_container_errors_skip_only_parent_record[validate-True]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[load-False]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[load-True]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_pass_original_remains_positional[validate-True]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[load-False]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[load-True]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[validate-False]",
+   "tests/test_record_local_schema_skip.py::test_record_local_skip[validate-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

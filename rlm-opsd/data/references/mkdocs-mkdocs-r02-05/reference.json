@@ -1,0 +1,176 @@
+{
+ "answer": [
+  "mkdocs/tests/config/config_options_legacy_tests.py::MarkdownExtensionsTest::test_builtins_config",
+  "mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_builtins_config"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_config\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0005112151891217861,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 26,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "page_selected",
+    "review",
+    "segments",
+    "selected",
+    "t",
+    "testpaths",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 17050,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "2 sub-calls (0 failed); 2 call sites on selected context, 0 on the whole context; max prompt 17050 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1077824 chars; 26 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": true,
+    "evidence": "2 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Two bounded sub-calls reviewed selected context, supporting the distinction between affected configuration assertions and unaffected direct Markdown or non-builtin configuration usage.",
+   "combine_verify_finish": "The final test-ID list was computed, checked, and returned through FINAL_VAR, and it matches the independently verified impact tests.",
+   "inspect_locate": "The execution used 26 targeted searches to connect builtin declarations, configuration handling, and relevant tests without printing the whole repository context.",
+   "recursive_decomposition": "The investigation separated configuration-result assertions from possible downstream rendering effects; both sub-call results were stored and incorporated into the final answer."
+  },
+  "notes": "The proposal precisely defines the behavioral change and requests an unambiguous, sorted list of newly failing tests. Although the two affected tests have suggestive names, establishing the complete impact requires checking normalization and downstream consumers rather than merely locating those names. The task is repository-dependent, reads naturally as a maintainer's change-impact request, and does not duplicate an accepted task."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The impact cannot be decided from occurrences of toc alone: many tests construct Markdown directly, use explicit extension settings through MkDocsConfig, or exercise unrelated extensions. Substantial test bodies must be understood to distinguish these cases.",
+   "combine_verify_finish": "The final answer must aggregate exact pytest IDs while excluding direct Markdown calls and non-builtin configurations that the probe does not change.",
+   "inspect_locate": "Builtin extension declarations, configuration normalization, Markdown construction, and resulting title, TOC, and page expectations are spread across several modules.",
+   "recursive_decomposition": "Configuration-result assertions and downstream rendered-page assertions are independent impact paths, with different reasons for failure."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::MarkdownExtensions.run_validation",
+    "why": "The probe removes builtin configuration after input parsing and before Markdown registration."
+   },
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::MarkdownExtensions.post_validation",
+    "why": "Publishes the same filtered configdata as mdx_configs."
+   },
+   {
+    "path": "mkdocs/config/defaults.py",
+    "symbol": "mkdocs/config/defaults.py::MkDocsConfig",
+    "why": "Declares toc, tables, and fenced_code as builtins for root configuration."
+   },
+   {
+    "path": "mkdocs/structure/pages.py",
+    "symbol": "mkdocs/structure/pages.py::Page.render",
+    "why": "Consumes validated extension names and mdx_configs during actual page rendering."
+   },
+   {
+    "path": "mkdocs/tests/config/config_options_tests.py",
+    "symbol": null,
+    "why": "Contains extension normalization and builtin-configuration expectations."
+   },
+   {
+    "path": "mkdocs/tests/structure/page_tests.py",
+    "symbol": null,
+    "why": "Contains downstream rendering cases where configured builtin behavior must be distinguished from direct Markdown construction."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe intentionally preserves validation of malformed builtin configuration input. Only successfully parsed configuration associated with builtin names is discarded.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/mkdocs/config/config_options.py\n+++ b/mkdocs/config/config_options.py\n@@ -1020,6 +1020,9 @@\n \n         extensions = utils.reduce_list(self.builtins + extensions)\n \n+        for ext in self.builtins:\n+            self.configdata.pop(ext, None)\n+\n         # Confirm that Markdown considers extensions to be valid\n         md = markdown.Markdown()\n         for ext in extensions:\n",
+  "question": "We are considering enforcing a stricter meaning of MarkdownExtensions.builtins: builtin extensions would stay enabled, but user configuration for their names would be discarded. Parsing and validation of extension names and configuration mappings would still happen first; immediately before registering extensions with Markdown, builtin names would be removed from configdata, and they would consequently also be absent from the published mdx_configs. Non-builtin extension configuration would be unchanged. Which existing tests would newly fail under this proposal? Return a JSON list of pytest node IDs sorted lexicographically.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mkdocs-mkdocs-r02-05",
+ "truth": {
+  "answer": [
+   "mkdocs/tests/config/config_options_legacy_tests.py::MarkdownExtensionsTest::test_builtins_config",
+   "mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_builtins_config"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "mkdocs/tests/config/config_options_legacy_tests.py::MarkdownExtensionsTest::test_builtins_config",
+    "mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_builtins_config"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "mkdocs/tests/config/config_options_legacy_tests.py::MarkdownExtensionsTest::test_builtins_config",
+    "mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_builtins_config"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "mkdocs/tests/config/config_options_legacy_tests.py::MarkdownExtensionsTest::test_builtins_config",
+   "mkdocs/tests/config/config_options_tests.py::MarkdownExtensionsTest::test_builtins_config"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 720,
+  "stability_runs": 3
+ }
+}

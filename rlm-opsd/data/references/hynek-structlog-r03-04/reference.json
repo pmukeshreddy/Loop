@@ -1,0 +1,177 @@
+{
+ "answer": "--- a/src/structlog/contextvars.py\n+++ b/src/structlog/contextvars.py\n@@ -66,21 +66,34 @@\n     return rv\n \n \n-def get_merged_contextvars(bound_logger: BindableLogger) -> dict[str, Any]:\n+def get_merged_contextvars(\n+    bound_logger: BindableLogger, *, overwrite: bool = False\n+) -> dict[str, Any]:\n     \"\"\"\n     Return a copy of the current context-local context merged with the context\n     from *bound_logger*.\n \n+    If *overwrite* is ``True``, context-local values take precedence over\n+    logger-bound values. Otherwise, logger-bound values take precedence.\n+\n     .. versionadded:: 21.2.0\n     \"\"\"\n     ctx = get_contextvars()\n-    ctx.update(structlog.get_context(bound_logger))\n+    if overwrite:\n+        for key, value in structlog.get_context(bound_logger).items():\n+            ctx.setdefault(key, value)\n+    else:\n+        ctx.update(structlog.get_context(bound_logger))\n \n     return ctx\n \n \n def merge_contextvars(\n-    logger: WrappedLogger, method_name: str, event_dict: EventDict\n+    logger: WrappedLogger,\n+    method_name: str,\n+    event_dict: EventDict,\n+    *,\n+    overwrite: bool = False,\n ) -> EventDict:\n     \"\"\"\n     A processor that merges in a global (context-local) context.\n@@ -88,6 +101,10 @@\n     Use this as your first processor in :func:`structlog.configure` to ensure\n     context-local context is included in all log calls.\n \n+    If *overwrite* is ``True``, ambient context values take precedence over\n+    event dictionary values. Otherwise, event dictionary values take\n+    precedence.\n+\n     .. versionadded:: 20.1.0\n     .. versionchanged:: 21.1.0 See toplevel note.\n     \"\"\"\n@@ -95,7 +112,11 @@\n \n     for k in ctx:\n         if k.name.startswith(STRUCTLOG_KEY_PREFIX) and ctx[k] is not Ellipsis:\n-            event_dict.setdefault(k.name[STRUCTLOG_KEY_PREFIX_LEN:], ctx[k])\n+            key = k.name[STRUCTLOG_KEY_PREFIX_LEN:]\n+            if overwrite:\n+                event_dict[key] = ctx[k]\n+            else:\n+                event_dict.setdefault(key, ctx[k])\n \n     return event_dict\n \n--- a/src/structlog/threadlocal.py\n+++ b/src/structlog/threadlocal.py\n@@ -239,29 +239,46 @@\n     return _get_context().copy()\n \n \n-def get_merged_threadlocal(bound_logger: BindableLogger) -> Context:\n+def get_merged_threadlocal(\n+    bound_logger: BindableLogger, *, overwrite: bool = False\n+) -> Context:\n     \"\"\"\n     Return a copy of the current thread-local context merged with the context\n     from *bound_logger*.\n \n+    If *overwrite* is ``True``, thread-local values take precedence over\n+    logger-bound values. Otherwise, logger-bound values take precedence.\n+\n     .. versionadded:: 21.2.0\n     .. deprecated:: 22.1.0\n     \"\"\"\n     _deprecated()\n     ctx = _get_context().copy()\n-    ctx.update(structlog.get_context(bound_logger))\n+    if overwrite:\n+        for key, value in structlog.get_context(bound_logger).items():\n+            ctx.setdefault(key, value)\n+    else:\n+        ctx.update(structlog.get_context(bound_logger))\n \n     return ctx\n \n \n def merge_threadlocal(\n-    logger: WrappedLogger, method_name: str, event_dict: EventDict\n+    logger: WrappedLogger,\n+    method_name: str,\n+    event_dict: EventDict,\n+    *,\n+    overwrite: bool = False,\n ) -> EventDict:\n     \"\"\"\n     A processor that merges in a global (thread-local) context.\n \n     Use this as your first processor in :func:`structlog.configure` to ensure\n     thread-local context is included in all log calls.\n+\n+    If *overwrite* is ``True``, ambient context values take precedence over\n+    event dictionary values. Otherwise, event dictionary values take\n+    precedence.\n \n     .. versionadded:: 19.2.0\n \n@@ -273,7 +290,11 @@\n     \"\"\"\n     _deprecated()\n     context = _get_context().copy()\n-    context.update(event_dict)\n+    if overwrite:\n+        for key, value in event_dict.items():\n+            context.setdefault(key, value)\n+    else:\n+        context.update(event_dict)\n \n     return context\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0007535250667478736,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "nodes",
+    "p",
+    "paths",
+    "targets"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution constructed and inspected a coordinated production diff covering the collision policy across the four APIs. The supplied verification tests exercise default and explicit precedence, None-valued ambient entries, preservation of noncolliding fields, processor identity behavior, and storage isolation.",
+   "inspect_locate": "The execution used 19 targeted searches without printing the whole repository context. Inspection was useful because the four APIs span ContextVar and thread-local implementations with different mutation and return-object contracts.",
+   "recursive_decomposition": "Not established: the reference execution made no sub-calls. This should not be credited as an observed behavior."
+  },
+  "notes": "A natural, precisely scoped feature request requiring repository-specific implementation reasoning. Naming the affected public APIs and specifying their required behavior does not leak an implementation. The task is distinct from the existing ExtraAdder overwrite request because it concerns ambient-context merging across two storage mechanisms and different mutation contracts. The unified-diff output format is clear."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "A coordinated production diff must implement one collision policy in all four APIs while preserving each API's existing return-object and mutation contracts.",
+   "inspect_locate": "The four public merge operations are split across modern ContextVar storage and legacy thread-local storage, with bound-context access delegated through structlog.",
+   "recursive_decomposition": "The implementation separates by storage backend and by processor versus retrieval API. The event processor implementations also differ in whether they mutate or replace the input dictionary, so one mechanical edit is insufficient."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/contextvars.py",
+    "symbol": "src/structlog/contextvars.py::merge_contextvars",
+    "why": "Currently applies ambient values using setdefault and filters the Ellipsis absence marker."
+   },
+   {
+    "path": "src/structlog/contextvars.py",
+    "symbol": "src/structlog/contextvars.py::get_merged_contextvars",
+    "why": "Currently overlays bound values on a fresh ambient-context dictionary."
+   },
+   {
+    "path": "src/structlog/threadlocal.py",
+    "symbol": "src/structlog/threadlocal.py::merge_threadlocal",
+    "why": "Currently copies ambient storage before overlaying the supplied event."
+   },
+   {
+    "path": "src/structlog/threadlocal.py",
+    "symbol": "src/structlog/threadlocal.py::get_merged_threadlocal",
+    "why": "Provides the analogous retrieval operation for legacy storage."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_ambient_merge_overwrite.py\n@@ -0,0 +1,49 @@\n+import pytest\n+import structlog\n+from structlog import contextvars, threadlocal\n+from structlog.testing import ReturnLogger\n+\n+\n+pytestmark = pytest.mark.filterwarnings(\"ignore::DeprecationWarning\")\n+\n+\n+@pytest.fixture(autouse=True)\n+def clean_contexts():\n+    contextvars.clear_contextvars()\n+    threadlocal.clear_threadlocal()\n+    yield\n+    contextvars.clear_contextvars()\n+    threadlocal.clear_threadlocal()\n+\n+\n+@pytest.mark.parametrize(\"api\", [contextvars, threadlocal])\n+@pytest.mark.parametrize(\"overwrite\", [None, False, True])\n+@pytest.mark.parametrize(\"ambient\", [1, None])\n+def test_processor_policy(api, overwrite, ambient):\n+    suffix = \"contextvars\" if api is contextvars else \"threadlocal\"\n+    getattr(api, f\"bind_{suffix}\")(shared=ambient, only_local=2)\n+    event = {\"shared\": \"call\", \"only_event\": 3}\n+    kwargs = {} if overwrite is None else {\"overwrite\": overwrite}\n+    result = getattr(api, f\"merge_{suffix}\")(None, \"info\", event, **kwargs)\n+    expected = ambient if overwrite else \"call\"\n+    assert result == {\"shared\": expected, \"only_local\": 2, \"only_event\": 3}\n+    assert (result is event) is (api is contextvars)\n+    if api is threadlocal:\n+        assert event == {\"shared\": \"call\", \"only_event\": 3}\n+    assert getattr(api, f\"get_{suffix}\")() == {\"shared\": ambient, \"only_local\": 2}\n+\n+\n+@pytest.mark.parametrize(\"api\", [contextvars, threadlocal])\n+@pytest.mark.parametrize(\"overwrite\", [None, False, True])\n+@pytest.mark.parametrize(\"ambient\", [1, None])\n+def test_retrieval_policy(api, overwrite, ambient):\n+    suffix = \"contextvars\" if api is contextvars else \"threadlocal\"\n+    getattr(api, f\"bind_{suffix}\")(shared=ambient, only_local=2)\n+    log = structlog.wrap_logger(ReturnLogger(), processors=[]).bind(\n+        shared=\"bound\", only_bound=3\n+    )\n+    kwargs = {} if overwrite is None else {\"overwrite\": overwrite}\n+    result = getattr(api, f\"get_merged_{suffix}\")(log, **kwargs)\n+    expected = ambient if overwrite else \"bound\"\n+    assert result == {\"shared\": expected, \"only_local\": 2, \"only_bound\": 3}\n+    assert structlog.get_context(log) == {\"shared\": \"bound\", \"only_bound\": 3}\n",
+  "include_failure_log": false,
+  "notes": "The new test file checks both omitted and explicit default values, both collision modes, None-valued ambient entries, noncolliding fields, and processor input identity. Existing tests cover absence markers and the legacy merge alias.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Add a keyword-only `overwrite: bool = False` option to `merge_contextvars`, `get_merged_contextvars`, `merge_threadlocal`, and `get_merged_threadlocal`. The default must preserve current precedence. With `overwrite=True`, values present in the corresponding ambient context must win collisions against the supplied event dictionary or logger-bound context; noncolliding values from both sources must remain. An ambient value of `None` is still a present value, while unbound ContextVar entries remain absent. Neither ambient storage nor a logger's bound context may be modified by merging. Preserve the existing processor return-object behavior: `merge_contextvars` updates and returns its event dictionary, whereas `merge_threadlocal` returns a separate dictionary without changing its input. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r03-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-True-structlog.threadlocal]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 16,
+   "full_suite": {
+    "failed": 0,
+    "passed": 908
+   },
+   "patch_files": [
+    "src/structlog/contextvars.py",
+    "src/structlog/threadlocal.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[1-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_processor_policy[None-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[1-True-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-False-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-False-structlog.threadlocal]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-True-structlog.contextvars]",
+   "tests/test_ambient_merge_overwrite.py::test_retrieval_policy[None-True-structlog.threadlocal]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

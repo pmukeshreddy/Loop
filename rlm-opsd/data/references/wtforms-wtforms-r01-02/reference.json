@@ -1,0 +1,172 @@
+{
+ "answer": [
+  "tests/fields/test_file.py::test_multiple_file_field",
+  "tests/test_form.py::test_empty_formdata"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/fields/test_boolean.py::test_formdata\",\n  \"tests/fields/test_core.py::test_process\",\n  \"tests/fields/test_selectmultiple.py::test_empty\",\n  \"tests/fields/test_file.py::test_multiple_file_field\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 12,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "b",
+    "batches",
+    "effects",
+    "files",
+    "t",
+    "tests"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 28907,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 7,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "7 sub-calls (0 failed); 2 call sites on selected context, 0 on the whole context; max prompt 28907 chars"
+   },
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "7 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Seven sub-calls examined selected context in bounded prompts, supporting investigation of field-family differences. Their results did not directly flow into the final answer, so the evidence supports bounded inspection rather than delegated answer aggregation.",
+   "combine_verify_finish": "The final test-ID collection was computed in code and inspected before completion, and it matches the independently verified impact set.",
+   "inspect_locate": "The reference execution used 12 searches without printing the whole context to locate relevant processing paths and tests across the repository."
+  },
+  "notes": "This is a natural change-impact request with a precise proposed semantic change and an unambiguous output format. Identifying newly failing tests requires repository-specific reasoning about empty formdata, shared processing, and subclass behavior; the question does not reveal the affected tests. It is distinct from the accepted tasks. Recursive decomposition is not established by the execution evidence, consistent with its omission from behaviors_established."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Deciding impact requires understanding numerous tests together with distinct subclass policies for empty submitted value lists, raw-data rendering, and validation. These semantic dependencies span more text than a single bounded read.",
+   "combine_verify_finish": "The final deliverable is the exact union of newly failing pytest node IDs, including parameter suffixes, with duplicate discoveries removed.",
+   "inspect_locate": "Relevant tests are scattered among field families, form tests, and validator tests; their formdata construction and calls into shared processing must be located.",
+   "recursive_decomposition": "The impact investigation separates naturally into field-family sub-investigations, including simple fields, numeric fields, datetime fields, choices, and composite overrides, whose results must be reconciled."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.process",
+    "why": "Defines precisely the planned change and the two operations skipped for empty multidicts."
+   },
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::BaseForm.process",
+    "why": "Python-side data is still supplied before the altered submission branch."
+   },
+   {
+    "path": "src/wtforms/meta.py",
+    "symbol": "src/wtforms/meta.py::DefaultMeta.wrap_formdata",
+    "why": "Input adaptation determines which formdata objects reach the shared processor."
+   },
+   {
+    "path": "tests/test_form.py",
+    "symbol": "tests/test_form.py::test_empty_formdata",
+    "why": "Explicitly asserts that an empty multidict still invokes submitted-data processing, including when Python data is present."
+   },
+   {
+    "path": "src/wtforms/validators.py",
+    "symbol": "src/wtforms/validators.py::InputRequired.__call__",
+    "why": "Validation consequences can depend on the raw-data state left by processing."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeField.process_formdata",
+    "why": "Some subclasses deliberately preserve Python data on an empty value list, so not every empty-formdata test is affected."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply only the probe patch. Compute the answer as newly failing tests relative to the unmodified snapshot, not all failures from the probe run.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/src/wtforms/fields/core.py\n+++ b/src/wtforms/fields/core.py\n@@ -330,8 +330,8 @@\n         except ValueError as e:\n             self.process_errors.append(e.args[0])\n \n-        if formdata is not None:\n+        if formdata:\n             if self.name in formdata:\n                 self.raw_data = formdata.getlist(self.name)\n             else:\n                 self.raw_data = []\n",
+  "question": "We are considering changing the shared `Field.process` submission branch so that it runs only when the supplied formdata object is truthy, rather than whenever formdata is not `None`. For a falsey multidict, both the assignment of `raw_data` and the call to `process_formdata` would be skipped. Python-data/default processing and filters would remain unchanged, and no subclass overrides would be edited. Which currently passing tests in this snapshot would newly fail? Return a JSON list of complete pytest node IDs, including parameter suffixes where applicable. Exclude existing baseline failures.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r01-02",
+ "truth": {
+  "answer": [
+   "tests/fields/test_file.py::test_multiple_file_field",
+   "tests/test_form.py::test_empty_formdata"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "expected": [
+    "tests/fields/test_file.py::test_multiple_file_field",
+    "tests/test_form.py::test_empty_formdata"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/fields/test_file.py::test_multiple_file_field",
+    "tests/test_form.py::test_empty_formdata"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/fields/test_file.py::test_multiple_file_field",
+   "tests/test_form.py::test_empty_formdata"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

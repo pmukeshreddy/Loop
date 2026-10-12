@@ -1,0 +1,21 @@
+--- a/tenacity/wait.py
++++ b/tenacity/wait.py
+@@ -251,8 +251,8 @@
+ 
+     @override
+     def __call__(self, retry_state: "RetryCallState") -> float:
+-        exponent = retry_state.attempt_number - 1
++        exponent = retry_state.attempt_number
+         if (
+             self.multiplier > 0
+             and self.max > 0
+             and self.exp_base > 1
+@@ -369,7 +369,7 @@
+     def __call__(self, retry_state: "RetryCallState") -> float:
+         jitter = random.uniform(0, self.jitter)
+         try:
+-            exp = self.exp_base ** (retry_state.attempt_number - 1)
++            exp = self.exp_base ** retry_state.attempt_number
+             result = self.multiplier * exp + jitter
+         except OverflowError:
+             result = self.max

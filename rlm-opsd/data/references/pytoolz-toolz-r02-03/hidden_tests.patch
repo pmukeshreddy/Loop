@@ -1,0 +1,38 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_creation_metadata.py
+@@ -0,0 +1,35 @@
++import types
++from importlib.machinery import ModuleSpec
++
++import tlz._build_tlz as builder
++
++
++def test_module_metadata_without_backend_loading(monkeypatch):
++    def forbidden(name):
++        raise AssertionError('create_module must not import a backend')
++
++    monkeypatch.setattr(builder, 'import_module', forbidden)
++    loader = builder.TlzLoader()
++    spec = ModuleSpec('tlz.audit.leaf', loader)
++    module = loader.create_module(spec)
++    assert isinstance(module, types.ModuleType)
++    assert module.__name__ == spec.name
++    assert module.__spec__ is spec
++    assert module.__loader__ is loader
++    assert module.__package__ == 'tlz.audit'
++    assert not hasattr(module, '__path__')
++    assert not hasattr(module, '__file__')
++
++
++def test_package_search_locations_are_copied():
++    loader = builder.TlzLoader()
++    spec = ModuleSpec('tlz.audit', loader, is_package=True)
++    spec.submodule_search_locations[:] = ['first', 'second']
++    module = loader.create_module(spec)
++    assert module.__spec__ is spec
++    assert module.__loader__ is loader
++    assert module.__package__ == 'tlz.audit'
++    assert module.__path__ == ['first', 'second']
++    assert module.__path__ is not spec.submodule_search_locations
++    module.__path__.append('third')
++    assert spec.submodule_search_locations == ['first', 'second']

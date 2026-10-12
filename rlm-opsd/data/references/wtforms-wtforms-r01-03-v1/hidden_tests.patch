@@ -1,0 +1,126 @@
+--- /dev/null
++++ b/tests/test_fieldlist_extra_validator_contract.py
+@@ -0,0 +1,123 @@
++import pytest
++
++from wtforms import FieldList
++from wtforms import Form
++from wtforms import StringField
++from wtforms.validators import StopValidation
++from wtforms.validators import ValidationError
++
++
++class ValidatorClass:
++    def __call__(self, form, field):
++        pass
++
++
++@pytest.mark.parametrize("invalid", [None, 42, ValidatorClass])
++@pytest.mark.parametrize("sequence", [list, tuple])
++@pytest.mark.parametrize("stopping", [False, True])
++@pytest.mark.parametrize("count", [0, 2])
++def test_invalid_extras_are_rejected_before_validation(invalid, sequence, stopping, count):
++    events = []
++
++    class Child(StringField):
++        def validate(self, form, extra_validators=()):
++            events.append("child")
++            return super().validate(form, extra_validators)
++
++    def declared(form, field):
++        events.append("declared")
++        if stopping:
++            raise StopValidation("halt")
++
++    def extra(form, field):
++        events.append("extra")
++
++    class Sample(Form):
++        items = FieldList(Child(), validators=[declared], min_entries=count)
++
++    class Ordinary(Form):
++        value = StringField()
++
++    supplied = sequence([extra, invalid])
++    ordinary = Ordinary()
++    with pytest.raises(TypeError) as baseline:
++        ordinary.value.validate(ordinary, supplied)
++    sample = Sample()
++    with pytest.raises(TypeError) as actual:
++        sample.validate(extra_validators={"items": supplied})
++    assert str(actual.value) == str(baseline.value)
++    reason = (
++        "it is a class, it should be an instance"
++        if invalid is ValidatorClass
++        else "it is not callable"
++    )
++    assert str(actual.value) == f"{invalid} is not a valid validator because {reason}"
++    assert events == []
++
++
++@pytest.mark.parametrize("sequence", [list, tuple])
++@pytest.mark.parametrize("child_failure", [False, True])
++def test_valid_extras_preserve_nested_errors_and_order(sequence, child_failure):
++    events = []
++
++    def child(form, field):
++        events.append(field.name)
++        if field.data == "bad":
++            raise ValidationError("bad")
++
++    def record(label, message=None):
++        def validator(form, field):
++            events.append(label)
++            if child_failure and message:
++                raise ValidationError(message)
++        return validator
++
++    class Sample(Form):
++        rows = FieldList(
++            FieldList(StringField(validators=[child]), validators=[record("inner")]),
++            validators=[record("declared-1"), record("declared-2", "outer")],
++        )
++
++    sample = Sample(data={"rows": [["ok", "bad" if child_failure else "ok"], ["ok"]]})
++    supplied = sequence([record("extra-1"), record("extra-2", "extra")])
++    assert sample.validate(extra_validators={"rows": supplied}) is not child_failure
++    assert events == [
++        "rows-0-0",
++        "rows-0-1",
++        "inner",
++        "rows-1-0",
++        "inner",
++        "declared-1",
++        "declared-2",
++        "extra-1",
++        "extra-2",
++    ]
++    if child_failure:
++        assert sample.rows.errors == [[[], ["bad"]], [], "outer", "extra"]
++        assert sample.errors == {"rows": [[[], ["bad"]], [], "outer", "extra"]}
++    else:
++        assert sample.rows.errors == []
++        assert sample.errors == {}
++
++
++@pytest.mark.parametrize("sequence", [list, tuple])
++def test_valid_extras_preserve_stop_validation(sequence):
++    events = []
++
++    def child(form, field):
++        events.append("child")
++
++    def stop(form, field):
++        events.append("stop")
++        raise StopValidation("halt")
++
++    def extra(form, field):
++        events.append("extra")
++
++    class Sample(Form):
++        items = FieldList(StringField(validators=[child]), validators=[stop])
++
++    sample = Sample(data={"items": ["ok"]})
++    assert sample.validate(extra_validators={"items": sequence([extra])}) is False
++    assert events == ["child", "stop"]
++    assert sample.items.errors == ["halt"]

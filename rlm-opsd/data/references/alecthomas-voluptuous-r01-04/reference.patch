@@ -1,0 +1,41 @@
+--- a/voluptuous/validators.py
++++ b/voluptuous/validators.py
+@@ -38,7 +38,13 @@
+ )
+ 
+ # F401: flake8 complains about 'raises' not being used, but it is used in doctests
+-from voluptuous.schema_builder import Schema, Schemable, message, raises  # noqa: F401
++from voluptuous.schema_builder import (  # noqa: F401
++    Schema,
++    Schemable,
++    _isnamedtuple,
++    message,
++    raises,
++)
+ 
+ if typing.TYPE_CHECKING:
+     from _typeshed import SupportsAllComparisons
+@@ -946,11 +952,18 @@
+     def __call__(self, v):
+         if not isinstance(v, (list, tuple)) or len(v) != len(self._schemas):
+             raise ExactSequenceInvalid(self.msg)
+-        try:
+-            v = type(v)(schema(x) for x, schema in zip(v, self._schemas))
+-        except Invalid as e:
+-            raise e if self.msg is None else ExactSequenceInvalid(self.msg)
+-        return v
++        out = []
++        for index, (x, schema) in enumerate(zip(v, self._schemas)):
++            try:
++                out.append(schema(x))
++            except Invalid as e:
++                if self.msg is not None:
++                    raise ExactSequenceInvalid(self.msg)
++                e.prepend([index])
++                raise
++        if _isnamedtuple(v):
++            return type(v)(*out)
++        return type(v)(out)
+ 
+     def __repr__(self):
+         return 'ExactSequence([%s])' % ", ".join(repr(v) for v in self.validators)

@@ -1,0 +1,242 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -474,6 +474,19 @@\n \n     if field_transformer is not None:\n         attrs = tuple(field_transformer(cls, attrs))\n+\n+    # Normalize the final hooks, including inherited and newly added fields.\n+    # Attribute.evolve() bypasses the syntactic sugar applied by attrib().\n+    normalized_attrs = []\n+    for a in attrs:\n+        if isinstance(a.on_setattr, (list, tuple)):\n+            for hook in a.on_setattr:\n+                if not callable(hook):\n+                    msg = \"on_setattr sequence members must be callable.\"\n+                    raise TypeError(msg)\n+            a = a.evolve(on_setattr=setters.pipe(*a.on_setattr))\n+        normalized_attrs.append(a)\n+    attrs = normalized_attrs\n \n     # Check attr order after executing the field_transformer.\n     # Mandatory vs non-mandatory attr order only matters when they are part of\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 8,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "lines",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 109886 chars; 8 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The resulting patch normalizes final sequence-valued hooks while distinguishing empty identity pipelines from None and standalone NO_OP. The reference inspected the constructed final diff, and the supplied verification exercises assignment order, Attribute identity, decoration-time rejection, class-hook overrides, and initialization separation.",
+   "inspect_locate": "The reference execution used eight targeted searches within the supplied source context. The task requires connecting declaration-time normalization, Attribute.evolve, final transformer output, setter installation, and initialization handling rather than locating a single named function."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-diff format. Its requirements constrain one coherent feature without prescribing solver operations or revealing the implementation location. It differs materially from the accepted pipe-extension tasks: normalization occurs at the final field-transformer boundary, nested sequences are rejected rather than expanded, and setters.py must remain unchanged. The initialization-regression task also addresses a different defect."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must normalize final fields while preserving the distinction between an empty identity pipeline, a missing hook, and the standalone NO_OP sentinel. Its hunks and the resulting behavior must be checked against setter installation and initialization consumers.",
+   "inspect_locate": "The relevant evidence is scattered through the large class-building module: attrib normalizes declared hooks, Attribute.evolve can introduce unnormalized values, transformed fields feed setter installation, and initializer generation separately decides when to bypass assignment hooks. These paths must be reconciled to support transformed sequences without changing ordinary initialization."
+  },
+  "context": {
+   "files": [
+    "src/attr/_make.py",
+    "src/attr/setters.py",
+    "src/attr/__init__.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::attrib",
+    "why": "Normalizes declared list and tuple hooks before creating counting attributes, establishing the existing sequence semantics."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Attribute.evolve",
+    "why": "Copies supplied on_setattr values without performing the normalization used by attrib."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_transform_attrs",
+    "why": "Collects the final transformer output before the fields reach assignment-hook installation and initializer generation."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.add_setattr",
+    "why": "Selects field or class hooks using truth-value fallback and later invokes the selected hook, explaining both raw-sequence failures and empty-sequence fallback."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_make_init_script",
+    "why": "Consumes final field hooks to preserve the separation between constructor behavior and later assignment."
+   },
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::pipe",
+    "why": "Already supplies ordered value propagation and an identity callable for zero hooks; it does not validate members."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_transformed_setattr_sequences.py\n@@ -0,0 +1,132 @@\n+import pytest\n+\n+import attr\n+\n+\n+@pytest.mark.parametrize(\"decorate\", [attr.s, attr.define])\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+def test_transformed_sequence_order_and_initialization(decorate, slots, sequence):\n+    calls = []\n+\n+    def first(instance, attribute, value):\n+        calls.append((\"first\", instance, attribute, value))\n+        return value + 2\n+\n+    def second(instance, attribute, value):\n+        calls.append((\"second\", instance, attribute, value))\n+        return value * 3\n+\n+    def transform(cls, fields):\n+        return [a.evolve(on_setattr=sequence([first, second])) for a in fields]\n+\n+    @decorate(slots=slots, field_transformer=transform)\n+    class C:\n+        x = attr.ib(converter=int)\n+\n+    obj = C(\"4\")\n+    assert obj.x == 4\n+    assert calls == []\n+    attribute = attr.fields(C).x\n+    assert callable(attribute.on_setattr)\n+    obj.x = 5\n+    assert obj.x == 21\n+    assert calls == [\n+        (\"first\", obj, attribute, 5),\n+        (\"second\", obj, attribute, 7),\n+    ]\n+\n+\n+@pytest.mark.parametrize(\"decorate\", [attr.s, attr.define])\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+def test_empty_transformed_sequence_overrides_class_hook(decorate, slots, sequence):\n+    calls = []\n+\n+    def class_hook(instance, attribute, value):\n+        calls.append((attribute.name, value))\n+        return value + 100\n+\n+    def transform(cls, fields):\n+        return [\n+            a.evolve(on_setattr=sequence()) if a.name == \"x\" else a\n+            for a in fields\n+        ]\n+\n+    @decorate(slots=slots, on_setattr=class_hook, field_transformer=transform)\n+    class C:\n+        x = attr.ib()\n+        y = attr.ib()\n+\n+    token = object()\n+    obj = C(token, 1)\n+    assert calls == []\n+    assert callable(attr.fields(C).x.on_setattr)\n+    obj.x = token\n+    assert obj.x is token\n+    assert calls == []\n+    obj.y = 2\n+    assert obj.y == 102\n+    assert calls == [(\"y\", 2)]\n+\n+\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+@pytest.mark.parametrize(\"bad\", [None, 42, \"hook\", attr.setters.NO_OP, [], ()])\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+def test_invalid_transformed_member_rejected_during_decoration(sequence, bad, slots):\n+    def hook(instance, attribute, value):\n+        return value\n+\n+    def transform(cls, fields):\n+        return [a.evolve(on_setattr=sequence([hook, bad])) for a in fields]\n+\n+    class C:\n+        x = attr.ib()\n+\n+    with pytest.raises(TypeError):\n+        attr.s(C, slots=slots, field_transformer=transform)\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+def test_standalone_transformed_no_op_remains_opt_out(slots):\n+    def class_hook(instance, attribute, value):\n+        raise AssertionError(\"The opted-out field must not run the class hook\")\n+\n+    def transform(cls, fields):\n+        return [a.evolve(on_setattr=attr.setters.NO_OP) for a in fields]\n+\n+    @attr.s(slots=slots, on_setattr=class_hook, field_transformer=transform)\n+    class C:\n+        x = attr.ib()\n+\n+    obj = C(1)\n+    obj.x = 2\n+    assert obj.x == 2\n+    assert attr.fields(C).x.on_setattr is attr.setters.NO_OP\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+def test_final_inherited_and_added_fields_receive_pipelines(slots, sequence):\n+    def hook(instance, attribute, value):\n+        return value + 1\n+\n+    @attr.s(slots=slots)\n+    class Base:\n+        x = attr.ib()\n+\n+    def transform(cls, fields):\n+        x = fields[0].evolve(on_setattr=sequence([hook]))\n+        y = x.evolve(name=\"y\", inherited=False)\n+        return [x, y]\n+\n+    @attr.s(slots=slots, collect_by_mro=True, field_transformer=transform)\n+    class Child(Base):\n+        pass\n+\n+    obj = Child(1, 2)\n+    assert (obj.x, obj.y) == (1, 2)\n+    obj.x = 10\n+    obj.y = 20\n+    assert (obj.x, obj.y) == (11, 21)\n+    assert all(callable(a.on_setattr) for a in attr.fields(Child))\n",
+  "include_failure_log": false,
+  "notes": "Implementation task against the unmodified snapshot; no setup defect is required. A sufficient production change validates members of list/tuple hooks in the final transformed fields and replaces each sequence with setters.pipe(*members), including empty sequences, before class-building consumers receive them. Standalone NO_OP remains untouched. The acceptance tests use public APIs only and cover both decorator entry points, both slot modes, eager rejection, pipeline ordering, initializer bypass, inherited fields, and transformer-added fields. The solution must leave src/attr/setters.py unchanged and therefore differs substantively from the original pipe extension.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Support flat lists and tuples of on_setattr hooks in the final Attribute objects returned by a field_transformer, including objects created with Attribute.evolve. This must work for transformed own fields, inherited fields, and fields added by the transformer, on both slotted and non-slotted classes. On assignment, run the sequence in order, passing every hook the same instance and Attribute and passing each return value to the next hook. An empty list or tuple must act as an identity hook that overrides any class-wide hook, rather than falling back to it. For sequence-valued hooks, fields(C) must expose a callable on_setattr after decoration. Reject any non-callable sequence member with TypeError during class decoration; this includes nested sequences and setters.NO_OP inside a sequence. A standalone setters.NO_OP must retain its field-level opt-out behavior. Preserve existing callable and None behavior, and keep initialization-time conversion and validation separate from assignment hooks. Leave src/attr/setters.py unchanged. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from a single-function direct solve to targeted cross-symbol investigation: trace attrib normalization, Attribute.evolve, _transform_attrs, _ClassBuilder.add_setattr, and _make_init_script. These dependencies establish where normalization must occur and why empty sequences and standalone NO_OP require different treatment.",
+  "change_type": "dependency",
+  "description": "Make flat list/tuple on_setattr hooks supplied by a field_transformer work correctly without changing src/attr/setters.py::pipe. In src/attr/_make.py, support transformers that return Attribute objects produced by Attribute.evolve(on_setattr=[hook_a, hook_b]) or an empty tuple. Normalize these sequences after the transformer runs, preserve empty sequences as identity hooks that override a class-wide hook, and reject non-callable sequence members, including setters.NO_OP, during class decoration. A standalone setters.NO_OP must remain the field-level opt-out. Deliver a production-only unified diff.",
+  "expected_answer_change": "The answer depends on normalizing and validating the final transformed attributes in _transform_attrs before setter installation and initialization checks consume them. Nonempty sequences become callable pipelines; empty sequences become callable identity pipelines rather than false-valued containers. Standalone NO_OP remains untouched, while NO_OP inside a sequence is rejected. The repair is in the class-building path, not recursive flattening in setters.pipe.",
+  "why_substantive": "src/attr/_make.py::attrib normalizes sequences before Attribute creation, but Attribute.evolve can introduce a sequence later. _transform_attrs currently passes those transformed objects onward unchanged, and _ClassBuilder.add_setattr can either try to invoke a list or treat an empty sequence as absent and fall back to the class hook. Extending setters.pipe alone does not repair this entry path."
+ },
+ "task_id": "python-attrs-attrs-r02-00-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[list-False]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[list-True]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[tuple-False]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[tuple-True]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-42-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-42-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-None-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-None-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad3-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad3-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad4-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad4-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad5-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad5-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-hook-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-hook-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-42-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-42-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-None-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-None-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad3-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad3-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad4-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad4-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad5-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad5-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-hook-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-hook-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-True-define]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 44,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1424
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[list-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_empty_transformed_sequence_overrides_class_hook[tuple-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[list-False]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[list-True]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[tuple-False]",
+   "tests/test_transformed_setattr_sequences.py::test_final_inherited_and_added_fields_receive_pipelines[tuple-True]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-42-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-42-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-None-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-None-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad3-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad3-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad4-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad4-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad5-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-bad5-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-hook-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[False-hook-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-42-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-42-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-None-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-None-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad3-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad3-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad4-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad4-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad5-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-bad5-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-hook-list]",
+   "tests/test_transformed_setattr_sequences.py::test_invalid_transformed_member_rejected_during_decoration[True-hook-tuple]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[list-True-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-False-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-False-define]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-True-attrs]",
+   "tests/test_transformed_setattr_sequences.py::test_transformed_sequence_order_and_initialization[tuple-True-define]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

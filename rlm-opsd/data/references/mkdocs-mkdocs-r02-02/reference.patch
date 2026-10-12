@@ -1,0 +1,30 @@
+--- a/mkdocs/config/config_options.py
++++ b/mkdocs/config/config_options.py
+@@ -703,6 +703,11 @@
+         )
+ 
+     def run_validation(self, value: object) -> str:
++        if isinstance(value, os.PathLike):
++            try:
++                value = os.fspath(value)
++            except TypeError as e:
++                raise ValidationError(str(e)) from e
+         value = super().run_validation(value)
+         if self.config_dir and not os.path.isabs(value):
+             value = os.path.join(self.config_dir, value)
+@@ -839,6 +844,15 @@
+ 
+         if not theme_config['name'] and 'custom_dir' not in theme_config:
+             raise ValidationError("At least one of 'name' or 'custom_dir' must be defined.")
++
++        if 'custom_dir' in theme_config:
++            custom_dir = theme_config['custom_dir']
++            if isinstance(custom_dir, os.PathLike):
++                try:
++                    custom_dir = os.fspath(custom_dir)
++                except TypeError as e:
++                    raise ValidationError(str(e)) from e
++            theme_config['custom_dir'] = Type(str).run_validation(custom_dir)
+ 
+         # Ensure custom_dir is an absolute path
+         if 'custom_dir' in theme_config and not os.path.isabs(theme_config['custom_dir']):

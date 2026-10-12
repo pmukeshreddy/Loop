@@ -1,0 +1,34 @@
+--- a/lark/lexer.py
++++ b/lark/lexer.py
+@@ -396,15 +396,15 @@
+                 return m.lastgroup
+         return None
+ 
+-def _regexp_has_newline(r: str):
++def _regexp_has_newline(r: str, flags: int = 0):
+     r"""Expressions that may indicate newlines in a regexp:
+         - newlines (\n)
+         - escaped newline (\\n)
+         - anything but ([^...])
+-        - any-char (.) when the flag (?s) exists
++        - any-char (.) when DOTALL is enabled, globally or inline
+         - spaces (\s)
+     """
+-    return '\n' in r or '\\n' in r or '\\s' in r or '[^' in r or ('(?s' in r and '.' in r)
++    return '\n' in r or '\\n' in r or '\\s' in r or '[^' in r or ('.' in r and (flags & re.DOTALL or '(?s' in r))
+ 
+ 
+ class LexerState:
+@@ -577,7 +577,11 @@
+                 raise LexError("interegular must be installed for strict mode. Use `pip install 'lark[interegular]'`.")
+ 
+         # Init
+-        self.newline_types = frozenset(t.name for t in terminals if _regexp_has_newline(t.pattern.to_regexp()))
++        self.newline_types = frozenset(
++            t.name for t in terminals
++            if ('\n' in t.pattern.value if t.pattern.type == 'str'
++                else _regexp_has_newline(t.pattern.to_regexp(), conf.g_regex_flags))
++        )
+         self.ignore_types = frozenset(conf.ignore)
+ 
+         terminals.sort(key=lambda x: (-x.priority, -x.pattern.max_width, -len(x.pattern.value), x.name))

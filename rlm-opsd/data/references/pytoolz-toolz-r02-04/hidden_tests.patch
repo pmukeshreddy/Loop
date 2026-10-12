@@ -1,0 +1,55 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_supplemental_exports.py
+@@ -0,0 +1,52 @@
++import types
++
++import toolz
++import tlz._build_tlz as builder
++
++
++def test_slow_only_public_exports_are_added(monkeypatch):
++    fast = types.ModuleType('cytoolz.audit', 'fast docs')
++    slow = types.ModuleType('toolz.audit', 'slow docs')
++    fast.__package__ = 'cytoolz.audit'
++    slow.__package__ = 'toolz.audit'
++    slow.__file__ = 'slow.py'
++    fast.shared = object()
++    slow.shared = object()
++    fast.fast_only = object()
++    slow.fallback = {'items': [1, 2]}
++    slow.alias = toolz.pipe
++    slow._private = object()
++    slow.preexisting = object()
++    owned = types.ModuleType('toolz.audit.child')
++    owned.__package__ = slow.__name__
++    slow.child = owned
++    foreign = types.ModuleType('outside.child')
++    foreign.__package__ = 'outside'
++    slow.foreign = foreign
++    mirrored = types.ModuleType('tlz.audit.child')
++    modules = {'cytoolz.audit': fast, 'toolz.audit': slow,
++               'tlz.audit.child': mirrored}
++    calls = []
++
++    def resolve(name):
++        calls.append(name)
++        return modules[name]
++
++    monkeypatch.setattr(builder, 'import_module', resolve)
++    target = types.ModuleType('tlz.audit')
++    marker = object()
++    target.preexisting = marker
++    builder.TlzLoader().exec_module(target)
++    assert target.fallback is slow.fallback
++    assert target.alias is toolz.pipe
++    assert target.child is mirrored
++    assert target.foreign is foreign
++    assert target.shared is fast.shared
++    assert target.fast_only is fast.fast_only
++    assert target.preexisting is marker
++    assert not hasattr(target, '_private')
++    assert target.__name__ == 'tlz.audit'
++    assert target.__package__ == 'tlz.audit'
++    assert target.__doc__ == 'fast docs'
++    assert target.__file__ == 'slow.py'
++    assert calls == ['cytoolz.audit', 'toolz.audit', 'tlz.audit.child']

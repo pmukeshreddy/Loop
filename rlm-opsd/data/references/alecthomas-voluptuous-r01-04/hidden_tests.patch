@@ -1,0 +1,61 @@
+--- /dev/null
++++ b/voluptuous/tests/test_exact_sequence_positions.py
+@@ -0,0 +1,58 @@
++import collections
++
++import pytest
++
++from voluptuous import Coerce, ExactSequence, ExactSequenceInvalid, MultipleInvalid, Schema
++
++
++@pytest.mark.parametrize("fields,values", [(["a"], ("4",)), (["a", "b"], ("4", "9"))])
++def test_exact_sequence_namedtuple_transform(fields, values):
++    Record = collections.namedtuple("Record", fields)
++    data = Record(*values)
++    validator = ExactSequence([Coerce(int)] * len(fields))
++    for validate in (validator, Schema(validator)):
++        result = validate(data)
++        assert type(result) is Record
++        assert result == Record(*(int(value) for value in values))
++
++
++@pytest.mark.parametrize("factory", [list, tuple])
++def test_exact_sequence_retains_plain_sequence_type(factory):
++    data = factory(["2", "5"])
++    result = Schema(ExactSequence([Coerce(int), Coerce(int)]))(data)
++    assert type(result) is factory
++    assert result == factory([2, 5])
++
++
++def test_exact_sequence_nested_paths_direct_and_embedded():
++    validator = ExactSequence([int, {"a": int, "b": int}])
++    data = [1, {"a": "bad", "b": "bad"}]
++    with pytest.raises(MultipleInvalid) as direct:
++        validator(data)
++    assert {tuple(e.path) for e in direct.value.errors} == {(1, "a"), (1, "b")}
++    with pytest.raises(MultipleInvalid) as wrapped:
++        Schema({"items": validator})({"items": data})
++    assert {tuple(e.path) for e in wrapped.value.errors} == {
++        ("items", 1, "a"), ("items", 1, "b")
++    }
++
++
++def test_exact_sequence_custom_message_stays_at_sequence():
++    validator = ExactSequence([int], msg="bad sequence")
++    with pytest.raises(MultipleInvalid) as caught:
++        Schema({"items": validator})({"items": ["bad"]})
++    assert isinstance(caught.value.errors[0], ExactSequenceInvalid)
++    assert caught.value.errors[0].path == ["items"]
++    assert caught.value.errors[0].msg == "bad sequence"
++
++
++def test_exact_sequence_scalar_position():
++    with pytest.raises(MultipleInvalid) as caught:
++        Schema(ExactSequence([int, int]))([1, "bad"])
++    assert caught.value.errors[0].path == [1]
++
++
++def test_exact_sequence_length_mismatch_preserves_message():
++    with pytest.raises(ExactSequenceInvalid) as caught:
++        ExactSequence([int], msg="wrong size")([])
++    assert caught.value.msg == "wrong size"

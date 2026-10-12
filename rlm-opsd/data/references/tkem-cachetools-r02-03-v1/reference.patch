@@ -1,0 +1,36 @@
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -633,21 +633,23 @@
+ 
+     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):
+         with self.timer as time:
++            expires = self.__ttu(key, value, time)
++            # Validate the deadline before expiring or otherwise mutating items.
++            expired = not (time < expires)
+             self.expire(time)
+-            expires = self.__ttu(key, value, time)
+-            if not (time < expires):
++            if expired:
+                 # updating an existing item with an already expired
+                 # one should remove the existing item
+                 return self.__delitem(key)
+             cache_setitem(self, key, value)
+-        # removing an existing item would break the heap structure, so
+-        # only mark it as removed for now
+-        try:
+-            self.__getitem(key).removed = True
+-        except KeyError:
+-            pass
+-        self.__items[key] = item = TLRUCache._Item(key, expires)
+-        heapq.heappush(self.__order, item)
++            # removing an existing item would break the heap structure, so
++            # only mark it as removed for now
++            try:
++                self.__getitem(key).removed = True
++            except KeyError:
++                pass
++            self.__items[key] = item = TLRUCache._Item(key, expires)
++            heapq.heappush(self.__order, item)
+ 
+     def __delitem__(self, key, cache_delitem=Cache.__delitem__):
+         with self.timer as time:

@@ -1,0 +1,17 @@
+--- a/lark/tree.py
++++ b/lark/tree.py
+@@ -215,7 +215,13 @@
+     def __deepcopy__(self, memo):
+         return type(self)(self.data, deepcopy(self.children, memo), meta=self._meta)
+ 
+-    def copy(self) -> 'Tree[_Leaf_T]':
++    def copy(self, keep_meta: bool=False) -> 'Tree[_Leaf_T]':
++        """Return a shallow copy, optionally sharing already allocated metadata.
++
++        Children are shared. Unallocated metadata remains independent.
++        """
++        if keep_meta:
++            return type(self)(self.data, self.children, meta=self._meta)
+         return type(self)(self.data, self.children)
+ 
+     def set(self, data: str, children: 'List[Branch[_Leaf_T]]') -> None:

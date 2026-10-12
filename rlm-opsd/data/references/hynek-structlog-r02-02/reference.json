@@ -1,0 +1,168 @@
+{
+ "answer": [
+  "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+  "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+  "tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args",
+  "tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args",
+  "tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_native.py::TestFilteringBoundLogger::test_positional_arguments_dict\",\n  \"tests/test_native.py::TestFilteringBoundLogger::test_apositional_arguments_dict\",\n  \"tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0008951651168884514,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "hits",
+    "native",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference execution constructed the test-ID collection in code and inspected it before finishing. The resulting set matches the independently verified five affected tests.",
+   "inspect_locate": "The reference execution made 19 targeted searches across the repository context to connect interpolation behavior with assertions in the native and stdlib suites, including asynchronous and exception paths.",
+   "recursive_decomposition": "Not established by the reference execution: no sub-calls were made. The investigation nevertheless supports decomposition by native and stdlib interpolation paths; acceptance rests on the two established behaviors."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. Identifying every newly failing test requires repository-specific reasoning beyond locating either named implementation. The question specifies the behavioral change and output format without revealing the affected tests or prescribing solver operations. The existing dictionary-interpolation task concerns foreign-record integration support, not the impact of removing tuple unwrapping across native and stdlib paths, so it is not a duplicate."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact set of pytest node IDs, including asynchronous cases, whose independently derived results must be merged and deduplicated.",
+   "inspect_locate": "Interpolation appears in generated native methods, native exception delegation, the stdlib processor, and integration chains. Relevant assertions are scattered across native and stdlib suites.",
+   "recursive_decomposition": "The native and standard-library interpolation paths can be evaluated independently, then their effects combined. Within the native path, ordinary, numeric-level, and exception methods reach interpolation differently."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_native.py",
+    "symbol": "src/structlog/_native.py::_maybe_interpolate",
+    "why": "The shared native interpolation operation is reached by generated methods and numeric dispatch, including exception delegation."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::PositionalArgumentsFormatter.__call__",
+    "why": "The stdlib processor has a separate dictionary-unwrapping rule."
+   },
+   {
+    "path": "tests/test_native.py",
+    "symbol": "tests/test_native.py::TestNativeFilteringLogger",
+    "why": "Contains synchronous, asynchronous, numeric-level, and exception interpolation expectations."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestPositionalArgumentsFormatter",
+    "why": "Separately tests named interpolation and argument-retention behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the full existing suite for ground truth. The probe deliberately changes both runtime interpolation implementations, not Python logging's own LogRecord formatting.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/structlog/_native.py\n+++ b/src/structlog/_native.py\n@@ -138,13 +138,6 @@\n     if not args:\n         return event\n \n-    if (\n-        len(args) == 1\n-        and isinstance(args[0], collections.abc.Mapping)\n-        and args[0]\n-    ):\n-        return event % args[0]\n-\n     return event % args\n \n \n--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -856,9 +856,6 @@\n         # \"single dict\" check is the same one as the stdlib's logging module\n         # performs in LogRecord.__init__().\n         if args:\n-            if len(args) == 1 and isinstance(args[0], dict) and args[0]:\n-                args = args[0]\n-\n             event_dict[\"event\"] %= args\n \n         if self.remove_positional_args and args is not None:\n",
+  "question": "We are considering removing the special treatment of a single nonempty mapping during interpolation. In native logging, `_maybe_interpolate` would always use the positional argument tuple whenever arguments are present. In `PositionalArgumentsFormatter`, a tuple containing one nonempty dictionary would likewise remain a tuple rather than being unwrapped for named placeholders. The no-argument behavior and removal of `positional_args` would remain unchanged. Which existing tests would newly fail under exactly this change? Reply with a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r02-02",
+ "truth": {
+  "answer": [
+   "tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+   "tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+   "tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+    "tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+    "tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+    "tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+    "tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+   "tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+   "tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

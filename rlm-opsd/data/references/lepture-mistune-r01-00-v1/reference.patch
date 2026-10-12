@@ -1,0 +1,50 @@
+--- a/src/mistune/inline_parser.py
++++ b/src/mistune/inline_parser.py
+@@ -397,20 +397,39 @@
+         return known[name]
+     if not pattern:
+         return set()
+-    return _guess_pattern_start_chars(pattern) or set()
++    return _guess_pattern_start_chars(pattern)
+ 
+ 
+ def _guess_pattern_start_chars(pattern: str) -> Optional[Set[str]]:
+     if not pattern:
+-        return set()
+-
++        return None
++
++    # Only infer a literal prefix. Unknown starts must use the regex scanner.
+     if pattern.startswith("\\") and len(pattern) > 1:
+         c = pattern[1]
+-        if c in _REGEX_META_CHARS or c in PUNCTUATION:
+-            return {c}
++        if c not in _REGEX_META_CHARS and c not in PUNCTUATION:
++            return None
++        prefix_end = 2
++    else:
++        c = pattern[0]
++        if c in _REGEX_META_CHARS or c.isspace():
++            return None
++        prefix_end = 1
++
++    # A nullable leading literal need not be present at the match position.
++    # Be conservative with counted repeats, too.
++    if pattern[prefix_end : prefix_end + 1] in ("?", "*", "{"):
+         return None
+ 
+-    c = pattern[0]
+-    if c in _REGEX_META_CHARS or c.isspace():
+-        return None
++    # An alternative can start somewhere other than the literal prefix.
++    # Skip escaped characters so simple patterns like r"\|+" stay fast.
++    # Reject nested alternatives as well: false negatives here are safe.
++    pos = prefix_end
++    while pos < len(pattern):
++        if pattern[pos] == "\\":
++            pos += 2
++        elif pattern[pos] == "|":
++            return None
++        else:
++            pos += 1
+     return {c}

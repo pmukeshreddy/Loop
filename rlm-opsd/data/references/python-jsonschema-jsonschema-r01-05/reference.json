@@ -1,0 +1,122 @@
+{
+ "answer": "--- a/jsonschema/_types.py\n+++ b/jsonschema/_types.py\n@@ -153,7 +153,7 @@\n         type_checkers = self._type_checkers.update(definitions)\n         return evolve(self, type_checkers=type_checkers)\n \n-    def remove(self, *types) -> TypeChecker:\n+    def remove(self, *types, missing_ok=False) -> TypeChecker:\n         \"\"\"\n         Produce a new checker with the given types forgotten.\n \n@@ -163,11 +163,16 @@\n \n                 the names of the types to remove.\n \n+            missing_ok (bool):\n+\n+                If True, skip unknown types, including types already\n+                removed earlier in this call. Defaults to False.\n+\n         Raises:\n \n             `jsonschema.exceptions.UndefinedTypeCheck`:\n \n-                if any given type is unknown to this object\n+                if a given type is unknown and ``missing_ok`` is False\n \n         \"\"\"\n         type_checkers = self._type_checkers\n@@ -175,7 +180,8 @@\n             try:\n                 type_checkers = type_checkers.remove(each)\n             except KeyError:\n-                raise UndefinedTypeCheck(each) from None\n+                if not missing_ok:\n+                    raise UndefinedTypeCheck(each) from None\n         return evolve(self, type_checkers=type_checkers)\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5485 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference completed the change within the single 5,485-character file without sub-calls. The task requires local reasoning about sequential immutable-map removal, duplicate names, first-error behavior, and preserving the source checker and remaining predicates."
+  },
+  "notes": "A natural, precisely scoped API enhancement with an explicit unified-diff output format. Naming the target method and requested option specifies the feature rather than leaking its implementation. The verified patch preserves strict-mode behavior, implements permissive removal, and updates the existing method documentation. The task is appropriate for direct solving despite its small scope."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The immutable checker, its removal loop, and the draft checker derivation chain are all contained in a roughly 5,500-character file. The change requires local reasoning about partial removal, duplicate names, exceptions, and source immutability."
+  },
+  "context": {
+   "files": [
+    "jsonschema/_types.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_types.py",
+    "symbol": "jsonschema/_types.py::TypeChecker.remove",
+    "why": "The current method maintains a local persistent map and raises when any requested removal is absent."
+   },
+   {
+    "path": "jsonschema/_types.py",
+    "symbol": "jsonschema/_types.py::TypeChecker",
+    "why": "The frozen attrs class and evolve-based reconstruction establish the immutability contract that the new option must preserve."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_typechecker_remove_missing.py\n@@ -0,0 +1,38 @@\n+import pytest\n+\n+from jsonschema._types import draft4_type_checker, draft6_type_checker\n+from jsonschema.exceptions import UndefinedTypeCheck\n+\n+\n+def test_missing_names_can_be_skipped_without_mutating_the_source():\n+    original = draft6_type_checker\n+    stripped = original.remove(\"absent\", \"integer\", \"absent\", missing_ok=True)\n+    assert original.is_type(2.0, \"integer\")\n+    with pytest.raises(UndefinedTypeCheck) as caught:\n+        stripped.is_type(2.0, \"integer\")\n+    assert caught.value.type == \"integer\"\n+    assert stripped.is_type(True, \"boolean\")\n+    assert stripped.is_type(2.0, \"number\")\n+\n+\n+def test_removing_only_missing_names_preserves_the_predicates():\n+    original = draft4_type_checker\n+    unchanged = original.remove(\"absent\", \"also-absent\", missing_ok=True)\n+    assert unchanged == original\n+    assert unchanged.is_type(1, \"integer\")\n+\n+\n+@pytest.mark.parametrize(\"kwargs\", [{}, {\"missing_ok\": False}])\n+def test_default_and_explicit_strict_mode_report_the_first_missing_name(kwargs):\n+    with pytest.raises(UndefinedTypeCheck) as caught:\n+        draft4_type_checker.remove(\"integer\", \"absent\", \"boolean\", **kwargs)\n+    assert caught.value.type == \"absent\"\n+    assert draft4_type_checker.is_type(1, \"integer\")\n+    assert draft4_type_checker.is_type(True, \"boolean\")\n+\n+\n+def test_duplicate_known_names_are_tolerated_in_permissive_mode():\n+    stripped = draft4_type_checker.remove(\"integer\", \"integer\", missing_ok=True)\n+    with pytest.raises(UndefinedTypeCheck):\n+        stripped.is_type(1, \"integer\")\n+    assert stripped.is_type(\"x\", \"string\")\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests use only existing checker instances, the requested public method, and the named exception. They check strict defaults, permissive missing names, repeated removal, preservation of unrelated predicates, and source immutability.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add a keyword-only `missing_ok=False` option to `TypeChecker.remove`. With the default, retain the current behavior: an unknown name raises `UndefinedTypeCheck` for the first unknown name encountered. With `missing_ok=True`, skip names that are absent, including a name already removed earlier in the same call, and continue removing every known requested type. Both modes must leave the source checker unchanged and preserve all predicates not removed. Document the option in the method's existing API documentation. Return a unified diff against `jsonschema/_types.py`, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_default_and_explicit_strict_mode_report_the_first_missing_name[kwargs1]",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_duplicate_known_names_are_tolerated_in_permissive_mode",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_missing_names_can_be_skipped_without_mutating_the_source",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_removing_only_missing_names_preserves_the_predicates"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7293
+   },
+   "patch_files": [
+    "jsonschema/_types.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_default_and_explicit_strict_mode_report_the_first_missing_name[kwargs1]",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_duplicate_known_names_are_tolerated_in_permissive_mode",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_missing_names_can_be_skipped_without_mutating_the_source",
+   "jsonschema/tests/test_typechecker_remove_missing.py::test_removing_only_missing_names_preserves_the_predicates"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

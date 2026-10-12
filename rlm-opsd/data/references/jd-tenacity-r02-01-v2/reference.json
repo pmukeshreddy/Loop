@@ -1,0 +1,146 @@
+{
+ "answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -34,7 +34,7 @@\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n         pass\n \n-    def __add__(self, other: \"wait_base\") -> \"wait_combine\":\n+    def __add__(self, other: \"WaitBaseT\") -> \"wait_combine\":\n         return wait_combine(self, other)\n \n     # `other` is `int` rather than `Literal[0]` because typeshed's `sum()`\n@@ -52,7 +52,8 @@\n             return NotImplemented\n         # A plain callable -- `WaitBaseT` admits those, and a function has no\n         # `__add__` of its own to handle `callable + strategy`.\n-        return wait_combine(self, other)\n+        # Keep the left operand first so evaluation follows expression order.\n+        return wait_combine(other, self)\n \n \n WaitBaseT = wait_base | typing.Callable[[\"RetryCallState\"], float | int]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 11564 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution stayed within the focused wait.py context and used no sub-calls. The task requires reasoning about ordinary and reflected addition, nested composition, and exception propagation, which is appropriate for a direct solve."
+  },
+  "notes": "A natural, repository-dependent repair request with clear behavioral constraints and an explicit production-only unified-diff format. The question specifies observable behavior without revealing the defective implementation or its fix. The verified change preserves left-to-right operand order, and the supplied verification cases cover nesting, positional-only callbacks, exception identity, zero identity, and sum(). It is substantively distinct from both its parent and the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only tenacity/wait.py, under 16,000 characters. Understanding ordinary addition, reflected addition, and the combination evaluator is sufficient to reason about callback traces, nested expressions, and exception propagation; broader investigation or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "tenacity/wait.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_base.__add__",
+    "why": "Ordinary addition constructs the combination in expression order, establishing the behavior that must also hold for reflected addition."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_base.__radd__",
+    "why": "The callable branch reverses the operands, while the integer branch provides zero identity and rejects nonzero integers."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_combine.__call__",
+    "why": "Its ordered generator invokes children positionally and naturally stops on an exception, so construction order controls side effects and exception behavior."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestWaitConditions.test_wait_radd_plain_callable",
+    "why": "The existing constant-valued assertion checks the total but cannot distinguish reversed invocation order."
+   }
+  ],
+  "expected_answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -52,7 +52,7 @@\n             return NotImplemented\n         # A plain callable -- `WaitBaseT` admits those, and a function has no\n         # `__add__` of its own to handle `callable + strategy`.\n-        return wait_combine(self, other)\n+        return wait_combine(other, self)\n \n \n WaitBaseT = wait_base | typing.Callable[[\"RetryCallState\"], float | int]\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_wait_addition_order.py\n@@ -0,0 +1,84 @@\n+import pytest\n+\n+from tenacity import RetryCallState, Retrying, wait_combine, wait_fixed\n+\n+\n+@pytest.mark.parametrize(\n+    \"build,expected,total\",\n+    [\n+        (lambda a, b, c: a + wait_combine(b), [\"a\", \"b\"], 3.0),\n+        (lambda a, b, c: wait_combine(a) + b, [\"a\", \"b\"], 3.0),\n+        (lambda a, b, c: (a + wait_combine(b)) + c, [\"a\", \"b\", \"c\"], 6.0),\n+        (lambda a, b, c: a + (wait_combine(b) + c), [\"a\", \"b\", \"c\"], 6.0),\n+        (lambda a, b, c: c + (a + wait_combine(b)), [\"c\", \"a\", \"b\"], 6.0),\n+        (\n+            lambda a, b, c: sum([wait_combine(a), wait_combine(b), wait_combine(c)]),\n+            [\"a\", \"b\", \"c\"],\n+            6.0,\n+        ),\n+    ],\n+)\n+def test_wait_addition_evaluation_order(build, expected, total):\n+    state = RetryCallState(Retrying(), None, (), {})\n+    calls = []\n+\n+    def callback(name, value):\n+        def invoke(rs, /):\n+            assert rs is state\n+            calls.append(name)\n+            return value\n+\n+        return invoke\n+\n+    combined = build(callback(\"a\", 1), callback(\"b\", 2), callback(\"c\", 3))\n+    assert calls == []\n+    for _ in range(2):\n+        calls.clear()\n+        result = combined(state)\n+        assert result == total\n+        assert isinstance(result, float)\n+        assert calls == expected\n+\n+\n+@pytest.mark.parametrize(\n+    \"build\",\n+    [\n+        lambda left, right: left + wait_combine(right),\n+        lambda left, right: wait_combine(left) + right,\n+        lambda left, right: (left + wait_combine(right)) + right,\n+        lambda left, right: left + (wait_combine(right) + right),\n+    ],\n+)\n+def test_left_exception_stops_wait_addition(build):\n+    state = RetryCallState(Retrying(), None, (), {})\n+    calls = []\n+    error = ValueError(\"left failed\")\n+\n+    def left(rs, /):\n+        assert rs is state\n+        calls.append(\"left\")\n+        raise error\n+\n+    def right(rs, /):\n+        assert rs is state\n+        calls.append(\"right\")\n+        return 2\n+\n+    combined = build(left, right)\n+    assert calls == []\n+    with pytest.raises(ValueError) as caught:\n+        combined(state)\n+    assert caught.value is error\n+    assert calls == [\"left\"]\n+\n+\n+def test_zero_identity_and_nonzero_integer_rejection():\n+    strategy = wait_fixed(3)\n+    state = RetryCallState(Retrying(), None, (), {})\n+    assert 0 + strategy is strategy\n+    assert sum([strategy]) is strategy\n+    assert sum([]) == 0\n+    assert sum([strategy, wait_fixed(4)])(state) == 7.0\n+    for number in (-1, 1, 5):\n+        with pytest.raises(TypeError):\n+            number + strategy\n",
+  "include_failure_log": false,
+  "notes": "The operand-order defect already exists in the pinned snapshot, so this task uses new hidden acceptance tests rather than injecting another regression. The new test file replaces the suggestion's proposed edit to an existing test, as required by the hidden-test artifact rules. Verification covers observable invocation traces, repeated evaluation, positional-only state passing, original-state identity, nested combinations, exception identity and short-circuiting, and integer contracts. Existing tests must remain passing. The expected repair is distinct from the original exponential-backoff impact answer.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Adding a plain callable to a Tenacity wait strategy can produce the correct numeric total while invoking the operands in the wrong order. Repair wait-strategy addition so that calling a composed wait evaluates its leaf callables exactly once, from left to right in expression order, for both `callback + strategy` and `strategy + callback`, including nested combinations. Each callable must receive the original state object positionally, including callables with positional-only parameters. Keep the summed floating-point wait result unchanged. If an operand raises, propagate that same exception without evaluating operands to its right. Preserve integer-zero identity (`0 + strategy` returns the strategy itself), support for `sum()` over strategies, and immediate `TypeError` rejection of nonzero integers on the left. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from repository-wide change-impact enumeration to focused defect reproduction and repair. Direct reading of `__add__`, `__radd__`, and `wait_combine.__call__`, plus small trace-based tests, is the appropriate investigation; recursive or broad parallel searches would add little value.",
+  "change_type": "failure_condition",
+  "description": "Repair operand-order reversal when a plain callable is added on the left of a wait strategy. In `tenacity/wait.py::wait_base.__radd__`, `callback + strategy` currently constructs `wait_combine(self, other)`, so `wait_combine.__call__` invokes the right operand first. Require left-to-right evaluation in both operand orders, including nested combinations, while preserving positional state passing, integer-zero identity for `sum()`, and rejection of nonzero integers. Extend `tests/test_tenacity.py::TestWaitConditions::test_wait_radd_plain_callable` with stateful callbacks and add tests showing that a left operand's exception prevents evaluation of the right operand.",
+  "expected_answer_change": "The repair should construct the reflected combination in operand order, using `wait_combine(other, self)` for the callable branch. Verification must assert invocation traces and original-state identity, not merely summed values, and must retain the contracts covered by `test_wait_combine_passes_state_positionally`, `test_wait_arbitrary_sum`, and `test_wait_radd_rejects_non_zero_number`.",
+  "why_substantive": "The existing constant-valued test cannot distinguish reversed evaluation because addition produces the same numeric result. This variation investigates observable side effects and exception propagation through reflected operators and composition, rather than exponential timing values. Its verified repair targets `wait_base.__radd__`, not either exponential call method."
+ },
+ "task_id": "jd-tenacity-r02-01-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>0]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>2]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>3]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected0-3.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected2-6.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected3-6.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected4-6.0]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 195
+   },
+   "patch_files": [
+    "tenacity/wait.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>0]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>2]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_wait_addition[<lambda>3]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected0-3.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected2-6.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected3-6.0]",
+   "tests/test_wait_addition_order.py::test_wait_addition_evaluation_order[<lambda>-expected4-6.0]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

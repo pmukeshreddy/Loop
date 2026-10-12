@@ -274,40 +274,51 @@ in [TASK_PIPELINE.md](TASK_PIPELINE.md).
 
 ## Project entry points verified by execution
 
+The AgentInstruct-style DeepSWE pipeline (2026-10-10) replaced the earlier
+synthetic long-context generators, codecs, BANKING77 corpus and their tests.
+Usage is in [TASK_PIPELINE.md](TASK_PIPELINE.md); executed evidence is in
+[PROGRESS.md](PROGRESS.md) and `docs/checks/agentinstruct-tasks/`.
+
 | File / symbol | Contract |
 |---|---|
-| `rlm_opsd/tasks/__main__.py:main` | `python -m rlm_opsd.tasks {prepare,build,verify}`; `--config`, `--output` for build, `--manifest` for verify; JSON result and nonzero error exit |
-| `rlm_opsd/tasks/models.py:TaskSpec`, `Task` | Seeded generation input; separate answer-bearing audit object; `Task.manifest(context_path)` and `Task.from_manifest(row, context)` |
-| `rlm_opsd/tasks/generators.py:generate(spec, corpus=None)` | Six generated families, train/dev only; independent seeded content, label-subset and query-wording draws; four wordings per query type; resolved `query_variant` in audit knobs |
-| `rlm_opsd/tasks/verify.py:verify_answer(task, corpus=None)` | Recompute from serialized context and task criteria, using offline classification annotations or ASTs; does not consult stored answer |
-| `rlm_opsd/tasks/codec.py:render_records`, `parse_records` | Lossless plain/JSONL/CSV/log/Markdown records and whole-record list chunks |
-| `rlm_opsd/tasks/sources.py:ClassificationCorpus.from_records`, `.from_banking_csv` | Dataset/revision/license provenance; TREC exclusion; checksum and duplicate/conflicting-label checks; explicit ambiguity policy |
-| `rlm_opsd/tasks/prepare.py:checked_source`, `load_corpora`, `prepare_sources` | Checksum-pinned downloads/cache; split-specific classification imports; partial or full reserved-query/source index |
-| `rlm_opsd/tasks/build.py:plan_specs(config)` | Stable split/cell seeds; explicit family weights and eligible grid exclusions; `family_knobs` resolves fixed values, inclusive integer/ISO-date `min`/`max`, or nonempty `choices` independently by task seed and knob name |
-| `rlm_opsd/tasks/build.py:build_pool(config, output_dir, *, corpora, heldout=None)` | Real `ProcessPoolExecutor` with `multiprocessing.get_context('spawn')`; ordered generation, answer verification, decontamination, atomic pool write |
-| `rlm_opsd/tasks/build.py:verify_pool(manifest_path, *, corpora)` | Reload and independently verify every generated answer; benchmark answers explicitly excluded from this oracle |
-| `rlm_opsd/tasks/build.py:load_tasks(manifest_path, *, split, inspection_only=False)` | Answer-free OPSD records, explicit split, coverage/manifest-hash guard, context checks; no trainer invocation |
-| `rlm_opsd/tasks/decontam.py:HeldoutRecord`, `HeldoutIndex` | Benchmark query and source index; `.missing()`, `.load(path)`, `.write(path)`; query-only data cannot claim full coverage |
-| `rlm_opsd/tasks/decontam.py:decontaminate(tasks, heldout, *, ngram_size, overlap_threshold)` | Normalized exact/near query and shared source/content removal; per-rule and per-split report |
-| `rlm_opsd/tasks/heldout.py:adapt_heldout`, `load_heldout_snapshot` | Strict adapters for the five reserved benchmarks; always eval-only; JSON array or JSONL inputs |
+| `rlm_opsd/tasks/__main__.py:main` | `python -m rlm_opsd.tasks {prepare,generate,build,verify,status}`; `--config`, `--output`, `--manifest`, `--repos`, `--rounds`, `--target TRAIN DEV`, `--runs`; JSON result, nonzero exit on error or failed re-verification |
+| `rlm_opsd/tasks/models.py:CandidateSpec`, `Task`, `BEHAVIORS`, `FAMILIES` | Pydantic-validated generated spec (behaviors with rationale, answer kind/format, context scope, setup/probe/hidden-test patches, evidence); released record with `manifest(context_path)` / `from_manifest(row, context)`; families are the six behaviors |
+| `rlm_opsd/tasks/repos.py:RepoSpec`, `Workspace`, `run_tests`, `run_python`, `apply_patch`, `inventory`, `select_documents`, `render_context` | Pinned clone/tree/venv; `sandbox-exec` subprocesses without network or credential reads; per-test outcomes via the bundled pytest plugin; `git apply --recount` with `-p1`/`-p0`; context documents `# File:` / `# Log:` |
+| `rlm_opsd/tasks/pytest_report.py` | pytest hooks `pytest_runtest_logreport`, `pytest_collectreport`, `pytest_sessionfinish`; writes `{exitstatus, outcomes}` JSON to `RLM_TASK_REPORT` |
+| `rlm_opsd/tasks/analysis.py:repository_facts`, `facts_digest`, `diff_symbols`, `normalize_symbol` | AST symbol spans, internal import graph, test-to-module map; changed symbols from real file diffs (not hunk headers) |
+| `rlm_opsd/tasks/llm.py:ResponsesLLM`, `HarnessClient`, `parse_json_block` | OpenAI Responses streaming via `step1.auth.credential`; retries on transient/429/5xx; per-request usage log; verifiers-style `get_response` adapter for harness sub-calls |
+| `rlm_opsd/tasks/roles.py:load_skills`, `Roles` | Six hashed `skills/<role>/SKILL.md` files as role instructions; analyst, generator, suggester, editor, oracle writer, reviewer, no-repository baseline |
+| `rlm_opsd/tasks/materialize.py:materialize` | Stable fail-to-pass/pass-to-pass, impact sets, hidden-test checks, real failure logs, context assembly; `Rejected(code, detail)` |
+| `rlm_opsd/tasks/solver.py:solve`, `single_step` | Reference execution through `rlm_opsd.harness.episode.Episode` with the teacher-variant prompt plus solver skill; one REPL block per turn; finish only after observed output; sets `SandboxBackend.poll_interval_s = 0.5` |
+| `rlm_opsd/harness/sandbox.py:SandboxBackend.poll_interval_s` | Resource-watchdog period, default `0.02` s (unchanged training behavior); a class attribute so offline reference runs can poll less often |
+| `rlm_opsd/tasks/verify.py:verify_patch`, `run_oracle`, `parse_answer`, `normalize`, `matches` | Executable verification of patches, sets, symbols and values |
+| `rlm_opsd/tasks/practice.py:check_behaviors`, `execution_facts` | Behavior evidence from runtime sub-call logs and REPL-code provenance; repository-execution detection; detector values recorded for audit |
+| `rlm_opsd/tasks/pipeline.py:Pipeline` | Resumable stage machine, rounds and quotas, dedupe, review, variations; `Store` state in `store.py` |
+| `rlm_opsd/tasks/prepare.py:prepare_sources`, `assign_splits`, `build_heldout_index` | Source pinning and baselines; size-stratified repository split before generation; DeepSWE-113 and configured held-out sources |
+| `rlm_opsd/tasks/build.py:build_pool`, `load_tasks` | Release with decontamination, content-addressed contexts and references; unchanged answer-free loader contract and coverage/manifest-hash guard |
+| `rlm_opsd/tasks/reverify.py:verify_pool` | Re-runs executable verification of a released pool without model requests |
+| `rlm_opsd/tasks/decontam.py:HeldoutIndex`, `decontaminate`, `query_overlap` | Unchanged index/decontamination contract; `deepswe` added to required benchmarks; fast query screen |
+| `rlm_opsd/tasks/heldout.py:HeldoutTask`, `adapt_heldout`, `load_heldout_snapshot` | Strict reserved-benchmark adapters, now returning a dedicated eval-only record type |
 
-`configs/tasks.yaml` keys are `seed`, `workers`, `size_buckets`, `structures`,
-`encodings`, `families`, `splits`, `direct_read_max_chars`, `labels`,
-`family_knobs`, `decontamination.{ngram_size,overlap_threshold}`,
-`classification_sources`, `heldout_index`, `heldout_question_sources`, and
-`heldout_snapshots`. Exact nested keys and generator knobs are documented in
-TASK_PIPELINE.md and exercised by the CLI and planner tests. There are no
-teacher, gate, loss or training config changes in M2.
+External interfaces used by the pipeline, checked against installed or
+pinned sources:
 
-The seeded-diversity update adds dense-task `label_count` (sample from all
-corpus labels; mutually exclusive with explicit `labels`) and `cutoff_date`,
-plus small-control `records`. Query selection records `query_variant` and
-uses a separate RNG. `family_knobs` range and choice descriptors resolve
-before generation; invalid or reversed ranges fail at planning. Source pins
-and decontamination settings are unchanged. Contracts were exercised through
-the [task suite](checks/task-diversity/06-task-tests-final.log),
-[full configured build](checks/task-diversity/04-make-tasks.log) and
-[saved-context verification](checks/task-diversity/05-tasks-verify.log).
+| Interface | Source checked | Use |
+|---|---|---|
+| `openai.OpenAI(...).responses.create(model, input, store=False, stream=True, reasoning={'effort'})`; stream events `response.output_text.delta`, `response.completed`, `response.failed`, `response.incomplete` | Installed `openai==2.38.0` and the project's `third_party/rlm/rlm/clients/openai_responses.py` | All generation roles and the reference solver |
+| `step1.auth.credential(mode, min_validity)` | `../step1/auth.py` | ChatGPT-plan OAuth (default) or `OPENAI_API_KEY` |
+| `rlm_opsd.harness.episode.Episode(...)`, `.accept(text, ids)`, `.trace` | This repository (M1) | Reference executions in the student's harness |
+| `sandbox-exec -p <profile>` (`deny network-outbound`, `deny file-read*`/`file-write*` by subpath) | macOS `sandbox-exec`; behavior executed in tests and `docs/checks/agentinstruct-tasks/` | Test, oracle and patch-check isolation |
+| `uv venv`, `uv pip install`, `uv pip freeze`; `git clone --depth 1 --branch`, `git archive`, `git apply --recount` | Installed tools | Source pinning, environments, patch application |
+
+`configs/tasks.yaml` keys: `seed`, `sources_dir`, `work_dir`, `python`,
+`harness_config`, `models.{auth,model,request_timeout_s,effort.<role>}`,
+`targets.{train,dev_behavior}`, `splits.dev_behavior_repositories`,
+`generation.{seeds_per_round,max_rounds_per_repo,variations_per_seed,concurrency,test_concurrency,stability_runs,solver_attempts,test_timeout_s,oracle_timeout_s,analysis_source_chars,generator_file_chars}`,
+`context.{max_chars,max_documents,max_file_chars,direct_read_max_chars,size_buckets,exclude}`,
+`filters.*`, `practice.*`, `heldout.{index,deepswe_manifest,deepswe_tasks_dir,decontamination,question_sources,snapshots}`,
+and `repositories[]` (`name,url,ref,commit,license,pythonpath,test_paths,test_deps,pytest_args`).
+There are no teacher, gate, loss or training config changes.
 
 ## Pinned external data schemas
 
@@ -319,7 +330,6 @@ complete benchmark was downloaded or evaluated.
 
 | Source and exact revision | Verified source path / fields | Execution boundary |
 |---|---|---|
-| [PolyAI-LDN/task-specific-datasets](https://github.com/PolyAI-LDN/task-specific-datasets/tree/57ec275d8078af65b7731c2a98be812d844a6d6b), `57ec275d8078af65b7731c2a98be812d844a6d6b` | `banking_data/train.csv`, `test.csv`: CSV `text,category`; repository `LICENSE` (CC BY 4.0) | Actual train/test bytes imported and used to generate dense task contexts; no TREC training source |
 | [mit-oasys/oolong-pairs](https://huggingface.co/datasets/mit-oasys/oolong-pairs/tree/d1e1522b86ac0c169bbc890b0471408aaa29e8fa), `d1e1522b86ac0c169bbc890b0471408aaa29e8fa` | `questions.json`: `id,question,answer,type`; `README.md` specifies full `data/oolong-pairs-{context_len}.json` answers paired with matching `trec_coarse` validation context | Public templates actually imported for query checks. Full answer/context exports not imported. Card declares MIT. |
 | [oolongbench/oolong-synth](https://huggingface.co/datasets/oolongbench/oolong-synth/blob/f0d59eaf0febf130664cfceb710436c8e3216b2b/README.md), `f0d59eaf0febf130664cfceb710436c8e3216b2b` | `README.md` dataset schema: `context_len`, `context_window_id`, `context_window_text`, `context_window_text_with_labels`, `dataset`, `question`, `answer`, `answer_type` | Adapter uses unlabelled context and filters `trec_coarse`; full export not imported. Operator must provide the source license with the export. |
 | [Tevatron/browsecomp-plus](https://huggingface.co/datasets/Tevatron/browsecomp-plus/blob/144cff8e35b5eaef7e526346aa60774a9deb941f/README.md), `144cff8e35b5eaef7e526346aa60774a9deb941f` | `README.md`: `query_id`, `query`, `answer`, `gold_docs`, `evidence_docs`, `negative_docs`; document `docid,text,url`; official canary/SHA-256/XOR decryption recipe | Adapter accepts already-decrypted rows plus exactly 1,000 selected documents. No automatic decryption/document selection or full snapshot import was executed. |
@@ -330,8 +340,6 @@ The production source checksums are pinned in `configs/tasks.yaml`:
 
 | Artifact | SHA-256 |
 |---|---|
-| BANKING77 train CSV | `b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b` |
-| BANKING77 test CSV | `d12d6e3bc4c3103966ae786dc435913c0c563dfa328f5a3646d0e62cfeeb474d` |
 | OOLONG-Pairs question templates | `9d147c25ce727d09d35470ef267db59b3877132429b8b0269a46d941f252cada` |
 
 All held-out adapters were exercised on explicit small fixtures. The actual

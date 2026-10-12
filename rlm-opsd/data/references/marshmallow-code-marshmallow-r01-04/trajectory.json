@@ -1,0 +1,75 @@
+{
+  "task_id": "marshmallow-code-marshmallow-r01-04",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 2991,
+    "context_lengths": [
+      2991
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context), [len(x) for x in context])\nprint(context[0])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context), [len(x) for x in context])\nprint(context[0])"
+      ],
+      "stdout_raw_chars": 3016,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 1 [2991]\n# File: src/marshmallow/orderedset.py\n# OrderedSet\n# Copyright (c) 2009 Raymond Hettinger\n#\n# Permission is hereby granted, free of charge, to any person\n# obtaining a copy of this software and associated documentation files\n# (the \"Software\"), to deal in the Software without restriction,\n# including without limitation the rights to use, copy, modify, merge,\n# publish, distribute, sublicense, and/or sell copies of the Software,\n# and to permit persons to whom the Software is furnished to do so,\n# subject to the following conditions:\n#\n#     The above copyright notice and this permission notice shall be\n#     included in all copies or substantial portions of the Software.\n#\n#     THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\n#     EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES\n#     OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\n#     NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT\n#     HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\n#     WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n#     FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\n#     OTHER DEALINGS IN THE SOFTWARE.\nfrom collections.abc import MutableSet\n\n\nclass OrderedSet(MutableSet):  # noqa: PLW1641\n    def __init__(self, iterable=None):\n        self.end = end = []\n        end += [None, end, end]  # sentinel node for doubly linked list\n        self.map = {}  # key --> [key, prev, next]\n        if iterable is not None:\n            self |= iterable\n\n    def __len__(self):\n        return len(self.map)\n\n    def __contains__(self, key):\n        return key in self.map\n\n    def add(self, key):\n        if key not in self.map:\n            end = self.end\n            curr = end[1]\n            curr[2] = end[1] = self.map[key] = [key, curr, end]\n\n    def discard(self, key):\n        if key in self.map:\n            key, prev, next = self.map.pop(key)  # noqa: A001\n            prev[2] = next\n            next[1] = prev\n\n    def __iter__(self):\n        end = self.end\n        curr = end[2]\n        while curr is not end:\n            yield curr[0]\n            curr = curr[2]\n\n    def __reversed__(self):\n        end = self.end\n        curr = end[1]\n        while curr is not end:\n            yield curr[0]\n            curr = curr[1]\n\n    def pop(self, last=True):\n        if not self:\n            raise KeyError(\"set is empty\")\n        key = self.end[1][0] if last else self.end[2][0]\n        self.discard(key)\n        return key\n\n    def __repr__(self):\n        if not self:\n            return f\"{self.__class__.__name__}()\"\n        return f\"{self.__class__.__name__}({list(self)!r})\"\n\n    def __eq__(self, other):\n        if isinstance(other, OrderedSet):\n            return len(self) == len(other) and list(self) == list(other)\n        return set(self) == set(other)\n\n\nif __name__ == \"__main__\":\n    s = OrderedSet(\"abracadaba\")\n    t = OrderedSet(\"simsalabim\")\n    print(s | t)\n    print(s & t)\n    print(s - t)\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\npath, old = context[0].split(\"\\n\", 1)\npath = path.removeprefix(\"# File: \")\naddition = '''    def move_to_end(self, key, last=True):\n        \"\"\"Move an existing member to the end, or to the beginning if last is false.\n\n        Raise KeyError if the member is not present.\n        \"\"\"\n        node = self.map[key]\n        end = self.end\n        if node is (end[1] if last else end[2]):\n            return\n\n        prev, next = node[1], node[2]  # noqa: A001\n        prev[2] = next\n        next[1] = prev\n\n        if last:\n            prev, next = end[1], end\n        else:\n            prev, next = end, end[2]\n        node[1] = prev\n        node[2] = next\n        prev[2] = next[1] = node\n\n'''\nanchor = \"    def __iter__(self):\\n\"\nassert old.count(anchor) == 1\nnew = old.replace(anchor, addition + anchor)\nast.parse(new)\nassert new.replace(addition, \"\", 1) == old\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\"+path, tofile=\"b/\"+path))\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\npath, old = context[0].split(\"\\n\", 1)\npath = path.removeprefix(\"# File: \")\naddition = '''    def move_to_end(self, key, last=True):\n        \"\"\"Move an existing member to the end, or to the beginning if last is false.\n\n        Raise KeyError if the member is not present.\n        \"\"\"\n        node = self.map[key]\n        end = self.end\n        if node is (end[1] if last else end[2]):\n            return\n\n        prev, next = node[1], node[2]  # noqa: A001\n        prev[2] = next\n        next[1] = prev\n\n        if last:\n            prev, next = end[1], end\n        else:\n            prev, next = end, end[2]\n        node[1] = prev\n        node[2] = next\n        prev[2] = next[1] = node\n\n'''\nanchor = \"    def __iter__(self):\\n\"\nassert old.count(anchor) == 1\nnew = old.replace(anchor, addition + anchor)\nast.parse(new)\nassert new.replace(addition, \"\", 1) == old\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\"+path, tofile=\"b/\"+path))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 843,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/marshmallow/orderedset.py\n+++ b/src/marshmallow/orderedset.py\n@@ -49,6 +49,28 @@\n             prev[2] = next\n             next[1] = prev\n \n+    def move_to_end(self, key, last=True):\n+        \"\"\"Move an existing member to the end, or to the beginning if last is false.\n+\n+        Raise KeyError if the member is not present.\n+        \"\"\"\n+        node = self.map[key]\n+        end = self.end\n+        if node is (end[1] if last else end[2]):\n+            return\n+\n+        prev, next = node[1], node[2]  # noqa: A001\n+        prev[2] = next\n+        next[1] = prev\n+\n+        if last:\n+            prev, next = end[1], end\n+        else:\n+            prev, next = end, end[2]\n+        node[1] = prev\n+        node[2] = next\n+        prev[2] = next[1] = node\n+\n     def __iter__(self):\n         end = self.end\n         curr = end[2]\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/marshmallow/orderedset.py\n+++ b/src/marshmallow/orderedset.py\n@@ -49,6 +49,28 @@\n             prev[2] = next\n             next[1] = prev\n \n+    def move_to_end(self, key, last=True):\n+        \"\"\"Move an existing member to the end, or to the beginning if last is false.\n+\n+        Raise KeyError if the member is not present.\n+        \"\"\"\n+        node = self.map[key]\n+        end = self.end\n+        if node is (end[1] if last else end[2]):\n+            return\n+\n+        prev, next = node[1], node[2]  # noqa: A001\n+        prev[2] = next\n+        next[1] = prev\n+\n+        if last:\n+            prev, next = end[1], end\n+        else:\n+            prev, next = end, end[2]\n+        node[1] = prev\n+        node[2] = next\n+        prev[2] = next[1] = node\n+\n     def __iter__(self):\n         end = self.end\n         curr = end[2]\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 27.433840958001383
+  }
+}

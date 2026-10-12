@@ -1,0 +1,70 @@
+--- /dev/null
++++ b/tests/test_visitor_family_dispatch.py
+@@ -0,0 +1,67 @@
++from jinja2 import nodes
++from jinja2.visitor import NodeTransformer
++from jinja2.visitor import NodeVisitor
++
++
++def test_nearest_node_family_handler():
++    class FamilyVisitor(NodeVisitor):
++        def visit_Node(self, node):
++            return ("node", type(node).__name__)
++
++        def visit_Expr(self, node):
++            return ("expr", type(node).__name__)
++
++    visitor = FamilyVisitor()
++    assert visitor.visit(nodes.Const(1)) == ("expr", "Const")
++    assert visitor.visit(nodes.Add(nodes.Const(1), nodes.Const(2))) == ("expr", "Add")
++    assert visitor.visit(nodes.Output([])) == ("node", "Output")
++
++
++def test_specific_and_inherited_visitor_handlers():
++    class Parent(NodeVisitor):
++        def visit_Expr(self, node):
++            return "expr"
++
++        def visit_Const(self, node):
++            return "const"
++
++    class Child(Parent):
++        pass
++
++    assert Child().visit(nodes.Const(1)) == "const"
++
++
++def test_custom_dispatch_remains_authoritative():
++    class Custom(NodeVisitor):
++        def get_visitor(self, node):
++            return lambda current: "custom"
++
++        def visit_Const(self, node):
++            return "specific"
++
++    assert Custom().visit(nodes.Const(1)) == "custom"
++
++
++def test_transformer_family_replacement():
++    class Rewrite(NodeTransformer):
++        def visit_Expr(self, node):
++            return nodes.Const(9)
++
++    tree = nodes.Output([nodes.Add(nodes.Const(1), nodes.Const(2))])
++    assert Rewrite().visit(tree) is tree
++    assert len(tree.nodes) == 1
++    assert isinstance(tree.nodes[0], nodes.Const)
++    assert tree.nodes[0].value == 9
++
++
++def test_default_generic_traversal_is_unchanged():
++    class Record(NodeVisitor):
++        def __init__(self):
++            self.names = []
++
++        def visit_Name(self, node):
++            self.names.append(node.name)
++
++    visitor = Record()
++    visitor.visit(nodes.Output([nodes.Name("x", "load")]))
++    assert visitor.names == ["x"]

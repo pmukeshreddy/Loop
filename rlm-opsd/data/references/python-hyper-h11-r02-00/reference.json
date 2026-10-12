@@ -1,0 +1,165 @@
+{
+ "answer": [
+  "h11/tests/test_connection.py::test__keep_alive",
+  "h11/tests/test_headers.py::test_get_set_comma_header",
+  "h11/tests/test_headers.py::test_has_100_continue"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"h11/tests/test_headers.py::test_get_comma_header\",\n  \"h11/tests/test_connection.py::test_connection_close\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0035154814016205814,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 23,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "i",
+    "l",
+    "p",
+    "s",
+    "selected",
+    "tests"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 22738,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 4,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 323711 chars; 23 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "4 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final test-ID collection was computed in code, deduplicated, and inspected before submission; executable verification confirmed the three affected tests.",
+   "inspect_locate": "The execution used 23 targeted context searches to investigate the helper, its consumers, and assertions scattered across header and connection tests, without printing the whole repository context."
+  },
+  "notes": "This is a natural, precisely scoped change-impact question. Naming the proposed change does not reveal its test consequences: identifying all newly failing tests requires connecting case-sensitive token handling to caller behavior and existing assertions. The requested JSON list of unique pytest node IDs is clear, and the investigation is distinct from the accepted tasks. Recursive decomposition was not established by the reference execution, but it is not necessary to the task's validity."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is the deduplicated union of failing pytest node IDs across those consumer investigations, including tests that exercise several consumers.",
+   "inspect_locate": "The token helper has consumers in header utilities and Connection processing, while assertions about its effects are scattered across header and connection tests.",
+   "recursive_decomposition": "The impact separates into connection persistence, Expect handling, protocol-switch proposals, and framing. Each consumer needs an independent assessment because some values have already been normalized and others have not."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_headers.py",
+    "symbol": "h11/_headers.py::get_comma_header",
+    "why": "The proposed change affects token values, not matching of normalized header names."
+   },
+   {
+    "path": "h11/_headers.py",
+    "symbol": "h11/_headers.py::has_expect_100_continue",
+    "why": "The expectation check performs literal membership after token extraction."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._process_event",
+    "why": "Token extraction feeds lifecycle, switch-proposal, and waiting-flag behavior."
+   },
+   {
+    "path": "h11/tests/test_headers.py",
+    "symbol": "h11/tests/test_headers.py::test_get_set_comma_header",
+    "why": "Direct assertions distinguish original field values from normalized token values."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": null,
+    "why": "Public connection behavior must be checked for indirect effects of the changed token policy."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the complete existing suite after applying the probe. Do not infer impact solely from direct calls to get_comma_header.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/h11/_headers.py\n+++ b/h11/_headers.py\n@@ -263,7 +263,6 @@ def get_comma_header(headers: Headers, name: bytes) -> List[bytes]:\n     out: List[bytes] = []\n     for _, found_name, found_raw_value in headers._full_items:\n         if found_name == name:\n-            found_raw_value = found_raw_value.lower()\n             for found_split_value in found_raw_value.split(b\",\"):\n                 found_split_value = found_split_value.strip()\n                 if found_split_value:\n",
+  "question": "We are considering preserving the case of comma-separated header tokens: `get_comma_header` would stop lowercasing each matching field's value before splitting it, but would still strip whitespace and omit empty tokens. Header-name matching, header normalization, and every caller would remain unchanged. Which existing tests would newly fail with that exact change? Return a JSON list of pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r02-00",
+ "truth": {
+  "answer": [
+   "h11/tests/test_connection.py::test__keep_alive",
+   "h11/tests/test_headers.py::test_get_set_comma_header",
+   "h11/tests/test_headers.py::test_has_100_continue"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "h11/tests/test_connection.py::test__keep_alive",
+    "h11/tests/test_headers.py::test_get_set_comma_header",
+    "h11/tests/test_headers.py::test_has_100_continue"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "h11/tests/test_connection.py::test__keep_alive",
+    "h11/tests/test_headers.py::test_get_set_comma_header",
+    "h11/tests/test_headers.py::test_has_100_continue"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "h11/tests/test_connection.py::test__keep_alive",
+   "h11/tests/test_headers.py::test_get_set_comma_header",
+   "h11/tests/test_headers.py::test_has_100_continue"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

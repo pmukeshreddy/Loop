@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -81,6 +81,8 @@\n             elif (\n                 isinstance(v, types.ModuleType)\n                 and v.__package__ == fast_mod.__name__\n+                and v.__name__.startswith(fast_mod.__name__ + '.')\n+                and len(v.__name__) > len(fast_mod.__name__) + 1\n             ):\n                 package, dot, submodules = v.__name__.partition('.')\n                 module_name = ''.join(['tlz', dot, submodules])\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5157 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 5,157-character focused context supported solving without sub-calls. The change required understanding how namespace merging, slow-backend overrides, child mirroring, and metadata handling interact, then tightening the ownership predicate without disturbing those policies."
+  },
+  "notes": "A natural, precisely scoped implementation request with an explicit unified-diff format. The question specifies desired behavior rather than revealing a patch. The verified change enforces the dotted namespace boundary and nonempty suffix while preserving override precedence. This is substantively distinct from the parent task's caller-binding protection and the other accepted loader changes."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused loader and its existing tests fit comfortably below 16,000 characters. The task requires reasoning about dotted-name boundaries, recursive import side effects, and the precedence of namespace merging and overrides, rather than broad repository exploration."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "The existing ownership predicate checks only module type and package equality, but the mirrored import is constructed from the export's name. This allows unrelated or boundary-case names to trigger imports."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.__init__",
+    "why": "The mandatory toolz.pipe policy determines override precedence, including aliases whose fast-backend value would otherwise qualify for child mirroring."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "Existing tests establish genuine mirrored-module identities, backend file metadata, documentation behavior, and the toolz.pipe exception."
+   }
+  ],
+  "expected_answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -81,8 +81,10 @@\n             elif (\n                 isinstance(v, types.ModuleType)\n                 and v.__package__ == fast_mod.__name__\n+                and v.__name__.startswith(fast_mod.__name__ + '.')\n+                and len(v.__name__) > len(fast_mod.__name__) + 1\n             ):\n                 package, dot, submodules = v.__name__.partition('.')\n                 module_name = ''.join(['tlz', dot, submodules])\n                 submodule = import_module(module_name)\n                 module.__dict__[k] = submodule\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_child_ownership.py\n@@ -0,0 +1,107 @@\n+import importlib\n+import types\n+\n+import pytest\n+import toolz\n+\n+\n+builder = importlib.import_module('tlz._build_tlz')\n+\n+\n+def make_case(monkeypatch, backend):\n+    loader = builder.TlzLoader()\n+    fast = types.ModuleType(backend + '.audit')\n+    slow = types.ModuleType('toolz.audit') if backend == 'cytoolz' else fast\n+    fast.__package__ = fast.__name__\n+    fast.__doc__ = 'backend documentation'\n+    fast.__file__ = 'fast.py'\n+    slow.__file__ = 'slow.py'\n+    target = types.ModuleType('tlz.audit')\n+    target.__package__ = 'caller.package'\n+    target.__file__ = 'caller.py'\n+    backends = {backend: fast}\n+    if backend == 'cytoolz':\n+        backends['toolz'] = slow\n+    monkeypatch.setattr(loader, '_load_toolz', lambda fullname: backends)\n+    return loader, fast, slow, target\n+\n+\n+@pytest.mark.parametrize('backend', ['cytoolz', 'toolz'])\n+@pytest.mark.parametrize('prebound', [False, True])\n+@pytest.mark.parametrize('name, package, mirrored', [\n+    ('{parent}.child', '{parent}', True),\n+    ('{parent}.branch.child', '{parent}', True),\n+    ('foreign.child', '{parent}', False),\n+    ('{parent}_extra.child', '{parent}', False),\n+    ('{parent}', '{parent}', False),\n+    ('{parent}.', '{parent}', False),\n+    ('{parent}.child', 'foreign', False),\n+    ('{parent}.branch.child', '{parent}.branch', False),\n+])\n+def test_child_ownership(monkeypatch, backend, prebound, name, package, mirrored):\n+    loader, fast, slow, target = make_case(monkeypatch, backend)\n+    export = types.ModuleType(name.format(parent=fast.__name__))\n+    export.__package__ = package.format(parent=fast.__name__)\n+    fast.export = export\n+    sentinel = object()\n+    if prebound:\n+        target.export = sentinel\n+    expected_imports = []\n+    mirrored_export = types.ModuleType('tlz.audit.child')\n+\n+    def fake_import(fullname):\n+        expected = 'tlz' + export.__name__[len(backend):]\n+        assert mirrored\n+        assert fullname == expected\n+        expected_imports.append(fullname)\n+        return mirrored_export\n+\n+    monkeypatch.setattr(builder, 'import_module', fake_import)\n+    loader.exec_module(target)\n+    if mirrored:\n+        assert target.export is mirrored_export\n+        assert expected_imports == ['tlz' + export.__name__[len(backend):]]\n+    else:\n+        assert target.export is (sentinel if prebound else export)\n+        assert expected_imports == []\n+    assert target.__name__ == 'tlz.audit'\n+    assert target.__package__ == 'tlz.audit'\n+    assert target.__file__ == slow.__file__\n+    assert target.__doc__ == fast.__doc__\n+\n+\n+@pytest.mark.parametrize('local_doc', [None, 'caller documentation'])\n+def test_child_policy_preserves_other_policies(monkeypatch, local_doc):\n+    loader, fast, slow, target = make_case(monkeypatch, 'cytoolz')\n+    target.__doc__ = local_doc\n+    child = types.ModuleType(fast.__name__ + '.child')\n+    child.__package__ = fast.__name__\n+    fast.child = child\n+    fast.alias = child\n+    slow.alias = toolz.pipe\n+    fast.plain = object()\n+    fast.unhashable = []\n+    slow.unhashable = []\n+    sentinel = object()\n+    target.child = sentinel\n+    target.alias = sentinel\n+    target.plain = sentinel\n+    mirrored_child = types.ModuleType('tlz.audit.child')\n+    calls = []\n+\n+    def fake_import(fullname):\n+        calls.append(fullname)\n+        assert fullname == 'tlz.audit.child'\n+        return mirrored_child\n+\n+    monkeypatch.setattr(builder, 'import_module', fake_import)\n+    loader.exec_module(target)\n+    assert calls == ['tlz.audit.child']\n+    assert target.child is mirrored_child\n+    assert target.alias is toolz.pipe\n+    assert target.plain is sentinel\n+    assert target.unhashable is fast.unhashable\n+    assert target.__doc__ == (local_doc or fast.__doc__)\n+    assert target.__file__ == 'slow.py'\n+    assert target.__package__ == 'tlz.audit'\n+    assert target.__name__ == 'tlz.audit'\n",
+  "include_failure_log": false,
+  "notes": "This variation changes child eligibility, not binding protection. Acceptance tests intentionally retain the snapshot's behavior: genuine children replace preexisting target bindings, mandatory overrides replace preexisting bindings, and ordinary or disqualified exports preserve preexisting bindings through the initial merge. Isolated fixtures cover mixed backends and toolz-only fallback without requiring cytoolz to be installed. The new tests fail on the supplied implementation because disqualified names still trigger mirrored imports.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Tighten the child-module ownership rule used by `TlzLoader.exec_module`. A module-valued fast-backend export should qualify for mirroring only when its `__package__` equals the fast backend's `__name__` and its own `__name__` starts with that backend name followed by a dot and a nonempty suffix. For example, a module named outside the backend namespace must not qualify merely because it claims the backend's package; neither should a prefix lookalike, the backend module itself, or a name ending immediately after the separating dot. Disqualified exports must not trigger a mirrored import and should retain the binding produced by the existing namespace merge, unless the slow-backend override applies. Keep genuine child mirroring, slow-backend override precedence, metadata handling, and the current treatment of caller-supplied bindings unchanged. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct solving in the focused loader context, but exercises boundary-condition reasoning about dotted module names and import side effects rather than reasoning about namespace snapshots.",
+  "change_type": "constraint",
+  "description": "Tighten owned-child detection in `tlz/_build_tlz.py::TlzLoader.exec_module`. A module-valued fast-backend export should be mirrored only if its `__package__` equals `fast_mod.__name__` and its `__name__` begins with `fast_mod.__name__ + '.'` with a nonempty suffix. A module claiming the backend's package but named outside that namespace must remain the backend object and must not cause a `tlz` import. Preserve genuine child mirroring, slow-backend override precedence, metadata handling, and existing caller-binding behavior. Deliver a production-only unified diff.",
+  "expected_answer_change": "The patch must strengthen the owned-child predicate rather than skip preexisting target names. Acceptance fixtures should distinguish a genuine child such as `cytoolz.audit.child`, an unrelated module whose `__package__` claims `cytoolz.audit`, a prefix lookalike such as `cytoolz.audit_extra.child`, and a module named exactly `cytoolz.audit`. Only the genuine child should trigger a mirrored import.",
+  "why_substantive": "The original task protects bindings based on whether they existed before execution. This variation instead changes which backend module objects qualify for recursive mirroring, including exports on a fresh target. The investigation centers on the mismatch between the existing package-ownership test and the subsequent name-based import construction."
+ },
+ "task_id": "pytoolz-toolz-r02-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-True-toolz]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 16,
+   "full_suite": {
+    "failed": 0,
+    "passed": 226
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[foreign.child-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}.-{parent}-False-True-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-False-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-False-toolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-True-cytoolz]",
+   "toolz/tests/test_tlz_child_ownership.py::test_child_ownership[{parent}_extra.child-{parent}-False-True-toolz]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

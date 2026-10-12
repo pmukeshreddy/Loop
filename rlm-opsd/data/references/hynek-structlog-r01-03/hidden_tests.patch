@@ -1,0 +1,64 @@
+--- /dev/null
++++ b/tests/test_extra_adder_collision_policy.py
+@@ -0,0 +1,61 @@
++import logging
++
++import pytest
++
++from structlog.stdlib import ExtraAdder, ProcessorFormatter
++
++
++@pytest.mark.parametrize("allow", [None, ["shared", "fresh"], []])
++@pytest.mark.parametrize("overwrite", [True, False])
++def test_collision_policy(allow, overwrite):
++    rec = logging.LogRecord("sample", logging.INFO, "app.py", 1, "original", (), None)
++    rec.shared = "record"
++    rec.fresh = 7
++    ed = {"_record": rec, "shared": "event", "untouched": None}
++    expected = ed.copy()
++    if allow is None or "shared" in allow:
++        expected["shared"] = "record" if overwrite else "event"
++    if allow is None or "fresh" in allow:
++        expected["fresh"] = 7
++    assert ExtraAdder(allow, overwrite=overwrite)(None, "info", ed) == expected
++
++
++def test_default_still_overwrites():
++    rec = logging.LogRecord("sample", logging.INFO, "app.py", 1, "original", (), None)
++    rec.shared = "record"
++    ed = {"_record": rec, "shared": "event"}
++    assert ExtraAdder()(None, "info", ed)["shared"] == "record"
++
++
++def test_allow_is_snapshotted():
++    rec = logging.LogRecord("sample", logging.INFO, "app.py", 1, "original", (), None)
++    rec.shared = "record"
++    rec.fresh = 7
++    allow = ["shared"]
++    proc = ExtraAdder(allow, overwrite=False)
++    allow.append("fresh")
++    ed = {"_record": rec, "shared": "event"}
++    assert proc(None, "info", ed) == {"_record": rec, "shared": "event"}
++
++
++def test_foreign_formatter_preserves_preexisting_event():
++    rec = logging.LogRecord("sample", logging.INFO, "app.py", 1, "original", (), None)
++    rec.event = "extra"
++    fmt = ProcessorFormatter(
++        foreign_pre_chain=[ExtraAdder(overwrite=False)],
++        processors=[lambda logger, method, ed: ed["event"]],
++    )
++    assert fmt.format(rec) == "original"
++
++
++def test_false_policy_can_copy_standard_fields_when_allowed():
++    rec = logging.LogRecord("sample", logging.INFO, "app.py", 1, "original", (), None)
++    ed = {"_record": rec, "name": None}
++    result = ExtraAdder(["name", "levelno"], overwrite=False)(None, "info", ed)
++    assert result["name"] is None
++    assert result["levelno"] == logging.INFO
++
++
++def test_without_record_is_noop():
++    ed = {"shared": "event"}
++    assert ExtraAdder(overwrite=False)(None, "info", ed) == {"shared": "event"}

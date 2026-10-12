@@ -1,0 +1,27 @@
+--- a/voluptuous/humanize.py
++++ b/voluptuous/humanize.py
+@@ -14,11 +14,19 @@
+     data: typing.Any, path: typing.List[typing.Hashable]
+ ) -> typing.Optional[typing.Any]:
+     for item_index in path:
+-        try:
+-            data = data[item_index]
+-        except (KeyError, IndexError, TypeError):
+-            # The index is not present in the dictionary, list or other
+-            # indexable or data is not subscriptable
++        if hasattr(type(data), '__getitem__'):
++            try:
++                data = data[item_index]
++            except (KeyError, IndexError, TypeError):
++                # A failed subscription must not fall back to an attribute.
++                return None
++        elif isinstance(item_index, str):
++            try:
++                data = getattr(data, item_index)
++            except AttributeError:
++                return None
++        else:
++            # Attribute names must be strings.
+             return None
+     return data
+ 

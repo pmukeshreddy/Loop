@@ -1,0 +1,46 @@
+--- a/glom/core.py
++++ b/glom/core.py
+@@ -2004,6 +2004,22 @@
+             self._register_default_types()
+         return
+ 
++    def _clone(self):
++        """Copy registration bookkeeping without copying types or handlers."""
++        def copy_tree(tree):
++            return OrderedDict((target_type, copy_tree(sub_tree))
++                               for target_type, sub_tree in tree.items())
++
++        ret = copy.copy(self)
++        ret._op_type_map = {op: type_map.copy()
++                            for op, type_map in self._op_type_map.items()}
++        ret._op_type_tree = {op: copy_tree(tree)
++                             for op, tree in self._op_type_tree.items()}
++        ret._op_auto_map = self._op_auto_map.copy()
++        # Resolve against the snapshot rather than inheriting cached lookups.
++        ret._type_cache = {}
++        return ret
++
+     def get_handler(self, op, obj, path=None, raise_exc=True):
+         """for an operation and object **instance**, obj, return the
+         closest-matching handler function, raising UnregisteredTarget
+@@ -2470,6 +2486,20 @@
+         self.scope = ChainMap(dict(scope))
+         self.scope[TargetRegistry] = TargetRegistry(register_default_types=register_default_types)
+ 
++    def clone(self):
++        """Return an independently configurable snapshot of this Glommer.
++
++        The clone starts with the same effective scope values and target
++        registrations, including custom operation autodiscovery. Scope and
++        registration changes on either instance do not affect the other.
++        Scope values and handler callables themselves remain shared references;
++        they are not deep-copied.
++        """
++        ret = copy.copy(self)
++        ret.scope = ChainMap(dict(self.scope))
++        ret.scope[TargetRegistry] = self.scope[TargetRegistry]._clone()
++        return ret
++
+     def register(self, target_type, **kwargs):
+         """Register *target_type* so :meth:`~Glommer.glom()` will
+         know how to handle instances of that type as targets.

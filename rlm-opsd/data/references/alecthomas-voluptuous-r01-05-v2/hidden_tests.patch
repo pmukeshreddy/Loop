@@ -1,0 +1,102 @@
+--- /dev/null
++++ b/voluptuous/tests/test_humanize_repr_failure.py
+@@ -0,0 +1,99 @@
++import pytest
++
++from voluptuous import Invalid, MultipleInvalid, Schema
++from voluptuous.error import Error
++from voluptuous.humanize import humanize_error, validate_with_humanized_errors
++
++
++class BrokenRepr:
++    def __repr__(self):
++        raise RuntimeError('repr failed')
++
++    def __str__(self):
++        raise AssertionError('value must not be stringified')
++
++
++class UnprintableFailure(RuntimeError):
++    def __init__(self):
++        super().__init__('repr failed')
++        self.str_calls = 0
++
++    def __str__(self):
++        self.str_calls += 1
++        raise AssertionError('exception must not be stringified')
++
++
++class PoisonedRepr:
++    def __init__(self):
++        self.failure = UnprintableFailure()
++        self.str_calls = 0
++
++    def __repr__(self):
++        raise self.failure
++
++    def __str__(self):
++        self.str_calls += 1
++        raise AssertionError('value must not be stringified')
++
++
++@pytest.mark.parametrize('value_type', [BrokenRepr, PoisonedRepr])
++def test_fallback_preserves_diagnostic(value_type):
++    value = value_type()
++    error = Invalid('invalid field', ['payload', 0], error_type='item')
++    result = humanize_error({'payload': [value]}, error)
++    assert result == (
++        "invalid field for item @ data['payload'][0]. Got "
++        '<unrepresentable %s>' % value_type.__name__
++    )
++    if isinstance(value, PoisonedRepr):
++        assert value.str_calls == 0
++        assert value.failure.str_calls == 0
++
++
++@pytest.mark.parametrize('budget', [3, 4, 10, 28, 29, 30, 31, 100])
++@pytest.mark.parametrize('value_type', [BrokenRepr, PoisonedRepr])
++def test_fallback_budget(value_type, budget):
++    summary = '<unrepresentable %s>' % value_type.__name__
++    if len(summary) > budget:
++        summary = summary[:budget - 3] + '...'
++    assert humanize_error(value_type(), Invalid('bad'), budget) == 'bad. Got ' + summary
++
++
++def test_nested_mixed_aggregate():
++    data = {'bad': PoisonedRepr(), 'ok': 7, 'text': 'fine'}
++    error = MultipleInvalid([
++        Invalid('zeta', ['text']),
++        MultipleInvalid([
++            Invalid('beta', ['ok']),
++            Invalid('alpha', ['bad'], error_type='field'),
++        ]),
++    ])
++    assert humanize_error(data, error) == (
++        "alpha for field @ data['bad']. Got <unrepresentable PoisonedRepr>\n"
++        "beta @ data['ok']. Got 7\n"
++        "zeta @ data['text']. Got 'fine'"
++    )
++
++
++@pytest.mark.parametrize('budget', [10, 500])
++def test_validate_wrapper_contains_original_diagnostic(budget):
++    summary = '<unrepresentable PoisonedRepr>'
++    if len(summary) > budget:
++        summary = summary[:budget - 3] + '...'
++    with pytest.raises(Error) as caught:
++        validate_with_humanized_errors(PoisonedRepr(), Schema(int), budget)
++    assert type(caught.value) is Error
++    assert str(caught.value) == 'expected int. Got ' + summary
++
++
++@pytest.mark.parametrize('exception_type', [KeyboardInterrupt, SystemExit, GeneratorExit])
++def test_base_exception_propagates(exception_type):
++    failure = exception_type()
++
++    class InterruptedRepr:
++        def __repr__(self):
++            raise failure
++
++    with pytest.raises(exception_type) as caught:
++        humanize_error(InterruptedRepr(), Invalid('bad'))
++    assert caught.value is failure

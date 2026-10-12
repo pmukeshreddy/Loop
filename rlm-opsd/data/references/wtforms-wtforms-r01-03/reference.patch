@@ -1,0 +1,47 @@
+--- a/src/wtforms/form.py
++++ b/src/wtforms/form.py
+@@ -97,7 +97,7 @@
+             has a matching attribute. Only used if ``formdata`` is not
+             passed.
+         :param extra_filters: A dict mapping field attribute names to
+-            lists of extra filter functions to run. Extra filters run
++            lists or tuples of extra filter functions to run. Extra filters run
+             after filters passed when creating the field. If the form
+             has ``filter_<fieldname>``, it is the last extra filter.
+         :param kwargs: Merged with ``data`` to allow passing existing
+@@ -112,7 +112,7 @@
+         filters = extra_filters.copy() if extra_filters is not None else {}
+ 
+         for name, field in self._fields.items():
+-            field_extra_filters = filters.get(name, [])
++            field_extra_filters = list(filters.get(name, []))
+ 
+             inline_filter = getattr(self, f"filter_{name}", None)
+             if inline_filter is not None:
+@@ -268,7 +268,7 @@
+         :param meta: A dict of attributes to override on this form's
+             :attr:`meta` instance.
+         :param extra_filters: A dict mapping field attribute names to
+-            lists of extra filter functions to run. Extra filters run
++            lists or tuples of extra filter functions to run. Extra filters run
+             after filters passed when creating the field. If the form
+             has ``filter_<fieldname>``, it is the last extra filter.
+         :param kwargs: Merged with ``data`` to allow passing existing
+@@ -312,7 +312,7 @@
+         If the form defines a ``validate_<fieldname>`` method, it is
+         appended as an extra validator for the field's ``validate``.
+ 
+-        :param extra_validators: A dict mapping field names to lists of
++        :param extra_validators: A dict mapping field names to lists or tuples of
+             extra validator methods to run. Extra validators run after
+             validators passed when creating the field. If the form has
+             ``validate_<fieldname>``, it is the last extra validator.
+@@ -325,6 +325,7 @@
+         for name in self._fields:
+             inline = getattr(self.__class__, f"validate_{name}", None)
+             if inline is not None:
+-                extra.setdefault(name, []).append(inline)
++                extra[name] = list(extra.get(name, []))
++                extra[name].append(inline)
+ 
+         return super().validate(extra)

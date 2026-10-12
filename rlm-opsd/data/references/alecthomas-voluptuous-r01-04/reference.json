@@ -1,0 +1,150 @@
+{
+ "answer": "--- a/voluptuous/validators.py\n+++ b/voluptuous/validators.py\n@@ -38,7 +38,13 @@\n )\n \n # F401: flake8 complains about 'raises' not being used, but it is used in doctests\n-from voluptuous.schema_builder import Schema, Schemable, message, raises  # noqa: F401\n+from voluptuous.schema_builder import (  # noqa: F401\n+    Schema,\n+    Schemable,\n+    _isnamedtuple,\n+    message,\n+    raises,\n+)\n \n if typing.TYPE_CHECKING:\n     from _typeshed import SupportsAllComparisons\n@@ -946,11 +952,18 @@\n     def __call__(self, v):\n         if not isinstance(v, (list, tuple)) or len(v) != len(self._schemas):\n             raise ExactSequenceInvalid(self.msg)\n-        try:\n-            v = type(v)(schema(x) for x, schema in zip(v, self._schemas))\n-        except Invalid as e:\n-            raise e if self.msg is None else ExactSequenceInvalid(self.msg)\n-        return v\n+        out = []\n+        for index, (x, schema) in enumerate(zip(v, self._schemas)):\n+            try:\n+                out.append(schema(x))\n+            except Invalid as e:\n+                if self.msg is not None:\n+                    raise ExactSequenceInvalid(self.msg)\n+                e.prepend([index])\n+                raise\n+        if _isnamedtuple(v):\n+            return type(v)(*out)\n+        return type(v)(out)\n \n     def __repr__(self):\n         return 'ExactSequence([%s])' % \", \".join(repr(v) for v in self.validators)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 202298 chars; 11 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "5 turns; variables reused across turns: ['files', 's', 'v']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines namedtuple reconstruction and child-error indexing while preserving sequence-level custom messages. The reference constructed and inspected the final patch; the supplied verification evidence covers direct and embedded validation, transformed namedtuples, ordinary sequence types, and error paths.",
+   "inspect_locate": "The reference execution used 11 targeted code searches without printing the whole repository context. The change requires understanding ExactSequence reconstruction, the existing namedtuple helper, and error-path propagation through Schema.",
+   "persistent_state": "The reference reused files, s, and v across turns, although persistent_state was not listed among the established behaviors. This is supporting execution evidence rather than a necessary property of the task."
+  },
+  "notes": "This is a natural, cohesive implementation request with a precise output format. Naming the public validator and specifying its desired behavior does not disclose the implementation fix. Correct handling requires repository-specific reasoning about construction and nested errors, and the task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must combine reconstruction and positional-error changes into exact hunks and verify that all specified public behaviors are accounted for without editing tests.",
+   "inspect_locate": "ExactSequence has its own reconstruction and validation route, distinct from ordinary tuple schemas. Error behavior also depends on standalone Schema wrapping and the outer callable compiler.",
+   "persistent_state": "The solver must retain the compatibility requirements for ordinary sequences, namedtuples, nested child errors, outer paths, and custom messages while preparing the change."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::ExactSequence.__call__",
+    "why": "Currently reconstructs all accepted sequences from an iterable and propagates child errors without their positional index."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::Schema._compile_sequence",
+    "why": "Provides the existing repository convention for namedtuple reconstruction."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::_compile_scalar",
+    "why": "Adds enclosing paths to exceptions raised by an embedded ExactSequence."
+   },
+   {
+    "path": "voluptuous/error.py",
+    "symbol": "voluptuous/error.py::MultipleInvalid.prepend",
+    "why": "Supports adding an index to every nested child error."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_exact_sequence_positions.py\n@@ -0,0 +1,58 @@\n+import collections\n+\n+import pytest\n+\n+from voluptuous import Coerce, ExactSequence, ExactSequenceInvalid, MultipleInvalid, Schema\n+\n+\n+@pytest.mark.parametrize(\"fields,values\", [([\"a\"], (\"4\",)), ([\"a\", \"b\"], (\"4\", \"9\"))])\n+def test_exact_sequence_namedtuple_transform(fields, values):\n+    Record = collections.namedtuple(\"Record\", fields)\n+    data = Record(*values)\n+    validator = ExactSequence([Coerce(int)] * len(fields))\n+    for validate in (validator, Schema(validator)):\n+        result = validate(data)\n+        assert type(result) is Record\n+        assert result == Record(*(int(value) for value in values))\n+\n+\n+@pytest.mark.parametrize(\"factory\", [list, tuple])\n+def test_exact_sequence_retains_plain_sequence_type(factory):\n+    data = factory([\"2\", \"5\"])\n+    result = Schema(ExactSequence([Coerce(int), Coerce(int)]))(data)\n+    assert type(result) is factory\n+    assert result == factory([2, 5])\n+\n+\n+def test_exact_sequence_nested_paths_direct_and_embedded():\n+    validator = ExactSequence([int, {\"a\": int, \"b\": int}])\n+    data = [1, {\"a\": \"bad\", \"b\": \"bad\"}]\n+    with pytest.raises(MultipleInvalid) as direct:\n+        validator(data)\n+    assert {tuple(e.path) for e in direct.value.errors} == {(1, \"a\"), (1, \"b\")}\n+    with pytest.raises(MultipleInvalid) as wrapped:\n+        Schema({\"items\": validator})({\"items\": data})\n+    assert {tuple(e.path) for e in wrapped.value.errors} == {\n+        (\"items\", 1, \"a\"), (\"items\", 1, \"b\")\n+    }\n+\n+\n+def test_exact_sequence_custom_message_stays_at_sequence():\n+    validator = ExactSequence([int], msg=\"bad sequence\")\n+    with pytest.raises(MultipleInvalid) as caught:\n+        Schema({\"items\": validator})({\"items\": [\"bad\"]})\n+    assert isinstance(caught.value.errors[0], ExactSequenceInvalid)\n+    assert caught.value.errors[0].path == [\"items\"]\n+    assert caught.value.errors[0].msg == \"bad sequence\"\n+\n+\n+def test_exact_sequence_scalar_position():\n+    with pytest.raises(MultipleInvalid) as caught:\n+        Schema(ExactSequence([int, int]))([1, \"bad\"])\n+    assert caught.value.errors[0].path == [1]\n+\n+\n+def test_exact_sequence_length_mismatch_preserves_message():\n+    with pytest.raises(ExactSequenceInvalid) as caught:\n+        ExactSequence([int], msg=\"wrong size\")([])\n+    assert caught.value.msg == \"wrong size\"\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests exercise only public behavior stated in the request. Existing tests must continue to pass. The implementation need not reuse any particular private reconstruction helper.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Extend ExactSequence to support namedtuple inputs properly: successful validation must return the same concrete namedtuple type with each position's transformed value, including for single-field namedtuples. Also make child-validation failures identify their position: without a custom message, prepend the zero-based element index to every error raised by the failing child, before that child's existing path. This must work for direct ExactSequence calls and when embedded in a Schema, where enclosing paths must remain intact. Preserve list and ordinary tuple output types, length-mismatch behavior, and fail-fast child validation. A supplied custom message must still produce ExactSequenceInvalid at the sequence level, without an element index. Return a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "alecthomas-voluptuous-r01-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_namedtuple_transform[fields0-values0]",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_namedtuple_transform[fields1-values1]",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_nested_paths_direct_and_embedded",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_scalar_position"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_namedtuple_transform[fields0-values0]",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_namedtuple_transform[fields1-values1]",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_nested_paths_direct_and_embedded",
+   "voluptuous/tests/test_exact_sequence_positions.py::test_exact_sequence_scalar_position"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

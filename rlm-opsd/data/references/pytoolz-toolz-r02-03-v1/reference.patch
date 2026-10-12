@@ -1,0 +1,11 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -56,6 +56,8 @@
+         toolz_mods = self._load_toolz(module.__name__)
+         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']
+         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']
++        if not hasattr(module, '__path__') and hasattr(fast_mod, '__path__'):
++            module.__path__ = list(fast_mod.__path__)
+         module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))
+         package = fast_mod.__package__
+         if package is not None:

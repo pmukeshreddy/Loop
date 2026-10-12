@@ -1,0 +1,16 @@
+--- a/jsonschema/_utils.py
++++ b/jsonschema/_utils.py
+@@ -327,9 +327,10 @@
+ 
+     for keyword in ["allOf", "oneOf", "anyOf"]:
+         for subschema in schema.get(keyword, []):
+-            evaluated_keys += find_evaluated_property_keys_by_schema(
+-                validator, instance, subschema,
+-            )
++            if is_valid(validator.descend(instance, subschema)):
++                evaluated_keys += find_evaluated_property_keys_by_schema(
++                    validator, instance, subschema,
++                )
+ 
+     if "if" in schema:
+         if validator.evolve(schema=schema["if"]).is_valid(instance):

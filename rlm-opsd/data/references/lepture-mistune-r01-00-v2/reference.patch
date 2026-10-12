@@ -1,0 +1,26 @@
+--- a/src/mistune/__init__.py
++++ b/src/mistune/__init__.py
+@@ -58,18 +58,21 @@
+ html: Markdown = create_markdown(escape=False, plugins=["strikethrough", "footnotes", "table"])
+ 
+ 
+-__cached_parsers: Dict[Tuple[bool, Optional[RendererRef], Optional[Iterable[Any]]], Markdown] = {}
++__cached_parsers: Dict[Tuple[bool, Optional[RendererRef], Optional[Tuple[PluginRef, ...]]], Markdown] = {}
+ 
+ 
+ def markdown(
+     text: str,
+     escape: bool = True,
+     renderer: Optional[RendererRef] = "html",
+-    plugins: Optional[Iterable[Any]] = None,
++    plugins: Optional[Iterable[PluginRef]] = None,
+ ) -> Union[str, List[Dict[str, Any]]]:
+     if renderer == "ast":
+         # explicit and more similar to 2.x's API
+         renderer = None
++    # Snapshot the plugin specification so lists and tuples share a cache key.
++    # Keep None distinct from an explicitly empty collection.
++    plugins = tuple(plugins) if plugins is not None else None
+     key = (escape, renderer, plugins)
+     if key in __cached_parsers:
+         return __cached_parsers[key](text)

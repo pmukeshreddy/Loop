@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -769,12 +769,13 @@\n     Apply stdlib-like string formatting to the ``event`` key.\n \n     If the ``positional_args`` key in the event dict is set, it must\n-    contain a tuple that is used for formatting (using the ``%s`` string\n-    formatting operator) of the value from the ``event`` key.  This works\n-    in the same way as the stdlib handles arguments to the various log\n-    methods: if the tuple contains only a single `dict` argument it is\n-    used for keyword placeholders in the ``event`` string, otherwise it\n-    will be used for positional placeholders.\n+    contain a tuple or `dict` that is used for formatting (using the ``%``\n+    string formatting operator) of the value from the ``event`` key.\n+    A `dict` is used for keyword placeholders in the ``event`` string.\n+    A tuple containing only a single non-empty `dict` argument is treated\n+    the same way, matching the stdlib's handling of log method arguments.\n+    Other tuples are used for positional placeholders. Empty dictionaries\n+    and tuples leave the event unformatted.\n \n     ``positional_args`` is populated by `structlog.stdlib.BoundLogger` or\n     can be set manually.\n@@ -797,7 +798,12 @@\n         # \"single dict\" check is the same one as the stdlib's logging module\n         # performs in LogRecord.__init__().\n         if args:\n-            if len(args) == 1 and isinstance(args[0], dict) and args[0]:\n+            if (\n+                not isinstance(args, dict)\n+                and len(args) == 1\n+                and isinstance(args[0], dict)\n+                and args[0]\n+            ):\n                 args = args[0]\n \n             event_dict[\"event\"] %= args\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines direct-dictionary support with preservation of tuple handling, empty-argument behavior, and argument retention. The execution constructed and inspected the final diff before returning it; executable correctness verification was supplied separately.",
+   "inspect_locate": "The reference execution used 12 targeted searches without printing the whole context. Locating the argument handling across BoundLogger, ProcessorFormatter, and PositionalArgumentsFormatter was useful for explaining why foreign logging supplies a direct dictionary while structured logging supplies a tuple."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise compatibility constraints and a clear output format. Naming the public integration classes identifies the requested API behavior rather than prescribing the implementation fix. The change is substantively different from the parent handler-isolation task and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must support both callers without changing argument retention or empty-argument behavior. Checking the change against direct dictionaries, tuple-wrapped dictionaries, and ordinary tuples, and confirming its exact source context, is useful before delivering the patch.",
+   "inspect_locate": "The relevant evidence is scattered within the large standard-library integration module and its tests. The task requires connecting the argument representation supplied by BoundLogger with the foreign-record path in ProcessorFormatter and the downstream positional formatting contract."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::BoundLogger._proxy_to_logger",
+    "why": "Supplies structured positional arguments as the event_args tuple."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "Passes foreign LogRecord.args directly into positional_args before invoking foreign_pre_chain."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::PositionalArgumentsFormatter.__call__",
+    "why": "Currently assumes sequence-style indexing when examining a single argument; also defines interpolation and argument-removal semantics."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestPositionalArgumentsFormatter.test_formats_dict",
+    "why": "Establishes the existing tuple-wrapped dictionary interpolation contract."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter.test_pass_foreign_args_true_sets_positional_args_key",
+    "why": "Demonstrates that foreign mapping arguments reach the event dictionary as a direct dictionary."
+   }
+  ],
+  "expected_answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -850,8 +850,13 @@\n         # accepts both positional arguments and a single dict argument. The\n         # \"single dict\" check is the same one as the stdlib's logging module\n         # performs in LogRecord.__init__().\n         if args:\n-            if len(args) == 1 and isinstance(args[0], dict) and args[0]:\n+            if (\n+                not isinstance(args, dict)\n+                and len(args) == 1\n+                and isinstance(args[0], dict)\n+                and args[0]\n+            ):\n                 args = args[0]\n \n             event_dict[\"event\"] %= args\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_stdlib_dictionary_interpolation.py\n@@ -0,0 +1,100 @@\n+import logging\n+\n+import pytest\n+\n+from structlog.stdlib import (\n+    BoundLogger,\n+    PositionalArgumentsFormatter,\n+    ProcessorFormatter,\n+)\n+\n+\n+@pytest.mark.parametrize(\"remove\", [True, False])\n+@pytest.mark.parametrize(\n+    (\"event\", \"args\", \"expected\"),\n+    [\n+        (\"hello %(user)s\", {\"user\": \"Ada\"}, \"hello Ada\"),\n+        (\"%(user)s/%(role)s\", {\"user\": \"Ada\", \"role\": \"dev\"}, \"Ada/dev\"),\n+        (\"hello %(user)s\", ({\"user\": \"Ada\"},), \"hello Ada\"),\n+        (\"%s %d\", (\"Ada\", 3), \"Ada 3\"),\n+        (\"%s\", (\"Ada\",), \"Ada\"),\n+        (\"literal %s\", (), \"literal %s\"),\n+        (\"literal %(user)s\", {}, \"literal %(user)s\"),\n+    ],\n+)\n+def test_argument_forms(event, args, expected, remove):\n+    original_args = args.copy() if isinstance(args, dict) else args\n+    ed = {\"event\": event, \"positional_args\": args}\n+    result = PositionalArgumentsFormatter(remove)(None, \"info\", ed)\n+    assert result[\"event\"] == expected\n+    assert args == original_args\n+    if remove:\n+        assert \"positional_args\" not in result\n+    else:\n+        assert result[\"positional_args\"] is args\n+\n+\n+@pytest.mark.parametrize(\"remove\", [True, False])\n+def test_missing_and_none_arguments(remove):\n+    processor = PositionalArgumentsFormatter(remove)\n+    assert processor(None, \"info\", {\"event\": \"literal %s\"}) == {\n+        \"event\": \"literal %s\"\n+    }\n+    assert processor(\n+        None, \"info\", {\"event\": \"literal %s\", \"positional_args\": None}\n+    ) == {\"event\": \"literal %s\", \"positional_args\": None}\n+\n+\n+@pytest.mark.parametrize(\"remove\", [True, False])\n+@pytest.mark.parametrize(\"structured\", [True, False])\n+def test_mapping_logging_pipeline(remove, structured):\n+    messages = []\n+    captured = []\n+\n+    def render(logger, name, ed):\n+        captured.append(ed.copy())\n+        return ed[\"event\"]\n+\n+    class Handler(logging.Handler):\n+        def emit(self, record):\n+            messages.append(self.format(record))\n+\n+    processor = PositionalArgumentsFormatter(remove)\n+    formatter = ProcessorFormatter(\n+        use_get_message=False,\n+        pass_foreign_args=True,\n+        foreign_pre_chain=[processor],\n+        processors=[render],\n+    )\n+    handler = Handler()\n+    handler.setFormatter(formatter)\n+    logger = logging.Logger(\"mapping-pipeline\", logging.INFO)\n+    logger.addHandler(handler)\n+    args = {\"user\": \"Ada\"}\n+    if structured:\n+        bound = BoundLogger(\n+            logger, [processor, ProcessorFormatter.wrap_for_formatter], {}\n+        )\n+        bound.info(\"hello %(user)s\", args)\n+    else:\n+        logger.info(\"hello %(user)s\", args)\n+\n+    assert messages == [\"hello Ada\"]\n+    assert captured[0][\"_from_structlog\"] is structured\n+    if remove:\n+        assert \"positional_args\" not in captured[0]\n+    else:\n+        expected_args = (args,) if structured else args\n+        assert captured[0][\"positional_args\"] == expected_args\n+    assert args == {\"user\": \"Ada\"}\n+\n+\n+def test_default_get_message_is_unchanged():\n+    formatter = ProcessorFormatter(\n+        processors=[lambda logger, name, ed: ed[\"event\"]]\n+    )\n+    record = logging.LogRecord(\n+        \"mapping-default\", logging.INFO, __file__, 1,\n+        \"hello %(user)s\", ({\"user\": \"Ada\"},), None,\n+    )\n+    assert formatter.format(record) == \"hello Ada\"\n",
+  "include_failure_log": false,
+  "notes": "This task starts from the unmodified snapshot's existing dictionary interoperability gap; no injected defect is needed. The new acceptance file checks direct dictionaries, both existing tuple forms, empty/missing/None arguments, retention, and real foreign and structured logging pipelines. Its foreign pipeline cases fail on the current code. Non-dict Mapping implementations are outside this task's required extension. The expected production change differs from the original handler-isolation repair and leaves LogRecord copying intact.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Support dictionary-style interpolation throughout the standard-library processor integration. With ProcessorFormatter configured using use_get_message=False, pass_foreign_args=True, and foreign_pre_chain=[PositionalArgumentsFormatter()], an ordinary logging call such as logger.info('hello %(user)s', {'user': 'Ada'}) must render 'hello Ada', matching a structlog.stdlib.BoundLogger call whose processor chain includes PositionalArgumentsFormatter.\n\nPositionalArgumentsFormatter must also support dictionaries supplied directly as positional_args, including dictionaries with one or multiple entries. Preserve support for single-dictionary tuples and ordinary positional tuples. Empty dictionaries and empty tuples must leave the event unformatted; the default remove_positional_args=True must still remove those argument fields. Missing arguments and positional_args=None must retain their current behavior. With remove_positional_args=False, retain the original argument object and representation after interpolation, without modifying the dictionary supplied by the caller. Keep ProcessorFormatter's default use_get_message behavior unchanged.\n\nReturn only a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises dependency tracing and combine_verify_finish: compare the argument representations produced by BoundLogger._proxy_to_logger and the foreign ProcessorFormatter branch, then verify the downstream repair against both callers. This is a small, focused cross-symbol investigation rather than the original multi-handler mutation diagnosis.",
+  "change_type": "dependency",
+  "description": "Repair mapping-style positional formatting when foreign records are routed through src/structlog/stdlib.py::ProcessorFormatter.format into PositionalArgumentsFormatter.__call__. Use the explicit configuration use_get_message=False, pass_foreign_args=True, and foreign_pre_chain=[PositionalArgumentsFormatter()]. A logging call such as logger.info('hello %(user)s', {'user': 'Ada'}) should render successfully, just as a structured BoundLogger call with the same arguments does. Extend PositionalArgumentsFormatter to accept the direct dictionary representation supplied by LogRecord.args as well as the existing tuple representation. Return a non-test unified diff and specify acceptance cases for direct dictionaries, single-dictionary tuples, ordinary positional tuples, empty arguments, and remove_positional_args=False.",
+  "expected_answer_change": "The answer should change PositionalArgumentsFormatter.__call__ to distinguish direct dictionary arguments from tuple-wrapped dictionaries before indexing, while retaining interpolation and argument-removal semantics. ProcessorFormatter's default use_get_message value remains unchanged. Verification should build on tests/test_stdlib.py::TestPositionalArgumentsFormatter.test_formats_dict and TestProcessorFormatter.test_pass_foreign_args_true_sets_positional_args_key, with a new end-to-end case connecting those behaviors.",
+  "why_substantive": "The handler-isolation patch does not fix this failure. BoundLogger._proxy_to_logger supplies a tuple containing the dictionary, whereas logging.LogRecord normalizes a single nonempty dictionary argument into a dictionary directly. The current formatter assumes tuple-style indexing during its single-dictionary check, which can raise KeyError for a one-entry direct dictionary. The investigation crosses the foreign-record adapter and its downstream processor rather than repairing LogRecord copying."
+ },
+ "task_id": "hynek-structlog-r01-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_stdlib_dictionary_interpolation.py::test_argument_forms[hello %(user)s-args0-hello Ada-False]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_argument_forms[hello %(user)s-args0-hello Ada-True]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_mapping_logging_pipeline[False-False]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_mapping_logging_pipeline[False-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 905
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_stdlib_dictionary_interpolation.py::test_argument_forms[hello %(user)s-args0-hello Ada-False]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_argument_forms[hello %(user)s-args0-hello Ada-True]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_mapping_logging_pipeline[False-False]",
+   "tests/test_stdlib_dictionary_interpolation.py::test_mapping_logging_pipeline[False-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

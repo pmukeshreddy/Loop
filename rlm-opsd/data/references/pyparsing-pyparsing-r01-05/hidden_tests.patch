@@ -1,0 +1,37 @@
+--- /dev/null
++++ b/tests/test_compressed_re_single_pass.py
+@@ -0,0 +1,34 @@
++import pytest
++from pyparsing.util import make_compressed_re
++
++
++@pytest.mark.parametrize("words", [
++    ["parse", "parser", "parsed", "parse", "part"],
++    ["a", "ab", "abc", "abd", "b"],
++    ["[", "]", "-", "^", "\\"],
++    ["a.b", "a+b", "a?b", "a.b"],
++    ["only"],
++])
++@pytest.mark.parametrize("max_level", [0, 1, 2, 4])
++@pytest.mark.parametrize("non_capturing_groups", [False, True])
++def test_single_pass_matches_list(words, max_level, non_capturing_groups):
++    options = dict(max_level=max_level, non_capturing_groups=non_capturing_groups)
++    expected = make_compressed_re(words, **options)
++    assert make_compressed_re((word for word in words), **options) == expected
++    assert make_compressed_re(iter(words), **options) == expected
++
++
++@pytest.mark.parametrize("max_level", [0, 1, 2])
++def test_empty_iterator_validation(max_level):
++    with pytest.raises(ValueError, match="no words given to make_compressed_re"):
++        make_compressed_re(iter(()), max_level=max_level)
++
++
++@pytest.mark.parametrize("words", [
++    [""],
++    ["abc", ""],
++    ["", "abc"],
++])
++def test_empty_string_iterator_validation(words):
++    with pytest.raises(ValueError, match="word list cannot contain empty string"):
++        make_compressed_re((word for word in words))

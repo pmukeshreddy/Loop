@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/lark/load_grammar.py\n+++ b/lark/load_grammar.py\n@@ -867,8 +867,51 @@\n \n \n \n-def resolve_term_references(term_dict):\n-    # TODO Solve with transitive closure (maybe)\n+def resolve_term_references(term_dict, validate_declares=True):\n+    # Inspect dependencies before inlining mutates the trees. In particular,\n+    # start at outermost terminals so diagnostics don't depend on definition\n+    # order.\n+    dependencies = {}\n+    dependents = {name: set() for name in term_dict}\n+    for name, tree in term_dict.items():\n+        dependencies[name] = []\n+        if tree is not None:\n+            for exp in tree.find_data('value'):\n+                item, = exp.children\n+                if isinstance(item, Terminal):\n+                    dependencies[name].append(item.name)\n+                    if item.name in dependents:\n+                        dependents[item.name].add(name)\n+\n+    # Imports are resolved before the importing grammar has been loaded.\n+    # Leave references leading to declarations intact until we can report\n+    # the outermost terminal using the final, mangled names.\n+    unresolved = {name for name, tree in term_dict.items() if tree is None}\n+    pending = list(unresolved)\n+    while pending:\n+        for name in dependents[pending.pop()]:\n+            if name not in unresolved:\n+                unresolved.add(name)\n+                pending.append(name)\n+\n+    if validate_declares:\n+        roots = [name for name in term_dict if not dependents[name]]\n+        for name in roots + list(term_dict):\n+            if term_dict[name] is None or name not in unresolved:\n+                continue\n+            seen = set()\n+            pending = [name]\n+            while pending:\n+                dependency = pending.pop()\n+                if dependency in seen or dependency not in term_dict:\n+                    continue\n+                seen.add(dependency)\n+                if term_dict[dependency] is None:\n+                    raise GrammarError(\n+                        \"Terminal %s depends on declared terminal %s, which has no pattern\"\n+                        % (name, dependency)\n+                    )\n+                pending.extend(dependencies[dependency])\n \n     while True:\n         changed = False\n@@ -884,7 +927,8 @@\n                         term_value = term_dict[item.name]\n                     except KeyError:\n                         raise GrammarError(\"Terminal used but not defined: %s\" % item.name)\n-                    assert term_value is not None\n+                    if item.name in unresolved:\n+                        continue\n                     exp.children[0] = term_value\n                     changed = True\n                 else:\n@@ -1287,7 +1331,7 @@\n             for name, d in self._definitions.items()\n             if d.is_term\n         }\n-        resolve_term_references(term_defs)\n+        resolve_term_references(term_defs, validate_declares=mangle is None)\n \n \n     def _remove_unused(self, used):\n@@ -1296,7 +1340,7 @@\n                 d = self._definitions[symbol]\n             except KeyError:\n                 return []\n-            if d.is_term:\n+            if d.tree is None:\n                 return []\n             return _find_used_symbols(d.tree) - set(d.params)\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0012626693081708594,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "new",
+    "old_func",
+    "p",
+    "patch",
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 7464,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 791973 chars; 18 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected before delivery. Its coordinated changes address dependency-chain diagnostics and deferred import validation while retaining concrete-terminal expansion and standalone declarations.",
+   "inspect_locate": "The reference execution performed 18 targeted searches without printing the whole context. The investigation connects patternless declarations, terminal dependency expansion, and import-time aliasing and namespacing\u2014evidence needed to diagnose this construction failure."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise production-only unified-diff deliverable. It specifies observable behavior without revealing the defective function or prescribing solver operations. Direct and transitive dependencies, imported names, and compatibility constraints form one coherent change. The task is substantively distinct from its parent and the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve legal declarations and concrete reference expansion while adding diagnostics that retain the outermost dependency information. Its hunks and coverage of these distinct cases need to be checked together before delivery.",
+   "inspect_locate": "The construction failure requires tracing how declarations become patternless definitions, how imported definitions acquire aliases and namespaces, and when terminal references are expanded relative to validation and compilation. The relevant evidence is scattered across the grammar loader rather than confined to the public Lark entry point."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::resolve_term_references",
+    "why": "A terminal reference can resolve to None for a declaration and currently reaches an assertion. In-place expansion also makes definition order relevant to retaining the original dependency context."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::GrammarBuilder.load_grammar",
+    "why": "Declarations are stored as definitions with no tree, and terminal-reference resolution runs after definitions are loaded, including inside imported grammar builders."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::_get_mangle",
+    "why": "Explicit aliases and implicit namespaces determine the effective terminal names required in imported diagnostics."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::GrammarBuilder.validate",
+    "why": "Patternless declarations intentionally bypass definition-tree validation, so rejecting all declarations would break supported behavior."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::Grammar.compile",
+    "why": "Standalone declarations are intentionally omitted from compiled terminal patterns while remaining available as symbols in rules."
+   },
+   {
+    "path": "lark/exceptions.py",
+    "symbol": "lark/exceptions.py::GrammarError",
+    "why": "This is the public exception type required for invalid terminal dependencies."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_declared_terminal_dependencies.py\n@@ -0,0 +1,89 @@\n+import os\n+import tempfile\n+import unittest\n+\n+from lark import GrammarError, Lark, Token\n+from lark.lexer import Lexer\n+\n+\n+class DeclaredTokenLexer(Lexer):\n+    __future_interface__ = 2\n+\n+    def __init__(self, lexer_conf):\n+        pass\n+\n+    def lex(self, lexer_state, parser_state):\n+        yield Token(\"EXTERNAL_TOKEN\", \"x\")\n+\n+\n+class TestDeclaredTerminalDependencies(unittest.TestCase):\n+    def assert_dependency_error(self, grammar, concrete, declared, **options):\n+        with self.assertRaises(GrammarError) as caught:\n+            Lark(grammar, parser=\"lalr\", **options)\n+        message = str(caught.exception)\n+        self.assertIn(concrete, message)\n+        self.assertIn(declared, message)\n+\n+    def test_local_direct_dependency(self):\n+        self.assert_dependency_error(\n+            'start: LOCAL_TOKEN\\nLOCAL_TOKEN: EXTERNAL_TOKEN \"!\"\\n%declare EXTERNAL_TOKEN\\n',\n+            \"LOCAL_TOKEN\", \"EXTERNAL_TOKEN\",\n+        )\n+\n+    def test_local_transitive_dependency_in_both_orders(self):\n+        definitions = [\n+            'ROOT_TOKEN: MIDDLE_TOKEN \"!\"',\n+            'MIDDLE_TOKEN: INNER_TOKEN',\n+            'INNER_TOKEN: EXTERNAL_TOKEN',\n+        ]\n+        for ordered in (definitions, list(reversed(definitions))):\n+            with self.subTest(definitions=ordered):\n+                grammar = \"start: ROOT_TOKEN\\n\" + \"\\n\".join(ordered) + \"\\n%declare EXTERNAL_TOKEN\\n\"\n+                self.assert_dependency_error(grammar, \"ROOT_TOKEN\", \"EXTERNAL_TOKEN\")\n+\n+    def test_imported_dependencies_use_effective_names(self):\n+        cases = [\n+            ('PUBLIC_SOURCE: PRIVATE_DECL\\n%declare PRIVATE_DECL\\n',\n+             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\\nstart: PUBLIC_ALIAS\\n',\n+             \"PUBLIC_ALIAS\", \"bundle__PRIVATE_DECL\"),\n+            ('PUBLIC_SOURCE: PRIVATE_DECL\\n%declare PRIVATE_DECL\\n',\n+             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\\n%import bundle.PRIVATE_DECL -> DECL_ALIAS\\nstart: PUBLIC_ALIAS\\n',\n+             \"PUBLIC_ALIAS\", \"DECL_ALIAS\"),\n+            ('INNER_SOURCE: PRIVATE_DECL\\nMIDDLE_SOURCE: INNER_SOURCE\\nPUBLIC_SOURCE: MIDDLE_SOURCE\\n%declare PRIVATE_DECL\\n',\n+             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\\nstart: PUBLIC_ALIAS\\n',\n+             \"PUBLIC_ALIAS\", \"bundle__PRIVATE_DECL\"),\n+        ]\n+        with tempfile.TemporaryDirectory() as directory:\n+            for source, grammar, concrete, declared in cases:\n+                with self.subTest(grammar=grammar, source=source):\n+                    with open(os.path.join(directory, \"bundle.lark\"), \"w\", encoding=\"utf8\") as stream:\n+                        stream.write(source)\n+                    self.assert_dependency_error(\n+                        grammar, concrete, declared, import_paths=[directory],\n+                    )\n+\n+    def test_standalone_declarations_still_work_with_custom_lexer(self):\n+        parser = Lark(\n+            \"start: EXTERNAL_TOKEN\\n%declare EXTERNAL_TOKEN UNUSED_TOKEN\\n\",\n+            parser=\"lalr\", lexer=DeclaredTokenLexer,\n+        )\n+        result = parser.parse(\"x\")\n+        self.assertEqual(result.data, \"start\")\n+        self.assertEqual(result.children, [Token(\"EXTERNAL_TOKEN\", \"x\")])\n+\n+    def test_concrete_reference_chain_still_parses(self):\n+        parser = Lark(\n+            'start: ROOT_TOKEN\\nROOT_TOKEN: MIDDLE_TOKEN \"!\"\\nMIDDLE_TOKEN: INNER_TOKEN\\nINNER_TOKEN: \"x\"\\n',\n+            parser=\"lalr\",\n+        )\n+        self.assertEqual(parser.parse(\"x!\").children, [Token(\"ROOT_TOKEN\", \"x!\")])\n+\n+    def test_imported_concrete_chain_still_parses(self):\n+        with tempfile.TemporaryDirectory() as directory:\n+            with open(os.path.join(directory, \"bundle.lark\"), \"w\", encoding=\"utf8\") as stream:\n+                stream.write('PUBLIC_SOURCE: INNER_SOURCE \"!\"\\nINNER_SOURCE: \"x\"\\n')\n+            parser = Lark(\n+                \"%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\\nstart: PUBLIC_ALIAS\\n\",\n+                parser=\"lalr\", import_paths=[directory],\n+            )\n+            self.assertEqual(parser.parse(\"x!\").children, [Token(\"PUBLIC_ALIAS\", \"x!\")])\n",
+  "include_failure_log": false,
+  "notes": "This task adds missing construction-time validation for a defect already present in the pinned source, so it uses new hidden acceptance tests rather than injecting an artificial regression. The negative cases currently fail with AssertionError. The reversed-order chains require preserving dependency context rather than merely replacing the assertion with an immediate-reference error. Positive cases protect custom-lexer declarations and local/imported concrete expansion. The expected production repair concerns terminal dependency resolution, not Terminal.renamed.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Constructing a Lark grammar currently raises AssertionError when a concrete terminal uses a terminal introduced by `%declare` as part of its pattern. Replace this failure with a useful GrammarError for both direct and transitive dependencies, including definitions loaded through imports.\n\nThe diagnostic must identify the concrete terminal and the declared terminal that has no pattern. For a single dependency chain with one outermost concrete terminal, identify that outermost terminal and the declared endpoint, regardless of the order of the definitions; mentioning intermediate terminals is optional. Imported diagnostics must use the effective names after aliasing and namespacing. No particular message wording is required.\n\nStandalone declared terminals used by rules must remain legal for custom lexers, and references to concrete terminal definitions must continue to compile and parse normally. Preserve existing handling of other invalid grammars.\n\nDeliver a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from inspect-and-locate to diagnosis, repair, and regression-test design. Selective tracing through declaration loading, import mangling, and terminal expansion is useful for establishing which forms are legal and ensuring that the new validation does not reject custom-lexer declarations.",
+  "change_type": "failure_condition",
+  "description": "Investigate and repair an imported-grammar construction failure in which a concrete terminal refers, directly or transitively, to a terminal introduced by `%declare`. Require a `GrammarError` identifying the concrete terminal and the unresolved declared dependency instead of an `AssertionError`. Cover local definitions, imported definitions with aliases, and a multi-hop terminal-reference chain. Relevant code is `lark/load_grammar.py::resolve_term_references`, `GrammarBuilder.load_grammar`, and `GrammarBuilder.validate`; the public exception is `lark/exceptions.py::GrammarError`. Preserve standalone declared terminals for custom lexers and successful references to concrete terminal definitions.",
+  "expected_answer_change": "The repair belongs in `resolve_term_references`, where `term_dict[item.name]` can be `None` and currently reaches `assert term_value is not None`. The implementation must distinguish a valid standalone declaration from a declaration incorrectly used to construct another terminal, and retain useful dependency information through transitive expansion. `Terminal.renamed` remains unchanged.",
+  "why_substantive": "The original problem occurs after imports resolve and parsing succeeds, and its answer is terminal-filter metadata preservation. This variation fails during grammar construction because reference expansion encounters a declaration with no pattern. It requires investigating declaration handling and terminal-reference substitution, then implementing contextual error reporting rather than changing symbol renaming."
+ },
+ "task_id": "lark-parser-lark-r02-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_imported_dependencies_use_effective_names",
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_local_direct_dependency",
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_local_transitive_dependency_in_both_orders"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/load_grammar.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_imported_dependencies_use_effective_names",
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_local_direct_dependency",
+   "tests/test_declared_terminal_dependencies.py::TestDeclaredTerminalDependencies::test_local_transitive_dependency_in_both_orders"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

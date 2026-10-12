@@ -1,0 +1,20 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -2605,6 +2605,17 @@
+         .. versionadded:: 20.3.0
+         """
+         new = copy.copy(self)
++
++        for name in ("eq", "order"):
++            if name not in changes:
++                continue
++
++            value = changes[name]
++            if callable(value):
++                changes[name] = True
++                changes.setdefault(f"{name}_key", value)
++            elif value is True or value is False:
++                changes.setdefault(f"{name}_key", None)
+ 
+         new._setattrs(changes.items())
+ 

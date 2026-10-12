@@ -1,0 +1,131 @@
+{
+ "answer": "--- a/src/mistune/plugins/task_lists.py\n+++ b/src/mistune/plugins/task_lists.py\n@@ -8,16 +8,20 @@\n __all__ = [\"task_lists\"]\n \n \n-TASK_LIST_ITEM = re.compile(r\"^(\\[[ xX]\\])\\s+\")\n+TASK_LIST_ITEM = re.compile(r\"^(\\[[ xX-]\\])\\s+\")\n \n \n def task_lists_hook(md: \"Markdown\", state: \"BlockState\") -> Iterable[Dict[str, Any]]:\n     return _rewrite_all_list_items(state.tokens)\n \n \n-def render_task_list_item(renderer: \"BaseRenderer\", text: str, checked: bool = False) -> str:\n+def render_task_list_item(\n+    renderer: \"BaseRenderer\", text: str, checked: bool = False, indeterminate: bool = False\n+) -> str:\n     checkbox = '<input class=\"task-list-item-checkbox\" type=\"checkbox\" disabled'\n-    if checked:\n+    if indeterminate:\n+        checkbox += ' aria-checked=\"mixed\" data-indeterminate=\"true\"/>'\n+    elif checked:\n         checkbox += \" checked/>\"\n     else:\n         checkbox += \"/>\"\n@@ -38,6 +42,7 @@\n \n         - [ ] unchecked task\n         - [x] checked task\n+        - [-] indeterminate task\n \n     :param md: Markdown instance\n     \"\"\"\n@@ -66,4 +71,6 @@\n             first_child[\"text\"] = text[m.end() :]\n \n             tok[\"type\"] = \"task_list_item\"\n-            tok[\"attrs\"] = {\"checked\": mark != \"[ ]\"}\n+            tok[\"attrs\"] = {\"checked\": mark in (\"[x]\", \"[X]\")}\n+            if mark == \"[-]\":\n+                tok[\"attrs\"][\"indeterminate\"] = True\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.9998358772361726,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6093 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 6,093-character, two-file context supported a focused implementation without sub-calls. The reference patch coordinates marker recognition, AST attribute construction, and HTML rendering while preserving existing marker behavior, making direct solving appropriate."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise compatibility requirements and a clear production-only unified-diff format. The requested token attributes and HTML attributes specify the feature contract rather than reveal its implementation. The verification tests cover AST output, mixed-state HTML, nested lists within block quotes, existing markers, and missing following whitespace. The task is distinct from the previously accepted inline-plugin registration repair."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The task-list module contains the entire marker recognizer, recursive rewrite, attribute construction, and HTML checkbox renderer. Together with the short hook pipeline, the focused context is small enough to understand and edit directly."
+  },
+  "context": {
+   "files": [
+    "src/mistune/plugins/task_lists.py",
+    "src/mistune/markdown.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/plugins/task_lists.py",
+    "symbol": "src/mistune/plugins/task_lists.py::_rewrite_list_item",
+    "why": "Recognizes the first child's leading marker, removes it, and constructs task attributes."
+   },
+   {
+    "path": "src/mistune/plugins/task_lists.py",
+    "symbol": "src/mistune/plugins/task_lists.py::_rewrite_all_list_items",
+    "why": "Traverses child token trees, including nested containers."
+   },
+   {
+    "path": "src/mistune/plugins/task_lists.py",
+    "symbol": "src/mistune/plugins/task_lists.py::render_task_list_item",
+    "why": "Builds the disabled input and places it correctly in tight or paragraph-bearing items."
+   },
+   {
+    "path": "src/mistune/markdown.py",
+    "symbol": "src/mistune/markdown.py::Markdown.parse",
+    "why": "Runs the task-list rewrite before inline conversion and rendering."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_indeterminate_tasks.py\n@@ -0,0 +1,46 @@\n+from unittest import TestCase\n+\n+from mistune import create_markdown\n+\n+\n+class TestIndeterminateTasks(TestCase):\n+    def test_ast_marker_and_attributes(self):\n+        md = create_markdown(renderer=\"ast\", plugins=[\"task_lists\"])\n+        token = md(\"- [-] todo\\n\")[0][\"children\"][0]\n+        self.assertEqual(token[\"type\"], \"task_list_item\")\n+        self.assertEqual(token[\"attrs\"], {\"checked\": False, \"indeterminate\": True})\n+        self.assertEqual(token[\"children\"][0][\"children\"], [{\"type\": \"text\", \"raw\": \"todo\"}])\n+\n+    def test_html_mixed_checkbox(self):\n+        md = create_markdown(plugins=[\"task_lists\"])\n+        html = md(\"- [-] todo\\n\")\n+        self.assertIn('class=\"task-list-item\"', html)\n+        self.assertIn('type=\"checkbox\"', html)\n+        self.assertIn('aria-checked=\"mixed\"', html)\n+        self.assertIn('data-indeterminate=\"true\"', html)\n+        self.assertRegex(html, r\"<input\\b[^>]*\\sdisabled(?:\\s|/|>)\")\n+        self.assertNotRegex(html, r\"<input\\b[^>]*\\schecked(?:\\s|=|/|>)\")\n+        self.assertNotIn(\"[-]\", html)\n+\n+    def test_nested_items_are_rewritten(self):\n+        md = create_markdown(renderer=\"ast\", plugins=[\"task_lists\"])\n+        tokens = md(\"> - [-] outer\\n>   - [-] inner\\n\")\n+        pending = list(tokens)\n+        tasks = []\n+        while pending:\n+            token = pending.pop()\n+            pending.extend(token.get(\"children\", []))\n+            if token[\"type\"] == \"task_list_item\":\n+                tasks.append(token[\"attrs\"])\n+        self.assertEqual(tasks, [{\"checked\": False, \"indeterminate\": True}] * 2)\n+\n+    def test_existing_markers_and_missing_space(self):\n+        md = create_markdown(renderer=\"ast\", plugins=[\"task_lists\"])\n+        for mark, checked in ((\"[ ]\", False), (\"[x]\", True), (\"[X]\", True)):\n+            token = md(\"- \" + mark + \" todo\\n\")[0][\"children\"][0]\n+            self.assertEqual(token[\"attrs\"], {\"checked\": checked})\n+        token = md(\"- [-]word\\n\")[0][\"children\"][0]\n+        self.assertEqual(token[\"type\"], \"list_item\")\n+        html = create_markdown(plugins=[\"task_lists\"])(\"- [x] done\\n\")\n+        self.assertNotIn('aria-checked=\"mixed\"', html)\n+        self.assertNotIn('data-indeterminate=\"true\"', html)\n",
+  "include_failure_log": false,
+  "notes": "The new tests exercise observable plugin output only. Attribute order in HTML is not constrained. Existing tests supply the unchanged legacy-output checks.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add an indeterminate task marker, [-], to the task_lists plugin. It must have the same leading-marker and following-whitespace requirements as the existing checkbox markers and work in nested lists and block quotes. Its AST list-item token must have type task_list_item and attrs exactly {\"checked\": false, \"indeterminate\": true}, with the marker and its following whitespace removed from the first child's text. In HTML, render the usual disabled checkbox without a checked attribute, adding aria-checked=\"mixed\" and data-indeterminate=\"true\" to that input. Keep existing [ ], [x], and [X] AST attributes and HTML output unchanged; [-] without following whitespace must stay literal. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r01-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_ast_marker_and_attributes",
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_html_mixed_checkbox",
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_nested_items_are_rewritten"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1159
+   },
+   "patch_files": [
+    "src/mistune/plugins/task_lists.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_ast_marker_and_attributes",
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_html_mixed_checkbox",
+   "tests/test_indeterminate_tasks.py::TestIndeterminateTasks::test_nested_items_are_rewritten"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

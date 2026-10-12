@@ -1,0 +1,46 @@
+--- /dev/null
++++ b/glom/test/test_floor_division.py
+@@ -0,0 +1,43 @@
++import pytest
++
++from glom import Call, Fill, Path, PathAccessError, T, glom
++
++
++@pytest.mark.parametrize('target, divisor, expected', [
++    (7, 2, 3),
++    (-7, 2, -4),
++    (7, -2, -4),
++    (7.5, 2, 3.0),
++])
++def test_numeric_floor_division(target, divisor, expected):
++    result = glom(target, T // divisor)
++    assert result == expected
++    assert type(result) is type(expected)
++
++
++def test_operand_specs_and_chaining():
++    target = {'x': 17, 'y': 3}
++    assert glom(target, T['x'] // T['y']) == 5
++    assert glom(target, (T['x'] // T['y']) + 1) == 6
++    assert glom(7, -(T // 2)) == -3
++    assert glom(7, Fill([T // 2])) == [3]
++    assert glom(7, Call(tuple, args=([T // 2],))) == (3,)
++
++
++def test_floor_division_repr():
++    assert repr(T // 2) == 'T // 2'
++    assert repr(T + (T // 2)) == 'T + (T // 2)'
++    assert repr(-(T // 2)) == '-(T // 2)'
++
++
++@pytest.mark.parametrize('value, divisor, exc_type', [
++    (1, 0, ZeroDivisionError),
++    ('x', 2, TypeError),
++])
++def test_floor_division_access_errors(value, divisor, exc_type):
++    spec = T['value'] // divisor
++    with pytest.raises(PathAccessError) as caught:
++        glom({'value': value}, spec)
++    assert isinstance(caught.value.exc, exc_type)
++    assert caught.value.part_idx == 1
++    assert caught.value.path == Path(spec)

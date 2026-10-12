@@ -1,0 +1,82 @@
+--- /dev/null
++++ b/tests/test_rewrite_setup_cleanup.py
+@@ -0,0 +1,79 @@
++import builtins
++import os
++import stat
++import sys
++
++import pytest
++
++import dotenv
++import dotenv.main as main
++
++
++@pytest.mark.parametrize("operation", ["set", "unset"])
++@pytest.mark.parametrize("error_type", [PermissionError, OSError])
++@pytest.mark.parametrize("failure_stage", ["create", "enter"])
++@pytest.mark.parametrize("path_kind", ["regular", "replace-link", "follow-link"])
++def test_temp_output_setup_closes_source(
++    tmp_path, monkeypatch, operation, error_type, failure_stage, path_kind
++):
++    if path_kind != "regular" and sys.platform == "win32":
++        pytest.skip("symlinks require elevated privileges on Windows")
++
++    target = tmp_path / "target.env"
++    original = b"a=x\nb=y\n"
++    target.write_bytes(original)
++    if sys.platform != "win32":
++        target.chmod(0o640)
++    original_mode = stat.S_IMODE(target.stat().st_mode)
++    path = target
++    link_value = None
++    if path_kind != "regular":
++        path = tmp_path / ".env"
++        path.symlink_to(target.name)
++        link_value = os.readlink(path)
++
++    handles = []
++    error = error_type("temporary output unavailable")
++
++    def tracking_open(*args, **kwargs):
++        handle = builtins.open(*args, **kwargs)
++        handles.append(handle)
++        return handle
++
++    class BrokenContext:
++        def __enter__(self):
++            raise error
++
++        def __exit__(self, *args):
++            raise AssertionError("failed entry must not invoke __exit__")
++
++    def temporary_output(*args, **kwargs):
++        if failure_stage == "create":
++            raise error
++        return BrokenContext()
++
++    monkeypatch.setattr(main, "open", tracking_open, raising=False)
++    monkeypatch.setattr(main.tempfile, "NamedTemporaryFile", temporary_output)
++
++    try:
++        with pytest.raises(error_type) as caught:
++            if operation == "set":
++                dotenv.set_key(
++                    path, "a", "new", follow_symlinks=path_kind == "follow-link"
++                )
++            else:
++                dotenv.unset_key(
++                    path, "a", follow_symlinks=path_kind == "follow-link"
++                )
++        assert caught.value is error
++        assert handles
++        assert target.read_bytes() == original
++        assert stat.S_IMODE(target.stat().st_mode) == original_mode
++        if link_value is not None:
++            assert path.is_symlink()
++            assert os.readlink(path) == link_value
++        assert not list(tmp_path.glob(".tmp_*"))
++        assert all(handle.closed for handle in handles)
++    finally:
++        for handle in handles:
++            handle.close()

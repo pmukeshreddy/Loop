@@ -1,0 +1,108 @@
+--- /dev/null
++++ b/tests/test_tlru_assignment_safety.py
+@@ -0,0 +1,105 @@
++import pytest
++
++from cachetools import Cache, TLRUCache
++
++from .test_tlru import Timer
++
++
++class DeadlineError(Exception):
++    pass
++
++
++class BadDeadline:
++    def __gt__(self, other):
++        raise DeadlineError("comparison")
++
++
++def raw_state(cache):
++    keys = tuple(Cache.__iter__(cache))
++    values = tuple((key, Cache.__getitem__(cache, key)) for key in keys)
++    return keys, values, Cache.currsize.fget(cache)
++
++
++@pytest.mark.parametrize("failure", ["callback", "comparison"])
++@pytest.mark.parametrize("key", ["target", "new"])
++@pytest.mark.parametrize("check", ["lru", "expiry"])
++def test_rejected_deadline_preserves_state(failure, key, check):
++    timer = Timer()
++    reject = False
++    error = DeadlineError("callback")
++
++    def ttu(key, value, now):
++        if reject:
++            if failure == "callback":
++                raise error
++            return BadDeadline()
++        return now + value[0]
++
++    cache = TLRUCache(6, ttu, timer=timer, getsizeof=lambda value: value[1])
++    cache["stale"] = (1, 2, "stale")
++    cache["target"] = (10, 3, "old")
++    cache["peer"] = (12, 1, "peer")
++    timer.tick()
++    before = raw_state(cache)
++    reject = True
++    with pytest.raises(DeadlineError) as exc:
++        cache[key] = (20, 4, "incoming")
++    if failure == "callback":
++        assert exc.value is error
++    assert raw_state(cache) == before
++    assert timer.time == 1
++
++    assert cache.expire() == [("stale", (1, 2, "stale"))]
++    if check == "lru":
++        assert cache.popitem() == ("target", (10, 3, "old"))
++        assert cache.expire(12) == [("peer", (12, 1, "peer"))]
++    else:
++        assert cache.expire(10) == [("target", (10, 3, "old"))]
++        assert cache.expire(12) == [("peer", (12, 1, "peer"))]
++    assert raw_state(cache) == ((), (), 0)
++
++
++def test_successful_assignment_uses_frozen_time_and_normal_eviction():
++    timer = Timer()
++    events = []
++
++    class RecordingCache(TLRUCache):
++        def expire(self, time=None):
++            events.append(("expire", time, self.timer()))
++            return super().expire(time)
++
++    def ttu(key, value, now):
++        events.append(("ttu", now, cache.timer()))
++        return now + value[0]
++
++    cache = RecordingCache(6, ttu, timer=timer, getsizeof=lambda value: value[1])
++    cache["stale"] = (1, 2, "stale")
++    cache["target"] = (10, 3, "old")
++    cache["peer"] = (12, 1, "peer")
++    events.clear()
++    timer.auto = True
++    cache["fresh"] = (20, 3, "fresh")
++    assert timer.time == 1
++    assert sum(kind == "ttu" for kind, _, _ in events) == 1
++    assert all(left == right == 1 for _, left, right in events)
++    assert Cache.currsize.fget(cache) == 4
++    assert tuple(Cache.__iter__(cache)) == ("peer", "fresh")
++    assert Cache.__getitem__(cache, "fresh") == (20, 3, "fresh")
++
++
++@pytest.mark.parametrize("key", ["target", "new"])
++def test_already_expired_assignment_keeps_existing_cleanup_behavior(key):
++    timer = Timer()
++    cache = TLRUCache(6, lambda key, value, now: now + value[0], timer=timer, getsizeof=lambda value: value[1])
++    cache["stale"] = (1, 2, "stale")
++    cache["target"] = (10, 3, "old")
++    cache["peer"] = (12, 1, "peer")
++    timer.tick()
++    cache[key] = (0, 99, "dead")
++    expected = ("peer",) if key == "target" else ("target", "peer")
++    assert tuple(Cache.__iter__(cache)) == expected
++    assert Cache.currsize.fget(cache) == (1 if key == "target" else 4)
++    assert key not in cache
++    assert cache.expire(10) == ([] if key == "target" else [("target", (10, 3, "old"))])
++    assert cache.expire(12) == [("peer", (12, 1, "peer"))]
++    assert raw_state(cache) == ((), (), 0)

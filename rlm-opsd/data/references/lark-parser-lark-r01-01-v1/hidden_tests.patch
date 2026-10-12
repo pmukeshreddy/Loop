@@ -1,0 +1,104 @@
+--- /dev/null
++++ b/tests/test_optional_custom_positions.py
+@@ -0,0 +1,101 @@
++import unittest
++from functools import partial
++from types import SimpleNamespace
++
++from lark import Token, Tree
++from lark.parse_tree_builder import PropagatePositions
++
++
++FIELDS = ('line', 'column', 'start_pos', 'end_line', 'end_column', 'end_pos')
++
++
++def coords(obj, prefix=''):
++    return tuple(getattr(obj, prefix + name) for name in FIELDS)
++
++
++def metadata(values, container=None):
++    meta = SimpleNamespace(empty=False, **dict(zip(FIELDS, values)))
++    if container is not None:
++        meta.__dict__.update(('container_' + name, value) for name, value in zip(FIELDS, container))
++    return meta
++
++
++class CustomChild:
++    def __init__(self, position):
++        self.position = position
++
++    def __lark_meta__(self):
++        return self.position
++
++
++class ExcludedChild:
++    def __lark_meta__(self):
++        raise AssertionError('Excluded metadata hook must not be invoked')
++
++
++class TestOptionalCustomPositions(unittest.TestCase):
++    def build(self, children, node_filter=None, seed=None):
++        builder = partial(Tree, 'root', meta=seed)
++        return PropagatePositions(builder, node_filter=node_filter)(children)
++
++    def test_boundary_search(self):
++        start = (2, 3, 10, 2, 5, 12)
++        end = (4, 7, 30, 4, 9, 32)
++        for custom in (False, True):
++            if custom:
++                first, last = CustomChild(metadata(start)), CustomChild(metadata(end))
++            else:
++                first = Token('X', 'ab', start_pos=10, line=2, column=3, end_line=2, end_column=5, end_pos=12)
++                last = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)
++            for left, right in ((1, 0), (0, 1), (2, 2)):
++                with self.subTest(custom=custom, left=left, right=right):
++                    children = ([CustomChild(None)] * left + [first, last]
++                                + [CustomChild(None)] * right)
++                    result = self.build(children)
++                    expected = start[:3] + end[3:]
++                    self.assertFalse(result.meta.empty)
++                    self.assertEqual(coords(result.meta), expected)
++                    self.assertEqual(coords(result.meta, 'container_'), expected)
++                    self.assertEqual(result.children, children)
++
++    def test_all_unpositioned(self):
++        for children in ([], [CustomChild(None)], [CustomChild(None), Tree('empty', []), None, object(), CustomChild(None)]):
++            with self.subTest(count=len(children)):
++                result = self.build(children)
++                self.assertTrue(result.meta.empty)
++                for name in FIELDS + tuple('container_' + name for name in FIELDS):
++                    self.assertFalse(hasattr(result.meta, name))
++
++    def test_callable_filter(self):
++        first = CustomChild(metadata((2, 3, 10, 2, 5, 12)))
++        last = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)
++        children = [ExcludedChild(), CustomChild(None), first, CustomChild(None), last, CustomChild(None), ExcludedChild()]
++        result = self.build(children, node_filter=lambda c: not isinstance(c, ExcludedChild))
++        expected = (2, 3, 10, 4, 9, 32)
++        self.assertEqual(coords(result.meta), expected)
++        self.assertEqual(coords(result.meta, 'container_'), expected)
++
++    def test_filter_excludes_positioned_children(self):
++        ignored = CustomChild(metadata((1, 1, 0, 9, 9, 99)))
++        selected = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)
++        children = [CustomChild(None), ignored, selected, ignored, CustomChild(None)]
++        result = self.build(children, node_filter=lambda c: c is not ignored)
++        self.assertEqual(coords(result.meta), coords(selected))
++        self.assertEqual(coords(result.meta, 'container_'), coords(selected))
++
++    def test_existing_regular_range_and_container_range(self):
++        regular = (3, 4, 20, 3, 6, 22)
++        container = (2, 1, 10, 4, 8, 40)
++        provider = CustomChild(metadata(regular, container))
++        seed = metadata((3, 5, 21, 3, 6, 22))
++        result = self.build([CustomChild(None), provider, CustomChild(None)], seed=seed)
++        self.assertIs(result.meta, seed)
++        self.assertEqual(coords(result.meta), (3, 5, 21, 3, 6, 22))
++        self.assertEqual(coords(result.meta, 'container_'), container)
++
++    def test_custom_container_range_on_new_tree(self):
++        regular = (3, 4, 20, 3, 6, 22)
++        container = (2, 1, 10, 4, 8, 40)
++        result = self.build([CustomChild(None), CustomChild(metadata(regular, container)), CustomChild(None)])
++        self.assertEqual(coords(result.meta), container)
++        self.assertEqual(coords(result.meta, 'container_'), container)

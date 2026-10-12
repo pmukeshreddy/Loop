@@ -1,0 +1,226 @@
+{
+ "answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -141,6 +141,10 @@\n     The predicate is passed the exception object. Based on the exception, the\n     user can decide how much time to wait before retrying.\n \n+    For successful outcomes, the optional fallback is called with the retry\n+    state to determine the wait. Without a fallback, successful outcomes raise\n+    RuntimeError. An unset outcome always raises RuntimeError.\n+\n     For example::\n \n         def http_error(exception: BaseException) -> float:\n@@ -161,8 +165,14 @@\n             response.raise_for_status()\n     \"\"\"\n \n-    def __init__(self, predicate: typing.Callable[[BaseException], float]) -> None:\n+    def __init__(\n+        self,\n+        predicate: typing.Callable[[BaseException], float],\n+        *,\n+        fallback: \"WaitBaseT | None\" = None,\n+    ) -> None:\n         self.predicate = predicate\n+        self.fallback = fallback\n \n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n@@ -171,6 +181,8 @@\n \n         exception = retry_state.outcome.exception()\n         if exception is None:\n+            if self.fallback is not None:\n+                return self.fallback(retry_state)\n             raise RuntimeError(\"outcome failed but the exception is None\")\n         return self.predicate(exception)\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 11564 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the focused 11,564-character context without sub-calls and produced a local constructor and outcome-routing change. The task requires distinguishing unset, successful, and exceptional outcomes while preserving callback identity, positional invocation, and composition behavior."
+  },
+  "notes": "This is a natural, precisely specified feature request with a clear production-only unified-diff deliverable. The requirements describe the public contract rather than disclose the implementation. Executable verification covers successful results including None, falsy fallbacks, exception routing, unset outcomes, keyword-only construction, and wait_combine integration. The variation is substantive: it introduces success-path fallback routing rather than changing wait_chain child invocation, and it does not duplicate the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused wait.py context is under 16,000 characters and contains the callable type, exception-derived policy, and combination behavior. The implementation requires a local branch analysis distinguishing an absent outcome, a successful outcome, and an exceptional outcome, while preserving callback identity and positional invocation."
+  },
+  "context": {
+   "files": [
+    "tenacity/wait.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::WaitBaseT",
+    "why": "The fallback type admits both wait strategy instances and ordinary state-taking callables with integer or floating-point wait values."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exception.__init__",
+    "why": "The constructor currently stores only the exception predicate and needs the new keyword-only option."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exception.__call__",
+    "why": "The existing absent-outcome guard and exception dispatch define the behavior that must remain intact while adding successful-outcome routing."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_combine.__call__",
+    "why": "Combination invokes children positionally and sums their returned waits, allowing the new fallback contribution to work without changing composition."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::RetryCallState.set_result",
+    "why": "A successful result, even None or an exception object returned as a value, creates a completed Future rather than leaving the outcome absent."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::RetryCallState.set_exception",
+    "why": "Exceptional outcomes retain the original exception object, supporting identity-based acceptance checks for predicate dispatch."
+   }
+  ],
+  "expected_answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -167,18 +167,26 @@\n             response.raise_for_status()\n     \"\"\"\n \n-    def __init__(self, predicate: typing.Callable[[BaseException], float]) -> None:\n+    def __init__(\n+        self,\n+        predicate: typing.Callable[[BaseException], float],\n+        *,\n+        fallback: \"WaitBaseT | None\" = None,\n+    ) -> None:\n         self.predicate = predicate\n+        self.fallback = fallback\n \n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n         if retry_state.outcome is None:\n             raise RuntimeError(\"__call__() called before outcome was set\")\n \n         exception = retry_state.outcome.exception()\n         if exception is None:\n+            if self.fallback is not None:\n+                return self.fallback(retry_state)\n             raise RuntimeError(\"outcome failed but the exception is None\")\n         return self.predicate(exception)\n \n \n class wait_incrementing(wait_base):\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_wait_exception_fallback.py\n@@ -0,0 +1,95 @@\n+import pytest\n+\n+from tenacity import RetryCallState, Retrying\n+from tenacity.wait import wait_combine, wait_exception, wait_fixed\n+\n+\n+def make_state():\n+    return RetryCallState(Retrying(), fn=None, args=(), kwargs={})\n+\n+\n+@pytest.mark.parametrize(\"result\", [None, 0, False, \"ok\", ValueError(\"result\")])\n+@pytest.mark.parametrize(\"combined\", [False, True])\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"falsy\", \"strategy\"])\n+def test_success_routes_to_fallback(result, combined, kind):\n+    state = make_state()\n+    state.set_result(result)\n+    calls = []\n+\n+    def predicate(error, /):\n+        calls.append((\"predicate\", error))\n+        return 99\n+\n+    def fallback(state, /):\n+        calls.append((\"fallback\", state))\n+        return 2.75\n+\n+    class FalsyFallback:\n+        def __bool__(self):\n+            return False\n+\n+        def __call__(self, state, /):\n+            return fallback(state)\n+\n+    selected = fallback\n+    if kind == \"falsy\":\n+        selected = FalsyFallback()\n+    elif kind == \"strategy\":\n+        selected = wait_fixed(2.75)\n+    policy = wait_exception(predicate, fallback=selected)\n+    if combined:\n+        policy = wait_combine(wait_fixed(3), policy)\n+    assert policy(state) == (5.75 if combined else 2.75)\n+    if kind == \"strategy\":\n+        assert calls == []\n+    else:\n+        assert len(calls) == 1\n+        assert calls[0][0] == \"fallback\"\n+        assert calls[0][1] is state\n+\n+\n+@pytest.mark.parametrize(\"outcome\", [\"missing\", \"success\", \"exception\"])\n+@pytest.mark.parametrize(\"configured\", [False, True])\n+@pytest.mark.parametrize(\"combined\", [False, True])\n+def test_outcome_guards_and_exception_routing(outcome, configured, combined):\n+    state = make_state()\n+    error = ValueError(\"failure\")\n+    if outcome == \"success\":\n+        state.set_result(None)\n+    elif outcome == \"exception\":\n+        state.set_exception((type(error), error, None))\n+    calls = []\n+\n+    def predicate(received, /):\n+        calls.append((\"predicate\", received))\n+        return 7\n+\n+    def fallback(received, /):\n+        calls.append((\"fallback\", received))\n+        return 2\n+\n+    policy = wait_exception(predicate, fallback=fallback if configured else None)\n+    if combined:\n+        policy = wait_combine(policy, wait_fixed(3))\n+    if outcome == \"missing\" or (outcome == \"success\" and not configured):\n+        with pytest.raises(RuntimeError):\n+            policy(state)\n+        assert calls == []\n+    else:\n+        expected = 7 if outcome == \"exception\" else 2\n+        assert policy(state) == expected + (3 if combined else 0)\n+        assert len(calls) == 1\n+        assert calls[0][0] == (\"predicate\" if outcome == \"exception\" else \"fallback\")\n+        assert calls[0][1] is (error if outcome == \"exception\" else state)\n+\n+\n+def test_fallback_is_keyword_only():\n+    with pytest.raises(TypeError):\n+        wait_exception(lambda error: 1, wait_fixed(2))\n+\n+\n+def test_default_still_rejects_success():\n+    state = make_state()\n+    state.set_result(None)\n+    with pytest.raises(RuntimeError):\n+        wait_exception(lambda error: 1)(state)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work on the unmodified snapshot, so no setup or probe patch is needed. The new acceptance file covers positional-only callbacks, falsy callable objects, wait_base fallbacks, successful results of multiple kinds, absent outcomes, original object identity, exact callback counts, keyword-only construction, and direct versus combined waits. The expected production patch changes wait_exception only and differs from the original wait_chain capability.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add an optional success-path wait policy to `wait_exception`. Its constructor should accept keyword-only `fallback: WaitBaseT | None = None`. When the state has a completed successful outcome, including a result of `None`, call the configured fallback exactly once, positionally, with the original `RetryCallState`, and return its wait value. A callable whose boolean value is false must also work as the fallback. Without a fallback, retain the existing RuntimeError behavior for successful outcomes. For exceptional outcomes, call only the exception predicate, exactly once, with the original exception object. If no outcome has been set, continue to raise RuntimeError without invoking either callback, even when a fallback is configured. Support both direct calls and use as a child of `wait_combine`, preserving the child's contribution to the combined wait. Return a unified diff against production files only; leave `wait_chain` and all tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Remains suitable for direct_solve, with a modest expansion from invocation compatibility to outcome-state reasoning across wait.py and RetryCallState. The useful investigation is a branch matrix covering absent outcomes, successful results including None, exceptions, and falsy fallback objects.",
+  "change_type": "constraint",
+  "description": "Extend tenacity/wait.py::wait_exception with a keyword-only fallback: WaitBaseT | None = None constructor option. On a completed successful outcome, invoke the configured fallback positionally with the original RetryCallState and return its wait value; without a fallback, preserve the existing RuntimeError. On an exceptional outcome, invoke only the exception predicate with the original exception. Calling before an outcome exists must still raise, even when a fallback is configured. A falsy callable fallback must remain usable. Require this policy to work directly and as a child of wait_combine, without changing wait_chain or tests; deliver a production-only unified diff.",
+  "expected_answer_change": "The patch changes wait_exception.__init__ and wait_exception.__call__, using an explicit None check for fallback presence. Evidence comes from WaitBaseT, wait_exception's existing outcome checks, and tenacity/__init__.py::RetryCallState.set_result and set_exception. Acceptance must establish that only the appropriate predicate or fallback executes and that wait_combine preserves the fallback's returned contribution.",
+  "why_substantive": "This adds outcome-dependent routing to an exception-derived wait policy. Unlike the accepted task, it requires distinguishing missing, successful, and exceptional outcomes, maintaining the predicate's exception-only contract, and introducing an optional state-based dependency. It does not reuse the wait_chain fix."
+ },
+ "task_id": "jd-tenacity-r02-04-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-success]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-result4]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 42,
+   "full_suite": {
+    "failed": 0,
+    "passed": 228
+   },
+   "patch_files": [
+    "tenacity/wait.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-False-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[False-True-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-False-success]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-exception]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-missing]",
+   "tests/test_wait_exception_fallback.py::test_outcome_guards_and_exception_routing[True-True-success]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[falsy-True-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[function-True-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-False-result4]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-0]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-False]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-None]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-ok]",
+   "tests/test_wait_exception_fallback.py::test_success_routes_to_fallback[strategy-True-result4]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

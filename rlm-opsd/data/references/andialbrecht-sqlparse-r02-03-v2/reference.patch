@@ -1,0 +1,81 @@
+--- a/sqlparse/engine/grouping.py
++++ b/sqlparse/engine/grouping.py
+@@ -346,21 +346,39 @@
+         tidx, token = tlist.token_next_by(t=T.Comment, idx=tidx)
+ 
+ 
++def _group_clause(tlist, cls):
++    """Group a clause without crossing its container's boundaries."""
++    tidx, token = tlist.token_next_by(m=cls.M_OPEN)
++    while token:
++        # Parenthesis (and other delimited groups) exclude their delimiters
++        # from the groupable range. Statements keep their trailing semicolon.
++        end_idx = tlist.token_index(tlist._groupable_tokens[-1]) + 1
++        for eidx in range(tidx + 1, end_idx):
++            next_ = tlist.tokens[eidx]
++            if next_.match(*cls.M_CLOSE):
++                end_idx = eidx
++                break
++            if isinstance(tlist, (sql.Begin, sql.Parenthesis)):
++                # Only direct punctuation tokens terminate a clause: strings
++                # and nested groups may contain semicolons of their own.
++                if next_.match(T.Punctuation, ';'):
++                    end_idx = eidx
++                    break
++            if isinstance(tlist, sql.Begin) and next_.match(*sql.Begin.M_CLOSE):
++                end_idx = eidx
++                break
++        tlist.group_tokens(cls, tidx, end_idx, include_end=False)
++        tidx, token = tlist.token_next_by(m=cls.M_OPEN, idx=tidx)
++
++
+ @recurse(sql.Where)
+ def group_where(tlist):
+-    tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN)
+-    while token:
+-        eidx, end = tlist.token_next_by(m=sql.Where.M_CLOSE, idx=tidx)
+-
+-        if end is None:
+-            end = tlist._groupable_tokens[-1]
+-        else:
+-            end = tlist.tokens[eidx - 1]
+-        # TODO: convert this to eidx instead of end token.
+-        # i think above values are len(tlist) and eidx-1
+-        eidx = tlist.token_index(end)
+-        tlist.group_tokens(sql.Where, tidx, eidx)
+-        tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)
++    _group_clause(tlist, sql.Where)
++
++
++@recurse(sql.Qualify)
++def group_qualify(tlist):
++    _group_clause(tlist, sql.Qualify)
+ 
+ 
+ @recurse()
+@@ -454,6 +472,7 @@
+         group_over,
+         group_functions,
+         group_where,
++        group_qualify,
+         group_period,
+         group_arrays,
+         group_identifier,
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -559,7 +559,14 @@
+     M_OPEN = T.Keyword, 'WHERE'
+     M_CLOSE = T.Keyword, (
+         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',
+-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')
++        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')
++
++
++class Qualify(TokenList):
++    """A QUALIFY clause."""
++    M_OPEN = T.Keyword, 'QUALIFY'
++    M_CLOSE = T.Keyword, (
++        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')
+ 
+ 
+ class Over(TokenList):

@@ -1,0 +1,135 @@
+--- /dev/null
++++ b/jsonschema/tests/test_schema_format_checker.py
+@@ -0,0 +1,132 @@
++from unittest import TestCase
++
++from jsonschema import FormatChecker, SchemaError, ValidationError
++from jsonschema import validators
++
++
++DRAFTS = (
++    validators.Draft3Validator,
++    validators.Draft4Validator,
++    validators.Draft6Validator,
++    validators.Draft7Validator,
++    validators.Draft201909Validator,
++    validators.Draft202012Validator,
++)
++
++
++class TestSchemaFormatChecker(TestCase):
++    def test_independent_phase_matrix(self):
++        instance_checker = FormatChecker(formats=())
++        instance_checker.checks("instance-only")(lambda value: value == 13)
++        modes = {
++            "default": {},
++            "off": {"schema_format_checker": None},
++            "regex": {"schema_format_checker": FormatChecker(["regex"])},
++            "empty": {"schema_format_checker": FormatChecker(formats=())},
++        }
++        for cls in DRAFTS:
++            for pattern in ("[", "^ok$"):
++                for mode, options in modes.items():
++                    for check_instance in (False, True):
++                        with self.subTest(
++                            cls=cls, pattern=pattern, mode=mode,
++                            check_instance=check_instance,
++                        ):
++                            schema = {"pattern": pattern, "format": "instance-only"}
++                            kwargs = dict(options)
++                            kwargs["format_checker"] = (
++                                instance_checker if check_instance else None
++                            )
++                            expected = (
++                                SchemaError
++                                if pattern == "[" and mode in {"default", "regex"}
++                                else ValidationError if check_instance else None
++                            )
++                            if expected is None:
++                                self.assertIsNone(validators.validate(
++                                    12, schema, cls=cls, **kwargs,
++                                ))
++                            else:
++                                with self.assertRaises(expected) as caught:
++                                    validators.validate(12, schema, cls=cls, **kwargs)
++                                self.assertEqual(caught.exception.validator, "format")
++
++    def test_disabling_formats_does_not_skip_other_schema_checks(self):
++        for checker in (None, FormatChecker(formats=())):
++            for schema in ({"type": 12}, {"pattern": 42}):
++                with self.subTest(checker=checker, schema=schema):
++                    with self.assertRaises(SchemaError):
++                        validators.validate(
++                            12, schema, schema_format_checker=checker,
++                        )
++
++    def test_supplied_checker_controls_schema_only(self):
++        calls = []
++        checker = FormatChecker(formats=())
++
++        @checker.checks("regex")
++        def accept_regex(value):
++            calls.append(value)
++            return True
++
++        checker.checks("instance-only")(lambda value: False)
++        schema = {"pattern": "[", "format": "instance-only"}
++        self.assertIsNone(validators.validate(
++            12, schema, schema_format_checker=checker,
++        ))
++        self.assertEqual(calls, ["["])
++
++        checker.checks("regex")(lambda value: False)
++        with self.assertRaises(SchemaError) as caught:
++            validators.validate(
++                12, {"pattern": "^ok$"}, schema_format_checker=checker,
++            )
++        self.assertEqual(caught.exception.instance, "^ok$")
++
++    def test_omission_preserves_legacy_class_and_constructor_arguments(self):
++        calls = []
++        checker = FormatChecker(formats=())
++
++        class Legacy:
++            @classmethod
++            def check_schema(cls, schema):
++                calls.append(("schema", schema))
++
++            def __init__(self, schema, *args, **kwargs):
++                calls.append(("init", schema, args, kwargs))
++
++            def iter_errors(self, instance):
++                return iter(())
++
++        self.assertIsNone(validators.validate(
++            12, {}, Legacy, "positional", format_checker=checker, token=7,
++        ))
++        self.assertEqual(calls, [
++            ("schema", {}),
++            ("init", {}, ("positional",), {"format_checker": checker, "token": 7}),
++        ])
++
++    def test_explicit_values_reach_custom_check_schema_not_constructor(self):
++        for checker in (None, FormatChecker(formats=())):
++            calls = []
++
++            class Custom:
++                @classmethod
++                def check_schema(cls, schema, *, format_checker):
++                    calls.append(format_checker)
++
++                def __init__(self, schema, token, *, format_checker=None):
++                    calls.append((token, format_checker))
++
++                def iter_errors(self, instance):
++                    return iter(())
++
++            instance_checker = FormatChecker(formats=())
++            with self.subTest(checker=checker):
++                self.assertIsNone(validators.validate(
++                    12, {}, Custom, "token",
++                    schema_format_checker=checker,
++                    format_checker=instance_checker,
++                ))
++                self.assertIs(calls[0], checker)
++                self.assertEqual(calls[1], ("token", instance_checker))

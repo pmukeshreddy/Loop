@@ -1,0 +1,242 @@
+{
+  "task_id": "python-hyper-h11-r03-00",
+  "family": "recursive_decomposition",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 323711,
+    "context_lengths": [
+      262,
+      2410,
+      5305,
+      1144,
+      191,
+      7184,
+      540,
+      2778,
+      2249,
+      88,
+      1287,
+      44843,
+      12665,
+      10592,
+      10713,
+      663,
+      2907,
+      6436,
+      4157,
+      1867,
+      14774,
+      59,
+      2335,
+      1264,
+      1531,
+      4836,
+      26890,
+      11815,
+      10436,
+      8614,
+      5282,
+      13253,
+      4909,
+      710,
+      5105,
+      3384,
+      4012,
+      38186,
+      4578,
+      5769,
+      686,
+      17275,
+      3494,
+      8960,
+      3001,
+      1098,
+      1156,
+      1294,
+      48,
+      676
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nfor i in [0,25,49]:\n print(i,context[i][:350])\nindex={s.splitlines()[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint('\\n'.join(index.keys()))\nprint([s[:150] for s in context if s.startswith('# Log:')])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nfor i in [0,25,49]:\n print(i,context[i][:350])\nindex={s.splitlines()[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint('\\n'.join(index.keys()))\nprint([s[:150] for s in context if s.startswith('# Log:')])"
+      ],
+      "stdout_raw_chars": 2039,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 50\n0 # File: .readthedocs.yaml\nversion: 2\n\nbuild:\n  os: ubuntu-22.04\n  apt_packages:\n    - graphviz\n  tools:\n    python: \"3.8\"\n\nsphinx:\n  configuration: docs/source/conf.py\n\npython:\n  install:\n    - method: pip\n      path: .\n    - requirements: docs/requirements.txt\n\n25 # File: h11/_abnf.py\n# We use native strings for all the re patterns, to take advantage of string\n# formatting, and then convert to bytestrings when compiling the final re\n# objects.\n\n# https://svn.tools.ietf.org/svn/wg/httpbis/specs/rfc7230.html#whitespace\n#  OWS            = *( SP / HTAB )\n#                 ; optional whitespace\nOWS = r\"[ \\t]*\"\n\n\n49 # File: tox.ini\n[tox]\nenvlist = format, py{38, 39, 310, 311, 312, py3}, mypy\n\n[gh-actions]\npython =\n    3.8: py38, format, mypy\n    3.9: py39\n    3.10: py310\n    3.11: py311\n    3.12: py312\n    3.13: py313\n    pypy-3.9: pypy3\n    pypy-3.10: pypy3\n\n[testenv]\ndeps = -r{toxinidir}/test-requirements.txt\ncommands = pytest --cov=h11 --cov-config=.coverag\n.readthedocs.yaml\nCODE_OF_CONDUCT.md\nCONTRIBUTING.md\nLICENSE.txt\nMANIFEST.in\nREADME.rst\nbench/README.rst\nbench/asv.conf.json\nbench/benchmarks/benchmarks.py\ndocs/requirements.txt\ndocs/source/_examples/myclient.py\ndocs/source/api.rst\ndocs/source/basic-usage.rst\ndocs/source/changes.rst\ndocs/source/conf.py\ndocs/source/examples.rst\ndocs/source/index.rst\ndocs/source/make-state-diagrams.py\ndocs/source/supported-http.rst\nexamples/basic-client.py\nexamples/trio-server.py\nformat-requirements.txt\nfuzz/README.rst\nfuzz/afl-server.py\nh11/__init__.py\nh11/_abnf.py\nh11/_connection.py\nh11/_events.py\nh11/_headers.py\nh11/_readers.py\nh11/_receivebuffer.py\nh11/_state.py\nh11/_util.py\nh11/_version.py\nh11/_writers.py\nh11/tests/helpers.py\nh11/tests/test_against_stdlib_http.py\nh11/tests/test_connection.py\nh11/tests/test_events.py\nh11/tests/test_headers.py\nh11/tests/test_helpers.py\nh11/tests/test_io.py\nh11/tests/test_receivebuffer.py\nh11/tests/test_state.py\nh11/tests/test_util.py\nnewsfragments/README.rst\npyproject.toml\nsetup.py\ntest-requirements.txt\ntox.ini\n[]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re,ast\nc=index['h11/_connection.py']\nfor m in re.finditer(r'def .*',c):\n if 'clean' in m.group() or 'send' in m.group(): print(m.start(),m.group())\npos=c.index('def _clean')\nprint(c[pos:pos+3900])\ntests={p:t for p,t in index.items() if '/tests/test_' in p}\nfor p,t in tests.items():\n print(p,len(t),len(re.findall(r'\\bConnection\\(',t)))\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re,ast\nc=index['h11/_connection.py']\nfor m in re.finditer(r'def .*',c):\n if 'clean' in m.group() or 'send' in m.group(): print(m.start(),m.group())\npos=c.index('def _clean')\nprint(c[pos:pos+3900])\ntests={p:t for p,t in index.items() if '/tests/test_' in p}\nfor p,t in tests.items():\n print(p,len(t),len(re.findall(r'\\bConnection\\(',t)))"
+      ],
+      "stdout_raw_chars": 3866,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "19686 def send(self, event: ConnectionClosed) -> None:\n19766 def send(\n19912 def send(self, event: Event) -> Optional[bytes]:\n19978 def send(self, event: Event) -> Optional[bytes]:\n20904 def send_with_data_passthrough(self, event: Event) -> Optional[List[bytes]]:\n22531 def send_failed(self) -> None:\n23696 def _clean_up_response_headers_for_sending(self, response: Response) -> Response:\ndef _clean_up_response_headers_for_sending(self, response: Response) -> Response:\n        assert type(response) is Response\n\n        headers = response.headers\n        need_close = False\n\n        # HEAD requests need some special handling: they always act like they\n        # have Content-Length: 0, and that's how _body_framing treats\n        # them. But their headers are supposed to match what we would send if\n        # the request was a GET. (Technically there is one deviation allowed:\n        # we're allowed to leave out the framing headers -- see\n        # https://tools.ietf.org/html/rfc7231#section-4.3.2 . But it's just as\n        # easy to get them right.)\n        method_for_choosing_headers = cast(bytes, self._request_method)\n        if method_for_choosing_headers == b\"HEAD\":\n            method_for_choosing_headers = b\"GET\"\n        framing_type, _ = _body_framing(method_for_choosing_headers, response)\n        if framing_type in (\"chunked\", \"http/1.0\"):\n            # This response has a body of unknown length.\n            # If our peer is HTTP/1.1, we use Transfer-Encoding: chunked\n            # If our peer is HTTP/1.0, we use no framing headers, and close the\n            # connection afterwards.\n            #\n            # Make sure to clear Content-Length (in principle user could have\n            # set both and then we ignored Content-Length b/c\n            # Transfer-Encoding overwrote it -- this would be naughty of them,\n            # but the HTTP spec says that if our peer does this then we have\n            # to fix it instead of erroring out, so we'll accord the user the\n            # same respect).\n            headers = set_comma_header(headers, b\"content-length\", [])\n            if self.their_http_version is None or self.their_http_version < b\"1.1\":\n                # Either we never got a valid request and are sending back an\n                # error (their_http_version is None), so we assume the worst;\n                # or else we did get a valid HTTP/1.0 request, so we know that\n                # they don't understand chunked encoding.\n                headers = set_comma_header(headers, b\"transfer-encoding\", [])\n                # This is actually redundant ATM, since currently we\n                # unconditionally disable keep-alive when talking to HTTP/1.0\n                # peers. But let's be defensive just in case we add\n                # Connection: keep-alive support later:\n                if self._request_method != b\"HEAD\":\n                    need_close = True\n            else:\n                headers = set_comma_header(headers, b\"transfer-encoding\", [b\"chunked\"])\n\n        if not self._cstate.keep_alive or need_close:\n            # Make sure Connection: close is set\n            connection = set(get_comma_header(headers, b\"connection\"))\n            connection.discard(b\"keep-alive\")\n            connection.add(b\"close\")\n            headers = set_comma_header(headers, b\"connection\", sorted(connection))\n\n        return Response(\n            headers=headers,\n            status_code=response.status_code,\n            http_version=response.http_version,\n            reason=response.reason,\n        )\n\nh11/tests/test_against_stdlib_http.py 3966 2\nh11/tests/test_connection.py 38149 25\nh11/tests/test_events.py 4545 0\nh11/tests/test_headers.py 5735 0\nh11/tests/test_helpers.py 652 0\nh11/tests/test_io.py 17246 0\nh11/tests/test_receivebuffer.py 3454 0\nh11/tests/test_state.py 8928 0\nh11/tests/test_util.py 2970 0\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nt=tests['h11/tests/test_connection.py']\ntree=ast.parse(t)\nfuncs=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.ClassDef))]\nlines=t.splitlines(keepends=True)\nparts=[(''.join(lines[n.lineno-1:n.end_lineno]),n.name) for n in funcs]\nprint([(name,len(text)) for text,name in parts])\nprint(index['h11/tests/test_against_stdlib_http.py'][:3900])\n``` raw?\n\n```repl\nt=tests['h11/tests/test_connection.py']\ntree=ast.parse(t)\nfuncs=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.ClassDef))]\nlines=t.splitlines(keepends=True)\nparts=[(''.join(lines[n.lineno-1:n.end_lineno]),n.name) for n in funcs]\nprint([(name,len(text)) for text,name in parts])\nprint(index['h11/tests/test_against_stdlib_http.py'][:3900])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "t=tests['h11/tests/test_connection.py']\ntree=ast.parse(t)\nfuncs=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.ClassDef))]\nlines=t.splitlines(keepends=True)\nparts=[(''.join(lines[n.lineno-1:n.end_lineno]),n.name) for n in funcs]\nprint([(name,len(text)) for text,name in parts])\nprint(index['h11/tests/test_against_stdlib_http.py'][:3900])"
+      ],
+      "stdout_raw_chars": 4962,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "[('test__keep_alive', 976), ('test__body_framing', 1730), ('test_Connection_basics_and_content_length', 2287), ('test_chunked', 1060), ('test_chunk_boundaries', 1221), ('test_client_talking_to_http10_server', 696), ('test_server_talking_to_http10_client', 1234), ('test_automatic_transfer_encoding_in_response', 1633), ('test_automagic_connection_close_handling', 967), ('test_100_continue', 1482), ('test_max_incomplete_event_size_countermeasure', 2729), ('test_reuse_simple', 792), ('test_pipelining', 2203), ('test_protocol_switch', 4771), ('test_close_simple', 1741), ('test_close_different_states', 1935), ('test_pipelined_close', 1284), ('test_sendfile', 1240), ('test_errors', 2729), ('test_idle_receive_nothing', 199), ('test_connection_drop', 223), ('test_408_request_timeout', 250), ('test_empty_request', 157), ('test_empty_response', 229), ('test_early_detection_of_invalid_request', 252), ('test_early_detection_of_invalid_response', 253), ('test_HEAD_framing_headers', 1407), ('test_special_exceptions_for_lost_connection_in_message_body', 1081)]\nimport json\nimport os.path\nimport socket\nimport socketserver\nimport threading\nfrom contextlib import closing, contextmanager\nfrom http.server import SimpleHTTPRequestHandler\nfrom typing import Callable, Generator\nfrom urllib.request import urlopen\n\nimport h11\n\n\n@contextmanager\ndef socket_server(\n    handler: Callable[..., socketserver.BaseRequestHandler],\n) -> Generator[socketserver.TCPServer, None, None]:\n    httpd = socketserver.TCPServer((\"127.0.0.1\", 0), handler)\n    thread = threading.Thread(\n        target=httpd.serve_forever, kwargs={\"poll_interval\": 0.01}\n    )\n    thread.daemon = True\n    try:\n        thread.start()\n        yield httpd\n    finally:\n        httpd.shutdown()\n\n\ntest_file_path = os.path.join(os.path.dirname(__file__), \"data/test-file\")\nwith open(test_file_path, \"rb\") as f:\n    test_file_data = f.read()\n\n\nclass SingleMindedRequestHandler(SimpleHTTPRequestHandler):\n    def translate_path(self, path: str) -> str:\n        return test_file_path\n\n\ndef test_h11_as_client() -> None:\n    with socket_server(SingleMindedRequestHandler) as httpd:\n        with closing(socket.create_connection(httpd.server_address)) as s:  # type: ignore[arg-type]\n            c = h11.Connection(h11.CLIENT)\n\n            s.sendall(\n                c.send(\n                    h11.Request(\n                        method=\"GET\", target=\"/foo\", headers=[(\"Host\", \"localhost\")]\n                    )\n                )\n            )\n            s.sendall(c.send(h11.EndOfMessage()))\n\n            data = bytearray()\n            while True:\n                event = c.next_event()\n                print(event)\n                if event is h11.NEED_DATA:\n                    # Use a small read buffer to make things more challenging\n                    # and exercise more paths :-)\n                    c.receive_data(s.recv(10))\n                    continue\n                if type(event) is h11.Response:\n                    assert event.status_code == 200\n                if type(event) is h11.Data:\n                    data += event.data\n                if type(event) is h11.EndOfMessage:\n                    break\n            assert bytes(data) == test_file_data\n\n\nclass H11RequestHandler(socketserver.BaseRequestHandler):\n    def handle(self) -> None:\n        with closing(self.request) as s:\n            c = h11.Connection(h11.SERVER)\n            request = None\n            while True:\n                event = c.next_event()\n                if event is h11.NEED_DATA:\n                    # Use a small read buffer to make things more challenging\n                    # and exercise more paths :-)\n                    c.receive_data(s.recv(10))\n                    continue\n                if type(event) is h11.Request:\n                    request = event\n                if type(event) is h11.EndOfMessage:\n                    break\n            assert request is not None\n            info = json.dumps(\n                {\n                    \"method\": request.method.decode(\"ascii\"),\n                    \"target\": request.target.decode(\"ascii\"),\n                    \"headers\": {\n                        name.decode(\"ascii\"): value.decode(\"ascii\")\n                        for (name, value) in request.headers\n                    },\n                }\n            )\n            s.sendall(c.send(h11.Response(status_code=200, headers=[])))\n            s.sendall(c.send(h11.Data(data=info.encode(\"ascii\"))))\n            s.sendall(c.send(h11.EndOfMessage()))\n\n\ndef test_h11_as_server() -> None:\n    with socket_server(H11RequestHandler) as httpd:\n        host, port = httpd.server_address\n        url = f\"http://{host}:{port}/some-path\"  # type: ignore[str-bytes-safe]\n        with closing(urlopen(url)) as f:\n            assert f.getcode() == 200\n            data = f.read()\n    info = json.loads(data.decode(\"ascii\"))\n    print(info)\n    assert info[\"method\"] == \"GET\"\n    assert info[\"target\"] == \n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprompt=\"\"\"Analyze existing tests under this exact hypothetical h11 change: _clean_up_response_headers_for_sending still deletes Content-Length when response framing is chunked/http1.0, and still deletes Transfer-Encoding for unknown or HTTP/1.0 peer. For HTTP/1.1 peer it leaves Transfer-Encoding supplied unchanged (does NOT add chunked). It never adds/rewrites Connection headers. Everything else unchanged: _body_framing selects http/1.0 for no CL or TE response, chunked only for supplied TE; writers and state unchanged. Identify failing test functions and precise reason, also flag uncertain ones. Do not assume automatic chunking still happens absent TE. Tests using helper send invoke both sending and paired receiving. Return JSON object with failing list of objects {name,reason}, uncertain list. Test source:\\n\"\"\"\nbatches=[]; batch=''\nfor text,name in parts:\n if len(batch)+len(text)>14500:\n  batches.append(batch);batch=''\n batch+=text+'\\n\\n'\nbatches.append(batch)\nresults=[llm_query(prompt+b) for b in batches]\nfor r in results: print(r)\nprint(index['h11/tests/helpers.py'][:3900])\n```  tail?\n\n```repl\nprompt=\"\"\"Analyze existing tests under this exact hypothetical h11 change: _clean_up_response_headers_for_sending still deletes Content-Length when response framing is chunked/http1.0, and still deletes Transfer-Encoding for unknown or HTTP/1.0 peer. For HTTP/1.1 peer it leaves Transfer-Encoding supplied unchanged (does NOT add chunked). It never adds/rewrites Connection headers. Everything else unchanged: _body_framing selects http/1.0 for no CL or TE response, chunked only for supplied TE; writers and state unchanged. Identify failing test functions and precise reason, also flag uncertain ones. Do not assume automatic chunking still happens absent TE. Tests using helper send invoke both sending and paired receiving. Return JSON object with failing list of objects {name,reason}, uncertain list. Test source:\\n\"\"\"\nbatches=[]; batch=''\nfor text,name in parts:\n if len(batch)+len(text)>14500:\n  batches.append(batch);batch=''\n batch+=text+'\\n\\n'\nbatches.append(batch)\nresults=[llm_query(prompt+b) for b in batches]\nfor r in results: print(r)\nprint(index['h11/tests/helpers.py'][:3900])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "prompt=\"\"\"Analyze existing tests under this exact hypothetical h11 change: _clean_up_response_headers_for_sending still deletes Content-Length when response framing is chunked/http1.0, and still deletes Transfer-Encoding for unknown or HTTP/1.0 peer. For HTTP/1.1 peer it leaves Transfer-Encoding supplied unchanged (does NOT add chunked). It never adds/rewrites Connection headers. Everything else unchanged: _body_framing selects http/1.0 for no CL or TE response, chunked only for supplied TE; writers and state unchanged. Identify failing test functions and precise reason, also flag uncertain ones. Do not assume automatic chunking still happens absent TE. Tests using helper send invoke both sending and paired receiving. Return JSON object with failing list of objects {name,reason}, uncertain list. Test source:\\n\"\"\"\nbatches=[]; batch=''\nfor text,name in parts:\n if len(batch)+len(text)>14500:\n  batches.append(batch);batch=''\n batch+=text+'\\n\\n'\nbatches.append(batch)\nresults=[llm_query(prompt+b) for b in batches]\nfor r in results: print(r)\nprint(index['h11/tests/helpers.py'][:3900])"
+      ],
+      "stdout_raw_chars": 6082,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\n  \"failing\": [\n    {\n      \"name\": \"test_server_talking_to_http10_client\",\n      \"reason\": \"The response-wire assertion expects b\\\"HTTP/1.1 200 \\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\\\", but cleanup no longer adds Connection: close, so sending the headerless response produces b\\\"HTTP/1.1 200 \\\\r\\\\n\\\\r\\\\n\\\". The body still uses http/1.0 framing; the previously received HTTP/1.0 request still requires connection closure.\"\n    },\n    {\n      \"name\": \"test_automatic_transfer_encoding_in_response\",\n      \"reason\": \"The first loop iteration fails at the HTTP/1.0 response-wire assertion: supplied Transfer-Encoding is removed, but Connection: close is not added, yielding b\\\"HTTP/1.1 200 \\\\r\\\\n\\\\r\\\\n\\\" instead of the expected bytes containing Connection: close. Independently, the user_headers=[] HTTP/1.1 case would fail the paired receiving expectation: no Transfer-Encoding is added, so the received Response has no headers rather than Transfer-Encoding: chunked, and its body framing is http/1.0, not chunked. The supplied-TE HTTP/1.1 cases still retain chunked framing, with Content-Length removed when both headers are supplied.\"\n    },\n    {\n      \"name\": \"test_automagic_connection_close_handling\",\n      \"reason\": \"The helper sends and receives the server's 204 response and EndOfMessage, but the received Response has no headers rather than the expected Connection: close header. Cleanup no longer echoes the request's Connection: close. The 204 response still has a zero-length body, and the request's explicit close still drives the unchanged connection state machinery.\"\n    }\n  ],\n  \"uncertain\": []\n}\n{\n  \"failing\": [],\n  \"uncertain\": []\n}\n{\n  \"failing\": [\n    {\n      \"name\": \"test_errors\",\n      \"reason\": \"In the SERVER receive-error branch, sending the headerless 400 response produces b\\\"HTTP/1.1 400 \\\\r\\\\n\\\\r\\\\n\\\", not the asserted b\\\"HTTP/1.1 400 \\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\\\". The peer version is unknown, and cleanup no longer inserts Connection: close.\"\n    },\n    {\n      \"name\": \"test_HEAD_framing_headers\",\n      \"reason\": \"The first assertion fails for GET with an HTTP/1.1 peer: the headerless 200 response produces b\\\"HTTP/1.1 200 \\\\r\\\\n\\\\r\\\\n\\\", without the expected Transfer-Encoding: chunked. With no supplied Content-Length or Transfer-Encoding, GET response framing is http/1.0, not chunked. The corresponding HEAD assertion would also lack the expected Transfer-Encoding header. The HTTP/1.0-peer assertions would independently fail because Connection: close is no longer inserted. The explicitly supplied Content-Length plus Transfer-Encoding: chunked cases remain valid: cleanup removes Content-Length and preserves the supplied Transfer-Encoding.\"\n    }\n  ],\n  \"uncertain\": []\n}\nfrom typing import cast, List, Type, Union, ValuesView\n\nfrom .._connection import Connection, NEED_DATA, PAUSED\nfrom .._events import (\n    ConnectionClosed,\n    Data,\n    EndOfMessage,\n    Event,\n    InformationalResponse,\n    Request,\n    Response,\n)\nfrom .._state import CLIENT, CLOSED, DONE, MUST_CLOSE, SERVER\nfrom .._util import Sentinel\n\ntry:\n    from typing import Literal\nexcept ImportError:\n    from typing_extensions import Literal  # type: ignore\n\n\ndef get_all_events(conn: Connection) -> List[Event]:\n    got_events = []\n    while True:\n        event = conn.next_event()\n        if event in (NEED_DATA, PAUSED):\n            break\n        event = cast(Event, event)\n        got_events.append(event)\n        if type(event) is ConnectionClosed:\n            break\n    return got_events\n\n\ndef receive_and_get(conn: Connection, data: bytes) -> List[Event]:\n    conn.receive_data(data)\n    return get_all_events(conn)\n\n\n# Merges adjacent Data events, converts payloads to bytestrings, and removes\n# chunk boundaries.\ndef normalize_data_events(in_events: List[Event]) -> List[Event]:\n    out_events: List[Event] = []\n    for event in in_events:\n        if type(event) is Data:\n            event = Data(data=bytes(event.data), chunk_start=False, chunk_end=False)\n        if out_events and type(out_events[-1]) is type(event) is Data:\n            out_events[-1] = Data(\n                data=out_events[-1].data + event.data,\n                chunk_start=out_events[-1].chunk_start,\n                chunk_end=out_events[-1].chunk_end,\n            )\n        else:\n            out_events.append(event)\n    return out_events\n\n\n# Given that we want to write tests that push some events through a Connection\n# and check that its state updates appropriately... we might as make a habit\n# of pushing them through two Connections with a fake network link in\n# between.\nclass ConnectionPair:\n    def __init__(self) -> None:\n        self.conn = {CLIENT: Connection(CLIENT), SERVER: Connection(SERVER)}\n        self.other = {CLIENT: SERVER, SERVER: CLIENT}\n\n    @property\n    def conns(self) -> ValuesView[Connection]:\n        return self.conn.values()\n\n    # expect=\"match\" if expect=send_events; expect=[...] to say what expected\n    def send(\n        self,\n        role: Type[Sentinel],\n        send_events: Union[List[Event], Event],\n        expect: Union[List[Event], Event, Literal[\"match\"]] = \"match\",\n    ) -> bytes:\n        if not isinstance(send_events, list):\n            send_events = [send_events]\n        data = b\"\"\n        closed = False\n        for send_event in send_events:\n            new_data = self.conn[role].send(send_event)\n            if new_data is None:\n                closed = True\n            else:\n                data += new_data\n        # send uses b\"\" to mean b\"\", and None to mean closed\n        # receive uses b\"\" to mean closed, and None to mean \"try again\"\n        # so we have to translate between the two conventions\n        if data:\n            self.conn[self.other[role]].receive_data(data)\n        if closed:\n            self.conn[self.other[role]].receive_data(b\"\")\n        got_events = get_all_events(self.conn[self.other[role]])\n        if expect == \"match\":\n            expect = send_events\n        if not isinstance(expect, list):\n            expect = [expect]\n        assert got_events == expect\n        return data\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 14116,
+          "output_chars": 1613,
+          "latency_s": 17.495672624994768,
+          "turn_index": 3,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        },
+        {
+          "prompt_chars": 14993,
+          "output_chars": 38,
+          "latency_s": 19.53024641599768,
+          "turn_index": 3,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        },
+        {
+          "prompt_chars": 10138,
+          "output_chars": 1072,
+          "latency_s": 15.38179908299935,
+          "turn_index": 3,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "```repl\nprint(t[:1200])\nfor p,txt in tests.items():\n if p!='h11/tests/test_connection.py':\n  print(p,[(m.start(),m.group()) for m in re.finditer(r'ConnectionPair|\\.send\\(|Response\\(',txt)][:25])\nprint(c[c.index('def _body_framing'):c.index('def _body_framing')+2200])\nfor text,name in parts:\n if name in ['test_server_talking_to_http10_client','test_automagic_connection_close_handling','test_HEAD_framing_headers']:\n  print(text)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(t[:1200])\nfor p,txt in tests.items():\n if p!='h11/tests/test_connection.py':\n  print(p,[(m.start(),m.group()) for m in re.finditer(r'ConnectionPair|\\.send\\(|Response\\(',txt)][:25])\nprint(c[c.index('def _body_framing'):c.index('def _body_framing')+2200])\nfor text,name in parts:\n if name in ['test_server_talking_to_http10_client','test_automagic_connection_close_handling','test_HEAD_framing_headers']:\n  print(text)"
+      ],
+      "stdout_raw_chars": 7815,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "from typing import Any, cast, Dict, List, Optional, Tuple, Type\n\nimport pytest\n\nfrom .._connection import _body_framing, _keep_alive, Connection, NEED_DATA, PAUSED\nfrom .._events import (\n    ConnectionClosed,\n    Data,\n    EndOfMessage,\n    InformationalResponse,\n    Request,\n    Response,\n)\nfrom .._state import (\n    CLIENT,\n    CLOSED,\n    DONE,\n    ERROR,\n    MIGHT_SWITCH_PROTOCOL,\n    MUST_CLOSE,\n    SEND_BODY,\n    SEND_RESPONSE,\n    SERVER,\n    SWITCHED_PROTOCOL,\n)\nfrom .._util import LocalProtocolError, RemoteProtocolError, Sentinel\nfrom .helpers import ConnectionPair, get_all_events, receive_and_get\n\n\ndef test__keep_alive() -> None:\n    assert _keep_alive(\n        Request(method=\"GET\", target=\"/\", headers=[(\"Host\", \"Example.com\")])\n    )\n    assert not _keep_alive(\n        Request(\n            method=\"GET\",\n            target=\"/\",\n            headers=[(\"Host\", \"Example.com\"), (\"Connection\", \"close\")],\n        )\n    )\n    assert not _keep_alive(\n        Request(\n            method=\"GET\",\n            target=\"/\",\n            headers=[(\"Host\", \"Example.com\"), (\"Connection\", \"a, b, cLOse, foo\")],\n        )\n    )\n    assert not _keep_alive(\n        Request(method=\"GET\", target=\"/\nh11/tests/test_against_stdlib_http.py [(1258, '.send('), (1460, '.send('), (3292, '.send('), (3302, 'Response('), (3365, '.send('), (3432, '.send(')]\nh11/tests/test_events.py [(2697, 'Response('), (2927, 'Response('), (2990, 'Response('), (3212, 'Response('), (3323, 'Response('), (3475, 'Response('), (3850, 'Response(')]\nh11/tests/test_headers.py []\nh11/tests/test_helpers.py [(263, 'Response('), (530, 'Response(')]\nh11/tests/test_io.py [(1028, 'Response('), (1215, 'Response('), (1371, 'Response('), (1605, 'Response('), (3932, 'Response('), (4722, 'Response('), (5145, 'Response('), (5442, 'Response('), (5666, 'Response('), (5947, 'Response('), (6261, 'Response('), (6577, 'Response('), (6919, 'Response(')]\nh11/tests/test_receivebuffer.py []\nh11/tests/test_state.py []\nh11/tests/test_util.py []\ndef _body_framing(\n    request_method: bytes, event: Union[Request, Response]\n) -> Tuple[str, Union[Tuple[()], Tuple[int]]]:\n    # Called when we enter SEND_BODY to figure out framing information for\n    # this body.\n    #\n    # These are the only two events that can trigger a SEND_BODY state:\n    assert type(event) in (Request, Response)\n    # Returns one of:\n    #\n    #    (\"content-length\", count)\n    #    (\"chunked\", ())\n    #    (\"http/1.0\", ())\n    #\n    # which are (lookup key, *args) for constructing body reader/writer\n    # objects.\n    #\n    # Reference: https://tools.ietf.org/html/rfc7230#section-3.3.3\n    #\n    # Step 1: some responses always have an empty body, regardless of what the\n    # headers say.\n    if type(event) is Response:\n        if (\n            event.status_code in (204, 304)\n            or request_method == b\"HEAD\"\n            or (request_method == b\"CONNECT\" and 200 <= event.status_code < 300)\n        ):\n            return (\"content-length\", (0,))\n        # Section 3.3.3 also lists another case -- responses with status_code\n        # < 200. For us these are InformationalResponses, not Responses, so\n        # they can't get into this function in the first place.\n        assert event.status_code >= 200\n\n    # Step 2: check for Transfer-Encoding (T-E beats C-L):\n    transfer_encodings = get_comma_header(event.headers, b\"transfer-encoding\")\n    if transfer_encodings:\n        assert transfer_encodings == [b\"chunked\"]\n        return (\"chunked\", ())\n\n    # Step 3: check for Content-Length\n    content_lengths = get_comma_header(event.headers, b\"content-length\")\n    if content_lengths:\n        return (\"content-length\", (int(content_lengths[0]),))\n\n    # Step 4: no applicable headers; fallback/default depends on type\n    if type(event) is Request:\n        return (\"content-length\", (0,))\n    else:\n        return (\"http/1.0\", ())\n\n\n################################################################\n#\n# The main Connection class\n#\n################################################################\n\n\nclass Connection:\n    \"\"\"An object encapsulating the state of an HTTP connection.\n\n    Args:\n        our_role: If you're implementing a client, pass :data:\ndef test_server_talking_to_http10_client() -> None:\n    c = Connection(SERVER)\n    # No content-length, so no body\n    # NB: no host header\n    assert receive_and_get(c, b\"GET / HTTP/1.0\\r\\n\\r\\n\") == [\n        Request(method=\"GET\", target=\"/\", headers=[], http_version=\"1.0\"),\n        EndOfMessage(),\n    ]\n    assert c.their_state is MUST_CLOSE\n\n    # We automatically Connection: close back at them\n    assert (\n        c.send(Response(status_code=200, headers=[]))\n        == b\"HTTP/1.1 200 \\r\\nConnection: close\\r\\n\\r\\n\"\n    )\n\n    assert c.send(Data(data=b\"12345\")) == b\"12345\"\n    assert c.send(EndOfMessage()) == b\"\"\n    assert c.our_state is MUST_CLOSE\n\n    # Check that it works if they do send Content-Length\n    c = Connection(SERVER)\n    # NB: no host header\n    assert receive_and_get(c, b\"POST / HTTP/1.0\\r\\nContent-Length: 10\\r\\n\\r\\n1\") == [\n        Request(\n            method=\"POST\",\n            target=\"/\",\n            headers=[(\"Content-Length\", \"10\")],\n            http_version=\"1.0\",\n        ),\n        Data(data=b\"1\"),\n    ]\n    assert receive_and_get(c, b\"234567890\") == [Data(data=b\"234567890\"), EndOfMessage()]\n    assert c.their_state is MUST_CLOSE\n    assert receive_and_get(c, b\"\") == [ConnectionClosed()]\n\ndef test_automagic_connection_close_handling() -> None:\n    p = ConnectionPair()\n    # If the user explicitly sets Connection: close, then we notice and\n    # respect it\n    p.send(\n        CLIENT,\n        [\n            Request(\n                method=\"GET\",\n                target=\"/\",\n                headers=[(\"Host\", \"example.com\"), (\"Connection\", \"close\")],\n            ),\n            EndOfMessage(),\n        ],\n    )\n    for conn in p.conns:\n        assert conn.states[CLIENT] is MUST_CLOSE\n    # And if the client sets it, the server automatically echoes it back\n    p.send(\n        SERVER,\n        # no header here...\n        [Response(status_code=204, headers=[]), EndOfMessage()],\n        # ...but oh look, it arrived anyway\n        expect=[\n            Response(status_code=204, headers=[(\"connection\", \"close\")]),\n            EndOfMessage(),\n        ],\n    )\n    for conn in p.conns:\n        assert conn.states == {CLIENT: MUST_CLOSE, SERVER: MUST_CLOSE}\n\ndef test_HEAD_framing_headers() -> None:\n    def setup(method: bytes, http_version: bytes) -> Connection:\n        c = Connection(SERVER)\n        c.receive_data(\n            method + b\" / HTTP/\" + http_version + b\"\\r\\n\" + b\"Host: example.com\\r\\n\\r\\n\"\n        )\n        assert type(c.next_event()) is Request\n        assert type(c.next_event()) is EndOfMessage\n        return c\n\n    for method in [b\"GET\", b\"HEAD\"]:\n        # No Content-Length, HTTP/1.1 peer, should use chunked\n        c = setup(method, b\"1.1\")\n        assert (\n            c.send(Response(status_code=200, headers=[])) == b\"HTTP/1.1 200 \\r\\n\"\n            b\"Transfer-Encoding: chunked\\r\\n\\r\\n\"\n        )\n\n        # No Content-Length, HTTP/1.0 peer, frame with connection: close\n        c = setup(method, b\"1.0\")\n        assert (\n            c.send(Response(status_code=200, headers=[])) == b\"HTTP/1.1 200 \\r\\n\"\n            b\"Connection: close\\r\\n\\r\\n\"\n        )\n\n        # Content-Length + Transfer-Encoding, TE wins\n        c = setup(method, b\"1.1\")\n        assert (\n            c.send(\n                Response(\n                    status_code=200,\n                    headers=[\n                        (\"Content-Length\", \"100\"),\n                        (\"Transfer-Encoding\", \"chunked\"),\n                    ],\n                )\n            )\n            == b\"HTTP/1.1 200 \\r\\n\"\n            b\"Transfer-Encoding: chunked\\r\\n\\r\\n\"\n        )\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nselected='\\n\\n'.join(text for text,name in parts if name in ['test_reuse_simple','test_pipelining','test_close_simple','test_close_different_states','test_pipelined_close','test_sendfile','test_errors','test_automatic_transfer_encoding_in_response'])\nreview=llm_query(prompt+selected+\"\\n\\nConnection helper:\\n\"+index['h11/tests/helpers.py']+\"\\n\\nFraming/state selection source:\\n\"+c[c.index('def _body_framing'):c.index('class Connection:')]+\"\\n\"+c[c.index('def _process_event'):c.index('def _process_event')+4700])\nprint(review)\nprint(index['h11/tests/test_against_stdlib_http.py'][-450:])\nprint([(n.name, [ast.unparse(d) for d in n.decorator_list]) for n in funcs if isinstance(n,ast.FunctionDef) and n.decorator_list])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "selected='\\n\\n'.join(text for text,name in parts if name in ['test_reuse_simple','test_pipelining','test_close_simple','test_close_different_states','test_pipelined_close','test_sendfile','test_errors','test_automatic_transfer_encoding_in_response'])\nreview=llm_query(prompt+selected+\"\\n\\nConnection helper:\\n\"+index['h11/tests/helpers.py']+\"\\n\\nFraming/state selection source:\\n\"+c[c.index('def _body_framing'):c.index('class Connection:')]+\"\\n\"+c[c.index('def _process_event'):c.index('def _process_event')+4700])\nprint(review)\nprint(index['h11/tests/test_against_stdlib_http.py'][-450:])\nprint([(n.name, [ast.unparse(d) for d in n.decorator_list]) for n in funcs if isinstance(n,ast.FunctionDef) and n.decorator_list])"
+      ],
+      "stdout_raw_chars": 1862,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\n  \"failing\": [\n    {\n      \"name\": \"test_automatic_transfer_encoding_in_response\",\n      \"reason\": \"The first iteration, with supplied Transfer-Encoding: chunked, passes the HTTP/1.1 paired-send check but fails the HTTP/1.0 wire-byte assertion: Transfer-Encoding is removed and no Connection: close is added, so the response is b\\\"HTTP/1.1 200 \\\\r\\\\n\\\\r\\\\n\\\" rather than the expected bytes containing Connection: close. Independently, the empty-header iteration would fail its HTTP/1.1 paired-send check: no Transfer-Encoding is added, so the received Response has empty headers instead of Transfer-Encoding: chunked, and its body framing is http/1.0. The TE-plus-CL iteration still removes Content-Length and preserves supplied TE for HTTP/1.1, but would fail the same HTTP/1.0 Connection: close assertion.\"\n    },\n    {\n      \"name\": \"test_errors\",\n      \"reason\": \"In the SERVER receive-error case, sending the headerless 400 response no longer adds Connection: close. The serialized response is b\\\"HTTP/1.1 400 \\\\r\\\\n\\\\r\\\\n\\\", so the assertion expecting b\\\"HTTP/1.1 400 \\\\r\\\\nConnection: close\\\\r\\\\n\\\\r\\\\n\\\" fails.\"\n    }\n  ],\n  \"uncertain\": []\n}\nr(H11RequestHandler) as httpd:\n        host, port = httpd.server_address\n        url = f\"http://{host}:{port}/some-path\"  # type: ignore[str-bytes-safe]\n        with closing(urlopen(url)) as f:\n            assert f.getcode() == 200\n            data = f.read()\n    info = json.loads(data.decode(\"ascii\"))\n    print(info)\n    assert info[\"method\"] == \"GET\"\n    assert info[\"target\"] == \"/some-path\"\n    assert \"urllib\" in info[\"headers\"][\"user-agent\"]\n\n[('test_early_detection_of_invalid_request', [\"pytest.mark.parametrize('data', [b'\\\\x00', b' ', b'\\\\x16\\\\x03\\\\x01\\\\x00\\\\xa5'])\"]), ('test_early_detection_of_invalid_response', [\"pytest.mark.parametrize('data', [b'\\\\x00', b' ', b'\\\\x16\\\\x03\\\\x03\\\\x001'])\"])]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 24537,
+          "output_chars": 1152,
+          "latency_s": 12.431681374997424,
+          "turn_index": 5,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "```repl\nimport json\nparsed=[json.loads(r) for r in results]\nnames={item['name'] for r in parsed for item in r['failing']}\nprint('\\n\\n'.join(text for text,name in parts if name=='test_chunked'))\nerrors=dict((name,text) for text,name in parts)['test_errors']\npos=errors.index('Connection: close')\nprint(errors[max(0,pos-950):pos+350])\nprint(llm_query(\"Under the proposed change, responses without CL/TE have HTTP/1.0 close-delimited framing and emit unchunked data; no Connection header inserted, no TE inserted for HTTP/1.1. Does test_h11_as_server fail? Inspect this source; socket closure after handler return is allowed. Explain briefly, no speculation.\\n\"+index['h11/tests/test_against_stdlib_http.py']))\nanswer=[f\"h11/tests/test_connection.py::{name}\" for text,name in parts if name in names]\nassert len(answer)==len(set(answer))==5\nanswer_json=json.dumps(answer)\nprint(answer_json)\n```  tail?\n\n```repl\nimport json\nparsed=[json.loads(r) for r in results]\nnames={item['name'] for r in parsed for item in r['failing']}\nprint('\\n\\n'.join(text for text,name in parts if name=='test_chunked'))\nerrors=dict((name,text) for text,name in parts)['test_errors']\npos=errors.index('Connection: close')\nprint(errors[max(0,pos-950):pos+350])\nprint(llm_query(\"Under the proposed change, responses without CL/TE have HTTP/1.0 close-delimited framing and emit unchunked data; no Connection header inserted, no TE inserted for HTTP/1.1. Does test_h11_as_server fail? Inspect this source; socket closure after handler return is allowed. Explain briefly, no speculation.\\n\"+index['h11/tests/test_against_stdlib_http.py']))\nanswer=[f\"h11/tests/test_connection.py::{name}\" for text,name in parts if name in names]\nassert len(answer)==len(set(answer))==5\nanswer_json=json.dumps(answer)\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import json\nparsed=[json.loads(r) for r in results]\nnames={item['name'] for r in parsed for item in r['failing']}\nprint('\\n\\n'.join(text for text,name in parts if name=='test_chunked'))\nerrors=dict((name,text) for text,name in parts)['test_errors']\npos=errors.index('Connection: close')\nprint(errors[max(0,pos-950):pos+350])\nprint(llm_query(\"Under the proposed change, responses without CL/TE have HTTP/1.0 close-delimited framing and emit unchunked data; no Connection header inserted, no TE inserted for HTTP/1.1. Does test_h11_as_server fail? Inspect this source; socket closure after handler return is allowed. Explain briefly, no speculation.\\n\"+index['h11/tests/test_against_stdlib_http.py']))\nanswer=[f\"h11/tests/test_connection.py::{name}\" for text,name in parts if name in names]\nassert len(answer)==len(set(answer))==5\nanswer_json=json.dumps(answer)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 2980,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "def test_chunked() -> None:\n    p = ConnectionPair()\n\n    p.send(\n        CLIENT,\n        Request(\n            method=\"GET\",\n            target=\"/\",\n            headers=[(\"Host\", \"example.com\"), (\"Transfer-Encoding\", \"chunked\")],\n        ),\n    )\n    data = p.send(CLIENT, Data(data=b\"1234567890\", chunk_start=True, chunk_end=True))\n    assert data == b\"a\\r\\n1234567890\\r\\n\"\n    data = p.send(CLIENT, Data(data=b\"abcde\", chunk_start=True, chunk_end=True))\n    assert data == b\"5\\r\\nabcde\\r\\n\"\n    data = p.send(CLIENT, Data(data=b\"\"), expect=[])\n    assert data == b\"\"\n    data = p.send(CLIENT, EndOfMessage(headers=[(\"hello\", \"there\")]))\n    assert data == b\"0\\r\\nhello: there\\r\\n\\r\\n\"\n\n    p.send(\n        SERVER, Response(status_code=200, headers=[(\"Transfer-Encoding\", \"chunked\")])\n    )\n    p.send(SERVER, Data(data=b\"54321\", chunk_start=True, chunk_end=True))\n    p.send(SERVER, Data(data=b\"12345\", chunk_start=True, chunk_end=True))\n    p.send(SERVER, EndOfMessage())\n\n    for conn in p.conns:\n        assert conn.states == {CLIENT: DONE, SERVER: DONE}\n\ndef test_errors() -> None:\n    # After a receive error, you can't receive\n    for role in [CLIENT, SERVER]:\n        c = Connection(our_role=role)\n        c.receive_data(b\"gibberish\\r\\n\\r\\n\")\n        with pytest.raises(RemoteProtocolError):\n            c.next_event()\n        # Now any attempt to receive continues to raise\n        assert c.their_state is ERROR\n        assert c.our_state is not ERROR\n        print(c._cstate.states)\n        with pytest.raises(RemoteProtocolError):\n            c.next_event()\n        # But we can still yell at the client for sending us gibberish\n        if role is SERVER:\n            assert (\n                c.send(Response(status_code=400, headers=[]))\n                == b\"HTTP/1.1 400 \\r\\nConnection: close\\r\\n\\r\\n\"\n            )\n\n    # After an error sending, you can no longer send\n    # (This is especially important for things like content-length errors,\n    # where there's complex internal state being modified)\n    def conn(role: Type[Sentinel]) -> Connection:\n        c = Connection(our_role=role)\n        if role is SERVER:\n      \nNo. `test_h11_as_server` does not fail under the stated change.\n\nThe handler sends a 200 response, the unchunked JSON body, and `EndOfMessage`, then exits `with closing(self.request)`, closing the socket. With neither `Content-Length` nor `Transfer-Encoding`, `urlopen(...).read()` reads the body until that EOF.\n\nThe test checks only the status and decoded JSON request information—not framing headers or connection reuse. No inserted `Connection` or `Transfer-Encoding` header is required for those assertions.\n[\"h11/tests/test_connection.py::test_server_talking_to_http10_client\", \"h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response\", \"h11/tests/test_connection.py::test_automagic_connection_close_handling\", \"h11/tests/test_connection.py::test_errors\", \"h11/tests/test_connection.py::test_HEAD_framing_headers\"]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 4272,
+          "output_chars": 512,
+          "latency_s": 9.087611916998867,
+          "turn_index": 6,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "[\"h11/tests/test_connection.py::test_server_talking_to_http10_client\", \"h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response\", \"h11/tests/test_connection.py::test_automagic_connection_close_handling\", \"h11/tests/test_connection.py::test_errors\", \"h11/tests/test_connection.py::test_HEAD_framing_headers\"]",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 282.65820075000374
+  }
+}

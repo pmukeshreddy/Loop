@@ -1,0 +1,37 @@
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -1236,13 +1236,27 @@
+             pass_original = processor_kwargs.get("pass_original", False)
+ 
+             if many and not pass_collection:
+-                if pass_original:
+-                    data = [
+-                        processor(item, original, many=many, **kwargs)
+-                        for item, original in zip_longest(data, original_data)
+-                    ]
+-                else:
+-                    data = [processor(item, many=many, **kwargs) for item in data]
++                processed_data = []
++                items = (
++                    zip_longest(data, original_data)
++                    if pass_original
++                    else ((item, None) for item in data)
++                )
++                for index, (item, original) in enumerate(items):
++                    try:
++                        if pass_original:
++                            processed_data.append(
++                                processor(item, original, many=many, **kwargs)
++                            )
++                        else:
++                            processed_data.append(processor(item, many=many, **kwargs))
++                    except ValidationError as err:
++                        if tag in (PRE_LOAD, POST_LOAD) and self.opts.index_errors:
++                            raise ValidationError(
++                                {index: err.normalized_messages()}
++                            ) from err
++                        raise
++                data = processed_data
+             elif pass_original:
+                 data = processor(data, original_data, many=many, **kwargs)
+             else:

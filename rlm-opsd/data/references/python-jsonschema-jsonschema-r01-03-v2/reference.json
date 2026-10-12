@@ -1,0 +1,211 @@
+{
+ "answer": "--- a/jsonschema/validators.py\n+++ b/jsonschema/validators.py\n@@ -410,6 +410,8 @@\n                     validator_value=None,\n                     instance=instance,\n                     schema=schema,\n+                    path=() if path is None else (path,),\n+                    schema_path=() if schema_path is None else (schema_path,),\n                 )\n                 return\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.00048675671665924863,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 19 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines the component-presence contract with preservation of false-schema metadata and root validation behavior. The final diff was computed and inspected after construction. The execution summary does not establish runtime testing, but the supplied verified patch satisfies these interacting requirements.",
+   "inspect_locate": "The reference execution used 19 targeted searches without printing the whole context. Locating the generated validator's descent behavior, keyword-supplied path components, and exception parent-path concatenation was useful for distinguishing relative locations from enclosing locations."
+  },
+  "notes": "This is a natural, precisely scoped diagnostic repair. Naming the affected API and describing its required behavior does not disclose the implementation fix. The task requires distinguishing false-schema descent from root validation and accounting for nested keyword and context propagation. It is substantively different from the existing unevaluatedProperties and generator-context tasks, despite sharing error-location concerns."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve false-schema metadata while satisfying direct descent, ordinary nested errors, and relative context errors. Its location handling must be checked against both keyword enrichment and parent concatenation to avoid missing or duplicated components.",
+   "inspect_locate": "The location contract spans generated validators, keyword callers that supply property names or array and branch indexes, and exception parent concatenation. The relevant definitions are a small fraction of the repository context."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "Generated Validator.descend returns early for false schemas before applying supplied location components; its object-schema branch establishes the existing None-sensitive location contract. The separate iter_errors branch defines root false-schema behavior."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::properties",
+    "why": "Property descent supplies the property name as both an instance and schema component, including empty property names."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::prefixItems",
+    "why": "Tuple-position descent supplies an array index as both location components, making index zero an essential case."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::anyOf",
+    "why": "Branch descent supplies a schema index and retains errors as context without adding the aggregate's instance path to their relative paths."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error",
+    "why": "Context construction installs parent links, and absolute paths concatenate the parent's absolute location with each child's relative location."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_false_schema_locations.py\n@@ -0,0 +1,116 @@\n+import pytest\n+\n+from jsonschema import (\n+    Draft6Validator,\n+    Draft7Validator,\n+    Draft201909Validator,\n+    Draft202012Validator,\n+)\n+\n+\n+VALIDATORS = (\n+    Draft6Validator, Draft7Validator,\n+    Draft201909Validator, Draft202012Validator,\n+)\n+\n+\n+def check_false(error, instance):\n+    assert error.message == f\"False schema does not allow {instance!r}\"\n+    assert error.validator is None\n+    assert error.validator_value is None\n+    assert error.instance is instance\n+    assert error.schema is False\n+    assert error.context == []\n+\n+\n+@pytest.mark.parametrize(\"Validator\", VALIDATORS)\n+@pytest.mark.parametrize(\"path,schema_path\", [\n+    (None, None), (0, None), (\"\", None), (None, 0),\n+    (None, \"\"), (0, \"\"), (\"\", 0), (\"item\", \"branch\"),\n+])\n+def test_direct_descent(Validator, path, schema_path):\n+    instance = {\"payload\": 1}\n+    validator = Validator({})\n+    errors = list(validator.descend(\n+        instance, False, path=path, schema_path=schema_path,\n+    ))\n+    assert len(errors) == 1\n+    error = errors[0]\n+    check_false(error, instance)\n+    assert list(error.path) == ([] if path is None else [path])\n+    assert list(error.schema_path) == (\n+        [] if schema_path is None else [schema_path]\n+    )\n+    assert error.parent is None\n+    assert list(error.absolute_path) == list(error.path)\n+    assert list(error.absolute_schema_path) == list(error.schema_path)\n+    assert list(validator.descend(instance, True, path=path)) == []\n+\n+\n+@pytest.mark.parametrize(\"Validator\", VALIDATORS)\n+def test_root_false(Validator):\n+    instance = {\"payload\": 1}\n+    errors = list(Validator(False).iter_errors(instance))\n+    assert len(errors) == 1\n+    error = errors[0]\n+    check_false(error, instance)\n+    assert list(error.path) == []\n+    assert list(error.schema_path) == []\n+    assert list(error.absolute_path) == []\n+    assert list(error.absolute_schema_path) == []\n+    assert error.parent is None\n+\n+\n+@pytest.mark.parametrize(\"Validator\", VALIDATORS)\n+def test_nested_empty_property(Validator):\n+    schema = {\"properties\": {\"outer\": {\"properties\": {\"\": False}}}}\n+    instance = {\"outer\": {\"\": {\"payload\": 1}}}\n+    errors = list(Validator(schema).iter_errors(instance))\n+    assert len(errors) == 1\n+    error = errors[0]\n+    check_false(error, instance[\"outer\"][\"\"])\n+    assert list(error.path) == [\"outer\", \"\"]\n+    assert list(error.schema_path) == [\"properties\", \"outer\", \"properties\", \"\"]\n+    assert list(error.absolute_path) == [\"outer\", \"\"]\n+    assert list(error.absolute_schema_path) == list(error.schema_path)\n+\n+\n+def test_nested_prefix_items():\n+    schema = {\"properties\": {\"outer\": {\"prefixItems\": [False, False]}}}\n+    instance = {\"outer\": [{\"payload\": 1}, {\"payload\": 2}]}\n+    errors = list(Draft202012Validator(schema).iter_errors(instance))\n+    assert len(errors) == 2\n+    for index, error in enumerate(errors):\n+        check_false(error, instance[\"outer\"][index])\n+        assert list(error.path) == [\"outer\", index]\n+        assert list(error.schema_path) == [\n+            \"properties\", \"outer\", \"prefixItems\", index,\n+        ]\n+        assert list(error.absolute_path) == [\"outer\", index]\n+        assert list(error.absolute_schema_path) == list(error.schema_path)\n+\n+\n+def test_anyof_context_below_prefix_items():\n+    schema = {\"properties\": {\"outer\": {\"prefixItems\": [\n+        {\"anyOf\": [False, {\"properties\": {\"\": False}}]},\n+    ]}}}\n+    instance = {\"outer\": [{\"\": {\"payload\": 1}}]}\n+    errors = list(Draft202012Validator(schema).iter_errors(instance))\n+    assert len(errors) == 1\n+    aggregate = errors[0]\n+    assert aggregate.validator == \"anyOf\"\n+    assert list(aggregate.path) == [\"outer\", 0]\n+    base = [\"properties\", \"outer\", \"prefixItems\", 0, \"anyOf\"]\n+    assert list(aggregate.schema_path) == base\n+    assert len(aggregate.context) == 2\n+    first, second = aggregate.context\n+    check_false(first, instance[\"outer\"][0])\n+    check_false(second, instance[\"outer\"][0][\"\"])\n+    assert list(first.path) == []\n+    assert list(first.schema_path) == [0]\n+    assert list(second.path) == [\"\"]\n+    assert list(second.schema_path) == [1, \"properties\", \"\"]\n+    for child, relative in [(first, []), (second, [\"\"])]:\n+        assert child.parent is aggregate\n+        assert list(child.absolute_path) == [\"outer\", 0] + relative\n+        assert list(child.absolute_schema_path) == base + list(child.schema_path)\n",
+  "include_failure_log": false,
+  "notes": "This task repairs a pre-existing diagnostic gap, so it uses new hidden acceptance tests rather than an injected setup defect. The tests cover generated validators for Draft 6, Draft 7, Draft 2019-09, and Draft 2020-12; prefixItems-specific cases use Draft 2020-12. The expected production change is distinct from the seed task's unevaluatedProperties aggregation enhancement.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "False boolean subschemas reject instances correctly, but their errors lose location components supplied to `descend`. Correct this diagnostic behavior for validators generated by `jsonschema.validators.create`: a non-`None` `path` or `schema_path` argument must contribute one component to the corresponding relative error path, including when the component is `0` or the empty string. Omitted or explicitly `None` components must contribute nothing.\n\nNested validation through `properties` and `prefixItems` must identify the rejected property's or item's location. When `anyOf` retains false-schema errors in its `context`, preserve their branch-relative locations and parent links so absolute instance and schema paths include the enclosing location exactly once. Keep the existing false-schema message, `validator=None`, `validator_value=None`, rejected `instance`, and `schema=False` metadata. Preserve validation outcomes, true-schema and object-schema behavior, and the empty paths produced by direct `iter_errors` validation of a root false schema.\n\nReturn a unified diff against production repository files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises caller-to-shared-layer tracing: inspect several keyword callers to establish the path contract, then identify the early return that violates it. Verification combines ordinary descent and context-parent behavior, while avoiding changes to draft-specific unevaluated-property coverage or diagnostic aggregation.",
+  "change_type": "dependency",
+  "description": "Repair location propagation for false boolean subschemas in the generated Validator.descend method inside jsonschema/validators.py::create. Its early schema-is-False branch currently bypasses the supplied path and schema_path. Require false-schema errors to honor those arguments, including path=0 and path=\"\", while retaining the existing message, validator=None, validator_value=None, instance, and schema=False metadata. Verify nested calls through jsonschema/_keywords.py::properties, prefixItems, and anyOf, including absolute locations of false-schema errors retained in anyOf context. Preserve direct iter_errors behavior for a root false schema.",
+  "expected_answer_change": "The patch must enrich the ValidationError produced by descend's false-schema early return with the supplied instance and schema path components, using explicit None checks rather than truthiness. Tests must distinguish root false-schema validation from nested property, array-index, and applicator-branch descent, and verify that parent concatenation adds outer locations exactly once.",
+  "why_substantive": "This changes the dependency layer and the failing input branch. The seed relies on descent already creating correct per-property paths for object schemas; this variation repairs descent itself for boolean false schemas, affecting several keyword callers rather than adding context to unevaluatedProperties."
+ },
+ "task_id": "python-jsonschema-jsonschema-r01-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_false_schema_locations.py::test_anyof_context_below_prefix_items",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_prefix_items"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 34,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7330
+   },
+   "patch_files": [
+    "jsonschema/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_false_schema_locations.py::test_anyof_context_below_prefix_items",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-0-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[-None-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0--Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[0-None-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None--Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[None-0-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_direct_descent[item-branch-Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft201909Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft202012Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft6Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_empty_property[Draft7Validator]",
+   "jsonschema/tests/test_false_schema_locations.py::test_nested_prefix_items"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

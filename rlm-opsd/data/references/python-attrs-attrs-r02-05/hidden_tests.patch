@@ -1,0 +1,53 @@
+--- /dev/null
++++ b/tests/test_falsy_callbacks.py
+@@ -0,0 +1,50 @@
++import pytest
++
++import attr
++
++
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("strict_bool", [False, True])
++def test_falsy_callbacks(slots, strict_bool):
++    events = []
++
++    class Convert:
++        def __bool__(self):
++            if strict_bool:
++                raise AssertionError("converter truth-tested")
++            return False
++
++        def __call__(self, value):
++            events.append(("convert", value))
++            return int(value)
++
++    class Validate:
++        def __bool__(self):
++            if strict_bool:
++                raise AssertionError("validator truth-tested")
++            return False
++
++        def __call__(self, instance, field, value):
++            events.append(("validate", field.name, value))
++            if value < 0:
++                raise ValueError("negative")
++
++    @attr.define(slots=slots)
++    class C:
++        x = attr.field(converter=Convert(), validator=Validate())
++
++    c = C("2")
++    assert c.x == 2
++    assert events == [("convert", "2"), ("validate", "x", 2)]
++    events.clear()
++    c.x = "3"
++    assert c.x == 3
++    assert events == [("convert", "3"), ("validate", "x", 3)]
++    events.clear()
++    attr.validate(c)
++    assert events == [("validate", "x", 3)]
++    with pytest.raises(ValueError, match="negative"):
++        c.x = "-1"
++    assert c.x == 3
++    with pytest.raises(ValueError, match="negative"):
++        C("-1")

@@ -1,0 +1,38 @@
+--- /dev/null
++++ b/tests/test_variable_alternative_expansion.py
+@@ -0,0 +1,35 @@
++import pytest
++
++from dotenv.variables import parse_variables
++
++
++@pytest.mark.parametrize(
++    "env,expression,expected",
++    [
++        ({}, "${X:+word}", ""),
++        ({"X": None}, "${X:+word}", ""),
++        ({"X": ""}, "${X:+word}", ""),
++        ({"X": "value"}, "${X:+word}", "word"),
++        ({"X": "0"}, "${X:+word}", "word"),
++        ({"X": "value"}, "${X:+}", ""),
++        ({"X": "value"}, "a${X:+$Y / tail}b", "a$Y / tailb"),
++        ({}, "${X:-fallback}", "fallback"),
++        ({"X": None}, "${X:-fallback}", ""),
++        ({"X": ""}, "${X:-fallback}", ""),
++        ({"X": "value"}, "$X", "$X"),
++        ({"X": "value"}, "${X:word}", "${X:word}"),
++        ({"X-Y": "value"}, "${X-Y:+yes}", "yes"),
++    ],
++)
++def test_alternative_expansion(env, expression, expected):
++    assert "".join(atom.resolve(env) for atom in parse_variables(expression)) == expected
++
++
++def test_expansion_atom_identity():
++    present = list(parse_variables("${X:+word}"))[0]
++    other = list(parse_variables("${X:+other}"))[0]
++    default = list(parse_variables("${X:-word}"))[0]
++    same = list(parse_variables("${X:+word}"))[0]
++    assert present == same
++    assert hash(present) == hash(same)
++    assert len({present, other, default}) == 3

@@ -128,7 +128,7 @@ def prepare_smoke(config):
     snapshot=cached_snapshot(config)
     tasks=list(load_tasks(gate_config.manifest_path,split='train'))
     if not tasks:raise ValueError('decontaminated train split is empty')
-    task=next((t for t in tasks if t['info']['family']=='small_context_control'),tasks[0])
+    task=next((t for t in tasks if t['info']['family']=='direct_solve'),tasks[0])
     prompt_config=PromptConfig.from_yaml(config.prompt_config)
     pair=PromptBuilder.load().build(query=task['info']['query'],context=task['info']['context'],config=gate_plan.harness_config)
     prefixes=ChatRenderer(prompt_config).prefixes(pair)

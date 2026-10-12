@@ -1,0 +1,56 @@
+--- /dev/null
++++ b/tests/test_cli_encoding_option.py
+@@ -0,0 +1,53 @@
++import json
++
++import pytest
++
++from click.testing import CliRunner
++
++import dotenv.cli as cli_module
++
++
++@pytest.mark.parametrize("command", ["list", "get", "set", "unset", "run"])
++def test_cli_latin1_all_commands(tmp_path, monkeypatch, command):
++    path = tmp_path / ".env"
++    path.write_bytes("NAME=café\nREF=${NAME}\nBARE\n".encode("latin-1"))
++    captured = {}
++
++    def capture(commandline, env):
++        captured.update(env)
++
++    monkeypatch.setattr(cli_module, "run_command", capture)
++    tail = {
++        "list": ["list", "--format", "json"],
++        "get": ["get", "REF"],
++        "set": ["set", "NAME", "déjà"],
++        "unset": ["unset", "NAME"],
++        "run": ["run", "unused-command"],
++    }[command]
++    result = CliRunner().invoke(
++        cli_module.cli,
++        ["--file", str(path), "--encoding", "latin-1", *tail],
++    )
++    assert result.exit_code == 0, result.output
++    if command == "list":
++        assert json.loads(result.output) == {"NAME": "café", "REF": "café", "BARE": None}
++    elif command == "get":
++        assert result.output == "café\n"
++    elif command == "set":
++        assert result.output == "NAME=déjà\n"
++        assert path.read_bytes() == "NAME='déjà'\nREF=${NAME}\nBARE\n".encode("latin-1")
++    elif command == "unset":
++        assert result.output == "Successfully removed NAME\n"
++        assert path.read_bytes() == b"REF=${NAME}\nBARE\n"
++    else:
++        assert captured == {"NAME": "café", "REF": "café"}
++
++
++def test_cli_encoding_default_utf8(tmp_path):
++    path = tmp_path / ".env"
++    path.write_bytes("NAME=雪\n".encode("utf-8"))
++    result = CliRunner().invoke(
++        cli_module.cli, ["--file", str(path), "get", "NAME"]
++    )
++    assert result.exit_code == 0, result.output
++    assert result.output == "雪\n"

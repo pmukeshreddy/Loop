@@ -1,0 +1,165 @@
+{
+ "answer": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -162,13 +162,34 @@\n             exceeded, then :meth:`next_event` will raise\n             :exc:`RemoteProtocolError`.\n \n+        max_receive_body_size (int or None):\n+            The maximum cumulative incoming body payload size in bytes per\n+            request/response cycle, or ``None`` for no limit (the default).\n+            Must be nonnegative. Only incoming :class:`Data` payloads count,\n+            not headers, framing, trailers, or outgoing data. If returning a\n+            complete Data event would exceed the limit, :meth:`next_event`\n+            raises :exc:`RemoteProtocolError` with ``error_status_hint=413``\n+            instead, even if only part of the event would fit. A declared\n+            Content-Length above the limit is not itself rejected. Exactly\n+            the limit is allowed, and zero permits bodyless messages.\n+            The total resets only when :meth:`start_next_cycle` succeeds.\n+\n     \"\"\"\n \n     def __init__(\n         self,\n         our_role: Type[Sentinel],\n         max_incomplete_event_size: int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,\n+        *,\n+        max_receive_body_size: Optional[int] = None,\n     ) -> None:\n+        if max_receive_body_size is not None:\n+            if not isinstance(max_receive_body_size, int):\n+                raise TypeError(\"max_receive_body_size must be an integer or None\")\n+            if max_receive_body_size < 0:\n+                raise ValueError(\"max_receive_body_size must be nonnegative\")\n+        self._max_receive_body_size = max_receive_body_size\n+        self._received_body_size = 0\n         self._max_incomplete_event_size = max_incomplete_event_size\n         # State and role tracking\n         if our_role not in (CLIENT, SERVER):\n@@ -251,6 +272,7 @@\n         # beyond a single request/response cycle\n         assert not self.client_is_waiting_for_100_continue\n         self._respond_to_state_changes(old_states)\n+        self._received_body_size = 0\n \n     def _process_error(self, role: Type[Sentinel]) -> None:\n         old_states = dict(self._cstate.states)\n@@ -479,6 +501,17 @@\n             raise RemoteProtocolError(\"Can't receive data when peer state is ERROR\")\n         try:\n             event = self._extract_next_receive_event()\n+            if isinstance(event, Data):\n+                received_body_size = self._received_body_size + len(event.data)\n+                if (\n+                    self._max_receive_body_size is not None\n+                    and received_body_size > self._max_receive_body_size\n+                ):\n+                    raise RemoteProtocolError(\n+                        \"Received body exceeds max_receive_body_size\",\n+                        error_status_hint=413,\n+                    )\n+                self._received_body_size = received_body_size\n             if event not in [NEED_DATA, PAUSED]:\n                 self._process_event(self.their_role, cast(Event, event))\n             if event is NEED_DATA:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0020450339963733084,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 20643,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 323711 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['files']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff coordinates constructor configuration, cumulative Data accounting, and successful-cycle reset. The reference computed and inspected the final artifact before finishing; this supports artifact-level checking, not a claim of runtime testing.",
+   "inspect_locate": "The reference execution used 18 targeted searches and a scoped sub-call to investigate the shared receive boundary, peer error handling, and cycle lifecycle. These are relevant to enforcing one payload limit consistently across all framing modes.",
+   "persistent_state": "The reference reused the repository file mapping across turns, though the supplied evidence establishes only modest persistent-state use rather than a substantial stateful investigation."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise observable semantics and an explicit unified-diff deliverable. Naming the public API and enforcement point specifies the desired feature rather than leaking an existing defect or fix. Implementing it requires understanding framing-independent receive processing, error attribution, and connection lifecycle. It is distinct from the accepted tasks and does not prescribe solver operations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable combines coordinated patch hunks for a new constructor option, cumulative receive enforcement, and reset behavior. Their contexts and combined semantics should be checked before producing the diff.",
+   "inspect_locate": "The implementation must locate the common receive boundary, framing-specific Data production, error attribution, and cycle-reset lifecycle.",
+   "persistent_state": "The solver must retain the framing and lifecycle findings while editing the exact Connection text at initialization, receive processing, and cycle reset, without conflating outgoing body activity with incoming accounting."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.__init__",
+    "why": "The new optional limit and lifetime of the per-cycle accounting belong to Connection."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.next_event",
+    "why": "All incoming framing adapters converge here, and its exception handler attributes errors to the peer."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.start_next_cycle",
+    "why": "A successful cycle reset is the required accounting reset boundary."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": null,
+    "why": "Content-length, chunked, and EOF-delimited adapters separate payload Data from framing and completion events."
+   },
+   {
+    "path": "h11/_state.py",
+    "symbol": "h11/_state.py::ConnectionState.process_error",
+    "why": "The implementation must preserve normal peer ERROR transitions and coupled state behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/h11/tests/test_receive_body_limit.py\n@@ -0,0 +1,83 @@\n+import pytest\n+\n+from h11 import CLIENT, SERVER, ERROR, NEED_DATA, Connection, Data, EndOfMessage, RemoteProtocolError, Request, Response\n+\n+\n+def opened(mode, limit):\n+    c = Connection(CLIENT if mode == \"eof\" else SERVER, max_receive_body_size=limit)\n+    if mode == \"eof\":\n+        c.send(Request(method=\"GET\", target=\"/\", headers=[(\"Host\", \"example\")]))\n+        c.send(EndOfMessage())\n+        head = b\"HTTP/1.0 200 OK\\r\\n\\r\\n\"\n+    elif mode == \"length\":\n+        head = b\"POST / HTTP/1.1\\r\\nHost: example\\r\\nContent-Length: 3\\r\\n\\r\\n\"\n+    else:\n+        head = b\"POST / HTTP/1.1\\r\\nHost: example\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n\"\n+    c.receive_data(head)\n+    assert isinstance(c.next_event(), (Request, Response))\n+    return c\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"length\", \"chunked\", \"eof\"])\n+def test_limit_is_cumulative_and_attributed_to_peer(mode):\n+    c = opened(mode, 2)\n+    c.receive_data(b\"2\\r\\nab\\r\\n\" if mode == \"chunked\" else b\"ab\")\n+    assert c.next_event().data == b\"ab\"\n+    assert c.next_event() is NEED_DATA\n+    c.receive_data(b\"1\\r\\nc\\r\\n0\\r\\n\\r\\n\" if mode == \"chunked\" else b\"c\")\n+    with pytest.raises(RemoteProtocolError) as caught:\n+        c.next_event()\n+    assert caught.value.error_status_hint == 413\n+    assert c.their_state is ERROR\n+    with pytest.raises(RemoteProtocolError):\n+        c.next_event()\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"length\", \"chunked\", \"eof\"])\n+def test_exact_limit_excludes_framing_headers_and_trailers(mode):\n+    c = opened(mode, 3)\n+    if mode == \"chunked\":\n+        wire = b\"3\\r\\nabc\\r\\n0\\r\\nX-Trailer: longer-than-the-body\\r\\n\\r\\n\"\n+    else:\n+        wire = b\"abc\"\n+    c.receive_data(wire)\n+    assert c.next_event().data == b\"abc\"\n+    if mode == \"eof\":\n+        c.receive_data(b\"\")\n+    assert isinstance(c.next_event(), EndOfMessage)\n+\n+\n+def test_zero_limit_allows_bodyless_request():\n+    c = Connection(SERVER, max_receive_body_size=0)\n+    c.receive_data(b\"GET / HTTP/1.1\\r\\nHost: example\\r\\n\\r\\n\")\n+    assert isinstance(c.next_event(), Request)\n+    assert isinstance(c.next_event(), EndOfMessage)\n+\n+\n+def test_count_resets_for_next_cycle_and_does_not_count_sent_body():\n+    c = Connection(SERVER, max_receive_body_size=2)\n+    for _ in range(2):\n+        c.receive_data(b\"POST / HTTP/1.1\\r\\nHost: example\\r\\nContent-Length: 2\\r\\n\\r\\nab\")\n+        assert isinstance(c.next_event(), Request)\n+        assert c.next_event().data == b\"ab\"\n+        assert isinstance(c.next_event(), EndOfMessage)\n+        c.send(Response(status_code=200, headers=[(\"Content-Length\", \"4\")]))\n+        c.send(Data(data=b\"wxyz\"))\n+        c.send(EndOfMessage())\n+        c.start_next_cycle()\n+\n+\n+def test_none_remains_unlimited():\n+    c = opened(\"length\", None)\n+    c.receive_data(b\"abc\")\n+    assert c.next_event().data == b\"abc\"\n+    assert isinstance(c.next_event(), EndOfMessage)\n+\n+\n+def test_rejects_entire_over_limit_event_not_a_shortened_fragment():\n+    c = opened(\"length\", 2)\n+    c.receive_data(b\"abc\")\n+    with pytest.raises(RemoteProtocolError) as caught:\n+        c.next_event()\n+    assert caught.value.error_status_hint == 413\n+    assert c.their_state is ERROR\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests use only public h11 APIs. Constructor validation for negative or non-integer limits is outside this task's specified input domain. Existing tests additionally verify compatibility when the new option is omitted.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add an optional `max_receive_body_size` keyword argument to `Connection`, defaulting to `None` for the existing unlimited behavior. For a nonnegative integer limit, cap the cumulative payload bytes received in the current request/response cycle, across all incoming Data events and all three body-framing modes. Do not count start lines, headers, chunk syntax, trailers, or outgoing data. Enforce the cap when `next_event()` would return Data: if that entire event would take the total above the limit, raise `RemoteProtocolError` with `error_status_hint=413` instead of returning or shortening it, and put the peer role into ERROR through the normal error handling. Do not reject a message merely because its declared Content-Length exceeds the cap. Exactly the limit is allowed, including normal EndOfMessage processing; a zero limit permits bodyless messages. Reset the received-body total only when `start_next_cycle()` succeeds. Preserve existing behavior when the option is omitted or is `None`. Return a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "h11/tests/test_receive_body_limit.py::test_count_resets_for_next_cycle_and_does_not_count_sent_body",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[chunked]",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[eof]",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[length]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[chunked]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[eof]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[length]",
+   "h11/tests/test_receive_body_limit.py::test_none_remains_unlimited",
+   "h11/tests/test_receive_body_limit.py::test_rejects_entire_over_limit_event_not_a_shortened_fragment",
+   "h11/tests/test_receive_body_limit.py::test_zero_limit_allows_bodyless_request"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 0,
+    "passed": 88
+   },
+   "patch_files": [
+    "h11/_connection.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "h11/tests/test_receive_body_limit.py::test_count_resets_for_next_cycle_and_does_not_count_sent_body",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[chunked]",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[eof]",
+   "h11/tests/test_receive_body_limit.py::test_exact_limit_excludes_framing_headers_and_trailers[length]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[chunked]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[eof]",
+   "h11/tests/test_receive_body_limit.py::test_limit_is_cumulative_and_attributed_to_peer[length]",
+   "h11/tests/test_receive_body_limit.py::test_none_remains_unlimited",
+   "h11/tests/test_receive_body_limit.py::test_rejects_entire_over_limit_event_not_a_shortened_fragment",
+   "h11/tests/test_receive_body_limit.py::test_zero_limit_allows_bodyless_request"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

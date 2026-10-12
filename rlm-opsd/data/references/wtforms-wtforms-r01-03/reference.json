@@ -1,0 +1,153 @@
+{
+ "answer": "--- a/src/wtforms/form.py\n+++ b/src/wtforms/form.py\n@@ -97,7 +97,7 @@\n             has a matching attribute. Only used if ``formdata`` is not\n             passed.\n         :param extra_filters: A dict mapping field attribute names to\n-            lists of extra filter functions to run. Extra filters run\n+            lists or tuples of extra filter functions to run. Extra filters run\n             after filters passed when creating the field. If the form\n             has ``filter_<fieldname>``, it is the last extra filter.\n         :param kwargs: Merged with ``data`` to allow passing existing\n@@ -112,7 +112,7 @@\n         filters = extra_filters.copy() if extra_filters is not None else {}\n \n         for name, field in self._fields.items():\n-            field_extra_filters = filters.get(name, [])\n+            field_extra_filters = list(filters.get(name, []))\n \n             inline_filter = getattr(self, f\"filter_{name}\", None)\n             if inline_filter is not None:\n@@ -268,7 +268,7 @@\n         :param meta: A dict of attributes to override on this form's\n             :attr:`meta` instance.\n         :param extra_filters: A dict mapping field attribute names to\n-            lists of extra filter functions to run. Extra filters run\n+            lists or tuples of extra filter functions to run. Extra filters run\n             after filters passed when creating the field. If the form\n             has ``filter_<fieldname>``, it is the last extra filter.\n         :param kwargs: Merged with ``data`` to allow passing existing\n@@ -312,7 +312,7 @@\n         If the form defines a ``validate_<fieldname>`` method, it is\n         appended as an extra validator for the field's ``validate``.\n \n-        :param extra_validators: A dict mapping field names to lists of\n+        :param extra_validators: A dict mapping field names to lists or tuples of\n             extra validator methods to run. Extra validators run after\n             validators passed when creating the field. If the form has\n             ``validate_<fieldname>``, it is the last extra validator.\n@@ -325,6 +325,7 @@\n         for name in self._fields:\n             inline = getattr(self.__class__, f\"validate_{name}\", None)\n             if inline is not None:\n-                extra.setdefault(name, []).append(inline)\n+                extra[name] = list(extra.get(name, []))\n+                extra[name].append(inline)\n \n         return super().validate(extra)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0031807378657712267,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 10177,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines both hook-assembly repairs and corresponding documentation updates. It was constructed programmatically and inspected before submission; the supplied verification tests cover list and tuple inputs, ordering, caller-owned sequence identity, and reuse across invocations and forms.",
+   "inspect_locate": "The execution used 18 searches without printing the whole context. The task requires locating constructor forwarding, form-level hook assembly, and field-level execution to preserve hook ordering.",
+   "persistent_state": "The execution reused repository context across six turns. Findings about sequence ownership and hook ordering apply to both processing and validation, making retained context useful for coordinating the changes."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise unified-diff deliverable. Naming the public APIs and required behavior defines the change without revealing the faulty implementation or prescribing solver operations. The verified patch copies sequences before appending inline hooks and preserves existing execution order. The task is distinct from the accepted CSRF investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable combines changes to both hook assembly paths into one diff, whose contexts and preservation of declared/supplied/inline ordering should be checked before submission.",
+   "inspect_locate": "Constructor forwarding, form-level inline hooks, and field-level execution order are implemented in different portions of form.py and fields/core.py.",
+   "persistent_state": "The repair has two parallel paths, processing and validation. Earlier findings about supplied sequences and inline-hook ordering must be retained while preparing coordinated changes that work across repeated invocations."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::Form.__init__",
+    "why": "Constructor keyword arguments are forwarded into processing, including extra_filters."
+   },
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::BaseForm.process",
+    "why": "The mapping is copied shallowly before an inline filter is appended to a caller-owned per-field sequence."
+   },
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::Form.validate",
+    "why": "Inline validators are likewise appended after a shallow mapping copy."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.process",
+    "why": "Runs field-declared filters before extra filters."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.validate",
+    "why": "Runs field-declared validators before extra validators while preserving stop and error behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_reusable_extra_hooks.py\n@@ -0,0 +1,72 @@\n+import pytest\n+\n+from wtforms.fields import StringField\n+from wtforms.form import Form\n+\n+\n+@pytest.mark.parametrize(\"sequence_type\", [list, tuple])\n+def test_extra_filters_are_reusable(sequence_type):\n+    def declared(value):\n+        return value + \"|declared\"\n+\n+    def supplied(value):\n+        return value + \"|supplied\"\n+\n+    class F(Form):\n+        a = StringField(default=\"start\", filters=[declared])\n+\n+        def filter_a(self, value):\n+            return value + \"|inline\"\n+\n+    sequence = sequence_type([supplied])\n+    extras = {\"a\": sequence}\n+    form = F(extra_filters=extras)\n+    assert form.a.data == \"start|declared|supplied|inline\"\n+    assert extras == {\"a\": sequence_type([supplied])}\n+    assert extras[\"a\"] is sequence\n+\n+    form.process(a=\"again\", extra_filters=extras)\n+    assert form.a.data == \"again|declared|supplied|inline\"\n+    assert extras == {\"a\": sequence_type([supplied])}\n+    assert extras[\"a\"] is sequence\n+\n+    other = F(extra_filters=extras)\n+    assert other.a.data == \"start|declared|supplied|inline\"\n+    assert extras == {\"a\": sequence_type([supplied])}\n+\n+\n+@pytest.mark.parametrize(\"sequence_type\", [list, tuple])\n+def test_extra_validators_are_reusable(sequence_type):\n+    events = []\n+\n+    def declared(form, field):\n+        events.append(\"declared\")\n+\n+    def supplied(form, field):\n+        events.append(\"supplied\")\n+\n+    class F(Form):\n+        a = StringField(validators=[declared])\n+\n+        def validate_a(self, field):\n+            events.append(\"inline\")\n+\n+    sequence = sequence_type([supplied])\n+    extras = {\"a\": sequence}\n+    form = F(a=\"value\")\n+    assert form.validate(extra_validators=extras)\n+    assert events == [\"declared\", \"supplied\", \"inline\"]\n+    assert extras == {\"a\": sequence_type([supplied])}\n+    assert extras[\"a\"] is sequence\n+\n+    events.clear()\n+    assert form.validate(extra_validators=extras)\n+    assert events == [\"declared\", \"supplied\", \"inline\"]\n+    assert extras == {\"a\": sequence_type([supplied])}\n+    assert extras[\"a\"] is sequence\n+\n+    events.clear()\n+    other = F(a=\"other\")\n+    assert other.validate(extra_validators=extras)\n+    assert events == [\"declared\", \"supplied\", \"inline\"]\n+    assert extras == {\"a\": sequence_type([supplied])}\n",
+  "include_failure_log": false,
+  "notes": "The new tests use public Form APIs and ordinary StringField declarations. All four parametrized cases fail on the current implementation through mutation or tuple append errors.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Make extra hook collections reusable in declarative forms. `extra_filters` passed to a `Form` constructor or `process`, and `extra_validators` passed to `Form.validate`, must accept per-field lists or tuples without modifying the caller's mapping or sequences. Keep the existing order: field-declared hooks, supplied extra hooks, then the form's inline `filter_<name>` or `validate_<name>` hook. Each inline hook must run once per invocation; reusing the same collections for another invocation or another form must not accumulate inline hooks. Deliver a unified diff against non-test repository files, preserving existing processing and validation semantics.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_reusable_extra_hooks.py::test_extra_filters_are_reusable[list]",
+   "tests/test_reusable_extra_hooks.py::test_extra_filters_are_reusable[tuple]",
+   "tests/test_reusable_extra_hooks.py::test_extra_validators_are_reusable[list]",
+   "tests/test_reusable_extra_hooks.py::test_extra_validators_are_reusable[tuple]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 8,
+    "passed": 350
+   },
+   "patch_files": [
+    "src/wtforms/form.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_reusable_extra_hooks.py::test_extra_filters_are_reusable[list]",
+   "tests/test_reusable_extra_hooks.py::test_extra_filters_are_reusable[tuple]",
+   "tests/test_reusable_extra_hooks.py::test_extra_validators_are_reusable[list]",
+   "tests/test_reusable_extra_hooks.py::test_extra_validators_are_reusable[tuple]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

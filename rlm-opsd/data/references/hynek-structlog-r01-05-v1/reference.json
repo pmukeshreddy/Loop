@@ -1,0 +1,139 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -1192,8 +1192,10 @@\n         # If required, unset stack-related attributes on the record copy so\n         # that the base implementation doesn't append stacktraces to the\n         # output.\n+        # Clear any exception text cached by another formatter so that the\n+        # base implementation uses this formatter's formatException method.\n+        record.exc_text = None\n         if not self.keep_exc_info:\n-            record.exc_text = None\n             record.exc_info = None\n         if not self.keep_stack_info:\n             record.stack_info = None\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0007535250667478736,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "start"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines the formatter-specific exception-rendering requirement with exception suppression and original-record isolation. The reference execution constructed and inspected the final diff in code before finishing; it does not show repository test execution, so the execution evidence supports artifact verification rather than an independently demonstrated regression-test run.",
+   "inspect_locate": "The reference execution used two targeted searches in a 706,015-character repository context without printing the whole context. Locating record preparation and the keep-flag handling was useful for identifying where cached exception text interacts with delegation to logging.Formatter."
+  },
+  "notes": "This is a natural, precisely scoped maintenance request with a clear unified-diff deliverable. It states observable behavior without prescribing the implementation or solver workflow. The variation is substantive: it addresses reuse of an earlier formatter's cached exception text, whereas the parent task addresses mutation of the caller's LogRecord. Identifying the formatter does not make this a lookup-only task, because the change requires reasoning about conditional exception retention, base-formatter rendering, and record-copy isolation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact-source patch whose behavior must be checked across structured and foreign records and both keep_exc_info settings. The checks must distinguish retained exception information, formatter-specific exception output, and preservation of the original record.",
+   "inspect_locate": "The supplied stdlib module and integration suite exceed the direct-read size limit. The relevant evidence is concentrated in record preparation, the keep flags, delegation to logging.Formatter, and exception-retention tests; unrelated bound-logger and async functionality can be excluded."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "Copies the incoming record, clears cached exception text only when exception retention is disabled, and delegates final formatting to logging.Formatter."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.wrap_for_formatter",
+    "why": "Provides the public mechanism for marking structured records, which must receive the same exception-rendering behavior."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter.test_formatter_unsets_exc_info",
+    "why": "Establishes the existing distinction between suppressing appended exception output and retaining it, but does not cover inherited cached text with a custom formatException."
+   }
+  ],
+  "expected_answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -1230,10 +1230,10 @@\n         # If required, unset stack-related attributes on the record copy so\n         # that the base implementation doesn't append stacktraces to the\n         # output.\n+        record.exc_text = None\n         if not self.keep_exc_info:\n-            record.exc_text = None\n             record.exc_info = None\n         if not self.keep_stack_info:\n             record.stack_info = None\n \n         for p in self.processors:\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_processor_formatter_exception_cache.py\n@@ -0,0 +1,62 @@\n+import logging\n+import sys\n+\n+import pytest\n+\n+from structlog.stdlib import ProcessorFormatter\n+\n+\n+class DistinctiveFormatter(ProcessorFormatter):\n+    def formatException(self, exc_info):\n+        self.exception_calls.append(exc_info)\n+        return f\"own exception: {exc_info[1]}\"\n+\n+\n+@pytest.mark.parametrize(\"keep\", [True, False])\n+@pytest.mark.parametrize(\"structured\", [True, False])\n+def test_cached_exception_rendering(keep, structured):\n+    try:\n+        raise ValueError(\"broken\")\n+    except ValueError:\n+        exc_info = sys.exc_info()\n+\n+    if structured:\n+        event_dict = {\"event\": \"hello world\", \"exc_info\": exc_info}\n+        args, kwargs = ProcessorFormatter.wrap_for_formatter(\n+            logging.getLogger(\"cached-exception\"), \"error\", event_dict\n+        )\n+        record = logging.LogRecord(\n+            \"cached-exception\", logging.ERROR,\n+            __file__, 1, args[0], (), exc_info,\n+        )\n+        record.__dict__.update(kwargs[\"extra\"])\n+    else:\n+        record = logging.LogRecord(\n+            \"cached-exception\", logging.ERROR,\n+            __file__, 1, \"hello %s\", (\"world\",), exc_info,\n+        )\n+\n+    record.exc_text = \"earlier handler exception\"\n+    original = record.__dict__.copy()\n+    original_message = record.msg.copy() if structured else record.msg\n+\n+    formatter = DistinctiveFormatter(\n+        processors=[lambda logger, name, ed: ed[\"event\"] + \" [processed]\"],\n+        keep_exc_info=keep,\n+    )\n+    formatter.exception_calls = []\n+    expected = \"hello world [processed]\"\n+    if keep:\n+        expected += \"\\nown exception: broken\"\n+\n+    assert formatter.format(record) == expected\n+    assert record.__dict__ == original\n+    assert record.msg == original_message\n+    assert record.exc_info is exc_info\n+    assert record.exc_text == \"earlier handler exception\"\n+    assert formatter.exception_calls == ([exc_info] if keep else [])\n+\n+    assert formatter.format(record) == expected\n+    assert record.__dict__ == original\n+    assert record.msg == original_message\n+    assert formatter.exception_calls == ([exc_info, exc_info] if keep else [])\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against an existing uncovered behavior, so no setup defect is injected. The supplied snapshot already contains the original LogRecord-copying repair; retain it. The new hidden tests should fail on the two keep_exc_info=True cases before the change and pass for both keep settings afterward. They verify distinctive formatException output, repeated formatting, and preservation of the original record for both record origins. The expected repair differs from the original task by addressing inherited exception-text caching rather than adding record isolation. Repository scope is used because the complete supplied stdlib module alone exceeds the 16,000-character direct_solve limit.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "ProcessorFormatter can display exception text produced by an earlier handler even when its own formatException override should render the exception. Support formatter-specific exception rendering when keep_exc_info=True: an incoming record containing both exc_info and pre-populated exc_text must produce this formatter's exception output, not the earlier handler's cached text. Apply this behavior to both foreign records and structured records created through wrap_for_formatter. With keep_exc_info=False, neither the cached exception text nor an additional exception rendering should be appended. Formatting must leave the caller's original record, including its exception tuple and cached text, unchanged, and preserve existing processor-chain and stack-info behavior. Return a unified diff against non-test repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused inspect_locate and combine_verify_finish: inspect exception-cache handling and the delegation to logging.Formatter, then verify output and original-record preservation across keep flags. The supplied stdlib module is sufficient for a direct investigation; repository-wide exploration or recursive sub-calls would not be useful.",
+  "change_type": "failure_condition",
+  "description": "With the original LogRecord-isolation repair already applied, address stale exception rendering in src/structlog/stdlib.py::ProcessorFormatter.format. An earlier logging handler may populate record.exc_text using its own exception formatter. Require ProcessorFormatter with keep_exc_info=True to render retained exc_info through its own formatException implementation rather than reuse that earlier handler's cached text. Return a unified diff against non-test files, and verify using a ProcessorFormatter subclass with distinctive exception output, an input record containing both exc_info and pre-populated exc_text, and both keep_exc_info settings.",
+  "expected_answer_change": "The repair must invalidate inherited exc_text on the formatter's private record when exception information is retained, allowing logging.Formatter to recompute it through this formatter. It must leave the original record's cached text and exception tuple unchanged and preserve suppression when keep_exc_info=False. Relevant existing coverage is tests/test_stdlib.py::TestProcessorFormatter.test_formatter_unsets_exc_info, but the decisive verification requires a cached-text/custom-formatException case rather than the original handler-isolation tests.",
+  "why_substantive": "The original defect loses exception state by mutating the shared record. This problem persists after record copying: the copy inherits an exception-text cache produced by a different formatter. The new investigation must distinguish preserving exception information from preserving a formatter-specific cached rendering."
+ },
+ "task_id": "hynek-structlog-r01-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_processor_formatter_exception_cache.py::test_cached_exception_rendering[False-True]",
+   "tests/test_processor_formatter_exception_cache.py::test_cached_exception_rendering[True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 888
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_processor_formatter_exception_cache.py::test_cached_exception_rendering[False-True]",
+   "tests/test_processor_formatter_exception_cache.py::test_cached_exception_rendering[True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

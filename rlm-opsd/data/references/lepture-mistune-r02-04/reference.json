@@ -1,0 +1,162 @@
+{
+ "answer": "--- a/src/mistune/plugins/table.py\n+++ b/src/mistune/plugins/table.py\n@@ -245,11 +245,15 @@\n \n def table_in_quote(md: \"Markdown\") -> None:\n     \"\"\"Enable table plugin in block quotes.\"\"\"\n-    md.block.insert_rule(md.block.block_quote_rules, \"table\", before=\"paragraph\")\n-    md.block.insert_rule(md.block.block_quote_rules, \"nptable\", before=\"paragraph\")\n+    if \"table\" not in md.block.block_quote_rules:\n+        md.block.insert_rule(md.block.block_quote_rules, \"table\", before=\"paragraph\")\n+    if \"nptable\" not in md.block.block_quote_rules:\n+        md.block.insert_rule(md.block.block_quote_rules, \"nptable\", before=\"paragraph\")\n \n \n def table_in_list(md: \"Markdown\") -> None:\n     \"\"\"Enable table plugin in list.\"\"\"\n-    md.block.insert_rule(md.block.list_rules, \"table\", before=\"paragraph\")\n-    md.block.insert_rule(md.block.list_rules, \"nptable\", before=\"paragraph\")\n+    if \"table\" not in md.block.list_rules:\n+        md.block.insert_rule(md.block.list_rules, \"table\", before=\"paragraph\")\n+    if \"nptable\" not in md.block.list_rules:\n+        md.block.insert_rule(md.block.list_rules, \"nptable\", before=\"paragraph\")\n--- a/src/mistune/plugins/math.py\n+++ b/src/mistune/plugins/math.py\n@@ -76,9 +76,11 @@\n \n def math_in_quote(md: \"Markdown\") -> None:\n     \"\"\"Enable block math plugin in block quote.\"\"\"\n-    md.block.insert_rule(md.block.block_quote_rules, \"block_math\", before=\"list\")\n+    if \"block_math\" not in md.block.block_quote_rules:\n+        md.block.insert_rule(md.block.block_quote_rules, \"block_math\", before=\"list\")\n \n \n def math_in_list(md: \"Markdown\") -> None:\n     \"\"\"Enable block math plugin in list.\"\"\"\n-    md.block.insert_rule(md.block.list_rules, \"block_math\", before=\"list\")\n+    if \"block_math\" not in md.block.list_rules:\n+        md.block.insert_rule(md.block.list_rules, \"block_math\", before=\"list\")\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009930233742425014,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 549836 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files', 'p']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines changes in both plugin modules, covers all four helpers, and was constructed and inspected programmatically before completion. The supplied verification supports rule-list stability and unchanged rendering after repeated enablement.",
+   "inspect_locate": "The execution used 12 targeted searches across repository context to locate the four helpers and the shared rule-insertion and parsing infrastructure. Understanding ordering and scanner behavior requires more than finding the named helpers.",
+   "persistent_state": "The execution reused repository data in `files` and `p` across turns while developing the patch. The task also supplies meaningful stateful constraints: repeat installation must preserve existing rule positions and rendering after prior parser use."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise production-only unified-diff format. Naming the affected public helpers defines the requested scope without prescribing the fix. Ordering, independent helper installation, combined enablement, and prior rendering impose coherent constraints rather than unrelated checks. The task is distinct from the accepted inline-plugin registration and scanning repairs."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The resulting patch must satisfy all four helper configurations without moving existing rules or introducing duplicate scanner groups, and its source hunks must be checked against the selected shared or local implementation.",
+   "inspect_locate": "The four public container-enablement helpers live in two plugin modules and delegate rule insertion to core infrastructure, while container parsing uses separate rule lists and scanners.",
+   "persistent_state": "The implementation must preserve existing rule positions and previously established scanner/rendering behavior across repeated plugin installation, so the investigation reuses the helper-to-rule-list relationships and ordering constraints."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/plugins/table.py",
+    "symbol": "src/mistune/plugins/table.py::table_in_quote",
+    "why": "Enables two separate table rules in the quote-specific grammar."
+   },
+   {
+    "path": "src/mistune/plugins/table.py",
+    "symbol": "src/mistune/plugins/table.py::table_in_list",
+    "why": "Enables those rules independently in the list-specific grammar."
+   },
+   {
+    "path": "src/mistune/plugins/math.py",
+    "symbol": "src/mistune/plugins/math.py::math_in_quote",
+    "why": "Inserts block_math before list in the quote-specific rule sequence."
+   },
+   {
+    "path": "src/mistune/plugins/math.py",
+    "symbol": "src/mistune/plugins/math.py::math_in_list",
+    "why": "Provides the corresponding list-scoped enablement."
+   },
+   {
+    "path": "src/mistune/core.py",
+    "symbol": "src/mistune/core.py::Parser.insert_rule",
+    "why": "Shared rule insertion currently permits duplicate entries."
+   },
+   {
+    "path": "src/mistune/core.py",
+    "symbol": "src/mistune/core.py::Parser.compile_sc",
+    "why": "Constructs named regex groups from rule sequences, making duplicates invalid when compiled."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_container_enablement_idempotence.py\n@@ -0,0 +1,40 @@\n+import pytest\n+\n+from mistune import create_markdown\n+from mistune.plugins.math import math_in_list, math_in_quote\n+from mistune.plugins.table import table_in_list, table_in_quote\n+\n+\n+@pytest.mark.parametrize(\n+    \"plugin, enable, attr, source, fragment\",\n+    [\n+        (\"table\", table_in_quote, \"block_quote_rules\", \"> A | B\\n> - | -\\n> 1 | 2\\n\", \"<table>\"),\n+        (\"table\", table_in_list, \"list_rules\", \"- A | B\\n  - | -\\n  1 | 2\\n\", \"<table>\"),\n+        (\"math\", math_in_quote, \"block_quote_rules\", \"> $$\\n> x\\n> $$\\n\", 'class=\"math\"'),\n+        (\"math\", math_in_list, \"list_rules\", \"- $$\\n  x\\n  $$\\n\", 'class=\"math\"'),\n+    ],\n+)\n+def test_repeated_container_enabling_preserves_rules_and_rendering(plugin, enable, attr, source, fragment):\n+    md = create_markdown(escape=False, plugins=[plugin, enable])\n+    rules = getattr(md.block, attr)\n+    initial_rules = list(rules)\n+    expected = md(source)\n+    assert fragment in expected\n+    for _ in range(3):\n+        md.use(enable)\n+        assert getattr(md.block, attr) == initial_rules\n+        assert md(source) == expected\n+\n+\n+def test_reenabling_does_not_move_existing_rules_relative_to_other_extensions():\n+    md = create_markdown(plugins=[\"table\", \"math\", table_in_quote, math_in_quote])\n+    rules = md.block.block_quote_rules\n+    table_pos = rules.index(\"table\")\n+    rules.insert(table_pos, \"block_html\")\n+    initial_rules = list(rules)\n+    md.use(table_in_quote)\n+    md.use(math_in_quote)\n+    assert rules == initial_rules\n+    assert rules.count(\"table\") == 1\n+    assert rules.count(\"nptable\") == 1\n+    assert rules.count(\"block_math\") == 1\n",
+  "include_failure_log": false,
+  "notes": "A shared insertion fix or coordinated helper fixes are both acceptable. Hidden tests use only the named public helpers, Markdown.use, observable rendering, and the explicitly discussed container rule lists.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Make `table_in_quote`, `table_in_list`, `math_in_quote`, and `math_in_list` safe to install repeatedly through `Markdown.use`. Assume the corresponding base `table` or `math` plugin is already installed. First-time enablement must retain its current rule ordering and behavior. Later calls must neither duplicate the enabled rule names nor move already-present rules relative to other extensions, and rendering must remain unchanged even if the parser has already rendered a document. Support each helper independently and table/math enablement together. Return a unified diff against production files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_container_enablement_idempotence.py::test_reenabling_does_not_move_existing_rules_relative_to_other_extensions",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[math-math_in_list-list_rules-- $$\\n  x\\n  $$\\n-class=\"math\"]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[math-math_in_quote-block_quote_rules-> $$\\n> x\\n> $$\\n-class=\"math\"]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[table-table_in_list-list_rules-- A | B\\n  - | -\\n  1 | 2\\n-<table>]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[table-table_in_quote-block_quote_rules-> A | B\\n> - | -\\n> 1 | 2\\n-<table>]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1160
+   },
+   "patch_files": [
+    "src/mistune/plugins/table.py",
+    "src/mistune/plugins/math.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_container_enablement_idempotence.py::test_reenabling_does_not_move_existing_rules_relative_to_other_extensions",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[math-math_in_list-list_rules-- $$\\n  x\\n  $$\\n-class=\"math\"]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[math-math_in_quote-block_quote_rules-> $$\\n> x\\n> $$\\n-class=\"math\"]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[table-table_in_list-list_rules-- A | B\\n  - | -\\n  1 | 2\\n-<table>]",
+   "tests/test_container_enablement_idempotence.py::test_repeated_container_enabling_preserves_rules_and_rendering[table-table_in_quote-block_quote_rules-> A | B\\n> - | -\\n> 1 | 2\\n-<table>]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

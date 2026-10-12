@@ -1,0 +1,44 @@
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -1,9 +1,15 @@
+ import math
+ import json
++from contextvars import ContextVar
+ 
+ from jmespath import exceptions
+ from jmespath.compat import string_type as STRING_TYPE
+ from jmespath.compat import get_methods
++
++
++# Keep the mapping factory local to an evaluation, not on a potentially
++# shared custom Functions instance.  Direct function calls default to dict.
++_MERGE_DICT_CLS = ContextVar('jmespath_merge_dict_cls', default=dict)
+ 
+ 
+ # python types -> jmespath types
+@@ -261,7 +267,7 @@
+ 
+     @signature({"types": ["object"], "variadic": True})
+     def _func_merge(self, *arguments):
+-        merged = {}
++        merged = _MERGE_DICT_CLS.get()()
+         for arg in arguments:
+             merged.update(arg)
+         return merged
+--- a/jmespath/visitor.py
++++ b/jmespath/visitor.py
+@@ -168,7 +168,13 @@
+         for child in node['children']:
+             current = self.visit(child, value)
+             resolved_args.append(current)
+-        return self._functions.call_function(node['value'], resolved_args)
++        # Scope the built-in merge factory without changing custom function
++        # instances or their dispatch interface.  Restore it for nested searches.
++        token = functions._MERGE_DICT_CLS.set(self._dict_cls)
++        try:
++            return self._functions.call_function(node['value'], resolved_args)
++        finally:
++            functions._MERGE_DICT_CLS.reset(token)
+ 
+     def visit_filter_projection(self, node, value):
+         base = self.visit(node['children'][0], value)

@@ -1,0 +1,147 @@
+{
+ "answer": "--- a/glom/core.py\n+++ b/glom/core.py\n@@ -2123,7 +2123,8 @@\n             for op_name in new_op_map:\n                 self._register_fuzzy_type(op_name, target_type)\n \n-\n+        # Registrations can change dispatch for previously cached subtypes too.\n+        self._type_cache.clear()\n         return\n \n     def register_op(self, op_name, auto_func=None, exact=False):\n@@ -2170,6 +2171,7 @@\n         self._op_type_map[op_name] = type_map\n         self._op_type_tree[op_name] = type_tree\n         self._op_auto_map[op_name] = auto_func\n+        self._type_cache.clear()\n \n     def _register_builtin_ops(self):\n         def _get_iterable_handler(type_obj):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.006691055773519907,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "index",
+    "test"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 7847,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 407559 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['core', 'files', 'index', 'test']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final unified diff was constructed programmatically and inspected before delivery, checking its source context and scope.",
+   "inspect_locate": "The execution used 12 targeted searches across the repository context to connect registration tests, Glommer-local registration, and cached handler dispatch, without printing the whole context.",
+   "persistent_state": "Repository and test variables were reused across seven turns, supporting continuity while comparing the registration paths and constructing the repair."
+  },
+  "notes": "This is a natural, repository-dependent regression repair. The question describes the observed behavior without naming the defective implementation or prescribing a fix. The verified patch invalidates registry-owned dispatch caches after registration changes, preserving local isolation. The requested output is precise, and the task does not duplicate the accepted grouped-consumption investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final repair is an exact-source diff whose hunk and scope should be checked before delivery.",
+   "inspect_locate": "Registration failures require locating the tests, the Glommer-local registration path, and the handler lookup machinery rather than inspecting only the public API.",
+   "persistent_state": "The investigation must retain the sequence of initial registration, handler resolution, later registration, and subsequent lookup while relating the registry's maps, subtype tree, and cached results."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::TargetRegistry.get_handler",
+    "why": "Resolved handlers are retained by target type and operation, bypassing fresh dispatch on later lookups."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::TargetRegistry.register",
+    "why": "Updates the operation maps and subtype trees and is responsible for invalidating previous resolutions."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Glommer.register",
+    "why": "Routes local registrations to the instance's own registry."
+   },
+   {
+    "path": "glom/test/test_target_types.py",
+    "symbol": null,
+    "why": "Existing registration tests provide observable evidence of dispatch and replacement behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup patch removes only registration-time cache invalidation. A correct repair should not bypass caching altogether or replace the Glommer registry with the global registry.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Handler registration has regressed: after a target type has already been used, later registrations do not reliably change subsequent evaluation behavior. The attached pytest output contains the failing cases. Restore the registration semantics demonstrated by the existing tests, preserving both global registration and Glommer-local isolation. Deliver a unified diff against the repository files without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/glom/core.py\n+++ b/glom/core.py\n@@ -2090,8 +2090,7 @@\n         if not exact:\n             for op_name in new_op_map:\n                 self._register_fuzzy_type(op_name, target_type)\n \n-        self._type_cache = {}  # reset type cache\n \n         return\n \n"
+ },
+ "suggestion": null,
+ "task_id": "mahmoud-glom-r01-01",
+ "truth": {
+  "fail_to_pass": [
+   "glom/test/test_target_types.py::test_reregister_type"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 200
+   },
+   "patch_files": [
+    "glom/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "glom/test/test_target_types.py::test_reregister_type"
+  ],
+  "ground_truth_symbols": [
+   "glom/core.py::TargetRegistry.register"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 199,
+  "stability_runs": 3
+ }
+}

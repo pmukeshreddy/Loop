@@ -1,0 +1,101 @@
+--- /dev/null
++++ b/tests/test_bytecode_checksum_recovery.py
+@@ -0,0 +1,98 @@
++import pickle
++from io import BytesIO
++
++import pytest
++
++from jinja2 import DictLoader
++from jinja2 import Environment
++from jinja2 import FileSystemBytecodeCache
++from jinja2.bccache import bc_magic
++from jinja2.bccache import Bucket
++
++
++CHECKSUM = "a" * 40
++PREFIXES = [0, 1, 2, 3, 7, -1]
++
++
++@pytest.mark.parametrize("cut", PREFIXES)
++def test_truncated_checksum_from_string_clears_code(cut):
++    bucket = Bucket(Environment(), "key", CHECKSUM)
++    bucket.code = compile("value = 1", "cached", "exec")
++    payload = bc_magic + pickle.dumps(CHECKSUM, 2)[:cut]
++
++    bucket.bytecode_from_string(payload)
++
++    assert bucket.code is None
++
++
++@pytest.mark.parametrize("cut", PREFIXES)
++def test_truncated_checksum_from_filesystem_clears_code(tmp_path, cut):
++    cache = FileSystemBytecodeCache(str(tmp_path), "%s.cache")
++    bucket = Bucket(Environment(), "key", CHECKSUM)
++    bucket.code = compile("value = 1", "cached", "exec")
++    path = tmp_path / (cache.pattern % bucket.key)
++    path.write_bytes(bc_magic + pickle.dumps(CHECKSUM, 2)[:cut])
++
++    cache.load_bytecode(bucket)
++
++    assert bucket.code is None
++
++
++@pytest.mark.parametrize("cut", PREFIXES)
++def test_template_loading_replaces_truncated_checksum(tmp_path, monkeypatch, cut):
++    source = "Hello {{ name }}!"
++    cache = FileSystemBytecodeCache(str(tmp_path), "%s.cache")
++    env = Environment(loader=DictLoader({"page": source}), bytecode_cache=cache, cache_size=0)
++    key = cache.get_cache_key("page", None)
++    checksum = cache.get_source_checksum(source)
++    path = tmp_path / (cache.pattern % key)
++    path.write_bytes(bc_magic + pickle.dumps(checksum, 2)[:cut])
++    calls = []
++    original_compile = env.compile
++
++    def record_compile(*args, **kwargs):
++        calls.append(args)
++        return original_compile(*args, **kwargs)
++
++    monkeypatch.setattr(env, "compile", record_compile)
++    assert env.get_template("page").render(name="Ada") == "Hello Ada!"
++    assert env.get_template("page").render(name="Grace") == "Hello Grace!"
++    assert len(calls) == 1
++
++
++@pytest.mark.parametrize("stage", ["header", "checksum", "code"])
++def test_stream_io_errors_propagate(stage):
++    error = OSError("cache stream read failed")
++    data = bc_magic + pickle.dumps(CHECKSUM, 2)
++    offsets = {"header": 0, "checksum": len(bc_magic), "code": len(data)}
++    failure_at = offsets[stage]
++
++    class BrokenStream(BytesIO):
++        def read(self, size=-1):
++            if self.tell() >= failure_at:
++                raise error
++            return super().read(size)
++
++        def readline(self, size=-1):
++            if self.tell() >= failure_at:
++                raise error
++            return super().readline(size)
++
++    bucket = Bucket(Environment(), "key", CHECKSUM)
++    bucket.code = compile("value = 1", "cached", "exec")
++    with pytest.raises(OSError) as exc_info:
++        bucket.load_bytecode(BrokenStream(data))
++
++    assert exc_info.value is error
++
++
++def test_valid_bytecode_still_round_trips():
++    bucket = Bucket(Environment(), "key", CHECKSUM)
++    code = compile("value = 42", "cached", "exec")
++    bucket.code = code
++    data = bucket.bytecode_to_string()
++    bucket.reset()
++    bucket.bytecode_from_string(data)
++    assert isinstance(bucket.code, type(code))
++    assert bucket.code.co_code == code.co_code
++    assert bucket.code.co_consts == code.co_consts

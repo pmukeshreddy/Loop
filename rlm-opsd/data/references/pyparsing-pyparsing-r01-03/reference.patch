@@ -1,0 +1,27 @@
+--- a/pyparsing/actions.py
++++ b/pyparsing/actions.py
+@@ -114,6 +114,11 @@
+     - as an explicit dict with ``**`` operator, when an attribute
+       name is also a Python reserved word, as in ``**{"class":"Customer", "align":"right"}``
+     - a list of name-value tuples, as in ``(("ns1:class", "Customer"), ("ns2:align", "right"))``
++
++    Positional name-value pairs and keyword arguments may be combined in
++    the same call. All constraints are checked, positional pairs first,
++    followed by keyword arguments in insertion order. Repeated attribute
++    names are checked separately.
+ 
+     For attribute names with a namespace prefix, you must use the second
+     form.  Attribute names are matched insensitive to upper/lower case.
+@@ -173,10 +178,8 @@
+        1,3 2,3 1,1
+     """
+     attrs_list: list[tuple[str, str]] = []
+-    if args:
+-        attrs_list.extend(args)
+-    else:
+-        attrs_list.extend(attr_dict.items())
++    attrs_list.extend(args)
++    attrs_list.extend(attr_dict.items())
+ 
+     def pa(s: str, l: int, tokens: ParseResults) -> None:
+         for attrName, attrValue in attrs_list:

@@ -1,0 +1,123 @@
+{
+ "answer": "--- a/h11/_receivebuffer.py\n+++ b/h11/_receivebuffer.py\n@@ -93,7 +93,8 @@\n         partial_idx = self._data.find(b\"\\r\\n\", search_start_index)\n \n         if partial_idx == -1:\n-            self._next_line_search = len(self._data)\n+            # Recheck the last byte in case a CRLF is split across appends.\n+            self._next_line_search = max(0, len(self._data) - 1)\n             return None\n \n         # + 2 is to compensate len(b\"\\r\\n\")\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.2545952287837309,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "old"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 10228 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused two-file context supports direct diagnosis by reasoning about the line-search cursor across appends. The reference execution used no sub-calls, and the verified patch preserves a one-byte overlap so a split CRLF is recognized."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise unified-diff output requirement. Naming the affected component and expected behavior does not disclose the defective method or cursor fix. The verified patch passes the relevant ReceiveBuffer and chunked-reader tests without modifying tests."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only ReceiveBuffer and its tests, totaling less than 16,000 characters. Diagnosing the failure requires simulating the search cursor across successive appends and recognizing a delimiter that crosses an append boundary."
+  },
+  "context": {
+   "files": [
+    "h11/_receivebuffer.py",
+    "h11/tests/test_receivebuffer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "h11/_receivebuffer.py",
+    "symbol": "h11/_receivebuffer.py::ReceiveBuffer.maybe_extract_next_line",
+    "why": "The remembered search position determines whether a delimiter spanning two appends is recognized."
+   },
+   {
+    "path": "h11/tests/test_receivebuffer.py",
+    "symbol": "h11/tests/test_receivebuffer.py::test_receivebuffer",
+    "why": "The test checks partial CRLF input, extraction after the final newline arrives, and extraction of the following line."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The defect should fail test_receivebuffer and incremental chunked-reader coverage without affecting whole-buffer parsing. The focused context is intentionally small.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in ReceiveBuffer's incremental line extraction. Restore its existing behavior: a CRLF delimiter split across appends must be recognized, and subsequent extractions must leave the correct trailing bytes. Submit a unified diff against the non-test files; leave the tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "stream_fragmentation_analysis",
+  "setup_patch": "--- a/h11/_receivebuffer.py\n+++ b/h11/_receivebuffer.py\n@@ -100,9 +100,9 @@\n         Extract the first line, if it is completed in the buffer.\n         \"\"\"\n         # Only search in buffer space that we've not already looked at.\n-        search_start_index = max(0, self._next_line_search - 1)\n+        search_start_index = self._next_line_search\n         partial_idx = self._data.find(b\"\\r\\n\", search_start_index)\n \n         if partial_idx == -1:\n             self._next_line_search = len(self._data)\n             return None\n"
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_io.py::test_ChunkedReader",
+   "h11/tests/test_receivebuffer.py::test_receivebuffer"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_receivebuffer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_io.py::test_ChunkedReader",
+   "h11/tests/test_receivebuffer.py::test_receivebuffer"
+  ],
+  "ground_truth_symbols": [
+   "h11/_receivebuffer.py::ReceiveBuffer.maybe_extract_next_line"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 76,
+  "stability_runs": 3
+ }
+}

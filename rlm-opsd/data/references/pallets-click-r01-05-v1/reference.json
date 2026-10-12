@@ -1,0 +1,190 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -888,7 +888,21 @@\n \n             for param in other_cmd.params:\n                 if param.name not in kwargs and param.expose_value:\n-                    default_value = param.get_default(ctx)\n+                    if (\n+                        isinstance(param, Option)\n+                        and param.multiple\n+                        and not param.is_flag\n+                        and not param.count\n+                    ):\n+                        default_value = ctx.lookup_default(param.name)\n+                        if default_value is not None or ctx._default_map_has(param.name):\n+                            default_value = param._normalize_default_map_value(\n+                                default_value\n+                            )\n+                        else:\n+                            default_value = param.get_default(ctx)\n+                    else:\n+                        default_value = param.get_default(ctx)\n                     # We explicitly hide the :attr:`UNSET` value to the user, as we\n                     # choose to make it an implementation detail. And because ``invoke``\n                     # has been designed as part of Click public API, we return ``None``\n@@ -2478,6 +2492,13 @@\n     @abstractmethod\n     def add_to_parser(self, parser: _OptionParser, ctx: Context) -> None: ...\n \n+    def _normalize_default_map_value(self, value: t.Any) -> t.Any:\n+        \"\"\"Split mapped strings using the same rules as environment values.\"\"\"\n+        if isinstance(value, str) and self.nargs != 1:\n+            return self.type.split_envvar_value(value)\n+\n+        return value\n+\n     def consume_value(\n         self, ctx: Context, opts: cabc.Mapping[str, t.Any]\n     ) -> tuple[t.Any, ParameterSource]:\n@@ -2513,10 +2534,7 @@\n                 value = default_map_value\n                 source = ParameterSource.DEFAULT_MAP\n \n-                # A string from default_map must be split for multi-value\n-                # parameters, matching value_from_envvar behavior.\n-                if isinstance(value, str) and self.nargs != 1:\n-                    value = self.type.split_envvar_value(value)\n+                value = self._normalize_default_map_value(value)\n \n         if value is UNSET:\n             default_value = self.get_default(ctx)\n@@ -3586,6 +3604,20 @@\n \n         return rv\n \n+    def _normalize_default_map_value(self, value: t.Any) -> t.Any:\n+        if (\n+            isinstance(value, str)\n+            and self.multiple\n+            and not self.is_flag\n+            and not self.count\n+        ):\n+            value = self.type.split_envvar_value(value)\n+            if self.nargs != 1:\n+                value = batch(value, self.nargs)\n+            return value\n+\n+        return super()._normalize_default_map_value(value)\n+\n     def consume_value(\n         self, ctx: Context, opts: cabc.Mapping[str, Parameter]\n     ) -> tuple[t.Any, ParameterSource]:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008817761538724391,
+  "facts": {
+   "code_blocks": 11,
+   "context_searches": 34,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "base_helper",
+    "core",
+    "files",
+    "new",
+    "new_parse",
+    "old_parse",
+    "option_helper",
+    "patch"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 29329,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 12,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 34 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final patch combines shared normalization with distinct parsed and programmatic acquisition paths. The reference inspected the constructed patch and computed its final value, supporting integration of the callable, conversion, provenance, and bypass constraints. The execution summary does not establish runtime testing by the reference itself.",
+   "inspect_locate": "The reference execution used 34 targeted searches without printing the whole context. Comparing inherited default-map lookup, default acquisition, parsed consumption, and Context.invoke was necessary to identify where normalization belongs and which parsing side effects must remain excluded."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format. Naming Context.invoke identifies the public behavior to extend rather than revealing the fix. Although it retains the earlier task's parsing requirements, adding programmatic dispatch introduces a materially different acquisition path and meaningful constraints on conversion and side effects, so it is not merely a cosmetic variation or duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must cover both acquisition paths while distinguishing string map entries from explicit kwargs and declared defaults. Its conditions and grouping must be checked together against callable evaluation, source recording, flag/count exclusions, and exact source context.",
+   "inspect_locate": "The relevant contracts are scattered within the large core.py module: subcontext construction inherits default maps, default getters distinguish map entries from declared defaults and evaluate callables, parsed acquisition performs normalization, and programmatic invocation goes directly to type conversion. These paths must be compared without importing parsing side effects into programmatic invocation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.invoke",
+    "why": "Omitted exposed parameters are acquired with get_default and cast directly; explicit kwargs bypass that branch."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context._make_sub_context",
+    "why": "Creates the invoked command's context using its name and the current context as parent, enabling nested default-map inheritance."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context._default_map_has",
+    "why": "Distinguishes a real map entry, including explicit None, from an absent entry or an UNSET entry without evaluating a callable."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.get_default",
+    "why": "Chooses a map entry before a declared default and evaluates the acquired callable once."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.get_default",
+    "why": "Applies flag-specific lazy defaults and callable rules that programmatic invocation must retain."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.consume_value",
+    "why": "The supplied snapshot also needs the parsed-path prerequisite: repeated map strings must be normalized before type conversion while retaining DEFAULT_MAP provenance."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.value_from_envvar",
+    "why": "Defines type-specific splitting and batching for repeated fixed-arity options without implying that programmatic dispatch should acquire environment values."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.type_cast_value",
+    "why": "Rejects raw strings for repeated values, accepts grouped iterables, converts map sequences, and maps None to an empty tuple for repeated options."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::batch",
+    "why": "The existing zip-based batching discards incomplete trailing groups."
+   }
+  ],
+  "expected_answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -844,6 +844,17 @@\n             for param in other_cmd.params:\n                 if param.name not in kwargs and param.expose_value:\n                     default_value = param.get_default(ctx)\n+                    if (\n+                        ctx._default_map_has(param.name)\n+                        and isinstance(param, Option)\n+                        and param.multiple\n+                        and not param.is_flag\n+                        and not param.count\n+                        and isinstance(default_value, str)\n+                    ):\n+                        default_value = param.type.split_envvar_value(default_value)\n+                        if param.nargs != 1:\n+                            default_value = batch(default_value, param.nargs)\n                     # We explicitly hide the :attr:`UNSET` value to the user, as we\n                     # choose to make it an implementation detail. And because ``invoke``\n                     # has been designed as part of Click public API, we return ``None``\n@@ -2515,8 +2526,18 @@\n \n                 # A string from default_map must be split for multi-value\n                 # parameters, matching value_from_envvar behavior.\n-                if isinstance(value, str) and self.nargs != 1:\n-                    value = self.type.split_envvar_value(value)\n+                if isinstance(value, str):\n+                    if (\n+                        isinstance(self, Option)\n+                        and self.multiple\n+                        and not self.is_flag\n+                        and not self.count\n+                    ):\n+                        value = self.type.split_envvar_value(value)\n+                        if self.nargs != 1:\n+                            value = batch(value, self.nargs)\n+                    elif self.nargs != 1:\n+                        value = self.type.split_envvar_value(value)\n \n         if value is UNSET:\n             default_value = self.get_default(ctx)\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_invoke_default_map_strings.py\n@@ -0,0 +1,157 @@\n+import pytest\n+\n+import click\n+\n+\n+class CommaType(click.ParamType):\n+    name = \"comma\"\n+    envvar_list_splitter = \",\"\n+\n+    def convert(self, value, param, ctx):\n+        return value\n+\n+\n+def make_command(option):\n+    def callback(**values):\n+        ctx = click.get_current_context()\n+        return values[\"item\"], dict(ctx.params), ctx.get_parameter_source(\"item\")\n+\n+    return click.Command(\"child\", params=[option], callback=callback)\n+\n+\n+def invoke(command, default_map, **kwargs):\n+    parent = click.Context(click.Command(\"parent\"), default_map={\"child\": default_map})\n+    return parent.invoke(command, **kwargs)\n+\n+\n+@pytest.mark.parametrize(\n+    \"type_,nargs,raw,expected\",\n+    [\n+        (str, 1, \"red blue\", (\"red\", \"blue\")),\n+        (str, 1, \"\", ()),\n+        (int, 2, \"1 2 3 4 5\", ((1, 2), (3, 4))),\n+        (CommaType(), 1, \"red blue,green\", (\"red blue\", \"green\")),\n+        (CommaType(), 2, \"a,b,c,d,e\", ((\"a\", \"b\"), (\"c\", \"d\"))),\n+        ((str, int), 2, \"a 1 b 2 tail\", ((\"a\", 1), (\"b\", 2))),\n+    ],\n+)\n+def test_strings_in_both_invocation_paths(type_, nargs, raw, expected):\n+    option = click.Option([\"--item\"], multiple=True, nargs=nargs, type=type_)\n+    command = make_command(option)\n+    value, params, source = invoke(command, {\"item\": raw})\n+    assert value == expected\n+    assert params == {\"item\": expected}\n+    assert source is None\n+    with command.make_context(\"child\", [], default_map={\"item\": raw}) as ctx:\n+        assert ctx.params[\"item\"] == expected\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.DEFAULT_MAP\n+\n+\n+@pytest.mark.parametrize(\"parsed\", [False, True])\n+def test_callable_map_entry_is_evaluated_once(parsed):\n+    calls = []\n+\n+    def default():\n+        calls.append(None)\n+        return \"1 2 3\"\n+\n+    option = click.Option([\"--item\"], type=int, nargs=2, multiple=True)\n+    command = make_command(option)\n+    if parsed:\n+        with command.make_context(\"child\", [], default_map={\"item\": default}) as ctx:\n+            assert ctx.params[\"item\"] == ((1, 2),)\n+    else:\n+        assert invoke(command, {\"item\": default})[0] == ((1, 2),)\n+    assert calls == [None]\n+\n+\n+@pytest.mark.parametrize(\"explicit\", [\"not split\", [\"not cast\"], None, object()])\n+def test_explicit_kwargs_bypass_defaults_and_conversion(explicit):\n+    def default():\n+        raise AssertionError(\"Explicit kwargs must not acquire defaults\")\n+\n+    command = make_command(click.Option([\"--item\"], multiple=True, type=int))\n+    value, params, source = invoke(command, {\"item\": default}, item=explicit)\n+    assert value is explicit\n+    assert params[\"item\"] is explicit\n+    assert source is None\n+\n+\n+@pytest.mark.parametrize(\"mapped\", [None, [\"1\", \"2\"], (\"3\", \"4\")])\n+def test_non_string_map_values_keep_existing_conversion(mapped):\n+    option = click.Option([\"--item\"], multiple=True, type=int, default=(9,))\n+    command = make_command(option)\n+    expected = () if mapped is None else tuple(map(int, mapped))\n+    assert invoke(command, {\"item\": mapped})[0] == expected\n+\n+\n+@pytest.mark.parametrize(\"callable_default\", [False, True])\n+def test_declared_string_defaults_are_not_normalized(callable_default):\n+    default = (lambda: \"1 2\") if callable_default else \"1 2\"\n+    option = click.Option([\"--item\"], multiple=True, type=int, default=default)\n+    with pytest.raises(click.BadParameter, match=\"Value must be an iterable\"):\n+        invoke(make_command(option), {})\n+\n+\n+@pytest.mark.parametrize(\"mapped\", [False, True])\n+def test_invoke_does_not_acquire_environment_prompt_or_parameter_callbacks(monkeypatch, mapped):\n+    def unexpected(*args, **kwargs):\n+        raise AssertionError(\"Programmatic invocation must not process parameters\")\n+\n+    monkeypatch.setenv(\"ITEM_EXPLICIT\", \"environment\")\n+    monkeypatch.setenv(\"APP_CHILD_ITEM\", \"automatic\")\n+    monkeypatch.setattr(click.Option, \"prompt_for_value\", unexpected)\n+    option = click.Option(\n+        [\"--item\"], multiple=True, default=(\"declared\",),\n+        envvar=\"ITEM_EXPLICIT\", prompt=True, callback=unexpected,\n+    )\n+    command = make_command(option)\n+    mapping = {\"item\": \"map values\"} if mapped else {}\n+    parent = click.Context(\n+        click.Command(\"parent\"), auto_envvar_prefix=\"APP\", default_map={\"child\": mapping}\n+    )\n+    expected = (\"map\", \"values\") if mapped else (\"declared\",)\n+    assert parent.invoke(command) == (expected, {\"item\": expected}, None)\n+\n+\n+def test_flag_count_and_non_repeated_options_are_unchanged():\n+    flag = click.Option([\"--item\"], multiple=True, is_flag=True, flag_value=\"on\")\n+    with pytest.raises(click.BadParameter, match=\"Value must be an iterable\"):\n+        invoke(make_command(flag), {\"item\": \"on off\"})\n+    assert invoke(make_command(flag), {\"item\": [\"on\", \"off\"]})[0] == (\"on\", \"off\")\n+    count = click.Option([\"--item\"], count=True)\n+    assert invoke(make_command(count), {\"item\": \"3\"})[0] == 3\n+    scalar = click.Option([\"--item\"], type=str)\n+    assert invoke(make_command(scalar), {\"item\": \"a b\"})[0] == \"a b\"\n+    pair = click.Option([\"--item\"], type=str, nargs=2)\n+    with pytest.raises(click.BadParameter, match=\"Value must be an iterable\"):\n+        invoke(make_command(pair), {\"item\": \"a b\"})\n+\n+\n+def test_declared_sequences_and_missing_values_keep_existing_behavior():\n+    option = click.Option([\"--item\"], multiple=True, type=int, default=[\"1\", \"2\"])\n+    assert invoke(make_command(option), {})[0] == (1, 2)\n+    option = click.Option([\"--item\"], multiple=True, type=int)\n+    assert invoke(make_command(option), {})[0] == ()\n+\n+\n+def test_nested_default_map_inheritance():\n+    option = click.Option([\"--item\"], multiple=True, type=int)\n+    child = make_command(option)\n+    middle = click.Command(\"middle\", callback=lambda: click.get_current_context().invoke(child))\n+    parent = click.Context(\n+        click.Command(\"parent\"), default_map={\"middle\": {\"child\": {\"item\": \"1 2\"}}}\n+    )\n+    assert parent.invoke(middle) == ((1, 2), {\"item\": (1, 2)}, None)\n+\n+\n+def test_parsed_precedence_is_preserved(monkeypatch):\n+    monkeypatch.setenv(\"ITEM\", \"env values\")\n+    option = click.Option([\"--item\"], multiple=True, envvar=\"ITEM\")\n+    command = make_command(option)\n+    with command.make_context(\"child\", [], default_map={\"item\": \"map values\"}) as ctx:\n+        assert ctx.params[\"item\"] == (\"env\", \"values\")\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.ENVIRONMENT\n+    with command.make_context(\"child\", [\"--item\", \"cli\"], default_map={\"item\": \"map values\"}) as ctx:\n+        assert ctx.params[\"item\"] == (\"cli\",)\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.COMMANDLINE\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot does not contain the accepted parsed-default-map patch. This task therefore makes that prerequisite explicit in the question and verifies it alongside the programmatic extension, rather than misusing setup_patch to install a feature. The new hidden-test file exercises inherited and nested maps, callable acquisition, custom delimiters, scalar and composite fixed arities, incomplete groups, explicit kwargs, None, sequences, declared defaults, and dispatch isolation. The original consume_value-only answer cannot pass the programmatic tests. Full repository context is used because core.py alone exceeds the direct_solve size limit; no semantic delegation behavior is claimed.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Extend repeated-option string defaults to programmatic dispatch through Context.invoke(Command, ...). When an ordinary value option has multiple=True and its keyword argument is omitted, a string acquired from the invoked command's inherited default_map should use the option type's environment-variable delimiter rules. For nargs greater than one, group the tokens exactly as the existing environment path does, including its treatment of an incomplete trailing group. These string-default rules must also work through normal command parsing.\n\nEvaluate callable map entries only once per acquisition. Preserve conversion of explicit sequence map values, explicit None map entries, and declared defaults; declared string defaults must not gain this normalization. Explicit keyword arguments must continue to bypass default acquisition and conversion. Leave flag and count-option behavior unchanged, and retain command-line/environment precedence and DEFAULT_MAP provenance during parsing.\n\nContext.invoke must remain programmatic dispatch: do not add environment lookup, prompting, parameter callbacks, or parameter-source recording to that path. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises caller-path tracing and contract comparison: inspect the parsed and programmatic invocation paths, identify which semantics should be shared, and verify that sharing string normalization does not accidentally share environment acquisition, prompting, or callbacks. Direct examination of the relevant core.py methods is sufficient; broad repository delegation is unnecessary.",
+  "change_type": "dependency",
+  "description": "After applying the accepted default-map parsing patch, extend the support to programmatic command invocation. In src/click/core.py, Context.invoke(Command, ...) currently acquires omitted parameters through Parameter.get_default or Option.get_default and sends them directly to Parameter.type_cast_value, bypassing Parameter.consume_value. Make omitted ordinary multiple=True options accept inherited default-map strings with the option type's environment delimiter and fixed-arity grouping rules. Preserve explicit keyword arguments, declared defaults, explicit None, and flag/count behavior. Do not introduce environment lookup, prompting, parameter callbacks, or parameter-source recording into Context.invoke. Return a unified diff without changing tests.",
+  "expected_answer_change": "The patch must reach Context.invoke and account for Context._make_sub_context, Context._default_map_has, Parameter.get_default, Option.get_default, and Parameter.type_cast_value. Callable map entries must still be acquired once, explicit kwargs must bypass normalization, and declared string defaults must retain their existing behavior. The accepted patch alone is insufficient.",
+  "why_substantive": "The accepted patch only changes parsed command invocation. Programmatic invocation follows a separate acquisition path and will still reject string values for repeated options. Solving this requires distinguishing default-map values from declared defaults in Context.invoke or factoring a narrowly scoped normalization operation that both paths can use, rather than repeating the accepted consume_value patch."
+ },
+ "task_id": "pallets-click-r01-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_invoke_default_map_strings.py::test_callable_map_entry_is_evaluated_once[False]",
+   "tests/test_invoke_default_map_strings.py::test_callable_map_entry_is_evaluated_once[True]",
+   "tests/test_invoke_default_map_strings.py::test_invoke_does_not_acquire_environment_prompt_or_parameter_callbacks[True]",
+   "tests/test_invoke_default_map_strings.py::test_nested_default_map_inheritance",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[int-2-1 2 3 4 5-expected2]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[str-1--expected1]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[str-1-red blue-expected0]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_3-1-red blue,green-expected3]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_4-2-a,b,c,d,e-expected4]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_5-2-a 1 b 2 tail-expected5]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2014
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_invoke_default_map_strings.py::test_callable_map_entry_is_evaluated_once[False]",
+   "tests/test_invoke_default_map_strings.py::test_callable_map_entry_is_evaluated_once[True]",
+   "tests/test_invoke_default_map_strings.py::test_invoke_does_not_acquire_environment_prompt_or_parameter_callbacks[True]",
+   "tests/test_invoke_default_map_strings.py::test_nested_default_map_inheritance",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[int-2-1 2 3 4 5-expected2]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[str-1--expected1]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[str-1-red blue-expected0]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_3-1-red blue,green-expected3]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_4-2-a,b,c,d,e-expected4]",
+   "tests/test_invoke_default_map_strings.py::test_strings_in_both_invocation_paths[type_5-2-a 1 b 2 tail-expected5]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

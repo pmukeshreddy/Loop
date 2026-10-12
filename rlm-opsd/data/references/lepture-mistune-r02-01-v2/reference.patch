@@ -1,0 +1,58 @@
+--- a/src/mistune/block_parser.py
++++ b/src/mistune/block_parser.py
+@@ -300,7 +300,10 @@
+         assert text is not None
+         lazy_line_starts: Set[int] = set()
+ 
+-        sc = self.compile_sc(["blank_line", "indent_code", "fenced_code"])
++        marker_rules = ["blank_line", "indent_code", "fenced_code"]
++        if "fenced_directive" in self.specification:
++            marker_rules.append("fenced_directive")
++        sc = self.compile_sc(marker_rules)
+         require_marker = bool(sc.match(text))
+ 
+         state.cursor += len(state.get_line(state.cursor))
+@@ -315,15 +318,16 @@
+                 state.cursor += len(state.get_line(state.cursor))
+         else:
+             prev_blank_line = False
+-            break_sc = self.compile_sc(
+-                [
+-                    "blank_line",
+-                    "thematic_break",
+-                    "fenced_code",
+-                    "list",
+-                    "block_html",
+-                ]
+-            )
++            break_rules = [
++                "blank_line",
++                "thematic_break",
++                "fenced_code",
++                "list",
++                "block_html",
++            ]
++            if "fenced_directive" in self.specification:
++                break_rules.insert(2, "fenced_directive")
++            break_sc = self.compile_sc(break_rules)
+             while state.cursor < state.cursor_max:
+                 quote = _parse_block_quote_line(state.get_line(state.cursor))
+                 if quote is not None:
+@@ -343,6 +347,10 @@
+ 
+                 m4 = break_sc.match(state.src, state.cursor)
+                 if m4:
++                    if m4.lastgroup == "fenced_directive":
++                        # Leave the directive for the parent parser so it follows
++                        # the quote, rather than becoming lazy quote content.
++                        break
+                     end_pos = self.parse_method(m4, state)
+                     if end_pos:
+                         break
+--- a/src/mistune/directives/_fenced.py
++++ b/src/mistune/directives/_fenced.py
+@@ -149,3 +149,4 @@
+             md.block.register("fenced_code", None, self.parse_fenced_code)
+         else:
+             self.register_block_parser(md, "fenced_code")
++            md.block.insert_rule(md.block.block_quote_rules, self.parser.name, before="fenced_code")

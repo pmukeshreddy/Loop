@@ -1,0 +1,13 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -1140,6 +1140,10 @@
+         *record* has been patched by `wrap_for_formatter` first though, so the
+          type isn't quite right.
+         """
++        # Work on a copy so other handlers receive the original record,
++        # including its message, arguments, and exception information.
++        record = logging.makeLogRecord(record.__dict__)
++
+         logger = getattr(record, "_logger", _SENTINEL)
+         meth_name = getattr(record, "_name", "__structlog_sentinel__")
+ 

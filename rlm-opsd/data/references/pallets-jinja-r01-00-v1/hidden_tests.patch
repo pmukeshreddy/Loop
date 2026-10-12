@@ -1,0 +1,134 @@
+--- /dev/null
++++ b/tests/test_overlay_globals_isolation.py
+@@ -0,0 +1,131 @@
++import pytest
++
++from jinja2 import DictLoader
++from jinja2 import Environment
++from jinja2.ext import Extension
++
++
++def test_overlay_globals_snapshot():
++    parent = Environment()
++    shared = {"items": []}
++    parent.globals.update(value="initial", parent_drop=1, overlay_drop=2, shared=shared)
++    before = dict(parent.globals)
++    overlay = parent.overlay()
++    assert overlay.globals == before
++    assert overlay.globals is not parent.globals
++
++    parent.globals["value"] = "parent"
++    parent.globals["parent_only"] = 3
++    del parent.globals["parent_drop"]
++    assert overlay.globals["value"] == "initial"
++    assert "parent_only" not in overlay.globals
++    assert overlay.globals["parent_drop"] == 1
++
++    overlay.globals["value"] = "overlay"
++    overlay.globals["overlay_only"] = 4
++    del overlay.globals["overlay_drop"]
++    assert parent.globals["value"] == "parent"
++    assert "overlay_only" not in parent.globals
++    assert parent.globals["overlay_drop"] == 2
++
++    overlay.globals["shared"]["items"].append("overlay")
++    parent.globals["shared"]["items"].append("parent")
++    assert overlay.globals["shared"] is shared
++    assert shared["items"] == ["overlay", "parent"]
++    overlay.globals["shared"] = {"items": ["replacement"]}
++    assert parent.globals["shared"] is shared
++
++    child = overlay.overlay()
++    overlay.globals["value"] = "later"
++    assert child.globals["value"] == "overlay"
++    child.globals["child_only"] = True
++    assert "child_only" not in overlay.globals
++    assert "child_only" not in parent.globals
++
++
++def test_overlay_template_globals_ownership():
++    source = "{{ value }}|{{ extra|default('-') }}"
++    parent = Environment(loader=DictLoader(dict.fromkeys(["early", "local", "late"], source)))
++    parent.globals["value"] = "initial"
++    early = parent.get_template("early")
++    local = parent.get_template("local", globals={"value": "parent-local"})
++    string = parent.from_string(source)
++    overlay = parent.overlay()
++    other_early = overlay.get_template("early")
++    other_local = overlay.get_template("local", globals={"value": "overlay-local"})
++    other_string = overlay.from_string(source)
++    assert other_early is not early
++    assert early.render() == other_early.render() == "initial|-"
++
++    parent.globals.update(value="parent", extra="P")
++    overlay.globals.update(value="overlay", extra="O")
++    late = parent.get_template("late")
++    other_late = overlay.get_template("late")
++    parent_plain = [early, string, late]
++    overlay_plain = [other_early, other_string, other_late]
++    for template in parent_plain:
++        assert template.render() == "parent|P"
++    for template in overlay_plain:
++        assert template.render() == "overlay|O"
++    assert local.render() == "parent-local|P"
++    assert other_local.render() == "overlay-local|O"
++
++    assert parent.get_template("local", globals={"value": "updated-parent"}) is local
++    assert overlay.get_template("local", globals={"value": "updated-overlay"}) is other_local
++    assert local.render() == "updated-parent|P"
++    assert other_local.render() == "updated-overlay|O"
++    assert parent.globals["value"] == "parent"
++    assert overlay.globals["value"] == "overlay"
++    assert early.render() == "parent|P"
++    assert other_early.render() == "overlay|O"
++    assert other_local.render(value="render", extra="R") == "render|R"
++
++    parent.globals["value"] = "parent-new"
++    del parent.globals["extra"]
++    for template in parent_plain:
++        assert template.render() == "parent-new|-"
++    for template in overlay_plain:
++        assert template.render() == "overlay|O"
++    overlay.globals["value"] = "overlay-new"
++    del overlay.globals["extra"]
++    for template in overlay_plain:
++        assert template.render() == "overlay-new|-"
++    assert local.render() == "updated-parent|-"
++    assert other_local.render() == "updated-overlay|-"
++
++
++@pytest.mark.parametrize("cache_size", [-1, 0, 2])
++@pytest.mark.parametrize("override_size", [None, -1, 0, 3])
++def test_overlay_preserves_registries_extensions_and_cache(cache_size, override_size):
++    class Marker(Extension):
++        pass
++
++    parent = Environment(loader=DictLoader({"t": "{{ value }}"}), cache_size=cache_size, extensions=[Marker])
++    parent.globals["value"] = "initial"
++    original = parent.get_template("t")
++    kwargs = {} if override_size is None else {"cache_size": override_size}
++    overlay = parent.overlay(**kwargs)
++    assert overlay.filters is parent.filters
++    assert overlay.tests is parent.tests
++    assert overlay.policies is parent.policies
++    assert overlay.extensions[Marker.identifier] is not parent.extensions[Marker.identifier]
++    assert overlay.extensions[Marker.identifier].environment is overlay
++    assert parent.extensions[Marker.identifier].environment is parent
++    expected_size = cache_size if override_size is None else override_size
++    if expected_size == 0:
++        assert overlay.cache is None
++    else:
++        assert overlay.cache is not parent.cache
++        assert len(overlay.cache) == 0
++
++    overlay.globals["value"] = "overlay"
++    loaded = overlay.get_template("t")
++    assert loaded is not original
++    assert loaded.environment is overlay
++    assert original.environment is parent
++    assert loaded.render() == "overlay"
++    assert original.render() == "initial"
++    if expected_size != 0:
++        assert overlay.get_template("t") is loaded
++    if cache_size != 0:
++        assert parent.get_template("t") is original

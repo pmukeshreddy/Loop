@@ -1,0 +1,150 @@
+{
+ "answer": [
+  "tests/test_functional.py::TestFunctional::test_auto_exc[True-True]",
+  "tests/test_functional.py::TestFunctional::test_auto_exc[True-False]",
+  "tests/test_functional.py::TestFunctional::test_auto_exc[False-True]",
+  "tests/test_functional.py::TestFunctional::test_auto_exc[False-False]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\"tests/test_make.py::TestAutoExc::test_args\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0008485736543383908,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "d",
+    "files",
+    "index",
+    "m",
+    "p",
+    "t",
+    "target_class",
+    "target_name"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution computed and inspected the final set of complete pytest node IDs, including all four parameterized variants. The executable verification confirmed that set.",
+   "inspect_locate": "The reference execution used 19 targeted searches without printing the whole repository context to connect generated exception initialization with the tests exercising its behavior.",
+   "recursive_decomposition": "Not established: the execution made no sub-calls. This behavior is appropriately absent from behaviors_established."
+  },
+  "notes": "The question is a natural, precisely scoped change-impact request. It specifies the proposed semantic change without revealing affected tests and requires repository-specific reasoning about generated initialization and exception argument assertions. The requested output is clear, and the investigation is distinct from the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The answer is an exact deduplicated set of pytest node IDs, including parameterized variants.",
+   "inspect_locate": "Exception initialization is generated in _make.py but exercised through decorators, make_class, and functional tests scattered across the suite.",
+   "recursive_decomposition": "The impact investigation separates direct decoration, dynamically created exception classes, and initializer filtering, then combines their affected test cases."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_make_init_script",
+    "why": "Filters out init=False fields without defaults before exception initialization is generated."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Selects the values passed to BaseException.__init__."
+   },
+   {
+    "path": "tests/test_functional.py",
+    "symbol": "tests/test_functional.py::TestFunctional.test_auto_exc",
+    "why": "Exercises both ordinary decoration and make_class with init-disabled fields and checks exception args."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply the probe to production code only and use newly failing tests from the full existing suite as ground truth.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2430,7 +2430,7 @@\n     # For exceptions we rely on BaseException.__init__ for proper\n     # initialization.\n     if is_exc:\n-        vals = \",\".join(f\"self.{a.name}\" for a in attrs if a.init)\n+        vals = \",\".join(f\"self.{a.name}\" for a in attrs)\n \n         lines.append(f\"BaseException.__init__(self, {vals})\")\n \n",
+  "question": "We propose changing attrs-generated exception initialization so that BaseException.__init__ receives every field assigned by the generated initializer, rather than only fields with init=True. Fields with init=False and no default would still be omitted by the existing initializer filtering. Conversion, validation, post-init ordering, and auto_exc policy would otherwise remain unchanged. Which existing tests would newly fail? Return a JSON list of complete pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r03-00",
+ "truth": {
+  "answer": [
+   "tests/test_functional.py::TestFunctional::test_auto_exc"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_functional.py::TestFunctional::test_auto_exc"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_functional.py::TestFunctional::test_auto_exc"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_functional.py::TestFunctional::test_auto_exc"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

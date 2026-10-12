@@ -1,0 +1,138 @@
+{
+ "answer": "--- a/jsonschema/exceptions.py\n+++ b/jsonschema/exceptions.py\n@@ -90,7 +90,7 @@\n         self.parent = parent\n         self._type_checker = type_checker\n \n-        for error in context:\n+        for error in self.context:\n             error.parent = self\n \n     def __repr__(self) -> str:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 15289 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused exceptions.py context supports reasoning directly about context materialization, parent assignment, and derived location properties. The reference execution completed without sub-calls and produced a production-only change that assigns parents through the retained context rather than re-traversing the supplied iterable."
+  },
+  "notes": "This is a natural, precisely scoped compatibility fix. The question specifies observable behavior without revealing the faulty statement or prescribing the implementation. Although the verified patch is small, understanding why it preserves nested locations and single-pass semantics requires repository-specific reasoning. The task is substantively distinct from its parent and the accepted tasks: it repairs iterable handling in error construction rather than collecting errors in keyword handlers."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused exceptions.py context contains the constructor, parent relationships, and all three location properties. Direct reading is sufficient to reason about single-pass consumption and nested error locations; no draft-specific validation or keyword-handler investigation is needed."
+  },
+  "context": {
+   "files": [
+    "jsonschema/exceptions.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.__init__",
+    "why": "The constructor materializes context and then traverses the supplied iterable again to install parent links, which does not work for single-pass inputs."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.absolute_path",
+    "why": "Absolute instance locations recursively combine relative paths through parent links."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.absolute_schema_path",
+    "why": "Absolute schema locations depend on the same parent hierarchy without modifying relative schema paths."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.json_path",
+    "why": "JSON paths render absolute instance locations, including array indices and property names requiring bracket notation."
+   }
+  ],
+  "expected_answer": "--- a/jsonschema/exceptions.py\n+++ b/jsonschema/exceptions.py\n@@ -93,7 +93,7 @@\n         self.parent = parent\n         self._type_checker = type_checker\n \n-        for error in context:\n+        for error in self.context:\n             error.parent = self\n \n     def __repr__(self) -> str:\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_context_iterables.py\n@@ -0,0 +1,97 @@\n+import pytest\n+\n+from jsonschema.exceptions import ValidationError\n+\n+\n+class SinglePass:\n+    def __init__(self, values):\n+        self.values = values\n+        self.iterations = 0\n+\n+    def __iter__(self):\n+        self.iterations += 1\n+        assert self.iterations == 1\n+        return iter(self.values)\n+\n+\n+def as_generator(values):\n+    yield from values\n+\n+\n+@pytest.mark.parametrize(\"wrap\", [list, tuple, iter, as_generator, SinglePass])\n+def test_context_iterables_preserve_nested_locations(wrap):\n+    leaf = ValidationError(\n+        \"leaf\", path=[\"bad-name\", 1],\n+        schema_path=[0, \"properties\", \"bad-name\", \"items\", \"type\"],\n+    )\n+    nested = wrap([leaf])\n+    child = ValidationError(\n+        \"child\", path=[\"branch\"], schema_path=[0, \"oneOf\"],\n+        context=nested,\n+    )\n+    sibling = ValidationError(\n+        \"sibling\", path=[4], schema_path=[1, \"type\"],\n+    )\n+    children = wrap([child, sibling])\n+    root = ValidationError(\n+        \"root\", path=[\"payload\", 2],\n+        schema_path=[\"properties\", \"payload\", \"items\", \"anyOf\"],\n+        context=children,\n+    )\n+\n+    assert isinstance(root.context, list)\n+    assert len(root.context) == 2\n+    assert root.context[0] is child\n+    assert root.context[1] is sibling\n+    assert len(child.context) == 1\n+    assert child.context[0] is leaf\n+    assert sibling.context == []\n+    assert leaf.context == []\n+    assert root.parent is None\n+    assert child.parent is root\n+    assert sibling.parent is root\n+    assert leaf.parent is child\n+\n+    assert child.path is child.relative_path\n+    assert leaf.schema_path is leaf.relative_schema_path\n+    assert list(root.path) == [\"payload\", 2]\n+    assert list(root.schema_path) == [\"properties\", \"payload\", \"items\", \"anyOf\"]\n+    assert list(child.path) == [\"branch\"]\n+    assert list(child.schema_path) == [0, \"oneOf\"]\n+    assert list(sibling.path) == [4]\n+    assert list(sibling.schema_path) == [1, \"type\"]\n+    assert list(leaf.path) == [\"bad-name\", 1]\n+    assert list(leaf.schema_path) == [\n+        0, \"properties\", \"bad-name\", \"items\", \"type\",\n+    ]\n+\n+    assert list(child.absolute_path) == [\"payload\", 2, \"branch\"]\n+    assert list(sibling.absolute_path) == [\"payload\", 2, 4]\n+    assert list(leaf.absolute_path) == [\n+        \"payload\", 2, \"branch\", \"bad-name\", 1,\n+    ]\n+    assert list(child.absolute_schema_path) == [\n+        \"properties\", \"payload\", \"items\", \"anyOf\", 0, \"oneOf\",\n+    ]\n+    assert list(sibling.absolute_schema_path) == [\n+        \"properties\", \"payload\", \"items\", \"anyOf\", 1, \"type\",\n+    ]\n+    assert list(leaf.absolute_schema_path) == [\n+        \"properties\", \"payload\", \"items\", \"anyOf\", 0, \"oneOf\",\n+        0, \"properties\", \"bad-name\", \"items\", \"type\",\n+    ]\n+    assert root.json_path == \"$.payload[2]\"\n+    assert child.json_path == \"$.payload[2].branch\"\n+    assert sibling.json_path == \"$.payload[2][4]\"\n+    assert leaf.json_path == \"$.payload[2].branch['bad-name'][1]\"\n+\n+    if isinstance(children, SinglePass):\n+        assert children.iterations == 1\n+        assert nested.iterations == 1\n+\n+\n+def test_empty_generator_context():\n+    error = ValidationError(\"empty\", context=as_generator([]))\n+    assert error.context == []\n+    assert error.parent is None\n+    assert error.json_path == \"$\"\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains the single-pass-context defect, so this task uses new acceptance tests rather than injecting an artificial regression. The iterator, generator, and strict single-pass cases fail on the starting code; list and tuple cases protect existing behavior. The expected production change is distinct from the seed's keyword-handler changes.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Constructing a `ValidationError` with generator-valued `context` retains the children, but their absolute locations differ from those produced with list-valued context. Make finite single-pass context iterables behave like lists: preserve child identity and order, retain relative instance and schema paths, and keep nested contexts intact. Each immediate child must have the aggregate as its parent, so children and grandchildren report the correct `absolute_path`, `absolute_schema_path`, and `json_path` even when the aggregate has nonempty instance and schema paths. Consume the supplied iterable only once, including when it is empty, and preserve existing list-valued behavior. Return a unified diff against production files only; do not change keyword handlers or tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from a multi-module keyword fix to focused inspection of iterable ownership and exception-tree invariants. Direct reading of exceptions.py is appropriate; verification should combine single-pass consumption checks with nested path calculations rather than investigate draft coverage rules.",
+  "change_type": "failure_condition",
+  "description": "Repair single-pass context handling in jsonschema/exceptions.py::_Error.__init__. Constructing a ValidationError with a generator of child errors currently retains those errors in context but fails to attach their parent links. Require generator-valued context to behave like list-valued context, preserving child identity, order, relative paths, and nested context structure. Include acceptance tests with an aggregate at a nonempty instance and schema location, checking child and grandchild absolute_path, absolute_schema_path, and json_path. Return a unified diff without changing keyword handlers.",
+  "expected_answer_change": "The fix belongs in _Error.__init__: parent installation must iterate the materialized self.context rather than the original context iterable. Verification must demonstrate that generator children acquire the same parent relationships and absolute locations as list children, without flattening nested contexts or rewriting relative paths.",
+  "why_substantive": "The seed task adds previously discarded errors to two keyword handlers. This variation instead repairs the shared exception constructor when callers already supply context through a single-pass iterable. The failure arises from consuming the iterable twice, not from discarding errors during validation."
+ },
+ "task_id": "python-jsonschema-jsonschema-r01-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[SinglePass]",
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[as_generator]",
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[iter]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7294
+   },
+   "patch_files": [
+    "jsonschema/exceptions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[SinglePass]",
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[as_generator]",
+   "jsonschema/tests/test_context_iterables.py::test_context_iterables_preserve_nested_locations[iter]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,116 @@
+........................................................................ [ 14%]
+.....x...............x.................................................. [ 28%]
+........................................................................ [ 42%]
+....................F...............................FFFFF............... [ 56%]
+........................................................F............... [ 70%]
+.........X..................FFF......................................... [ 84%]
+....................................................................FFFF [ 99%]
+F....                                                                    [100%]
+=================================== FAILURES ===================================
+__________________________ test_psql_quotation_marks ___________________________
+tests/test_parse.py:190: in test_psql_quotation_marks
+    assert len(t) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len(['UPDATE SET foo =$$bar;', 'SELECT bar$$'])
+___________________ test_dbldollar_as_literal[$$foo$$-True] ____________________
+tests/test_parse.py:435: in test_dbldollar_as_literal
+    assert len(p.tokens) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([<Literal '$$' at 0x10970D240>, <Identifier 'foo$$' at 0x108BDB7D0>])
+E    +    where [<Literal '$$' at 0x10970D240>, <Identifier 'foo$$' at 0x108BDB7D0>] = <Statement '$$foo$$' at 0x108BD8C50>.tokens
+__________________ test_dbldollar_as_literal[$_$foo$_$-True] ___________________
+tests/test_parse.py:435: in test_dbldollar_as_literal
+    assert len(p.tokens) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len([<Literal '$_$' at 0x109710040>, <Identifier 'foo$_$' at 0x109384050>])
+E    +    where [<Literal '$_$' at 0x109710040>, <Identifier 'foo$_$' at 0x109384050>] = <Statement '$_$foo...' at 0x109386550>.tokens
+_____________ test_dbldollar_as_literal[$token$ foo $token$-True] ______________
+tests/test_parse.py:435: in test_dbldollar_as_literal
+    assert len(p.tokens) == 1
+E   AssertionError: assert 5 == 1
+E    +  where 5 = len([<Literal '$token$' at 0x1097101C0>, <Whitespace ' ' at 0x109710160>, <Identifier 'foo' at 0x109758550>, <Whitespace ' ' at 0x109712680>, <Literal '$token$' at 0x1097126E0>])
+E    +    where [<Literal '$token$' at 0x1097101C0>, <Whitespace ' ' at 0x109710160>, <Identifier 'foo' at 0x109758550>, <Whitespace ' ' at 0x109712680>, <Literal '$token$' at 0x1097126E0>] = <Statement '$token...' at 0x109386ED0>.tokens
+_______ test_dbldollar_as_literal[$_$ foo $token$bar$token$ baz$_$-True] _______
+tests/test_parse.py:435: in test_dbldollar_as_literal
+    assert len(p.tokens) == 1
+E   AssertionError: assert 6 == 1
+E    +  where 6 = len([<Literal '$_$' at 0x109712A40>, <Whitespace ' ' at 0x109712AA0>, <Identifier 'foo' at 0x109758D50>, <Whitespace ' ' at 0x109712860>, <Literal '$token$' at 0x109712BC0>, <Identifier 'bar$to...' at 0x109758C50>])
+E    +    where [<Literal '$_$' at 0x109712A40>, <Whitespace ' ' at 0x109712AA0>, <Identifier 'foo' at 0x109758D50>, <Whitespace ' ' at 0x109712860>, <Literal '$token$' at 0x109712BC0>, <Identifier 'bar$to...' at 0x109758C50>] = <Statement '$_$ fo...' at 0x1097589D0>.tokens
+_________________ test_dbldollar_as_literal[$A$ foo $B$-False] _________________
+tests/test_parse.py:439: in test_dbldollar_as_literal
+    assert token.ttype != T.Literal
+E   AssertionError: assert Token.Literal != Token.Literal
+E    +  where Token.Literal = <Literal '$A$' at 0x1097129E0>.ttype
+E    +  and   Token.Literal = T.Literal
+_________________________________ test_issue83 _________________________________
+tests/test_regressions.py:147: in test_issue83
+    assert len(t) == 3
+E   AssertionError: assert 5 == 3
+E    +  where 5 = len(['CREATE OR REPLACE FUNCTION func_a(text)\n                  RETURNS boolean  LANGUAGE plpgsql STRICT IMMUTABLE AS\n  ...n                $_$\n                BEGIN\n                 ...\n                END;', '$_$;', 'ALTER TABLE..... ;'])
+________________ test_split_create_function[function_psql.sql] _________________
+tests/test_split.py:33: in test_split_create_function
+    assert len(stmts) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len((<Statement 'CREATE...' at 0x1092B2E50>, <Statement ' $$ LA...' at 0x1096A6750>))
+________________ test_split_create_function[function_psql2.sql] ________________
+tests/test_split.py:33: in test_split_create_function
+    assert len(stmts) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len((<Statement 'CREATE...' at 0x1096A6B50>, <Statement ' $body...' at 0x1096A6F50>))
+________________ test_split_create_function[function_psql3.sql] ________________
+tests/test_split.py:33: in test_split_create_function
+    assert len(stmts) == 1
+E   AssertionError: assert 2 == 1
+E    +  where 2 = len((<Statement 'CREATE...' at 0x1096A7550>, <Statement ' $body...' at 0x1096A77D0>))
+_ test_delimiters_in_strings_and_comments[SELECT '$$' FROM t, $$x$$-expected5] _
+tests/test_tokenize.py:275: in test_delimiters_in_strings_and_comments
+    assert expected in list(lexer.tokenize(sql))
+E   assert (Token.Literal, '$$x$$') in [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal.String.Single, "'$$'"), (Token.Text.Whitespace, ' '), (Token.Keyword, 'FROM'), (Token.Text.Whitespace, ' '), ...]
+E    +  where [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal.String.Single, "'$$'"), (Token.Text.Whitespace, ' '), (Token.Keyword, 'FROM'), (Token.Text.Whitespace, ' '), ...] = list(<generator object Lexer.get_tokens at 0x108a65930>)
+E    +    where <generator object Lexer.get_tokens at 0x108a65930> = <function tokenize at 0x108a3d440>("SELECT '$$' FROM t, $$x$$")
+E    +      where <function tokenize at 0x108a3d440> = lexer.tokenize
+_ test_delimiters_in_strings_and_comments[-- $$\nDO $$ BEGIN NULL; END $$-expected6] _
+tests/test_tokenize.py:275: in test_delimiters_in_strings_and_comments
+    assert expected in list(lexer.tokenize(sql))
+E   AssertionError: assert (Token.Literal, '$$ BEGIN NULL; END $$') in [(Token.Comment.Single, '-- $$\n'), (Token.Keyword, 'DO'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Text.Whitespace, ' '), (Token.Keyword, 'BEGIN'), ...]
+E    +  where [(Token.Comment.Single, '-- $$\n'), (Token.Keyword, 'DO'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Text.Whitespace, ' '), (Token.Keyword, 'BEGIN'), ...] = list(<generator object Lexer.get_tokens at 0x108a66ce0>)
+E    +    where <generator object Lexer.get_tokens at 0x108a66ce0> = <function tokenize at 0x108a3d440>('-- $$\nDO $$ BEGIN NULL; END $$')
+E    +      where <function tokenize at 0x108a3d440> = lexer.tokenize
+_ test_delimiters_in_strings_and_comments[SELECT '$t$' FROM t, $t$x$t$-expected7] _
+tests/test_tokenize.py:275: in test_delimiters_in_strings_and_comments
+    assert expected in list(lexer.tokenize(sql))
+E   assert (Token.Literal, '$t$x$t$') in [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal.String.Single, "'$t$'"), (Token.Text.Whitespace, ' '), (Token.Keyword, 'FROM'), (Token.Text.Whitespace, ' '), ...]
+E    +  where [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal.String.Single, "'$t$'"), (Token.Text.Whitespace, ' '), (Token.Keyword, 'FROM'), (Token.Text.Whitespace, ' '), ...] = list(<generator object Lexer.get_tokens at 0x108a667a0>)
+E    +    where <generator object Lexer.get_tokens at 0x108a667a0> = <function tokenize at 0x108a3d440>("SELECT '$t$' FROM t, $t$x$t$")
+E    +      where <function tokenize at 0x108a3d440> = lexer.tokenize
+________ test_delimiters_in_strings_and_comments[SELECT $$$$-expected8] ________
+tests/test_tokenize.py:275: in test_delimiters_in_strings_and_comments
+    assert expected in list(lexer.tokenize(sql))
+E   AssertionError: assert (Token.Literal, '$$$$') in [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Error, '$'), (Token.Error, '$')]
+E    +  where [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Error, '$'), (Token.Error, '$')] = list(<generator object Lexer.get_tokens at 0x108a65690>)
+E    +    where <generator object Lexer.get_tokens at 0x108a65690> = <function tokenize at 0x108a3d440>('SELECT $$$$')
+E    +      where <function tokenize at 0x108a3d440> = lexer.tokenize
+_______ test_delimiters_in_strings_and_comments[SELECT $$$a$$-expected9] _______
+tests/test_tokenize.py:275: in test_delimiters_in_strings_and_comments
+    assert expected in list(lexer.tokenize(sql))
+E   AssertionError: assert (Token.Literal, '$$$a$$') in [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Name.Placeholder, '$a'), (Token.Error, '$'), (Token.Error, '$')]
+E    +  where [(Token.Keyword.DML, 'SELECT'), (Token.Text.Whitespace, ' '), (Token.Literal, '$$'), (Token.Name.Placeholder, '$a'), (Token.Error, '$'), (Token.Error, '$')] = list(<generator object Lexer.get_tokens at 0x108a668f0>)
+E    +    where <generator object Lexer.get_tokens at 0x108a668f0> = <function tokenize at 0x108a3d440>('SELECT $$$a$$')
+E    +      where <function tokenize at 0x108a3d440> = lexer.tokenize
+=========================== short test summary info ============================
+FAILED tests/test_parse.py::test_psql_quotation_marks - AssertionError: asser...
+FAILED tests/test_parse.py::test_dbldollar_as_literal[$$foo$$-True] - Asserti...
+FAILED tests/test_parse.py::test_dbldollar_as_literal[$_$foo$_$-True] - Asser...
+FAILED tests/test_parse.py::test_dbldollar_as_literal[$token$ foo $token$-True]
+FAILED tests/test_parse.py::test_dbldollar_as_literal[$_$ foo $token$bar$token$ baz$_$-True]
+FAILED tests/test_parse.py::test_dbldollar_as_literal[$A$ foo $B$-False] - As...
+FAILED tests/test_regressions.py::test_issue83 - AssertionError: assert 5 == 3
+FAILED tests/test_split.py::test_split_create_function[function_psql.sql] - A...
+FAILED tests/test_split.py::test_split_create_function[function_psql2.sql] - ...
+FAILED tests/test_split.py::test_split_create_function[function_psql3.sql] - ...
+FAILED tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$$' FROM t, $$x$$-expected5]
+FAILED tests/test_tokenize.py::test_delimiters_in_strings_and_comments[-- $$\nDO $$ BEGIN NULL; END $$-expected6]
+FAILED tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$t$' FROM t, $t$x$t$-expected7]
+FAILED tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$$-expected8]
+FAILED tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$a$$-expected9]
+15 failed, 491 passed, 2 xfailed, 1 xpassed in 0.87s

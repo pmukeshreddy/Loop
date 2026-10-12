@@ -1,0 +1,138 @@
+{
+ "answer": "--- a/mkdocs/utils/yaml.py\n+++ b/mkdocs/utils/yaml.py\n@@ -127,7 +127,24 @@\n \n def yaml_load(source: IO | str, loader: type[yaml.BaseLoader] | None = None) -> dict[str, Any]:\n     \"\"\"Return dict of source YAML file using loader, recursively deep merging inherited parent.\"\"\"\n-    loader = loader or get_yaml_loader()\n+    return _yaml_load(source, loader or get_yaml_loader(), ())\n+\n+\n+def _yaml_load(\n+    source: IO | str, loader: type[yaml.BaseLoader], active_paths: tuple[str, ...]\n+) -> dict[str, Any]:\n+    # Track only this inheritance chain, not other (independent) loads. Real\n+    # paths ensure that a symlink alias of an active file also closes a cycle.\n+    name = getattr(source, 'name', None)\n+    if not isinstance(source, str) and isinstance(name, (str, bytes, os.PathLike)):\n+        path = os.path.normcase(os.path.realpath(os.path.abspath(os.fsdecode(name))))\n+        if path in active_paths:\n+            cycle = active_paths[active_paths.index(path) :] + (path,)\n+            raise exceptions.ConfigurationError(\n+                f\"INHERIT cycle detected: {' -> '.join(cycle)}\"\n+            )\n+        active_paths += (path,)\n+\n     try:\n         result = yaml.load(source, Loader=loader)\n     except yaml.YAMLError as e:\n@@ -145,6 +162,6 @@\n             )\n         log.debug(f\"Loading inherited configuration file: {abspath}\")\n         with open(abspath, 'rb') as fd:\n-            parent = yaml_load(fd, loader)\n+            parent = _yaml_load(fd, loader, active_paths)\n         result = mergedeep.merge(parent, result)\n     return result\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0005483269995843477,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 10305,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1077824 chars; 11 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['files', 'old', 'p']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff integrates normalized-path cycle detection with recursive loading while preserving the public interface. It was computed and inspected before submission, and executable verification covered ordinary cycles, symlink aliases, acyclic merging, repeated loads, and string-source handling.",
+   "inspect_locate": "The reference made 11 targeted searches without printing the whole context, locating the recursive YAML-loading behavior and its configuration-error handling.",
+   "persistent_state": "The reference reused files, old, and p across turns while constructing the patch. The task also requires a per-load active inheritance chain that preserves loader propagation and cannot contaminate independent loads."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format. It specifies observable requirements without revealing the implementation or prescribing solver operations. The verified patch addresses the requested behavior, and the investigation is distinct from the existing accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final diff must integrate cycle detection with recursive loading and verify that every exit path leaves independent loads unaffected.",
+   "inspect_locate": "The public configuration loader and recursive YAML utility must be connected to establish where inheritance identity and error translation belong.",
+   "persistent_state": "The implementation needs a per-load active inheritance chain, and patch construction must preserve the existing loader propagation, merge behavior, and string-source exception while reusing the recursive-call evidence."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "mkdocs/utils/yaml.py",
+    "symbol": "mkdocs/utils/yaml.py::yaml_load",
+    "why": "Recursively loads inherited files without tracking the active chain, while also implementing the behaviors that must be preserved."
+   },
+   {
+    "path": "mkdocs/config/defaults.py",
+    "symbol": "mkdocs/config/defaults.py::MkDocsConfig.load_file",
+    "why": "Supplies the configuration-aware loader, whose constructors must continue to propagate into inherited files."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/mkdocs/tests/test_yaml_inherit_cycles.py\n@@ -0,0 +1,56 @@\n+import os\n+import re\n+\n+import pytest\n+\n+from mkdocs.exceptions import ConfigurationError\n+from mkdocs.utils.yaml import get_yaml_loader, yaml_load\n+\n+\n+def load(path, loader=None):\n+    with path.open(\"rb\") as fd:\n+        return yaml_load(fd, loader)\n+\n+\n+@pytest.mark.parametrize(\"two_files\", [False, True])\n+def test_inherit_cycle_has_ordered_paths(tmp_path, two_files):\n+    a = tmp_path / \"a.yml\"\n+    b = tmp_path / \"b.yml\"\n+    a.write_text(\"INHERIT: b.yml\\n\" if two_files else \"INHERIT: a.yml\\n\")\n+    if two_files:\n+        b.write_text(\"INHERIT: a.yml\\n\")\n+    chain = [a, b, a] if two_files else [a, a]\n+    with pytest.raises(ConfigurationError) as exc:\n+        load(a)\n+    message = str(exc.value)\n+    assert \"INHERIT\" in message\n+    assert re.search(\".*?\".join(re.escape(os.path.realpath(p)) for p in chain), message, re.S)\n+\n+\n+def test_symlink_alias_detected_as_same_inherit_file(tmp_path):\n+    a = tmp_path / \"a.yml\"\n+    b = tmp_path / \"b.yml\"\n+    alias = tmp_path / \"alias.yml\"\n+    a.write_text(\"INHERIT: b.yml\\n\")\n+    b.write_text(\"INHERIT: alias.yml\\n\")\n+    try:\n+        alias.symlink_to(a)\n+    except (OSError, NotImplementedError):\n+        pytest.skip(\"symlinks unavailable\")\n+    with pytest.raises(ConfigurationError) as exc:\n+        load(a)\n+    message = str(exc.value)\n+    assert \"INHERIT\" in message\n+    assert re.search(\".*?\".join(re.escape(os.path.realpath(p)) for p in [a, b, a]), message, re.S)\n+\n+\n+def test_acyclic_inheritance_and_repeated_loads(tmp_path):\n+    parent = tmp_path / \"parent.yml\"\n+    child = tmp_path / \"child.yml\"\n+    parent.write_text(\"nested:\\n  parent: 1\\n  override: old\\n\")\n+    child.write_text(\"INHERIT: parent.yml\\nnested:\\n  child: 2\\n  override: new\\n\")\n+    loader = get_yaml_loader()\n+    expected = {\"nested\": {\"parent\": 1, \"child\": 2, \"override\": \"new\"}}\n+    assert load(child, loader) == expected\n+    assert load(child, loader) == expected\n+    assert yaml_load(\"INHERIT: parent.yml\\nvalue: 3\\n\", loader) == {\"INHERIT\": \"parent.yml\", \"value\": 3}\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests intentionally do not require a particular punctuation or prefix for the cycle message. They require ordered canonical filenames and the documented exception type. Symlink coverage is skipped only where symlinks are unavailable.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Make YAML INHERIT cycles fail with ConfigurationError instead of eventually raising RecursionError. Detect cycles by normalized absolute real paths, so a symlink alias of an active configuration file also closes a cycle. The error message must contain 'INHERIT' and the cycle's filenames in traversal order, with the starting filename repeated at the end. Keep the existing yaml_load calling interface, relative resolution of inherited filenames, deep-merge precedence, custom-loader propagation, and the rule that string sources do not process INHERIT. Cycle-tracking state must not leak between independent loads. Submit a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mkdocs-mkdocs-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_inherit_cycle_has_ordered_paths[False]",
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_inherit_cycle_has_ordered_paths[True]",
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_symlink_alias_detected_as_same_inherit_file"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 1,
+    "passed": 720
+   },
+   "patch_files": [
+    "mkdocs/utils/yaml.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_inherit_cycle_has_ordered_paths[False]",
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_inherit_cycle_has_ordered_paths[True]",
+   "mkdocs/tests/test_yaml_inherit_cycles.py::test_symlink_alias_detected_as_same_inherit_file"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 720,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,51 @@
+--- /dev/null
++++ b/tests/test_strict_backtick_literals.py
+@@ -0,0 +1,48 @@
++import warnings
++
++import pytest
++
++from jmespath.lexer import Lexer
++from jmespath.exceptions import LexerError
++
++
++@pytest.mark.parametrize("expression,expected", [
++    ("`null`", None),
++    ("`true`", True),
++    ("`[1, false]`", [1, False]),
++    ('`{"a": 1}`', {"a": 1}),
++    ('`"word"`', "word"),
++    ("`  12  `", 12),
++])
++def test_strict_json(expression, expected):
++    with warnings.catch_warnings(record=True) as caught:
++        warnings.simplefilter("always")
++        tokens = list(Lexer().tokenize(expression, allow_legacy_literals=False))
++    assert tokens[0]["value"] == expected
++    assert tokens[0]["type"] == "literal"
++    assert not caught
++
++
++@pytest.mark.parametrize("expression", ["`word`", "``", "`  word`", "foo.`word`"])
++def test_strict_rejects_fallback(expression):
++    with warnings.catch_warnings(record=True) as caught:
++        warnings.simplefilter("always")
++        with pytest.raises(LexerError) as error:
++            list(Lexer().tokenize(expression, allow_legacy_literals=False))
++    assert error.value.lex_position == expression.index("`")
++    assert not caught
++
++
++def test_legacy_default_after_strict_call():
++    lexer = Lexer()
++    with pytest.raises(LexerError):
++        list(lexer.tokenize("`word`", allow_legacy_literals=False))
++    with pytest.warns(PendingDeprecationWarning):
++        tokens = list(lexer.tokenize("`word`"))
++    assert tokens[0]["value"] == "word"
++
++
++def test_other_quotes_unchanged():
++    tokens = list(Lexer().tokenize("'word' \"word\"", allow_legacy_literals=False))
++    assert [t["type"] for t in tokens] == ["literal", "quoted_identifier", "eof"]
++    assert [t["value"] for t in tokens] == ["word", "word", ""]

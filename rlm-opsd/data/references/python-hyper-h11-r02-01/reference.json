@@ -1,0 +1,191 @@
+{
+ "answer": [
+  "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+  "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+  "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+  "h11/tests/test_connection.py::test_errors",
+  "h11/tests/test_connection.py::test_HEAD_framing_headers",
+  "h11/tests/test_io.py::test_writers_simple",
+  "h11/tests/test_io.py::test_ChunkedWriter",
+  "h11/tests/test_io.py::test_host_comes_first"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"h11/tests/test_io.py::test_write_headers\",\n  \"h11/tests/test_io.py::test_write_request\",\n  \"h11/tests/test_io.py::test_write_response\",\n  \"h11/tests/test_io.py::test_chunked_writer\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.002817327801650237,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 21,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "name",
+    "p",
+    "results",
+    "sources",
+    "testpaths",
+    "txt"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 29450,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 3,
+   "subcall_sites": 3,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 3,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 4,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "4 sub-calls (0 failed); 3 call sites on selected context, 0 on the whole context; max prompt 29450 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 323711 chars; 21 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Four bounded sub-calls examined selected context across the writer and connection paths, without passing the whole repository context.",
+   "combine_verify_finish": "The execution constructed and checked a deduplicated final node-ID list that matches the eight tests established by executable impact verification.",
+   "inspect_locate": "The reference execution used 11 targeted searches to locate wire-output assertions and distinguish serialization effects from unchanged header storage and response cleanup."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. Naming the proposed serialization change defines the investigation rather than revealing the affected tests. The answer requires repository-specific reasoning across direct writers, chunked trailers, and connection-level response handling. The requested format is clear, and the investigation is distinct from the previously accepted header-token case change."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining impact requires understanding many wire-output assertions in the substantial I/O and connection test modules, along with response cleanup and header replacement. The selected semantic evidence is too large for one bounded read.",
+   "combine_verify_finish": "Findings from direct writers and higher-level send paths must be merged into an exact, deduplicated node-ID set.",
+   "inspect_locate": "Relevant assertions include direct writer tests, event header-view tests, and Connection serialization tests rather than only references to write_headers."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_writers.py",
+    "symbol": "h11/_writers.py::write_headers",
+    "why": "All three requested wire surfaces share this serializer."
+   },
+   {
+    "path": "h11/_headers.py",
+    "symbol": "h11/_headers.py::set_comma_header",
+    "why": "Response cleanup can replace header names with conventional title casing before serialization."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._clean_up_response_headers_for_sending",
+    "why": "Generated framing and close headers create indirect casing-sensitive output."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": null,
+    "why": "Direct request, response, trailer, and Host-ordering tests assert exact wire bytes."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": null,
+    "why": "Higher-level send tests may assert exact bytes or compare reparsed events, which have different sensitivity to this change."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe changes serialization only. Assertions about Headers.raw_items() should not be treated as failures unless the test also has an affected wire assertion.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/h11/_writers.py\n+++ b/h11/_writers.py\n@@ -28,11 +28,11 @@ def write_headers(headers: Headers, write: Writer) -> None:\n     raw_items = headers._full_items\n     for raw_name, name, value in raw_items:\n         if name == b\"host\":\n-            write(b\"%s: %s\\r\\n\" % (raw_name, value))\n+            write(b\"%s: %s\\r\\n\" % (name, value))\n     for raw_name, name, value in raw_items:\n         if name != b\"host\":\n-            write(b\"%s: %s\\r\\n\" % (raw_name, value))\n+            write(b\"%s: %s\\r\\n\" % (name, value))\n     write(b\"\\r\\n\")\n \n \n",
+  "question": "For a proposed wire-format simplification, `write_headers` would serialize every field name using its stored lowercase name instead of its original spelling. Host fields would still be moved ahead of other fields; field values, duplicate handling, stored header representations, and all response-cleanup rules would remain unchanged. This would apply to request headers, response headers, and chunked trailers. Which existing tests would newly fail? Reply with a JSON list of pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r02-01",
+ "truth": {
+  "answer": [
+   "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+   "h11/tests/test_connection.py::test_HEAD_framing_headers",
+   "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+   "h11/tests/test_connection.py::test_errors",
+   "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+   "h11/tests/test_io.py::test_ChunkedWriter",
+   "h11/tests/test_io.py::test_host_comes_first",
+   "h11/tests/test_io.py::test_writers_simple"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+    "h11/tests/test_connection.py::test_HEAD_framing_headers",
+    "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+    "h11/tests/test_connection.py::test_errors",
+    "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+    "h11/tests/test_io.py::test_ChunkedWriter",
+    "h11/tests/test_io.py::test_host_comes_first",
+    "h11/tests/test_io.py::test_writers_simple"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+    "h11/tests/test_connection.py::test_HEAD_framing_headers",
+    "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+    "h11/tests/test_connection.py::test_errors",
+    "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+    "h11/tests/test_io.py::test_ChunkedWriter",
+    "h11/tests/test_io.py::test_host_comes_first",
+    "h11/tests/test_io.py::test_writers_simple"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+   "h11/tests/test_connection.py::test_HEAD_framing_headers",
+   "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+   "h11/tests/test_connection.py::test_errors",
+   "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+   "h11/tests/test_io.py::test_ChunkedWriter",
+   "h11/tests/test_io.py::test_host_comes_first",
+   "h11/tests/test_io.py::test_writers_simple"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

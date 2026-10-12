@@ -1,0 +1,41 @@
+--- /dev/null
++++ b/jsonschema/tests/test_legacy_unevaluated_refs.py
+@@ -0,0 +1,38 @@
++import pytest
++from referencing import Registry
++
++from jsonschema import Draft201909Validator, Draft202012Validator, validators
++
++
++@pytest.mark.parametrize("Validator", [Draft201909Validator, Draft202012Validator])
++@pytest.mark.parametrize("kind", ["properties", "items"])
++def test_legacy_references_contribute_evaluation_coverage(Validator, kind):
++    root = "https://example.test/root"
++    outer = "https://example.test/nested/outer"
++    leaf = "https://example.test/nested/leaf"
++    if kind == "properties":
++        coverage = {"properties": {"known": {"type": "integer"}}}
++        schema = {"$ref": outer, "unevaluatedProperties": False}
++        valid = {"known": 1}
++        extra = {"known": 1, "extra": 2}
++        invalid = {"known": "bad"}
++        aggregate = "unevaluatedProperties"
++    else:
++        keyword = "items" if Validator is Draft201909Validator else "prefixItems"
++        coverage = {keyword: [{"type": "integer"}]}
++        schema = {"$ref": outer, "unevaluatedItems": False}
++        valid = [1]
++        extra = [1, 2]
++        invalid = ["bad"]
++        aggregate = "unevaluatedItems"
++    store = {outer: {"$ref": "leaf"}, leaf: coverage}
++    with pytest.warns(DeprecationWarning):
++        resolver = validators.RefResolver(root, schema, store=store)
++    validator = Validator(schema, resolver=resolver, registry=Registry())
++    assert list(validator.iter_errors(valid)) == []
++    errors = list(validator.iter_errors(extra))
++    assert [error.validator for error in errors] == [aggregate]
++    errors = list(validator.iter_errors(invalid))
++    assert any(error.validator == "type" for error in errors)
++    assert not validator.is_valid(extra)
++    assert validator.is_valid(valid)

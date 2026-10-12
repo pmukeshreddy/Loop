@@ -1,0 +1,31 @@
+--- a/src/marshmallow/orderedset.py
++++ b/src/marshmallow/orderedset.py
+@@ -49,6 +49,28 @@
+             prev[2] = next
+             next[1] = prev
+ 
++    def move_to_end(self, key, last=True):
++        """Move an existing member to the end, or to the beginning if last is false.
++
++        Raise KeyError if the member is not present.
++        """
++        node = self.map[key]
++        end = self.end
++        if node is (end[1] if last else end[2]):
++            return
++
++        prev, next = node[1], node[2]  # noqa: A001
++        prev[2] = next
++        next[1] = prev
++
++        if last:
++            prev, next = end[1], end
++        else:
++            prev, next = end, end[2]
++        node[1] = prev
++        node[2] = next
++        prev[2] = next[1] = node
++
+     def __iter__(self):
+         end = self.end
+         curr = end[2]

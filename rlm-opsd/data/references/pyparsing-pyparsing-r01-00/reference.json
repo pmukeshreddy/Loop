@@ -1,0 +1,176 @@
+{
+ "answer": "--- a/pyparsing/results.py\n+++ b/pyparsing/results.py\n@@ -18,7 +18,6 @@\n \n str_type: tuple[type, ...] = (str, bytes)\n _generator_type = type((_ for _ in ()))\n-NULL_SLICE: slice = slice(None)\n \n \n class _ParseResultsWithOffset:\n@@ -277,12 +276,6 @@\n     def __delitem__(self, i):\n         if not isinstance(i, (int, slice)):\n             del self._tokdict[i]\n-            return\n-\n-        # slight optimization if del results[:]\n-        if i == NULL_SLICE:\n-            self._toklist.clear()\n-            self._tokdict.clear()\n             return\n \n         mylen = len(self._toklist)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0010342052280800694,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 22,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "idx",
+    "log",
+    "logs",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1216393 chars; 22 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['idx', 'log', 'logs', 'old', 'path']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final unified diff was constructed programmatically and inspected after construction. Independent test verification established that it repairs the counted-array failures as well as the related lookahead failures across parsing modes.",
+   "inspect_locate": "The execution used 22 targeted searches without printing the whole context. The investigation connected counted-array metadata loss to the generic ParseResults deletion operation and its separate positional and named stores, rather than modifying the symptom-producing helper."
+  },
+  "notes": "This is a natural regression-repair request with a precise deliverable. It identifies the observed symptom but does not disclose the defective symbol or prescribe the repair. Resolving it requires repository-specific reasoning across the count expression, result mutation, and named-field retention. The verified patch addresses the generic regression without changing tests or introducing counted_array workarounds. Persistent state is supported by variable reuse but is not necessary to the acceptance decision."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an applicable diff whose context must match the altered starting source and whose repair must preserve both count suppression and named metadata.",
+   "inspect_locate": "The failure is visible in counted-array results, but the regression is in a generic ParseResults mutation operation. The investigation must connect the failure log, the helper's count action, and the separate positional and named result stores.",
+   "persistent_state": "The solver must retain the relevant helper call, the mutation contract, and the exact source fragment while narrowing the repair."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/helpers.py",
+    "symbol": "pyparsing/helpers.py::counted_array",
+    "why": "Its count parse action removes positional tokens while deliberately retaining named results from a custom count expression."
+   },
+   {
+    "path": "pyparsing/results.py",
+    "symbol": "pyparsing/results.py::ParseResults.__delitem__",
+    "why": "Full-slice deletion is the generic mutation operation used by the count action."
+   },
+   {
+    "path": "pyparsing/results.py",
+    "symbol": "pyparsing/results.py::ParseResults.clear",
+    "why": "The explicit clear operation has a different contract: it removes both positional tokens and results names."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only the full-slice deletion fast path. The intended repair restores its original named-field-preserving contract rather than compensating in counted_array.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression involving named fields retained alongside counted-array items. The item count is still honored, but metadata supplied by the custom count expression is disappearing. Restore the existing behavior without changing tests or adding special-case workarounds to counted_array. Return a unified diff against the repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/pyparsing/results.py\n+++ b/pyparsing/results.py\n@@ -283,6 +283,7 @@\n         # slight optimization if del results[:]\n         if i == NULL_SLICE:\n             self._toklist.clear()\n+            self._tokdict.clear()\n             return\n \n         mylen = len(self._toklist)\n"
+ },
+ "suggestion": null,
+ "task_id": "pyparsing-pyparsing-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_unit.py::Test02_WithoutPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test02_WithoutPackrat::testFollowedBy",
+   "tests/test_unit.py::Test02_WithoutPackrat::testPrecededBy",
+   "tests/test_unit.py::Test04_WithPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test04_WithPackrat::testFollowedBy",
+   "tests/test_unit.py::Test04_WithPackrat::testPrecededBy",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testFollowedBy",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testPrecededBy",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testFollowedBy",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testPrecededBy",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testCountedArrayTest4",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testFollowedBy",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testPrecededBy",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testCountedArrayTest4",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testFollowedBy",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testPrecededBy"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 18,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2046
+   },
+   "patch_files": [
+    "pyparsing/results.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_unit.py::Test02_WithoutPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test02_WithoutPackrat::testFollowedBy",
+   "tests/test_unit.py::Test02_WithoutPackrat::testPrecededBy",
+   "tests/test_unit.py::Test04_WithPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test04_WithPackrat::testFollowedBy",
+   "tests/test_unit.py::Test04_WithPackrat::testPrecededBy",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testFollowedBy",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testPrecededBy",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testCountedArrayTest4",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testFollowedBy",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testPrecededBy",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testCountedArrayTest4",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testFollowedBy",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testPrecededBy",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testCountedArrayTest4",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testFollowedBy",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testPrecededBy"
+  ],
+  "ground_truth_symbols": [
+   "pyparsing/results.py::ParseResults.__delitem__"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 2028,
+  "stability_runs": 3
+ }
+}

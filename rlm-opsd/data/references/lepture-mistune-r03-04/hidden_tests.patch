@@ -1,0 +1,69 @@
+--- /dev/null
++++ b/tests/test_directive_strict_options.py
+@@ -0,0 +1,66 @@
++import html
++import pytest
++
++from mistune import create_markdown
++from mistune.directives import RSTDirective, FencedDirective, Admonition, Image, Figure, Include, TableOfContents
++
++
++CASES = [
++    ("note", Admonition, "Custom", [("class", "extra")], "**body**\n"),
++    ("image", Image, "cat.png", [("alt", "cat"), ("align", "left"), ("height", "12"), ("width", "2em"), ("target", "/go")], ""),
++    ("figure", Figure, "cat.png", [("alt", "cat"), ("align", "center"), ("height", "12"), ("width", "2em"), ("target", "/go"), ("figwidth", "80%"), ("figclass", "extra")], "caption\n\nlegend\n"),
++    ("include", Include, "child.txt", [("encoding", "utf-8")], ""),
++    ("toc", TableOfContents, "Contents", [("min-level", "2"), ("max-level", "3"), ("collapse", "")], ""),
++]
++
++
++def source(kind, title, options, content, fenced):
++    lines = "".join(":" + key + ": " + value + "\n" for key, value in options)
++    if fenced:
++        return "## Heading\n\n```{" + kind + "} " + title + "\n" + lines + "\n" + content + "```\n"
++    return "## Heading\n\n.. " + kind + ":: " + title + "\n" + "".join("   " + line + "\n" for line in lines.splitlines()) + "\n" + "".join("   " + line + "\n" for line in content.splitlines())
++
++
++def make_md(factory, fenced, strict):
++    kwargs = {} if strict is None else {"strict_options": strict}
++    if fenced:
++        directive = FencedDirective([factory()], **kwargs)
++    else:
++        directive = RSTDirective([factory()], **kwargs)
++    return create_markdown(plugins=[directive])
++
++
++def render(md, text, tmp_path):
++    (tmp_path / "child.txt").write_text("included", encoding="utf-8")
++    path = tmp_path / "source.md"
++    path.write_text(text, encoding="utf-8")
++    return md.read(str(path))[0]
++
++
++@pytest.mark.parametrize("case", CASES)
++@pytest.mark.parametrize("fenced", [False, True])
++def test_supported_options_keep_their_behavior(case, fenced, tmp_path):
++    kind, factory, title, options, content = case
++    text = source(kind, title, options, content, fenced)
++    assert render(make_md(factory, fenced, True), text, tmp_path) == render(make_md(factory, fenced, False), text, tmp_path)
++
++
++@pytest.mark.parametrize("case", CASES)
++@pytest.mark.parametrize("fenced", [False, True])
++def test_unknown_option_reports_first_name(case, fenced, tmp_path):
++    kind, factory, title, options, content = case
++    text = source(kind, title, options + [("bogus-first", "x"), ("bogus-second", "y")], content, fenced)
++    result = html.unescape(render(make_md(factory, fenced, True), text, tmp_path))
++    assert 'Unknown option "bogus-first" for directive "' + kind + '"' in result
++    assert "bogus-second" not in result
++
++
++@pytest.mark.parametrize("fenced", [False, True])
++def test_legacy_and_non_directive_behavior(fenced, tmp_path):
++    text = source("note", "Custom", [("bogus", "ignored")], "body\n", fenced)
++    ordinary = source("note", "Custom", [], "body\n", fenced)
++    default_md = make_md(Admonition, fenced, None)
++    assert render(default_md, text, tmp_path) == render(default_md, ordinary, tmp_path)
++    strict = make_md(Admonition, fenced, True)
++    expected = make_md(Admonition, fenced, False)
++    assert strict("```python\nx = 1\n```\n") == expected("```python\nx = 1\n```\n")

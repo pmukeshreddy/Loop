@@ -1,0 +1,188 @@
+{
+  "task_id": "andialbrecht-sqlparse-r02-03",
+  "family": "combine_verify_finish",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 338952,
+    "context_lengths": [
+      236,
+      1041,
+      423,
+      1553,
+      4513,
+      540,
+      2317,
+      7328,
+      1136,
+      1597,
+      2018,
+      1938,
+      1395,
+      4227,
+      183,
+      6688,
+      3418,
+      1482,
+      124,
+      4142,
+      75,
+      2117,
+      1694,
+      2097,
+      3300,
+      2524,
+      639,
+      7215,
+      483,
+      1640,
+      16274,
+      7778,
+      373,
+      1171,
+      5158,
+      6724,
+      4340,
+      12046,
+      1596,
+      1588,
+      7716,
+      35045,
+      6674,
+      21075,
+      1806,
+      3501,
+      1597,
+      148,
+      78,
+      392,
+      193,
+      124,
+      86,
+      220,
+      3103,
+      216,
+      210,
+      260,
+      9470,
+      240,
+      172,
+      75,
+      6425,
+      4693,
+      29836,
+      24378,
+      478,
+      20001,
+      17141,
+      10631,
+      7541,
+      296
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:200])\nprint(context[-1][:300])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint('\\n'.join(files))\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:200])\nprint(context[-1][:300])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint('\\n'.join(files))"
+      ],
+      "stdout_raw_chars": 2541,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 72\n# File: .pre-commit-hooks.yaml\n- id: sqlformat\n  name: sqlformat\n  description: Format SQL files using sqlparse\n  entry: sqlformat\n  language: python\n  types: [sql]\n  args: [--in-place, --reindent]\n  minimum_pre_commit_version: '2.9.0'\n\n# File: sqlparse/filters/output.py\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD Lic\n# File: tests/test_utils.py\nimport pytest\n\nfrom sqlparse import utils\n\n\n@pytest.mark.parametrize('value, expected', (\n    [None, None],\n    ['\\'foo\\'', 'foo'],\n    ['\"foo\"', 'foo'],\n    ['`foo`', 'foo']))\ndef test_remove_quotes(value, expected):\n    assert utils.remove_quotes(value) == expected\n\n.pre-commit-hooks.yaml\n.readthedocs.yaml\nCONTRIBUTING.md\nLICENSE\nREADME.md\nSECURITY.md\nbenchmarks/README.md\nbenchmarks/_harness.py\nbenchmarks/bench_group_comments.py\nbenchmarks/bench_grouping.py\nbenchmarks/bench_lexer_delimiters.py\nbenchmarks/bench_reindent_offset.py\ndocs/source/analyzing.rst\ndocs/source/api.rst\ndocs/source/changes.rst\ndocs/source/conf.py\ndocs/source/extending.rst\ndocs/source/index.rst\ndocs/source/indices.rst\ndocs/source/intro.rst\ndocs/source/license.rst\ndocs/source/ui.rst\nexamples/column_defs_lowlevel.py\nexamples/extract_table_names.py\npyproject.toml\nsqlparse/__init__.py\nsqlparse/__main__.py\nsqlparse/cli.py\nsqlparse/engine/__init__.py\nsqlparse/engine/filter_stack.py\nsqlparse/engine/grouping.py\nsqlparse/engine/statement_splitter.py\nsqlparse/exceptions.py\nsqlparse/filters/__init__.py\nsqlparse/filters/aligned_indent.py\nsqlparse/filters/others.py\nsqlparse/filters/output.py\nsqlparse/filters/reindent.py\nsqlparse/filters/right_margin.py\nsqlparse/filters/tokens.py\nsqlparse/formatter.py\nsqlparse/keywords.py\nsqlparse/lexer.py\nsqlparse/sql.py\nsqlparse/tokens.py\nsqlparse/utils.py\ntests/conftest.py\ntests/files/_Make_DirEntry.sql\ntests/files/begintag.sql\ntests/files/begintag_2.sql\ntests/files/casewhen_procedure.sql\ntests/files/dashcomment.sql\ntests/files/encoding_utf8.sql\ntests/files/function.sql\ntests/files/function_psql.sql\ntests/files/function_psql2.sql\ntests/files/function_psql3.sql\ntests/files/function_psql4.sql\ntests/files/huge_select.sql\ntests/files/multiple_case_in_begin.sql\ntests/files/mysql_handler.sql\ntests/files/stream.sql\ntests/test_cli.py\ntests/test_dos_prevention.py\ntests/test_format.py\ntests/test_grouping.py\ntests/test_keywords.py\ntests/test_parse.py\ntests/test_regressions.py\ntests/test_split.py\ntests/test_tokenize.py\ntests/test_utils.py\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re\ng=files['sqlparse/engine/grouping.py']; s=files['sqlparse/sql.py']\nfor text,pat in [(g,r'def group_where'),(g,r'def group\\('),(s,r'class Where'),(s,r'class Parenthesis')]:\n m=re.search(pat,text);print(text[max(0,m.start()-80):m.start()+1600])\nprint('QUALIFY keyword:',[(p,[(m.start(),files[p][max(0,m.start()-70):m.start()+100]) for m in re.finditer('QUALIFY',files[p])]) for p in ['sqlparse/keywords.py']])\n``` neural?\n\n```repl\nimport re\ng=files['sqlparse/engine/grouping.py']; s=files['sqlparse/sql.py']\nfor text,pat in [(g,r'def group_where'),(g,r'def group\\('),(s,r'class Where'),(s,r'class Parenthesis')]:\n m=re.search(pat,text);print(text[max(0,m.start()-40):m.start()+1050])\nprint('QUALIFY keyword:',[(m.start(),files['sqlparse/keywords.py'][max(0,m.start()-70):m.start()+100]) for m in re.finditer('QUALIFY',files['sqlparse/keywords.py'])])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re\ng=files['sqlparse/engine/grouping.py']; s=files['sqlparse/sql.py']\nfor text,pat in [(g,r'def group_where'),(g,r'def group\\('),(s,r'class Where'),(s,r'class Parenthesis')]:\n m=re.search(pat,text);print(text[max(0,m.start()-80):m.start()+1600])\nprint('QUALIFY keyword:',[(p,[(m.start(),files[p][max(0,m.start()-70):m.start()+100]) for m in re.finditer('QUALIFY',files[p])]) for p in ['sqlparse/keywords.py']])"
+      ],
+      "stdout_raw_chars": 6958,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": " tidx, token = tlist.token_next_by(t=T.Comment, idx=tidx)\n\n\n@recurse(sql.Where)\ndef group_where(tlist):\n    tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN)\n    while token:\n        eidx, end = tlist.token_next_by(m=sql.Where.M_CLOSE, idx=tidx)\n\n        if end is None:\n            end = tlist._groupable_tokens[-1]\n        else:\n            end = tlist.tokens[eidx - 1]\n        # TODO: convert this to eidx instead of end token.\n        # i think above values are len(tlist) and eidx-1\n        eidx = tlist.token_index(end)\n        tlist.group_tokens(sql.Where, tidx, eidx)\n        tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n\n\n@recurse()\ndef group_aliased(tlist):\n    I_ALIAS = (sql.Parenthesis, sql.Function, sql.Case, sql.Identifier,\n               sql.Operation, sql.Comparison)\n\n    tidx, token = tlist.token_next_by(i=I_ALIAS, t=T.Number)\n    while token:\n        nidx, next_ = tlist.token_next(tidx)\n        if isinstance(next_, sql.Identifier):\n            tlist.group_tokens(sql.Identifier, tidx, nidx, extend=True)\n        tidx, token = tlist.token_next_by(i=I_ALIAS, t=T.Number, idx=tidx)\n\n\n@recurse(sql.Function)\ndef group_functions(tlist):\n    has_create = False\n    has_table = False\n    has_as = False\n    for tmp_token in tlist.tokens:\n        if tmp_token.value.upper() == 'CREATE':\n            has_create = True\n        if tmp_token.value.upper() == 'TABLE':\n            has_table = True\n        if tmp_token.value.upper() == 'AS':\n            has_as = True\n    if has_create and has_table and not has_as:\n        return\n\n    tidx, token = tlist.token_next_by(t=T.Name)\n    while token:\n        nidx, next_ = tlist.token_next(tidx)\n    \n= -1:\n        tlist.group_tokens(sql.Values, start_idx, end_idx, extend=True)\n\n\ndef group(stmt):\n    for func in [\n        group_comments,\n\n        # _group_matching\n        group_brackets,\n        group_parenthesis,\n        group_case,\n        group_if,\n        group_for,\n        group_begin,\n\n        group_over,\n        group_functions,\n        group_where,\n        group_period,\n        group_arrays,\n        group_identifier,\n        group_order,\n        group_typecasts,\n        group_tzcasts,\n        group_typed_literal,\n        group_operator,\n        group_comparison,\n        group_as,\n        group_aliased,\n        group_assignment,\n\n        align_comments,\n        group_identifier_list,\n        group_values,\n    ]:\n        func(stmt)\n    return stmt\n\n\ndef _group(tlist, cls, match,\n           valid_prev=lambda t: True,\n           valid_next=lambda t: True,\n           post=None,\n           extend=True,\n           recurse=True,\n           depth=0\n           ):\n    \"\"\"Groups together tokens that are joined by a middle token. i.e. x < y\"\"\"\n    if MAX_GROUPING_DEPTH is not None and depth > MAX_GROUPING_DEPTH:\n        raise SQLParseError(\n            f\"Maximum grouping depth exceeded ({MAX_GROUPING_DEPTH}).\"\n        )\n\n    # Limit the number of tokens to prevent DoS attacks\n    if MAX_GROUPING_TOKENS is not None \\\n       and len(tlist.tokens) > MAX_GROUPING_TOKENS:\n        raise SQLParseError(\n            f\"Maximum number of tokens exceeded ({MAX_GROUPING_TOKENS}).\"\n        )\n\n    tidx_offset = 0\n    pidx, prev_ = None, None\n    token_list = list(tlist)\n\n    for idx, token in enumerate(token_list):\n        tidx = idx - tidx_offset\n        if tidx < 0: \n):\n        return self.tokens and self.tokens[0].ttype == T.Comment.Multiline\n\n\nclass Where(TokenList):\n    \"\"\"A WHERE clause.\"\"\"\n    M_OPEN = T.Keyword, 'WHERE'\n    M_CLOSE = T.Keyword, (\n        'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n\n\nclass Over(TokenList):\n    \"\"\"An OVER clause.\"\"\"\n    M_OPEN = T.Keyword, 'OVER'\n\n\nclass Having(TokenList):\n    \"\"\"A HAVING clause.\"\"\"\n    M_OPEN = T.Keyword, 'HAVING'\n    M_CLOSE = T.Keyword, ('ORDER BY', 'LIMIT')\n\n\nclass Case(TokenList):\n    \"\"\"A CASE statement with one or more WHEN and possibly an ELSE part.\"\"\"\n    M_OPEN = T.Keyword, 'CASE'\n    M_CLOSE = T.Keyword, 'END'\n\n    def get_cases(self, skip_ws=False):\n        \"\"\"Returns a list of 2-tuples (condition, value).\n\n        If an ELSE exists condition is None.\n        \"\"\"\n        CONDITION = 1\n        VALUE = 2\n\n        ret = []\n        mode = CONDITION\n\n        for token in self.tokens:\n            # Set mode from the current statement\n            if token.match(T.Keyword, 'CASE') or (skip_ws and token.ttype in T.Whitespace):\n                continue\n\n            elif token.match(T.Keyword, 'WHEN'):\n                ret.append(([], []))\n                mode = CONDITION\n\n            elif token.match(T.Keyword, 'THEN'):\n                mode = VALUE\n\n            elif token.match(T.Keyword, 'ELSE'):\n                ret.append((None, []))\n                mode = VALUE\n\n            elif token.match(T.Keyword, 'END'):\n                mode = None\n\n            # First condition without preceding WHEN\n            if mode and not ret:\n                ret.append(([], []))\n\n            # Append token\n   M_EXTEND = T.Keyword, (\"DAY\", \"HOUR\", \"MINUTE\", \"MONTH\", \"SECOND\", \"YEAR\")\n\n\nclass Parenthesis(TokenList):\n    \"\"\"Tokens between parenthesis.\"\"\"\n    M_OPEN = T.Punctuation, '('\n    M_CLOSE = T.Punctuation, ')'\n\n    @property\n    def _groupable_tokens(self):\n        return self.tokens[1:-1]\n\n\nclass SquareBrackets(TokenList):\n    \"\"\"Tokens between square brackets\"\"\"\n    M_OPEN = T.Punctuation, '['\n    M_CLOSE = T.Punctuation, ']'\n\n    @property\n    def _groupable_tokens(self):\n        return self.tokens[1:-1]\n\n\nclass Assignment(TokenList):\n    \"\"\"An assignment like 'var := val;'\"\"\"\n\n\nclass If(TokenList):\n    \"\"\"An 'if' clause with possible 'else if' or 'else' parts.\"\"\"\n    M_OPEN = T.Keyword, 'IF'\n    M_CLOSE = T.Keyword, 'END IF'\n\n\nclass For(TokenList):\n    \"\"\"A 'FOR' loop.\"\"\"\n    M_OPEN = T.Keyword, ('FOR', 'FOREACH')\n    M_CLOSE = T.Keyword, 'END LOOP'\n\n\nclass Comparison(TokenList):\n    \"\"\"A comparison used for example in WHERE clauses.\"\"\"\n\n    @property\n    def left(self):\n        return self.tokens[0]\n\n    @property\n    def right(self):\n        return self.tokens[-1]\n\n\nclass Comment(TokenList):\n    \"\"\"A comment.\"\"\"\n\n    def is_multiline(self):\n        return self.tokens and self.tokens[0].ttype == T.Comment.Multiline\n\n\nclass Where(TokenList):\n    \"\"\"A WHERE clause.\"\"\"\n    M_OPEN = T.Keyword, 'WHERE'\n    M_CLOSE = T.Keyword, (\n        'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n\n\nclass Over(TokenList):\n    \"\"\"An OVER clause.\"\"\"\n    M_OPEN = T.Keyword, 'OVER'\n\n\nclass Having(TokenList):\n    \"\"\"A HAVING clause.\"\"\"\n    M_OPEN = T.Keyword, 'HAVING'\n    M_CLOSE = T.Keyword, ('ORDER\nQUALIFY keyword: [('sqlparse/keywords.py', [(34445, \"    'ORGANIZATION': tokens.Keyword,\\n    'PIVOT': tokens.Keyword,\\n    'QUALIFY': tokens.Keyword,\\n    'REGEXP': tokens.Keyword,\\n    'RLIKE': tokens.Keyword,\\n    'SAMPLE': t\")])]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfor text,pat,size in [(g,r'def recurse',2000),(s,r'def group_tokens',1500),(s,r'def get_type',1400)]:\n m=re.search(pat,text)\n if m: print(text[m.start():m.start()+size])\nprint(g[:1000])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "for text,pat,size in [(g,r'def recurse',2000),(s,r'def group_tokens',1500),(s,r'def get_type',1400)]:\n m=re.search(pat,text)\n if m: print(text[m.start():m.start()+size])\nprint(g[:1000])"
+      ],
+      "stdout_raw_chars": 3903,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "def group_tokens(self, grp_cls, start, end, include_end=True,\n                     extend=False):\n        \"\"\"Replace tokens by an instance of *grp_cls*.\"\"\"\n        start_idx = start\n        start = self.tokens[start_idx]\n\n        end_idx = end + include_end\n\n        # will be needed later for new group_clauses\n        # while skip_ws and tokens and tokens[-1].is_whitespace:\n        #     tokens = tokens[:-1]\n\n        if extend and isinstance(start, grp_cls):\n            subtokens = self.tokens[start_idx + 1:end_idx]\n\n            grp = start\n            grp.tokens.extend(subtokens)\n            del self.tokens[start_idx + 1:end_idx]\n            grp.value += ''.join(token.value for token in subtokens)\n        else:\n            subtokens = self.tokens[start_idx:end_idx]\n            grp = grp_cls(subtokens)\n            self.tokens[start_idx:end_idx] = [grp]\n            grp.parent = self\n\n        for token in subtokens:\n            token.parent = grp\n\n        return grp\n\n    def insert_before(self, where, token):\n        \"\"\"Inserts *token* before *where*.\"\"\"\n        if not isinstance(where, int):\n            where = self.token_index(where)\n        token.parent = self\n        self.tokens.insert(where, token)\n\n    def insert_after(self, where, token, skip_ws=True):\n        \"\"\"Inserts *token* after *where*.\"\"\"\n        if not isinstance(where, int):\n            where = self.token_index(where)\n        nidx, next_ = self.token_next(where, skip_ws=skip_ws)\n        token.parent = self\n    \ndef get_type(self):\n        \"\"\"Returns the type of a statement.\n\n        The returned value is a string holding an upper-cased reprint of\n        the first DML or DDL keyword. If the first token in this group\n        isn't a DML or DDL keyword \"UNKNOWN\" is returned.\n\n        Whitespaces and comments at the beginning of the statement\n        are ignored.\n        \"\"\"\n        token = self.token_first(skip_cm=True)\n        if token is None:\n            # An \"empty\" statement that either has not tokens at all\n            # or only whitespace tokens.\n            return 'UNKNOWN'\n\n        elif token.ttype in (T.Keyword.DML, T.Keyword.DDL):\n            return token.normalized\n\n        elif token.ttype == T.Keyword.CTE:\n            # The WITH keyword should be followed by either an Identifier or\n            # an IdentifierList containing the CTE definitions;  the actual\n            # DML keyword (e.g. SELECT, INSERT) will follow next.\n            tidx = self.token_index(token)\n            while tidx is not None:\n                tidx, token = self.token_next(tidx, skip_ws=True)\n                if isinstance(token, (Identifier, IdentifierList)):\n                    tidx, token = self.token_next(tidx, skip_ws=True)\n\n                    if token is not None \\\n                            and token.ttype == T.Keyword.DML:\n                        return token.normalized\n\n        # Hmm, probabl\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD License: https://opensource.org/licenses/BSD-3-Clause\n\nfrom sqlparse import sql\nfrom sqlparse import tokens as T\nfrom sqlparse.exceptions import SQLParseError\nfrom sqlparse.utils import imt, recurse\n\n# Maximum recursion depth for grouping operations to prevent DoS attacks\n# Set to None to disable limit (not recommended for untrusted input)\nMAX_GROUPING_DEPTH = 100\n\n# Maximum number of tokens to process in one grouping operation to prevent\n# DoS attacks.\n# Set to None to disable limit (not recommended for untrusted input)\nMAX_GROUPING_TOKENS = 10000\n\nT_NUMERICAL = (T.Number, T.Number.Integer, T.Number.Float)\nT_STRING = (T.String, T.String.Single, T.String.Symbol)\nT_NAME = (T.Name, T.Name.Placeholder)\n\n\ndef _group_matching(tlist, cls, depth=0):\n    \"\"\"Groups Tokens that have beginning and end.\"\"\"\n    if MAX_GROUPING_DEPTH is not\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nu=files['sqlparse/utils.py']; m=re.search('def recurse',u); print(u[m.start():m.start()+2100])\nprint(files['sqlparse/__init__.py'][:1000])\n# Check relevant grouping constraints and keyword registration context\nm=re.search('def group_parenthesis',g);print(g[m.start()-40:m.start()+400])\nk=files['sqlparse/keywords.py']; pos=k.index(\"'QUALIFY'\"); print(k[k.rfind('\\nKEYWORDS',0,pos):k.rfind('\\nKEYWORDS',0,pos)+100])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "u=files['sqlparse/utils.py']; m=re.search('def recurse',u); print(u[m.start():m.start()+2100])\nprint(files['sqlparse/__init__.py'][:1000])\n# Check relevant grouping constraints and keyword registration context\nm=re.search('def group_parenthesis',g);print(g[m.start()-40:m.start()+400])\nk=files['sqlparse/keywords.py']; pos=k.index(\"'QUALIFY'\"); print(k[k.rfind('\\nKEYWORDS',0,pos):k.rfind('\\nKEYWORDS',0,pos)+100])"
+      ],
+      "stdout_raw_chars": 3111,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "def recurse(*cls):\n    \"\"\"Function decorator to help with recursion\n\n    :param cls: Classes to not recurse over\n    :return: function\n    \"\"\"\n    def wrap(f):\n        def wrapped_f(tlist):\n            for sgroup in tlist.get_sublists():\n                if not isinstance(sgroup, cls):\n                    wrapped_f(sgroup)\n            f(tlist)\n\n        return wrapped_f\n\n    return wrap\n\n\ndef imt(token, i=None, m=None, t=None):\n    \"\"\"Helper function to simplify comparisons Instance, Match and TokenType\n    :param token:\n    :param i: Class or Tuple/List of Classes\n    :param m: Tuple of TokenType & Value. Can be list of Tuple for multiple\n    :param t: TokenType or Tuple/List of TokenTypes\n    :return:  bool\n    \"\"\"\n    if token is None:\n        return False\n    if i and isinstance(token, i):\n        return True\n    if m:\n        if isinstance(m, list):\n            if any(token.match(*pattern) for pattern in m):\n                return True\n        elif token.match(*m):\n            return True\n    if t:\n        if isinstance(t, list):\n            if any(token.ttype in ttype for ttype in t):\n                return True\n        elif token.ttype in t:\n            return True\n    return False\n\n\ndef consume(iterator, n):\n    \"\"\"Advance the iterator n-steps ahead. If n is none, consume entirely.\"\"\"\n    deque(itertools.islice(iterator, n), maxlen=0)\n\n\n@contextmanager\ndef offset(filter_, n=0):\n    filter_.offset += n\n    yield\n    filter_.offset -= n\n\n\n@contextmanager\ndef indent(filter_, n=1):\n    filter_.indent += n\n    yield\n    filter_.indent -= n\n\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD License: https://opensource.org/licenses/BSD-3-Clause\n\n\"\"\"Parse SQL statements.\"\"\"\n\n# Setup namespace\nfrom collections.abc import Generator\nfrom typing import IO, Any\n\nfrom sqlparse import cli, engine, filters, formatter, sql, tokens\n\n__version__ = \"0.6.0\"\n__all__ = [\"cli\", \"engine\", \"filters\", \"formatter\", \"sql\", \"tokens\"]\n\n\ndef parse(\n    sql: str, encoding: str | None = None\n) -> tuple[sql.Statement, ...]:\n    \"\"\"Parse sql and return a list of statements.\n\n    :param sql: A string containing one or more SQL statements.\n    :param encoding: The encoding of the statement (optional).\n    :returns: A tuple of :class:`~sqlparse.sql.Statement` instances.\n    \"\"\"\n    return tuple(parsestream(sql, encoding))\n\n\ndef parsestream(\n    stream: str | IO[str], encoding: str | None = None\n) -> Generator[sql.Statement, None, None]:\n    \"\"\"P\np_matching(tlist, sql.SquareBrackets)\n\n\ndef group_parenthesis(tlist):\n    _group_matching(tlist, sql.Parenthesis)\n\n\ndef group_case(tlist):\n    _group_matching(tlist, sql.Case)\n\n\ndef group_if(tlist):\n    _group_matching(tlist, sql.If)\n\n\ndef group_for(tlist):\n    _group_matching(tlist, sql.For)\n\n\ndef group_begin(tlist):\n    _group_matching(tlist, sql.Begin)\n\n\ndef group_typecasts(tlist):\n    def match(token):\n        return token.match(T.P\n\nKEYWORDS_SNOWFLAKE = {\n    'ACCOUNT': tokens.Keyword,\n    'GSCLUSTER': tokens.Keyword,\n    'ISSUE':\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\nold_where=\"\"\"        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\"\"\"\nnew_s=s.replace(old_where,\"\"\"        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\"\"\",1)\nanchor='\\n\\nclass Over(TokenList):'\nqualify_class='''\n\nclass Qualify(TokenList):\n    \"\"\"A QUALIFY clause.\"\"\"\n    M_OPEN = T.Keyword, 'QUALIFY'\n    M_CLOSE = T.Keyword, (\n        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n'''\nassert s.count(anchor)==1\nnew_s=new_s.replace(anchor,qualify_class+anchor,1)\nstart=g.index('@recurse(sql.Where)\\ndef group_where')\nend=g.index('\\n\\n@recurse()',start)\nwhere_func=g[start:end]\nqualify_func=where_func.replace('sql.Where','sql.Qualify').replace('def group_where','def group_qualify')\n# Keep implementation consistent with WHERE, but omit obsolete TODO.\nqualify_func=qualify_func.replace('        # TODO: convert this to eidx instead of end token.\\n        # i think above values are len(tlist) and eidx-1\\n','')\nnew_g=g[:end]+'\\n\\n'+qualify_func+g[end:]\nassert new_g.count('        group_where,\\n')==1\nnew_g=new_g.replace('        group_where,\\n','        group_where,\\n        group_qualify,\\n',1)\nupdates={'sqlparse/sql.py':new_s,'sqlparse/engine/grouping.py':new_g}\npatch=''.join(''.join(difflib.unified_diff(files[p].splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+p,tofile='b/'+p)) for p,new in updates.items())\nfor p,new in updates.items():\n ast.parse(new)\n assert new!=files[p]\nprint(patch)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\nold_where=\"\"\"        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\"\"\"\nnew_s=s.replace(old_where,\"\"\"        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\"\"\",1)\nanchor='\\n\\nclass Over(TokenList):'\nqualify_class='''\n\nclass Qualify(TokenList):\n    \"\"\"A QUALIFY clause.\"\"\"\n    M_OPEN = T.Keyword, 'QUALIFY'\n    M_CLOSE = T.Keyword, (\n        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n'''\nassert s.count(anchor)==1\nnew_s=new_s.replace(anchor,qualify_class+anchor,1)\nstart=g.index('@recurse(sql.Where)\\ndef group_where')\nend=g.index('\\n\\n@recurse()',start)\nwhere_func=g[start:end]\nqualify_func=where_func.replace('sql.Where','sql.Qualify').replace('def group_where','def group_qualify')\n# Keep implementation consistent with WHERE, but omit obsolete TODO.\nqualify_func=qualify_func.replace('        # TODO: convert this to eidx instead of end token.\\n        # i think above values are len(tlist) and eidx-1\\n','')\nnew_g=g[:end]+'\\n\\n'+qualify_func+g[end:]\nassert new_g.count('        group_where,\\n')==1\nnew_g=new_g.replace('        group_where,\\n','        group_where,\\n        group_qualify,\\n',1)\nupdates={'sqlparse/sql.py':new_s,'sqlparse/engine/grouping.py':new_g}\npatch=''.join(''.join(difflib.unified_diff(files[p].splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+p,tofile='b/'+p)) for p,new in updates.items())\nfor p,new in updates.items():\n ast.parse(new)\n assert new!=files[p]\nprint(patch)"
+      ],
+      "stdout_raw_chars": 1503,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/sqlparse/sql.py\n+++ b/sqlparse/sql.py\n@@ -559,7 +559,14 @@\n     M_OPEN = T.Keyword, 'WHERE'\n     M_CLOSE = T.Keyword, (\n         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n+        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\n+\n+\n+class Qualify(TokenList):\n+    \"\"\"A QUALIFY clause.\"\"\"\n+    M_OPEN = T.Keyword, 'QUALIFY'\n+    M_CLOSE = T.Keyword, (\n+        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n \n \n class Over(TokenList):\n--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -361,6 +361,21 @@\n         eidx = tlist.token_index(end)\n         tlist.group_tokens(sql.Where, tidx, eidx)\n         tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n+\n+\n+@recurse(sql.Qualify)\n+def group_qualify(tlist):\n+    tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN)\n+    while token:\n+        eidx, end = tlist.token_next_by(m=sql.Qualify.M_CLOSE, idx=tidx)\n+\n+        if end is None:\n+            end = tlist._groupable_tokens[-1]\n+        else:\n+            end = tlist.tokens[eidx - 1]\n+        eidx = tlist.token_index(end)\n+        tlist.group_tokens(sql.Qualify, tidx, eidx)\n+        tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN, idx=tidx)\n \n \n @recurse()\n@@ -454,6 +469,7 @@\n         group_over,\n         group_functions,\n         group_where,\n+        group_qualify,\n         group_period,\n         group_arrays,\n         group_identifier,\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/sqlparse/sql.py\n+++ b/sqlparse/sql.py\n@@ -559,7 +559,14 @@\n     M_OPEN = T.Keyword, 'WHERE'\n     M_CLOSE = T.Keyword, (\n         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n+        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\n+\n+\n+class Qualify(TokenList):\n+    \"\"\"A QUALIFY clause.\"\"\"\n+    M_OPEN = T.Keyword, 'QUALIFY'\n+    M_CLOSE = T.Keyword, (\n+        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n \n \n class Over(TokenList):\n--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -361,6 +361,21 @@\n         eidx = tlist.token_index(end)\n         tlist.group_tokens(sql.Where, tidx, eidx)\n         tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n+\n+\n+@recurse(sql.Qualify)\n+def group_qualify(tlist):\n+    tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN)\n+    while token:\n+        eidx, end = tlist.token_next_by(m=sql.Qualify.M_CLOSE, idx=tidx)\n+\n+        if end is None:\n+            end = tlist._groupable_tokens[-1]\n+        else:\n+            end = tlist.tokens[eidx - 1]\n+        eidx = tlist.token_index(end)\n+        tlist.group_tokens(sql.Qualify, tidx, eidx)\n+        tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN, idx=tidx)\n \n \n @recurse()\n@@ -454,6 +469,7 @@\n         group_over,\n         group_functions,\n         group_where,\n+        group_qualify,\n         group_period,\n         group_arrays,\n         group_identifier,\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 191.1389257080009
+  }
+}

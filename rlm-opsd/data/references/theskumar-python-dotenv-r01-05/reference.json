@@ -1,0 +1,140 @@
+{
+ "answer": "--- a/src/dotenv/variables.py\n+++ b/src/dotenv/variables.py\n@@ -6,8 +6,9 @@\n     r\"\"\"\n     \\$\\{\n         (?P<name>[^\\}:]*)\n-        (?::-\n-            (?P<default>[^\\}]*)\n+        (?:\n+            :- (?P<default>[^\\}]*)\n+            | :\\+ (?P<alternate>[^\\{\\}]*)\n         )?\n     \\}\n     \"\"\",\n@@ -46,23 +47,38 @@\n \n \n class Variable(Atom):\n-    def __init__(self, name: str, default: Optional[str]) -> None:\n+    def __init__(\n+        self, name: str, default: Optional[str], *, operator: Optional[str] = None\n+    ) -> None:\n         self.name = name\n         self.default = default\n+        self.operator = operator if operator is not None else (\n+            \":-\" if default is not None else None\n+        )\n \n     def __repr__(self) -> str:\n+        if self.operator == \":+\":\n+            return (\n+                f\"Variable(name={self.name}, default={self.default}, \"\n+                f\"operator={self.operator})\"\n+            )\n         return f\"Variable(name={self.name}, default={self.default})\"\n \n     def __eq__(self, other: object) -> bool:\n         if not isinstance(other, self.__class__):\n             return NotImplemented\n-        return (self.name, self.default) == (other.name, other.default)\n+        return (self.name, self.operator, self.default) == (\n+            other.name, other.operator, other.default\n+        )\n \n     def __hash__(self) -> int:\n-        return hash((self.__class__, self.name, self.default))\n+        return hash((self.__class__, self.name, self.operator, self.default))\n \n     def resolve(self, env: Mapping[str, Optional[str]]) -> str:\n         default = self.default if self.default is not None else \"\"\n+        if self.operator == \":+\":\n+            value = env.get(self.name)\n+            return default if value is not None and value != \"\" else \"\"\n         result = env.get(self.name, default)\n         return result if result is not None else \"\"\n \n@@ -78,7 +94,11 @@\n         if start > cursor:\n             yield Literal(value=value[cursor:start])\n \n-        yield Variable(name=name, default=default)\n+        alternate = match[\"alternate\"]\n+        if alternate is not None:\n+            yield Variable(name=name, default=alternate, operator=\":+\")\n+        else:\n+            yield Variable(name=name, default=default)\n         cursor = end\n \n     length = len(value)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 2380 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The relevant implementation fits in one 2,380-character module. The reference execution used no sub-calls and produced a localized patch addressing recognition, resolution, API compatibility, and atom identity."
+  },
+  "notes": "This is a natural, precisely scoped feature request with an explicit unified-diff output format. It requires reasoning about repository-specific parsing and existing resolution semantics, rather than a trivial lookup. The compatibility and equality requirements directly constrain the feature, and the verified patch implements the requested behavior without changing tests."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The tokenizer and all atom behavior are contained in one approximately 2,350-character file. Implementing a second expansion operator requires reasoning about recognition, resolution, and equality, but delegation or repository-wide exploration is unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/dotenv/variables.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/variables.py",
+    "symbol": "src/dotenv/variables.py::parse_variables",
+    "why": "Recognizes expansion expressions and preserves literal gaps and unsupported syntax."
+   },
+   {
+    "path": "src/dotenv/variables.py",
+    "symbol": "src/dotenv/variables.py::Variable.resolve",
+    "why": "Existing absent, None, and empty-value semantics must be retained alongside the new operator."
+   },
+   {
+    "path": "src/dotenv/variables.py",
+    "symbol": "src/dotenv/variables.py::Variable.__eq__",
+    "why": "The new operator must not collapse distinct expression identities."
+   },
+   {
+    "path": "src/dotenv/variables.py",
+    "symbol": "src/dotenv/variables.py::Variable.__hash__",
+    "why": "Hashing must remain compatible with atom equality."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_variable_alternative_expansion.py\n@@ -0,0 +1,35 @@\n+import pytest\n+\n+from dotenv.variables import parse_variables\n+\n+\n+@pytest.mark.parametrize(\n+    \"env,expression,expected\",\n+    [\n+        ({}, \"${X:+word}\", \"\"),\n+        ({\"X\": None}, \"${X:+word}\", \"\"),\n+        ({\"X\": \"\"}, \"${X:+word}\", \"\"),\n+        ({\"X\": \"value\"}, \"${X:+word}\", \"word\"),\n+        ({\"X\": \"0\"}, \"${X:+word}\", \"word\"),\n+        ({\"X\": \"value\"}, \"${X:+}\", \"\"),\n+        ({\"X\": \"value\"}, \"a${X:+$Y / tail}b\", \"a$Y / tailb\"),\n+        ({}, \"${X:-fallback}\", \"fallback\"),\n+        ({\"X\": None}, \"${X:-fallback}\", \"\"),\n+        ({\"X\": \"\"}, \"${X:-fallback}\", \"\"),\n+        ({\"X\": \"value\"}, \"$X\", \"$X\"),\n+        ({\"X\": \"value\"}, \"${X:word}\", \"${X:word}\"),\n+        ({\"X-Y\": \"value\"}, \"${X-Y:+yes}\", \"yes\"),\n+    ],\n+)\n+def test_alternative_expansion(env, expression, expected):\n+    assert \"\".join(atom.resolve(env) for atom in parse_variables(expression)) == expected\n+\n+\n+def test_expansion_atom_identity():\n+    present = list(parse_variables(\"${X:+word}\"))[0]\n+    other = list(parse_variables(\"${X:+other}\"))[0]\n+    default = list(parse_variables(\"${X:-word}\"))[0]\n+    same = list(parse_variables(\"${X:+word}\"))[0]\n+    assert present == same\n+    assert hash(present) == hash(same)\n+    assert len({present, other, default}) == 3\n",
+  "include_failure_log": false,
+  "notes": "Tests use only parse_variables and observable atom resolution, equality, and hashing; they do not mandate a particular new atom class or representation. Existing tests remain responsible for backwards-compatible Variable construction.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Extend `dotenv.variables.parse_variables` to recognize `${NAME:+word}`. Resolving this expression must return `word` only when `NAME` exists in the supplied mapping with a value other than `None` or the empty string; otherwise it returns the empty string. `word` may be empty or contain any brace-free text and is returned literally, without further expansion. Preserve existing `${NAME}` and `${NAME:-word}` behavior, the existing `Variable(name, default)` construction API, and literal treatment of other unsupported colon operators. Atoms must retain meaningful equality and hashing: expressions differing in name, operator, or word must not compare equal. Return a unified diff against `src/dotenv/variables.py`, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "theskumar-python-dotenv-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env0-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env1-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env12-${X-Y:+yes}-yes]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env2-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env3-${X:+word}-word]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env4-${X:+word}-word]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env5-${X:+}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env6-a${X:+$Y / tail}b-a$Y / tailb]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 271
+   },
+   "patch_files": [
+    "src/dotenv/variables.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env0-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env1-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env12-${X-Y:+yes}-yes]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env2-${X:+word}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env3-${X:+word}-word]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env4-${X:+word}-word]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env5-${X:+}-]",
+   "tests/test_variable_alternative_expansion.py::test_alternative_expansion[env6-a${X:+$Y / tail}b-a$Y / tailb]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,20 @@
+--- a/mkdocs/config/base.py
++++ b/mkdocs/config/base.py
+@@ -275,7 +275,16 @@
+     """Extract ConfigOptions defined in a class (used just as a container) and put them into a schema tuple."""
+     if issubclass(cls, Config):
+         return cls._schema
+-    return tuple((k, v) for k, v in cls.__dict__.items() if isinstance(v, BaseConfigOption))
++    schema: dict[str, BaseConfigOption] = {}
++    for base in reversed(cls.__mro__):
++        if base is object:
++            continue
++        for name, value in base.__dict__.items():
++            if isinstance(value, BaseConfigOption):
++                schema[name] = value
++            else:
++                schema.pop(name, None)
++    return tuple(schema.items())
+ 
+ 
+ class LegacyConfig(Config):

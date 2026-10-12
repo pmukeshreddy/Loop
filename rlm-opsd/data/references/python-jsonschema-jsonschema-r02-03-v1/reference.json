@@ -1,0 +1,167 @@
+{
+ "answer": "--- a/jsonschema/_utils.py\n+++ b/jsonschema/_utils.py\n@@ -188,6 +188,18 @@\n     Covers all keywords related to unevaluatedItems: items, prefixItems, if,\n     then, else, contains, unevaluatedItems, allOf, oneOf, anyOf\n     \"\"\"\n+    # Reference traversal may evolve the validator to another dialect.\n+    # Import locally since the keyword modules also import these utilities.\n+    from jsonschema import _legacy_keywords\n+\n+    if (\n+        validator.VALIDATORS.get(\"items\")\n+        is _legacy_keywords.items_draft6_draft7_draft201909\n+    ):\n+        return _legacy_keywords.find_evaluated_item_indexes_by_schema(\n+            validator, instance, schema,\n+        )\n+\n     if validator.is_type(schema, \"boolean\"):\n         return []\n     evaluated_indexes = []\n--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -246,6 +246,14 @@\n     Covers all keywords related to unevaluatedItems: items, prefixItems, if,\n     then, else, contains, unevaluatedItems, allOf, oneOf, anyOf\n     \"\"\"\n+    # Reference traversal may evolve the validator to another dialect.\n+    from jsonschema import _keywords\n+\n+    if validator.VALIDATORS.get(\"items\") is _keywords.items:\n+        return _utils.find_evaluated_item_indexes_by_schema(\n+            validator, instance, schema,\n+        )\n+\n     if validator.is_type(schema, \"boolean\"):\n         return []\n     evaluated_indexes = []\n@@ -281,7 +289,7 @@\n         if \"additionalItems\" in schema:\n             return list(range(len(instance)))\n \n-        if validator.is_type(schema[\"items\"], \"object\"):\n+        if not validator.is_type(schema[\"items\"], \"array\"):\n             return list(range(len(instance)))\n         evaluated_indexes += list(range(len(schema[\"items\"])))\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.00048675671665924863,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 28,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "legacy",
+    "legacy_helper",
+    "modern_helper",
+    "p",
+    "utils",
+    "validators"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 6599,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 28 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines reciprocal dialect dispatch in both coverage helpers with preservation of full-array coverage for non-array 2019-09 items schemas. The execution computed and inspected the assembled final value before finishing. This supports integration and final-artifact checking, although the execution summary does not show repository test runs.",
+   "inspect_locate": "The reference execution performed 28 context searches without printing the whole repository context. The resulting patch connects the separate draft-specific item-coverage helpers with the active validator's keyword implementation, consistent with locating and relating coverage semantics to dialect evolution."
+  },
+  "notes": "The request is a natural, repository-dependent bug fix with explicit behavioral constraints and a clear production-only unified-diff format. It does not disclose the defective helper or prescribe solver operations. The variation is substantive: it concerns dialect selection across modern registry references, rather than honoring legacy resolver stores and scope. The bidirectional and repeated-switch requirements require reasoning across validator evolution and both coverage implementations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must handle both cross-draft directions and repeated dialect changes consistently, retaining the resolved registry scope and preserving same-draft behavior. Checking the assembled changes against this bidirectional matrix is necessary before finishing.",
+   "inspect_locate": "Item coverage is implemented separately for the two drafts, while reference resolution and dialect selection occur in generated validator methods. The solver must connect those implementations with draft registrations and validator evolution to distinguish validation semantics from coverage semantics."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_evaluated_item_indexes_by_schema",
+    "why": "The modern coverage helper evolves the validator for a referenced schema but recursively invokes its own coverage implementation, whose items rule covers the entire array."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_item_indexes_by_schema",
+    "why": "The 2019-09 coverage helper similarly retains its own traversal after reference-driven evolution; it handles tuple items but does not collect prefixItems coverage."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "Generated evolve selects a potentially different validator class while carrying configuration forward. Modern reference validation supplies the resolver returned by the registry lookup."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::validator_for",
+    "why": "Explicit $schema selects a registered draft, while a schema without that declaration uses the supplied default class."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::unevaluatedItems",
+    "why": "The public validation outcome depends on the modern helper's collected indexes."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::unevaluatedItems_draft2019",
+    "why": "The corresponding 2019-09 keyword consumes the separate legacy-draft coverage helper."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_reference_item_dialects.py\n@@ -0,0 +1,106 @@\n+import pytest\n+from referencing import Registry, Resource\n+from referencing.jsonschema import DRAFT201909, DRAFT202012\n+\n+from jsonschema import Draft201909Validator, Draft202012Validator\n+\n+\n+DIALECTS = {\n+    \"old\": (\n+        Draft201909Validator,\n+        \"https://json-schema.org/draft/2019-09/schema\",\n+        DRAFT201909,\n+    ),\n+    \"new\": (\n+        Draft202012Validator,\n+        \"https://json-schema.org/draft/2020-12/schema\",\n+        DRAFT202012,\n+    ),\n+}\n+\n+\n+def make_validator(outer, path, coverage):\n+    outer_class, outer_uri, _ = DIALECTS[outer]\n+    base = \"https://coverage.example/\"\n+    resources = []\n+    inherited = outer\n+    for index, declared in enumerate(path):\n+        if declared is not None:\n+            inherited = declared\n+        _, dialect_uri, specification = DIALECTS[inherited]\n+        uri = f\"{base}step{index}/schema\"\n+        schema = {\"$id\": uri}\n+        if declared is not None:\n+            schema[\"$schema\"] = dialect_uri\n+        if index + 1 < len(path):\n+            schema[\"$ref\"] = f\"../step{index + 1}/schema\"\n+        elif coverage == \"prefix\":\n+            keyword = \"items\" if inherited == \"old\" else \"prefixItems\"\n+            schema[keyword] = [{\"type\": \"integer\"}]\n+        elif coverage == \"all\":\n+            schema[\"items\"] = {}\n+        elif coverage == \"additional\":\n+            assert inherited == \"old\"\n+            schema.update(items=[{}], additionalItems={})\n+        resources.append((uri, Resource.from_contents(\n+            schema, default_specification=specification,\n+        )))\n+    registry = Registry().with_resources(resources)\n+    return outer_class(\n+        {\n+            \"$schema\": outer_uri,\n+            \"$id\": f\"{base}root\",\n+            \"$ref\": f\"{base}step0/schema\",\n+            \"unevaluatedItems\": False,\n+        },\n+        registry=registry,\n+    )\n+\n+\n+@pytest.mark.parametrize(\"outer,target\", [\n+    (\"new\", \"old\"), (\"old\", \"new\"),\n+    (\"new\", \"new\"), (\"old\", \"old\"),\n+    (\"new\", None), (\"old\", None),\n+])\n+@pytest.mark.parametrize(\"coverage\", [\"prefix\", \"all\"])\n+def test_direct_reference_item_coverage(outer, target, coverage):\n+    validator = make_validator(outer, [target], coverage)\n+    assert validator.is_valid([])\n+    assert validator.is_valid([1])\n+    errors = list(validator.iter_errors([1, 2]))\n+    if coverage == \"prefix\":\n+        assert len(errors) == 1\n+        assert errors[0].validator == \"unevaluatedItems\"\n+    else:\n+        assert errors == []\n+    if coverage == \"prefix\":\n+        errors = list(validator.iter_errors([\"not an integer\"]))\n+        assert [error.validator for error in errors] == [\"type\"]\n+\n+\n+@pytest.mark.parametrize(\"outer,path\", [\n+    (\"new\", [\"old\", \"new\", \"old\"]),\n+    (\"old\", [\"new\", \"old\", \"new\"]),\n+    (\"new\", [\"old\", None]),\n+    (\"old\", [\"new\", None]),\n+    (\"new\", [\"old\", None, \"new\"]),\n+    (\"old\", [\"new\", None, \"old\"]),\n+])\n+@pytest.mark.parametrize(\"coverage\", [\"prefix\", \"all\"])\n+def test_reference_chains_keep_scope_and_dialect(outer, path, coverage):\n+    validator = make_validator(outer, path, coverage)\n+    assert validator.is_valid([])\n+    assert validator.is_valid([1])\n+    errors = list(validator.iter_errors([1, 2]))\n+    if coverage == \"prefix\":\n+        assert len(errors) == 1\n+        assert errors[0].validator == \"unevaluatedItems\"\n+    else:\n+        assert errors == []\n+\n+\n+@pytest.mark.parametrize(\"outer\", [\"old\", \"new\"])\n+def test_2019_additional_items_cover_tail(outer):\n+    validator = make_validator(outer, [\"old\"], \"additional\")\n+    assert validator.is_valid([1])\n+    assert validator.is_valid([1, 2, 3])\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against an existing coverage-dispatch limitation, so no setup defect is introduced. The new acceptance file uses only public validator and referencing APIs, with all resources supplied in-memory and no legacy resolver or retrieval callback. It checks both direct cross-draft directions, same-draft and undeclared-dialect controls, relative chains with repeated switches and inherited dialects, ordinary tuple/prefix validation, and full-array coverage controls. The required repair differs from the original legacy-resolver task: coverage semantics must follow reference-driven dialect changes rather than selecting a legacy resolution mechanism.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Correct item evaluation coverage across `$ref` boundaries between Draft 2019-09 and Draft 2020-12 when validation uses a modern `referencing.Registry`, without a legacy resolver. The referenced schema's explicit `$schema` must determine its item semantics, even when the outer validator uses the other draft. A referenced 2019-09 resource with `items: [{}]` and a referenced 2020-12 resource with `prefixItems: [{}]` each cover only the first item: an outer schema with `unevaluatedItems: false` must accept `[1]` and reject `[1, 2]` in either cross-draft direction. This must also work through relative-reference chains that switch dialect more than once; resources without `$schema` should retain the incoming validator's dialect. Keep registry resolution scope intact, preserve ordinary validation and same-draft coverage behavior, and retain full-array coverage where the referenced draft's `items` or `additionalItems` rules provide it. Return a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across validator evolution, draft registrations, and both item helpers, followed by combine_verify_finish using a bidirectional dialect matrix. The useful investigation is semantic dispatch across modules, not legacy resolver scope management.",
+  "change_type": "constraint",
+  "description": "Make reference-derived item coverage honor the dialect explicitly declared by the referenced schema, using only the modern registry and no legacy resolver. A Draft202012Validator referencing a Draft 2019-09 resource with tuple-form `items` must leave trailing indexes uncovered; a Draft201909Validator referencing a Draft 2020-12 resource with `prefixItems` must cover those prefix indexes. Require both directions to work with `unevaluatedItems: false`, including reference chains that change dialect. Return a production-only unified diff. Investigate `jsonschema/_utils.py::find_evaluated_item_indexes_by_schema`, `jsonschema/_legacy_keywords.py::find_evaluated_item_indexes_by_schema`, and `jsonschema/validators.py::create`'s generated `evolve` method and `validator_for`.",
+  "expected_answer_change": "The repair must choose coverage semantics from the referenced schema's effective dialect rather than merely pass the resolved contents back to the same helper. For instance `[1, 2]`, a referenced 2019-09 schema with `items: [{}]` covers only index 0, as does a referenced 2020-12 schema with `prefixItems: [{}]`; the outer `unevaluatedItems: false` must reject index 1 in both cross-draft directions. Preserve the resolved modern resolver and same-draft behavior.",
+  "why_substantive": "The original task selects between legacy and modern resolution while keeping each coverage traversal within its original helper. This variation keeps modern resolution but changes the item semantics required after crossing a reference: evolving the validator can change its draft, yet the current recursive call still uses the originating helper. It concerns coverage dispatch, not the reference-sibling keyword dispatch covered by another repository task."
+ },
+ "task_id": "python-jsonschema-jsonschema-r02-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_reference_item_dialects.py::test_direct_reference_item_coverage[prefix-new-old]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_direct_reference_item_coverage[prefix-old-new]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-new-path0]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-new-path2]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-old-path1]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-old-path3]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7314
+   },
+   "patch_files": [
+    "jsonschema/_utils.py",
+    "jsonschema/_legacy_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_reference_item_dialects.py::test_direct_reference_item_coverage[prefix-new-old]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_direct_reference_item_coverage[prefix-old-new]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-new-path0]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-new-path2]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-old-path1]",
+   "jsonschema/tests/test_reference_item_dialects.py::test_reference_chains_keep_scope_and_dialect[prefix-old-path3]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

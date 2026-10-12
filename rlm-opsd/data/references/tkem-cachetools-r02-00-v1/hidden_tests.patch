@@ -1,0 +1,60 @@
+--- /dev/null
++++ b/tests/test_key_pickle_process.py
+@@ -0,0 +1,57 @@
++import json
++import os
++from pathlib import Path
++import subprocess
++import sys
++import unittest
++
++import cachetools.keys
++
++
++class KeyPickleProcessTest(unittest.TestCase):
++    def test_hashed_key_cross_seed(self):
++        package_root = str(Path(cachetools.keys.__file__).resolve().parents[1])
++        env = os.environ.copy()
++        env["PYTHONPATH"] = os.pathsep.join(
++            [package_root, env.get("PYTHONPATH", "")]
++        )
++        producer = """
++import pickle
++import sys
++from cachetools.keys import hashkey
++key = hashkey("abc", 123)
++hash(key)
++sys.stdout.buffer.write(pickle.dumps(key))
++"""
++        receiver = """
++import json
++import pickle
++import sys
++from cachetools.keys import hashkey
++restored = pickle.loads(sys.stdin.buffer.read())
++fresh = hashkey("abc", 123)
++print(json.dumps([
++    restored == fresh,
++    hash(restored) == hash(fresh),
++    {fresh: "hit"}.get(restored),
++    {restored: "hit"}.get(fresh),
++]))
++"""
++        payload = subprocess.run(
++            [sys.executable, "-c", producer],
++            env=dict(env, PYTHONHASHSEED="1"),
++            stdout=subprocess.PIPE,
++            stderr=subprocess.PIPE,
++            check=True,
++            timeout=30,
++        ).stdout
++        result = subprocess.run(
++            [sys.executable, "-c", receiver],
++            input=payload,
++            env=dict(env, PYTHONHASHSEED="2"),
++            stdout=subprocess.PIPE,
++            stderr=subprocess.PIPE,
++            check=True,
++            timeout=30,
++        )
++        self.assertEqual(json.loads(result.stdout), [True, True, "hit", "hit"])

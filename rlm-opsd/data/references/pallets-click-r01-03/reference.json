@@ -1,0 +1,144 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -1207,11 +1207,11 @@\n         if not help_option_names or not self.add_help_option:\n             return None\n \n-        # Cache the help option object in private _help_option attribute to\n-        # avoid creating it multiple times. Not doing this will break the\n-        # callback ordering by iter_params_for_processing(), which relies on\n-        # object comparison.\n-        if self._help_option is None:\n+        # Cache the help option while its effective names are unchanged.\n+        # iter_params_for_processing() relies on object identity for callback\n+        # ordering. Create a new option when the names change instead of\n+        # mutating an option that may still be in use by another context.\n+        if self._help_option is None or self._help_option.opts != help_option_names:\n             # Avoid circular import.\n             from .decorators import help_option\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009234479947926868,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['core', 'files']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch reconciles context-dependent spellings with stable identity for unchanged spellings and preserves previously returned options. The final diff was constructed programmatically and inspected before delivery.",
+   "inspect_locate": "The reference execution used 13 targeted searches without printing the whole repository context. Locating the help-option cache alone was insufficient: the change also required understanding effective-name filtering, option construction, and identity-sensitive eager processing.",
+   "persistent_state": "The execution reused the core and files variables across turns, although persistent_state was not explicitly listed among the established behaviors."
+  },
+  "notes": "This is a natural, focused maintainer request with a precise unified-diff output requirement. It specifies observable requirements rather than the implementation fix or solver workflow. The small patch still requires repository-specific reasoning about caching, ordered effective names, and option identity."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must reconcile refreshed spelling behavior with stable option identity, and its exact hunks should be checked against the source before delivery.",
+   "inspect_locate": "Automatic help combines context-specific spellings, conflict filtering, decorator-created options, parser registration, and identity-sensitive processing order.",
+   "persistent_state": "The solver must retain the cache identity requirements and the effective spelling rules while comparing construction, registration, and repeated-context behavior."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Command.get_help_option",
+    "why": "Caches the automatic help option without considering subsequent effective spelling changes."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Command.get_help_option_names",
+    "why": "Preserves declaration order, deduplicates names, and removes primary and secondary user-option conflicts."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::iter_params_for_processing",
+    "why": "Relies on matching parameter objects between parser invocation order and declaration order."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_help_cache_refresh.py\n@@ -0,0 +1,79 @@\n+import click\n+\n+\n+def test_help_cache_tracks_context_spellings():\n+    command = click.Command(\"tool\")\n+    first_ctx = click.Context(command, help_option_names=[\"-h\", \"--help\"])\n+    first = command.get_help_option(first_ctx)\n+    assert first is not None\n+    assert first.opts == [\"-h\", \"--help\"]\n+    assert command.get_help_option(first_ctx) is first\n+\n+    second_ctx = click.Context(\n+        command, help_option_names=[\"--assist\", \"-a\", \"--assist\"]\n+    )\n+    second = command.get_help_option(second_ctx)\n+    assert second is not None\n+    assert second is not first\n+    assert second.opts == [\"--assist\", \"-a\"]\n+    assert first.opts == [\"-h\", \"--help\"]\n+    equivalent_ctx = click.Context(\n+        command, help_option_names=[\"--assist\", \"-a\"], terminal_width=100\n+    )\n+    assert command.get_help_option(equivalent_ctx) is second\n+    assert command.get_params(equivalent_ctx)[-1] is second\n+\n+\n+def test_help_cache_tracks_order():\n+    command = click.Command(\"tool\")\n+    first_ctx = click.Context(command, help_option_names=[\"-h\", \"--help\"])\n+    first = command.get_help_option(first_ctx)\n+    second_ctx = click.Context(command, help_option_names=[\"--help\", \"-h\"])\n+    second = command.get_help_option(second_ctx)\n+    assert first is not None and second is not None\n+    assert second is not first\n+    assert first.opts == [\"-h\", \"--help\"]\n+    assert second.opts == [\"--help\", \"-h\"]\n+\n+\n+def test_help_cache_tracks_user_option_conflicts():\n+    command = click.Command(\n+        \"tool\", params=[click.Option([\"--enabled/--disabled\"])]\n+    )\n+    ctx = click.Context(\n+        command,\n+        help_option_names=[\"--enabled\", \"--disabled\", \"--assist\", \"--more\"],\n+    )\n+    first = command.get_help_option(ctx)\n+    assert first is not None\n+    assert first.opts == [\"--assist\", \"--more\"]\n+    command.params.append(click.Option([\"--assist\"]))\n+    second = command.get_help_option(ctx)\n+    assert second is not None\n+    assert second is not first\n+    assert second.opts == [\"--more\"]\n+    assert first.opts == [\"--assist\", \"--more\"]\n+    assert command.get_help_option(ctx) is second\n+    command.add_help_option = False\n+    assert command.get_help_option(ctx) is None\n+    command.add_help_option = True\n+    assert command.get_help_option(ctx) is second\n+    empty_ctx = click.Context(command, help_option_names=[])\n+    assert command.get_help_option(empty_ctx) is None\n+\n+\n+def test_refreshed_help_spelling_is_registered(runner):\n+    command = click.Command(\"tool\", help=\"Tool help.\")\n+    old_ctx = click.Context(command, help_option_names=[\"--help\"])\n+    old_option = command.get_help_option(old_ctx)\n+    result = runner.invoke(\n+        command, [\"--assist\"], help_option_names=[\"--assist\"]\n+    )\n+    assert result.exit_code == 0\n+    assert \"Tool help.\" in result.output\n+    assert \"--assist\" in result.output\n+    assert old_option is not None\n+    assert old_option.opts == [\"--help\"]\n",
+  "include_failure_log": false,
+  "notes": "Hidden tests exercise public command/context methods and observable parser registration. They do not require a particular cache representation.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "A Command reused with different Context.help_option_names currently keeps the spellings from its first automatic help option. Make automatic help follow the current context's effective spellings, including their order and filtering out names claimed by primary or secondary user options. When the effective spellings are unchanged, repeated calls must retain the same help Option object so eager processing order remains reliable. When the spellings change, previously returned help options must not be mutated. Disabling automatic help or having no available spellings must still produce no help option. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-click-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_context_spellings",
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_order",
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_user_option_conflicts",
+   "tests/test_help_cache_refresh.py::test_refreshed_help_spelling_is_registered"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1995
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_context_spellings",
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_order",
+   "tests/test_help_cache_refresh.py::test_help_cache_tracks_user_option_conflicts",
+   "tests/test_help_cache_refresh.py::test_refreshed_help_spelling_is_registered"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

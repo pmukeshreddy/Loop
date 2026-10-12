@@ -1,0 +1,88 @@
+--- /dev/null
++++ b/jsonschema/tests/test_error_tree_stack_safe.py
+@@ -0,0 +1,85 @@
++import sys
++
++import pytest
++
++from jsonschema.exceptions import ErrorTree, ValidationError
++
++
++@pytest.fixture(autouse=True)
++def preserve_recursion_limit(monkeypatch):
++    limit = sys.getrecursionlimit()
++
++    def forbidden(limit):
++        pytest.fail("ErrorTree must not change the recursion limit")
++
++    monkeypatch.setattr(sys, "setrecursionlimit", forbidden)
++    yield
++    assert sys.getrecursionlimit() == limit
++
++
++@pytest.mark.parametrize("operation", ["total_errors", "len", "repr"])
++def test_single_deep_path(operation):
++    path = tuple(range(3000))
++    error = ValidationError("deep", validator="type", path=path)
++    tree = ErrorTree([error])
++
++    if operation == "total_errors":
++        assert tree.total_errors == 1
++    elif operation == "len":
++        assert len(tree) == 1
++    else:
++        assert repr(tree) == "<ErrorTree (1 total error)>"
++    assert tuple(error.path) == path
++    assert error.parent is None
++
++
++@pytest.mark.parametrize("depth", [4, 3000])
++def test_branching_stored_entries_and_input_preservation(depth):
++    path = tuple(range(depth))
++    nested = ValidationError("nested", validator="minimum", path=["nested"])
++    child = ValidationError("child", validator="type", context=[nested])
++    parent = ValidationError("parent", path=["outside"])
++    root = ValidationError(
++        "aggregate", validator="anyOf", context=[child], parent=parent,
++    )
++    middle = ValidationError("middle", validator="type", path=path[:depth // 2])
++    old = ValidationError("old", validator="type", path=path)
++    last = ValidationError("last", validator="type", path=path)
++    minimum = ValidationError("minimum", validator="minimum", path=path)
++    sibling = ValidationError(
++        "sibling", validator="type", path=path[:-1] + ("sibling",),
++    )
++    other = ValidationError("other", validator="type", path=["other"])
++    supplied = [root, middle, old, last, minimum, sibling, other]
++    all_errors = supplied + [child, nested, parent]
++    snapshots = [
++        (tuple(e.path), tuple(e.schema_path), e.parent, tuple(e.context))
++        for e in all_errors
++    ]
++    tree = ErrorTree(iter(supplied))
++
++    assert tree.total_errors == 6
++    assert len(tree) == 6
++    assert repr(tree) == "<ErrorTree (6 total errors)>"
++    assert tree.errors == {"anyOf": root}
++    assert set(tree) == {0, "other"}
++    node = tree
++    for component in path[:depth // 2]:
++        node = node[component]
++    assert node.total_errors == 4
++    leaf = tree
++    for component in path:
++        leaf = leaf[component]
++    assert leaf.errors == {"type": last, "minimum": minimum}
++    assert len(leaf) == 2
++    assert [
++        (tuple(e.path), tuple(e.schema_path), e.parent, tuple(e.context))
++        for e in all_errors
++    ] == snapshots
++
++
++def test_empty_tree():
++    tree = ErrorTree()
++    assert tree.total_errors == 0
++    assert len(tree) == 0
++    assert repr(tree) == "<ErrorTree (0 total errors)>"

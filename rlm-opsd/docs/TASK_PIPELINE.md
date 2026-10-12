@@ -1,237 +1,225 @@
-# M2 task pipeline
+# Task pipeline (AgentInstruct-style DeepSWE generation)
 
-Run commands from `rlm-opsd/` using the M0/M1 environment. This pipeline is CPU
-code and uses a spawn-based process pool on macOS or Linux. It does not start
-inference or training. Source contracts are in [VERIFIED_APIS.md](VERIFIED_APIS.md),
-and executed results are in [PROGRESS.md](PROGRESS.md).
+Run commands from `rlm-opsd/`. The pool format and acceptance rules are in
+[TASKS.md](TASKS.md). Executed results are recorded in [PROGRESS.md](PROGRESS.md).
 
-## Build and verify
+The pipeline follows AgentInstruct (Mitra et al., arXiv:2407.03502). Each
+flow is implemented by a generation role whose instructions are a versioned
+`SKILL.md`:
 
-```bash
-make test-m2
-make tasks                         # requires a new or empty data/ directory
-make tasks-verify
+| Flow | Role | Skill | Output |
+|---|---|---|---|
+| Content transformation | Source analyst | [source-analysis](../skills/source-analysis/SKILL.md) | Per-repository dossier: mechanisms, defect sites, semantic sets, focused units, proposed settings |
+| Seed instruction generation | Question generator | [question-generation](../skills/question-generation/SKILL.md) | Candidate specs with intended behaviors, rationale, answer kind and defect/probe/hidden-test patches |
+| Refinement | Variation suggester, editor | [variation-suggester](../skills/variation-suggester/SKILL.md), [variation-editor](../skills/variation-editor/SKILL.md) | Substantive variations of accepted seeds |
+| Response generation | Reference solver | [solver](../skills/solver/SKILL.md) | Reference trajectory and answer from the real RLM harness |
+| Verification | Verifier | [verifier](../skills/verifier/SKILL.md) | Executable oracle programs, then an acceptance review |
 
-# Preserve an existing pool by selecting a fresh destination:
-make tasks TASK_OUTPUT=data-rebuild
-make tasks-verify TASK_OUTPUT=data-rebuild
-```
-
-`TASK_CONFIG=configs/tasks.yaml` is the default and can be overridden. `make
-tasks` first prepares sources: missing public CSV/query files are downloaded
-from exact revision URLs and SHA-256 checked. A corrupt cache fails; it is not
-silently accepted. The build then generates, independently verifies, filters,
-and atomically writes the candidate pool. It refuses to overwrite a nonempty
-output directory.
-
-Individual CLI commands are:
+## Commands
 
 ```bash
-.venv/bin/python -m rlm_opsd.tasks prepare --config configs/tasks.yaml
-.venv/bin/python -m rlm_opsd.tasks build --config configs/tasks.yaml --output data-rebuild
-.venv/bin/python -m rlm_opsd.tasks verify --config configs/tasks.yaml --manifest data-rebuild/manifest.jsonl
+make tasks-prepare     # pin, set up, baseline, split and index (no model requests)
+make tasks-generate    # resumable generation (model requests through step1.auth)
+make tasks             # prepare + generate + release into an empty data/
+make tasks-verify      # re-run executable verification of a released pool
+make tasks-status      # counts from the work directory
 ```
 
-`verify` reloads the serialized context and recomputes each generated answer.
-It does not certify benchmark ground truth or held-out coverage. Preparation
-and generation may succeed with partial held-out coverage to allow inspection;
-release through the train/dev loader requires complete coverage.
+The underlying CLI is `python -m rlm_opsd.tasks {prepare,generate,build,verify,status,reopen,repractice}`.
+`generate` accepts `--repos`, `--rounds` and `--target TRAIN DEV` for pilot
+batches. `--focus <behavior> ...` runs a focused top-up: seeds whose primary
+behavior is outside the focus are screened out (`off_focus`), generators are
+told only those behaviors are needed, and `--target` counts accepted tasks
+whose family is in the focus. Tasks whose execution establishes a different
+family are still released under their established behavior. `build` refuses to write into a nonempty output directory.
 
-## Configuration and task identity
+Model access uses the project's step-1 OAuth module (`step1.auth`, ChatGPT plan
+by default; `models.auth: api-key` uses `OPENAI_API_KEY`). Sign in once with
+`../.venv/bin/python -m step1.auth login` from the project root. Every completed
+request is appended to `<work_dir>/usage.jsonl` with role, tokens and latency.
 
-All operational settings are in [configs/tasks.yaml](../configs/tasks.yaml).
-They do not define teacher-gate or OPSD-exit thresholds.
+## Stages
 
-| Key | Meaning |
-|---|---|
-| `seed` | Master seed; each family/bucket/structure/split/instance gets a stable derived seed |
-| `workers` | Positive number of worker processes; `1` runs serially |
-| `size_buckets` | Target context characters, not tokenizer tokens |
-| `structures` | `str` and/or `list` |
-| `encodings` | Rotated across eligible cells: `plain`, `jsonl`, `csv`, `logs`, `markdown` |
-| `families` | Family names mapped to positive integer weights |
-| `splits` | `train` and `dev_behavior`, each with a positive per-cell multiplier |
-| `direct_read_max_chars` | Strict upper bound for small-context controls |
-| `labels` | Optional fixed classification-intent selection; omit when using `label_count` |
-| `family_knobs` | Per-family parameters, each a fixed value, inclusive `{min, max}` range, or `{choices: [...]}` |
-| `classification_sources` | Separate train/dev CSV paths, URLs, SHA-256, revisions, partitions, and ambiguity policy |
-| `heldout_index` | Destination for reserved queries and source references |
-| `heldout_question_sources` | Pinned query-only artifacts; cannot establish full coverage |
-| `heldout_snapshots` | Local, checksum-pinned reserved exports, described below |
-| `decontamination.ngram_size` | Word n-gram size for query similarity |
-| `decontamination.overlap_threshold` | Drop when Jaccard similarity is strictly greater than this value |
+1. **Prepare** (`prepare.py`). Each configured repository is shallow-cloned
+   at its release tag. The pipeline checks that the tag resolves to the
+   pinned commit, exports it to a clean tree, and installs it with its test
+   dependencies into a dedicated uv virtualenv. The suite runs
+   `stability_runs` times. Stable passing tests, consistent failures and
+   flaky tests are recorded in `repos/<slug>/baseline.json`. The pipeline
+   refuses any repository that is a DeepSWE-113 upstream. Repositories are
+   then assigned to `train` or `dev_behavior` using a size-stratified seeded
+   draw. The assignment is written once to `splits.json` and never
+   recomputed. `sources.lock.json` records URL, ref, commit, license,
+   tree digest, environment freeze and baseline counts. The held-out index
+   holds all DeepSWE-113 instructions, with repository identities as source
+   references, plus the configured partial or complete benchmark sources.
+2. **Analyze.** Deterministic facts come first: modules, internal imports,
+   importers, symbols, and which modules each test file imports. The source
+   analyst then receives these facts and the most connected modules' text,
+   and writes `repos/<slug>/dossier.json`.
+3. **Generate.** Each repository runs rounds until it reaches its share of
+   its split's target, or `max_rounds_per_repo`. The teacher-gate preflight
+   requires every family in `dev_behavior`, so dev repositories keep
+   generating within the round cap while any family is missing from the
+   split. A family counts only when a reference execution establishes it.
+   Each round focuses on different dossier entries and shows
+   the generator the exact text of their files. The generator also receives
+   the behavior and answer-kind coverage still needed for the repository,
+   and questions already written there. Invalid specs are rejected with
+   their validation errors.
+4. **Screen.** Questions that are too long, mention RLM operations
+   (`llm_query`, `FINAL`, REPL, sub-calls, and similar), or embed long code
+   listings are rejected before any execution.
+5. **Materialize** (`materialize.py`). The setup defect is applied to a
+   fresh checkout and the full suite runs `stability_runs` times.
+   Fail-to-pass tests must fail on every run and be baseline-passing. The
+   defect may break at most `max_setup_fail_fraction` of passing tests and
+   must not break collection. Probe patches yield the impact set, which must
+   be stable, within the configured size range, and file-faithful: each
+   node ID must name the context file that defines the test. Suites that
+   collect through an aggregator module would otherwise produce answers the
+   solver cannot derive. Hidden acceptance tests
+   must fail before any fix. Defect symbols come from diffing the real files
+   against AST spans, because hunk headers in generated patches are only
+   approximate. The context is built from the starting state, scoped to the
+   repository within the size budget or to explicit files. The real pytest
+   output is appended when requested. Agent-instruction files (`AGENTS.md`,
+   `CLAUDE.md`), `.github/`, lockfiles and binaries are excluded.
+6. **Oracle.** For `value` tasks, and `symbols` tasks without a defect, the
+   verifier writes a program that executes the repository. It never sees the
+   solver's answer. The program runs twice in the sandbox and must be
+   deterministic.
+7. **No-repository check.** The same model answers without repository
+   access. If it matches the ground truth, the task is rejected as
+   answerable without the repository. Patch tasks are exempt, because a
+   correct patch cannot be produced without the files. This
+   cheap check runs before the reference solve.
+8. **Solve** (`solver.py`). The reference solver runs through
+   `rlm_opsd.harness.Episode`, the same sandboxed REPL worker, `llm_query`
+   proxy, budgets and FINAL/FINAL_VAR parsing the student uses. Its system
+   prompt is the OPSD teacher variant (student API plus the task-independent
+   manual) followed by the solver skill. Only the first ```repl``` block of
+   each message runs. A finish counts only in a message without unexecuted
+   code, so every answer follows observed output. Up to `solver_attempts`
+   attempts are allowed, and each one is kept. `solver_harness_overrides`
+   may only relax timing limits: REPL wall time and per-sub-call timeout.
+   Remote sub-calls take a median of about 12 s, against milliseconds for a
+   local training server, and loops of sequential sub-calls were being
+   killed by the 120 s limit. Turn, sub-call count and size, memory and CPU
+   limits are always the student's. Each task's provenance records the
+   overrides.
+9. **Verify** (`verify.py`). Patches must apply to a fresh starting state
+   without editing tests. Fail-to-pass tests (and hidden tests) must pass on
+   every stability run, and no pass-to-pass test may fail on the full suite.
+   Test-ID and symbol answers must equal the executable set exactly; values
+   must equal the oracle output.
+10. **Practice check** (`practice.py`). The reference trajectory must
+    exhibit at least one intended behavior; if the intended primary is not
+    exhibited, the task is released under the first exhibited one
+    (`relabeled_from`). Evidence comes from runtime sub-call logs and a
+    provenance analysis of the REPL code: code searches over context,
+    sub-calls on selected rather than whole context, at least two successful
+    sub-calls whose results reach the final answer, variables read across
+    turns, and a final value that derives from `context` or sub-call results
+    through code (not retyped from printed output) and was inspected before
+    finishing. A direct solve must use a small context and no sub-calls.
+    Only established behaviors are released, and detector tags are derived
+    from them.
+11. **Review and deduplicate.** The verifier reviews the verified task
+    against the acceptance criteria. Accepted tasks in the same repository
+    may not share a near-duplicate question or a repeated answer. A variation
+    whose verified answer equals its parent's is rejected as cosmetic. Query
+    overlap with held-out data is rejected.
+12. **Vary.** For each accepted seed, the suggester proposes
+    `variations_per_seed` changes to constraints, dependencies, failure
+    conditions, evidence or deliverable. The editor implements each one as
+    a full spec, which then repeats stages 4–11. Variations inherit their
+    parent's repository and split.
+13. **Release** (`build.py`). Accepted tasks are decontaminated against the
+    held-out index (repository identity and query n-grams). Each task's
+    executable ground truth is then re-run on fresh checkouts (`--runs`,
+    default 1): defect and fail-to-pass sets, the reference patch, impact
+    sets, defect symbols and oracles. Tasks that do not reproduce are
+    rejected as `reverification_failed` and excluded, which catches
+    nondeterminism that the stability runs missed. The release
+    writes `manifest.jsonl`, content-addressed `contexts/`,
+    `references/<task_id>/` (reference answer, patches, oracle, trajectory,
+    logs, review), `build-report.json` (counts by split, family, setting,
+    answer type, repository and size bucket; rejection counts by stage and
+    reason; sources; skill hashes; manifest hash) and `decontamination.json`.
 
-The number of tasks per eligible cell is the family weight multiplied by the
-split multiplier. Repo QA has `list` structure only and uses Markdown file
-envelopes. Small controls use buckets strictly below the direct-read limit.
-The other families cover all configured sizes and both structures. Encoding is
-rotated, not an extra Cartesian-product axis. Reports include excluded cells
-and both the generated and retained grids.
+## Resumability, provenance and rejections
 
-The default train multiplier is `5`, the dev multiplier is `1`, and the
-small-context family weight is `3`. Each knob is sampled from a separate RNG
-derived from the task seed and knob name. Worker count and YAML key order do
-not change the sampled values. Integer ranges include both endpoints; date
-ranges sample calendar days inclusively and use quoted ISO date strings.
-For example:
+All state lives under `work_dir` (default `.deps/task-generation/`):
 
-```yaml
-family_knobs:
-  sparse_retrieval:
-    needles: {min: 1, max: 8}
-  linear_aggregation:
-    label_count: {min: 2, max: 8}
-    temporal_filter: {choices: [true, false]}
-    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
+```text
+splits.json, sources.lock.json, run.json, usage.jsonl, events.jsonl, rejections.jsonl
+repos/<slug>/{baseline,facts,dossier,round-NN}.json
+candidates/<cid>/{meta,spec,status,materialized,context,truth,verification,baseline,practice,review,accepted}.json
+candidates/<cid>/{solve-N.json,trajectory-N.json,oracle.py,reference.patch,logs/}
 ```
 
-The shipped ranges cover needles `1–8`, hops `2–4`, label counts `2–8`, repo
-files `8–64`, and small-context quantity records `4–24`. Both pair relations
-and temporal-filter states are sampled. `label_count` selects a seeded subset
-from all labels in the split's pinned corpus, without a fixed allowlist. It
-must fit the available labels and cannot be combined with explicit `labels`.
+Each stage writes its output atomically. A restart skips any stage whose
+output exists, so an interrupted run resumes where it stopped. Rejected
+candidates are terminal. Each rejection appears once in `rejections.jsonl`
+with its stage, reason code and detail. Infrastructure errors are rejections
+with code `pipeline_error` and a saved traceback in `error.json`; they are
+never silently retried.
 
-Common generator knobs are `target_chars`, `structure`, `encoding`, and
-`chunk_chars`. Leave the grid-derived size/structure knobs to the planner when
-using `family_knobs`. Records remain whole across list chunks. Target sizes are
-minimums, so complete records/file envelopes can exceed the bucket size; exact
-character counts are stored in the manifest.
+When a check itself is found to be wrong and is fixed, `reopen --codes <code>`
+returns the affected candidates to pending. Only practice- and review-stage
+rejections can be reopened, because their inputs (verified answer, reference
+trajectory) are already stored. Each reopening is logged in `events.jsonl`.
+The release report counts only final rejections. `repractice` re-derives
+the behavior labels of accepted tasks from their stored reference
+trajectories after the practice analysis changes. It touches only the
+established behaviors, family, rationale subset and tags; answers and
+verification are untouched. Each change is logged as a `repracticed` event.
 
-| Family | Additional knobs and behavior |
-|---|---|
-| `sparse_retrieval` | `needles` from 1–8; exact parcel IDs, shuffled facts and near-ID distractors |
-| `multi_hop` | `hops` from 2–4; keyed links, terminal lookup and decoy terminal |
-| `linear_aggregation` | `entries` (optional explicit count), `users`, `labels` or `label_count`, `temporal_filter`, `cutoff_date`, `query_type` (`count` or `most_frequent`) |
-| `quadratic_pairs` | Dense-task knobs plus `pair_relation` (`both_have_any` or `cover_labels`); unique pairs sorted numerically |
-| `repo_qa` | `files` (at least three), `repo_query_type` (`definition`, `callers`, `config`); generated Python repository |
-| `small_context_control` | `records` (positive quantity-record count, default `8`), `direct_read_max_chars`; sum the quantities of a named group |
+## Execution isolation
 
-With no explicit `entries`, dense tasks grow using classification entries until
-the target size is reached. With an explicit small count, unrelated records can
-pad the context. Temporal filtering means dates strictly after `cutoff_date`
-(default `2023-03-31` for direct generator calls). With the filter off, all
-dates are eligible. Generated dates span January through June 2023, and user
-IDs are synthetic. Most-frequent ties use lexical order and empty results
-return `NONE`. Small-context `records` counts quantity records, excluding any
-unrelated archival filler used to reach the context-size bucket.
+Repository tests, oracle programs and patch checks run as
+`sandbox-exec`-wrapped subprocesses (macOS):
 
-Every query type has four wordings, selected by seed using an RNG separate
-from context generation and label sampling. Each wording preserves the same
-matching, date, tie-breaking and output-order rules.
-The verifier parses the serialized records independently; it does not call the
-generator or read `task.answer`. Repo verification uses Python ASTs without
-executing repository code.
+- outbound network is denied, except localhost;
+- file writes are confined to the checkout and a scratch directory;
+- reads of credential locations (`.phase1-auth`, `~/.codex`, `~/.ssh`, and
+  similar) are denied;
+- the environment contains only PATH, HOME (a scratch directory), locale,
+  TZ and PYTHONPATH.
 
-Plain/log/Markdown formats encode structured records with JSON field values.
-CSV uses two columns (`record`, JSON object) to preserve heterogeneous record
-schemas and multiline text. JSONL uses one JSON object per line. Repo QA uses
-`# File: path` followed by a Python fenced block in each list item.
+Logs are rewritten so they contain no checkout, venv, interpreter or home
+paths. The reference solver's REPL uses the harness's own sandboxed worker.
+Reference executions raise `SandboxBackend.poll_interval_s` from 0.02 s to
+0.5 s. On macOS each resource check scans the whole process table (about
+10 ms), and ten concurrent episodes at 20 ms saturated the event loop. The
+limits are unchanged; only how often they are checked. Training rollouts keep
+the default.
 
-Task identity includes family, resolved knobs, seed and split. Dense-task knobs
-also include a fingerprint of the pinned classification corpus. Resolved knobs,
-including selected labels, query criteria, `query_variant` and actual entry
-counts, remain in the manifest for audit and offline verification. Neither
-these criteria nor annotation maps are passed to the model. Regenerate from
-the original build configuration or input `TaskSpec`; resolved manifest knobs
-are audit output, not a replacement input recipe (`label_count` and its
-resolved `labels` are both recorded, but are mutually exclusive as inputs).
+Repositories that pytest itself imports (pluggy, packaging, iniconfig)
+cannot be sources, because a defect in the checkout would break the runner.
+Suites that only run under unittest are excluded as well.
 
-## Classification provenance
+## Configuration
 
-Dense tasks use BANKING77, attributed in
-[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md). The importer validates the
-CSV checksum, rejects TREC, and rejects conflicting normalized text labels by
-default. The checked-in configuration explicitly uses `ambiguity_policy: drop`:
-all rows of an ambiguous text are removed, rather than arbitrarily choosing a
-label. Repeated text with the same label is deduplicated. Import reports record
-these changes. The context contains utterances without their gold labels;
-independent verification joins text to the pinned annotation map offline.
+All settings are in [configs/tasks.yaml](../configs/tasks.yaml):
+repositories, model and per-role reasoning effort, targets, split size,
+rounds, variations, concurrency, stability runs, context budgets and size
+buckets, data filters, and practice-check thresholds. These are operational
+and data-filter settings. They are not teacher-gate or OPSD-exit thresholds,
+which remain user-owned in `gate.yaml` and `exit.yaml`.
 
-Train uses the upstream train CSV and dev uses its test CSV. These upstream
-partitions are not inherently normalized-text disjoint; the actual generated
-pool is separately audited in PROGRESS.md. Changing the label selection or pool
-size requires checking that property again. This is separate from mandatory
-held-out benchmark decontamination.
-
-## Manifest, context and OPSD input
-
-The output directory contains:
-
-- `manifest.jsonl`: all TASKS.md fields, plus `context_sha256` and `source_refs`.
-- `contexts/<task_id>.json`: a JSON string or list of strings, stored separately.
-- `build-report.json`: config, source import counts, generated/retained grids,
-  exclusions, answer-verification count, decontamination and manifest SHA-256.
-- `decontamination.json`: rule counts, per-split counts, match reasons and coverage.
-
-`context_path` is relative to the **manifest's parent directory**. Thus the
-default row stores `contexts/<id>.json`, resolving to `data/contexts/<id>.json`.
-This convention lets a complete pool move together. Context files are ignored
-by Git and can be regenerated; the manifest and reports are retained.
+## Loader and held-out coverage
 
 ```python
 from rlm_opsd.tasks.build import load_tasks
-
 rows = load_tasks("data/manifest.jsonl", split="train")
 ```
 
-The returned iterator requires an explicit split and yields `example_id`, a
-query-only `prompt`, and `info` containing the query, context and task metadata.
-There is no answer, annotation map, or verification knob in these records. The
-M1 harness loads `info.context` into the REPL and constructs metadata for the
-root model. This function returns Python records; it does not initialize a
-verifiers environment or a training job.
-
-Train/dev loading checks complete held-out coverage and the manifest hash.
-Every load checks context shape, character count, content hash, duplicate IDs,
-and paths escaping the pool. `inspection_only=True` explicitly allows reading
-an uncertified candidate pool for local inspection; it is not a training release.
-Eval imports always have `split="eval_heldout"`, and generation/decontamination
-reject attempts to use eval tasks as training candidates.
-
-## Reserved benchmark imports and decontamination
-
-The current public query-only import is **incomplete**. Its zero-drop result is
-not evidence of no overlap with all benchmark queries/documents. See the
-[executed report](../data/decontamination.json) and
-[current build log](checks/task-diversity/04-make-tasks.log).
-
-For complete coverage, supply the actual reserved JSON array or JSONL exports
-in `heldout_snapshots`. Each entry has `benchmark`, `path`, `sha256`, `revision`,
-`license`, and `complete`. These files are read locally and checksum-checked;
-the pipeline does not download or invent missing benchmark contexts. A full
-snapshot replaces that benchmark's query-only index. Use one combined export
-per benchmark.
-
-`complete: true` is an operator declaration that the file contains the entire
-reserved evaluation snapshot, including its source documents. It must never be
-used for a sample. The loader additionally checks a nonempty matching record
-count, revision, and source references for every record; it cannot independently
-prove that an operator's selection covers the intended benchmark.
-
-| Benchmark key | Required exported fields / constraints |
-|---|---|
-| `sniah` | RULER-style `input`, one-element `outputs`; explicit `question` or a recoverable final `What is/are ...?` question. Supply the actual reserved single-needle snapshot and its seed/revision provenance. |
-| `browsecomp_plus` | Already-decrypted `query`, `answer`, `gold_docs`, plus `documents`: exactly 1,000 distinct selected `{docid, text}` records, including all gold documents. The document selection must be the reserved 1K-doc evaluation selection. |
-| `oolong` | `dataset: trec_coarse`, `context_window_text`, `question`, `answer`, `answer_type`; optional `context_window_id`. Other source subsets are filtered out. Gold-labelled context is never exposed. |
-| `oolong_pairs` | Full `question`/`answer` rows (answer is a list), with `context_len` and the matching unlabelled OOLONG `context_record`, including `dataset: trec_coarse` and matching `context_len`. Empty-answer question templates are insufficient. |
-| `longbench_v2_codeqa` | `domain: Code Repository Understanding`, `sub_domain: Code repo QA`, `context`, `question`, `choice_A` through `choice_D`, `answer` in A–D. Other domains are filtered out. |
-
-Direct adapters are `adapt_heldout(...)` and `load_heldout_snapshot(...)` in
-[heldout.py](../rlm_opsd/tasks/heldout.py). They return reserved `Task` objects;
-source preparation retains only queries/source references in the decontamination
-index. This keeps benchmark answers out of the generated training manifest.
-Adapter tests use clearly identified fixtures; no full benchmark evaluation was
-run in M2.
-
-Query normalization uses Unicode NFKC, case-folding, and word tokens. Exact
-matches take precedence over near matches. Near matching compares word n-gram
-sets using Jaccard overlap; short queries use their full available word width.
-Source matching compares `(dataset, item_id)` across revisions, and normalized
-content hashes also catch aliases with different dataset IDs. Rule counts may
-overlap; `dropped_total` counts each rejected candidate once. The current default
-threshold is a configurable data-filter setting, not an evaluation pass/fail
-threshold.
-
-After importing complete reserved snapshots, rerun preparation and build into a
-fresh output directory so decontamination and the manifest hash are recomputed
-together. Do not edit a report's coverage flag to bypass the missing-data guard.
+Each row is `{example_id, prompt, info}`, where `info` holds only task ID,
+family, domain, tags, query and context. Train/dev release still requires
+complete held-out coverage. DeepSWE-113 coverage is complete from local data.
+The paper's long-context benchmarks need their reserved snapshots
+(`heldout.snapshots`) before the normal loader accepts the pool. Until then,
+`inspection_only=True` reads it for review. The snapshot formats and adapters
+are unchanged; see `rlm_opsd/tasks/heldout.py`.

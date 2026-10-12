@@ -1,0 +1,179 @@
+{
+ "answer": "--- a/jmespath/lexer.py\n+++ b/jmespath/lexer.py\n@@ -24,6 +24,11 @@\n     }\n \n     def tokenize(self, expression):\n+        # Each iterator owns its scanning state.  Initialization remains lazy\n+        # inside _tokenize, so errors and warnings occur when it is advanced.\n+        return Lexer()._tokenize(expression)\n+\n+    def _tokenize(self, expression):\n         self._initialize_for_expression(expression)\n         while self._current is not None:\n             if self._current in self.SIMPLE_TOKENS:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "lexer"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 12759 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused lexer and exception context supports direct reasoning about shared cursor state, generator suspension, lazy initialization, and failure or abandonment. The reference execution used no sub-calls and produced a small isolation patch."
+  },
+  "notes": "This is a natural, precisely scoped implementation request. Correctness requires repository-specific reasoning about token offsets, warning timing, exception diagnostics, and iterator lifetime, rather than a simple lookup. Naming the public entry point specifies the requested change without revealing the fix. The task is substantively distinct from its parent\u2019s strict-literal option and from the accepted token-stream and diagnostic fixture tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused lexer and exception definitions total under 16,000 characters. The task requires reasoning about generator suspension, cursor ownership, and the consumers that mutate scanning state, including what happens when another iterator fails or is abandoned. All relevant control flow is available for direct reading without repository-wide investigation."
+  },
+  "context": {
+   "files": [
+    "jmespath/lexer.py",
+    "jmespath/exceptions.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer.tokenize",
+    "why": "The generator suspends at several different points relative to cursor advancement, so interleaving must preserve each iterator's complete scanning state."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._initialize_for_expression",
+    "why": "Starting an iterator currently overwrites the expression, character buffer, position, current character, and length on the shared instance."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._next",
+    "why": "Every consumer advances the same instance-owned cursor, making independence a lifecycle issue rather than a single-token parsing change."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._consume_literal",
+    "why": "Legacy literal warnings and JSON values must remain associated with the advancement of the iterator containing that literal."
+   },
+   {
+    "path": "jmespath/exceptions.py",
+    "symbol": "jmespath/exceptions.py::LexerError",
+    "why": "The error's position, value, message, and expression are observable diagnostics that must match isolated tokenization."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_lexer_iterator_isolation.py\n@@ -0,0 +1,95 @@\n+import warnings\n+\n+import pytest\n+\n+from jmespath.exceptions import EmptyExpressionError, LexerError\n+from jmespath.lexer import Lexer\n+\n+\n+def advance(iterator):\n+    with warnings.catch_warnings(record=True) as emitted:\n+        warnings.simplefilter(\"always\")\n+        try:\n+            outcome = (\"token\", next(iterator))\n+        except StopIteration:\n+            outcome = (\"stop\",)\n+        except LexerError as error:\n+            outcome = (\"error\", type(error), error.lexer_position,\n+                       error.lexer_value, error.message, error.expression)\n+        except EmptyExpressionError as error:\n+            outcome = (\"error\", type(error), str(error))\n+    return outcome, [(w.category, str(w.message)) for w in emitted]\n+\n+\n+def assert_schedule(expressions, schedule):\n+    shared = Lexer()\n+    actual = [shared.tokenize(expression) for expression in expressions]\n+    expected = [Lexer().tokenize(expression) for expression in expressions]\n+    for index in schedule:\n+        assert advance(actual[index]) == advance(expected[index])\n+    for index in range(len(expressions)):\n+        for _ in range(100):\n+            want = advance(expected[index])\n+            assert advance(actual[index]) == want\n+            if want[0][0] == \"stop\":\n+                break\n+        else:\n+            pytest.fail(\"token stream did not terminate\")\n+\n+\n+@pytest.mark.parametrize(\"expressions\", [\n+    (\"foo.bar[0]\", \"other[*].name\"),\n+    (\".@(*)\", \"a[] | b[?c >= `2`]\"),\n+    (\"'left\\\\'side'.x\", '\"right\\\\\"side\"[1]'),\n+    ('`{\"a\": [1, true, null]}`.a', '`\"tick\\\\`value\"` | z'),\n+    (\"a || b && !c == d\", \"e <= -12 | f != g > 3 < 4 &h\"),\n+    (\"`legacy text`.tail\", \"x.` other legacy `\"),\n+    (\"x./\", \"ok.name\"),\n+    (\"prefix.'unterminated\", \"valid.`false`\"),\n+    (\"ok.more\", \"/\"),\n+    (\"ok.more\", \"\"),\n+])\n+@pytest.mark.parametrize(\"schedule\", [\n+    [0, 1, 0, 1, 0, 1],\n+    [1, 1, 0, 1, 0, 0, 1],\n+])\n+def test_interleaved_tokenization_matches_separate_lexers(expressions, schedule):\n+    assert_schedule(expressions, schedule)\n+\n+\n+def test_three_iterators_can_finish_in_a_different_order():\n+    assert_schedule(\n+        [\".alpha[2]\", \"`legacy`.tail\", \"bad.'unfinished\"],\n+        [0, 1, 2, 1, 1, 1, 1, 2, 0, 2, 0, 0])\n+\n+\n+@pytest.mark.parametrize(\"close\", [False, True])\n+def test_abandoned_iterator_does_not_disturb_a_suspended_iterator(close):\n+    shared = Lexer()\n+    survivor = shared.tokenize(\".alpha[2].omega\")\n+    expected = Lexer().tokenize(\".alpha[2].omega\")\n+    assert advance(survivor) == advance(expected)\n+    abandoned = shared.tokenize(\"other.`legacy`.tail\")\n+    assert next(abandoned)[\"value\"] == \"other\"\n+    if close:\n+        abandoned.close()\n+    del abandoned\n+    assert list(survivor) == list(expected)\n+    assert list(shared.tokenize(\"fresh.name\")) == list(Lexer().tokenize(\"fresh.name\"))\n+\n+\n+def test_creating_unstarted_iterators_remains_lazy():\n+    shared = Lexer()\n+    survivor = shared.tokenize(\".alpha\")\n+    expected = Lexer().tokenize(\".alpha\")\n+    assert advance(survivor) == advance(expected)\n+    with warnings.catch_warnings(record=True) as emitted:\n+        warnings.simplefilter(\"always\")\n+        legacy = shared.tokenize(\"`legacy`\")\n+        malformed = shared.tokenize(\"'unfinished\")\n+        empty = shared.tokenize(\"\")\n+    assert not emitted\n+    assert list(survivor) == list(expected)\n+    assert advance(legacy) == advance(Lexer().tokenize(\"`legacy`\"))\n+    assert advance(malformed) == advance(Lexer().tokenize(\"'unfinished\"))\n+    assert advance(empty) == advance(Lexer().tokenize(\"\"))\n",
+  "include_failure_log": false,
+  "notes": "This implements an existing missing capability, so no artificial setup regression is needed. The new hidden tests compare shared-instance iterator advancement with separate-instance advancement across alternating and uneven schedules, warning-producing literals, lexical failures, EOF, abandonment, and lazy creation. The baseline fails the interleaving and abandonment checks. The required repair differs substantively from the original strict-literal argument: it must isolate scanning state while retaining the current public signature.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make `Lexer.tokenize` support multiple live tokenization iterators from the same `Lexer` instance. Advancing those iterators in any interleaving must behave exactly like advancing iterators backed by separate lexer instances: preserve every token dictionary, including offsets and EOF, and preserve the warnings and exception diagnostics produced at each advancement. An iterator that raises `LexerError`, is closed, or is dropped before completion must not disturb the others or later tokenization calls. Keep tokenization lazy, retain the existing `tokenize(self, expression)` signature, and leave the supported syntax and deprecated-literal behavior unchanged. Deliver a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct solving within the focused lexer module, but adds generator-lifecycle reasoning. Alternating iterator advancement and checking recovery after an error are useful validation strategies; repository-wide exploration or recursive sub-calls are unnecessary.",
+  "change_type": "failure_condition",
+  "description": "Make tokenization iterators independent when they share a Lexer instance. In jmespath/lexer.py, Lexer.tokenize currently stores each expression's cursor in instance attributes through _initialize_for_expression and advances it through _next. Require two iterators created from one lexer to be consumable in arbitrary interleavings, including when one iterator raises LexerError or is abandoned. Each iterator must produce the same tokens, warnings, and errors as it would with its own lexer. Preserve the existing tokenize signature and token dictionary conventions; deliver a unified diff against non-test files.",
+  "expected_answer_change": "The patch must isolate mutable scanning state for each tokenization iterator, for example by delegating each call to a private scanner instance. It depends on examining Lexer.tokenize, _initialize_for_expression, _next, and the consumers that access instance attributes. Passing another argument into _consume_literal does not solve this problem.",
+  "why_substantive": "The seed only prevents a per-call strictness setting from leaking into later calls. This variation exposes interference between simultaneously suspended generators: starting or advancing one iterator overwrites the other iterator's expression and cursor. Its repair concerns ownership of the complete scanning state, not JSON decoding or deprecated-literal policy."
+ },
+ "task_id": "jmespath-jmespath-py-r01-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_lexer_iterator_isolation.py::test_abandoned_iterator_does_not_disturb_a_suspended_iterator[False]",
+   "tests/test_lexer_iterator_isolation.py::test_abandoned_iterator_does_not_disturb_a_suspended_iterator[True]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions0]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions1]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions2]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions3]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions4]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions5]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions6]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions7]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions8]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions0]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions1]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions2]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions3]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions4]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions5]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions6]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions7]",
+   "tests/test_lexer_iterator_isolation.py::test_three_iterators_can_finish_in_a_different_order"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 20,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1015
+   },
+   "patch_files": [
+    "jmespath/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_lexer_iterator_isolation.py::test_abandoned_iterator_does_not_disturb_a_suspended_iterator[False]",
+   "tests/test_lexer_iterator_isolation.py::test_abandoned_iterator_does_not_disturb_a_suspended_iterator[True]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions0]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions1]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions2]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions3]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions4]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions5]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions6]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions7]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule0-expressions8]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions0]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions1]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions2]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions3]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions4]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions5]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions6]",
+   "tests/test_lexer_iterator_isolation.py::test_interleaved_tokenization_matches_separate_lexers[schedule1-expressions7]",
+   "tests/test_lexer_iterator_isolation.py::test_three_iterators_can_finish_in_a_different_order"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

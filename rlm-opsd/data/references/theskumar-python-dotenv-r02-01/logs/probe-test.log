@@ -1,0 +1,151 @@
+.....................F....FF..............................F....FFFFFFF.. [ 28%]
+...........F..FFF....................................................... [ 56%]
+........................................................................ [ 84%]
+.........................................                                [100%]
+=================================== FAILURES ===================================
+__________________ test_set_quote_options[always-a-x-a='x'\n] __________________
+tests/test_cli.py:151: in test_set_quote_options
+    assert dotenv_path.read_text() == expected
+E   assert 'a=x\n' == "a='x'\n"
+E     
+E     - a='x'
+E     ?   - -
+E     + a=x
+____________ test_set_export[dotenv_path0-true-a-x-export a='x'\n] _____________
+tests/test_cli.py:178: in test_set_export
+    assert dotenv_path.read_text() == expected
+E   assert 'export a=x\n' == "export a='x'\n"
+E     
+E     - export a='x'
+E     ?          - -
+E     + export a=x
+_______________ test_set_export[dotenv_path1-false-a-x-a='x'\n] ________________
+tests/test_cli.py:178: in test_set_export
+    assert dotenv_path.read_text() == expected
+E   assert 'a=x\n' == "a='x'\n"
+E     
+E     - a='x'
+E     ?   - -
+E     + a=x
+_____________________ test_set_key[-a-b-expected1-a='b'\n] _____________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=b\n' == "a='b'\n"
+E     
+E     - a='b'
+E     ?   - -
+E     + a=b
+___________________ test_set_key[a=b-a-c-expected6-a='c'\n] ____________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=c\n' == "a='c'\n"
+E     
+E     - a='c'
+E     ?   - -
+E     + a=c
+__________________ test_set_key[a=b\n-a-c-expected7-a='c'\n] ___________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=c\n' == "a='c'\n"
+E     
+E     - a='c'
+E     ?   - -
+E     + a=c
+________________ test_set_key[a=b\n\n-a-c-expected8-a='c'\n\n] _________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=c\n\n' == "a='c'\n\n"
+E     
+E     - a='c'
+E     ?   - -
+E     + a=c
+_______________ test_set_key[a=b\nc=d-a-e-expected9-a='e'\nc=d] ________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=e\nc=d' == "a='e'\nc=d"
+E     
+E     - a='e'
+E     ?   - -
+E     + a=e
+E       c=d
+__________ test_set_key[a=b\nc=d\ne=f-c-g-expected10-a=b\nc='g'\ne=f] __________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=b\nc=g\ne=f' == "a=b\nc='g'\ne=f"
+E     
+E       a=b
+E     - c='g'
+E     ?   - -
+E     + c=g
+E       e=f
+_______________ test_set_key[a=b\n-c-d-expected11-a=b\nc='d'\n] ________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=b\nc=d\n' == "a=b\nc='d'\n"
+E     
+E       a=b
+E     - c='d'
+E     ?   - -
+E     + c=d
+________________ test_set_key[a=b-c-d-expected12-a=b\nc='d'\n] _________________
+tests/test_main.py:56: in test_set_key
+    assert dotenv_path.read_text() == after
+E   assert 'a=b\nc=d\n' == "a=b\nc='d'\n"
+E     
+E       a=b
+E     - c='d'
+E     ?   - -
+E     + c=d
+____________________________ test_set_key_encoding _____________________________
+tests/test_main.py:92: in test_set_key_encoding
+    assert dotenv_path.read_text(encoding=encoding) == "a='é'\n"
+E   assert 'a=é\n' == "a='é'\n"
+E     
+E     - a='é'
+E     ?   - -
+E     + a=é
+____________________ test_set_key_symlink_to_existing_file _____________________
+tests/test_main.py:141: in test_set_key_symlink_to_existing_file
+    assert "a='y'" in symlink.read_text()
+E   assert "a='y'" in 'a=y\n'
+E    +  where 'a=y\n' = read_text()
+E    +    where read_text = PosixPath('$TMP/pytest-of-mukeshreddypochamreddy/pytest-0/test_set_key_symlink_to_existi0/.env').read_text
+_____________________ test_set_key_symlink_to_missing_file _____________________
+tests/test_main.py:157: in test_set_key_symlink_to_missing_file
+    assert symlink.read_text() == "a='x'\n"
+E   assert 'a=x\n' == "a='x'\n"
+E     
+E     - a='x'
+E     ?   - -
+E     + a=x
+_________________________ test_set_key_follow_symlinks _________________________
+tests/test_main.py:171: in test_set_key_follow_symlinks
+    assert target.read_text() == "a='y'\n"
+E   assert 'a=y\n' == "a='y'\n"
+E     
+E     - a='y'
+E     ?   - -
+E     + a=y
+=============================== warnings summary ===============================
+tests/test_cli.py: 30 warnings
+  tests/conftest.py:8: DeprecationWarning: 'isolated_filesystem' is deprecated and will be removed in Click 9.0. Use 'tempfile.TemporaryDirectory' or pytest's 'tmp_path' fixture with absolute paths instead.
+    with runner.isolated_filesystem():
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_cli.py::test_set_quote_options[always-a-x-a='x'\n] - assert...
+FAILED tests/test_cli.py::test_set_export[dotenv_path0-true-a-x-export a='x'\n]
+FAILED tests/test_cli.py::test_set_export[dotenv_path1-false-a-x-a='x'\n] - a...
+FAILED tests/test_main.py::test_set_key[-a-b-expected1-a='b'\n] - assert 'a=b...
+FAILED tests/test_main.py::test_set_key[a=b-a-c-expected6-a='c'\n] - assert '...
+FAILED tests/test_main.py::test_set_key[a=b\n-a-c-expected7-a='c'\n] - assert...
+FAILED tests/test_main.py::test_set_key[a=b\n\n-a-c-expected8-a='c'\n\n] - as...
+FAILED tests/test_main.py::test_set_key[a=b\nc=d-a-e-expected9-a='e'\nc=d] - ...
+FAILED tests/test_main.py::test_set_key[a=b\nc=d\ne=f-c-g-expected10-a=b\nc='g'\ne=f]
+FAILED tests/test_main.py::test_set_key[a=b\n-c-d-expected11-a=b\nc='d'\n] - ...
+FAILED tests/test_main.py::test_set_key[a=b-c-d-expected12-a=b\nc='d'\n] - as...
+FAILED tests/test_main.py::test_set_key_encoding - assert 'a=é\n' == "a='é'\n"
+FAILED tests/test_main.py::test_set_key_symlink_to_existing_file - assert "a=...
+FAILED tests/test_main.py::test_set_key_symlink_to_missing_file - assert 'a=x...
+FAILED tests/test_main.py::test_set_key_follow_symlinks - assert 'a=y\n' == "...
+15 failed, 242 passed, 1 skipped, 30 warnings in 1.10s

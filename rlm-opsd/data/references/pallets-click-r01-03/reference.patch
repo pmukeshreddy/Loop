@@ -1,0 +1,19 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1207,11 +1207,11 @@
+         if not help_option_names or not self.add_help_option:
+             return None
+ 
+-        # Cache the help option object in private _help_option attribute to
+-        # avoid creating it multiple times. Not doing this will break the
+-        # callback ordering by iter_params_for_processing(), which relies on
+-        # object comparison.
+-        if self._help_option is None:
++        # Cache the help option while its effective names are unchanged.
++        # iter_params_for_processing() relies on object identity for callback
++        # ordering. Create a new option when the names change instead of
++        # mutating an option that may still be in use by another context.
++        if self._help_option is None or self._help_option.opts != help_option_names:
+             # Avoid circular import.
+             from .decorators import help_option
+ 

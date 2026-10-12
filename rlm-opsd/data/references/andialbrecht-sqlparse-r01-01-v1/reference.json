@@ -1,0 +1,169 @@
+{
+ "answer": "--- a/sqlparse/engine/statement_splitter.py\n+++ b/sqlparse/engine/statement_splitter.py\n@@ -50,6 +50,8 @@\n \n     def _handle_closing_keyword(self, unified):\n         \"\"\"Handle closing keywords for blocks\"\"\"\n+        # Normalize whitespace for matching only; keep the token value intact.\n+        unified = ' '.join(unified.split())\n         if unified == 'END IF':\n             if self._block_stack and self._block_stack[-1] == 'IF':\n                 self._block_stack.pop()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 11942 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 11,942-character context covers the public split API, filter pipeline, and statement splitter. The reference produced a focused production patch without sub-calls, consistent with reasoning directly about closing-keyword matching while preserving token text."
+  },
+  "notes": "The task is a natural, repository-dependent bug fix with precise behavioral requirements and a clear unified-diff output format. It specifies observable failures and compatibility constraints without revealing the defective helper or prescribing the fix. The verified patch normalizes whitespace only for closing-keyword comparisons. This is materially distinct from the accepted parent task, which investigates test failures caused by changing a lexer rule."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the public splitting API, its filter pipeline, and the statement splitter, totaling less than 16,000 characters. Reading these files directly is sufficient to reason about nested-block state, closing-keyword comparisons, statement emission, and preservation of token text."
+  },
+  "context": {
+   "files": [
+    "sqlparse/__init__.py",
+    "sqlparse/engine/filter_stack.py",
+    "sqlparse/engine/statement_splitter.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter._change_splitlevel",
+    "why": "Uppercases keyword values before dispatch but does not account for the internal whitespace accepted in combined closing phrases."
+   },
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter._handle_closing_keyword",
+    "why": "Matches exact closing strings and checks the corresponding stack entries, including the three starter types accepted by END LOOP."
+   },
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter.process",
+    "why": "Stores the original token values and permits semicolon splitting only when block state and split level allow it."
+   },
+   {
+    "path": "sqlparse/engine/filter_stack.py",
+    "symbol": "sqlparse/engine/filter_stack.py::FilterStack.run",
+    "why": "Runs statement splitting before optional grouping, allowing a splitter-local repair without altering grouping semantics."
+   },
+   {
+    "path": "sqlparse/__init__.py",
+    "symbol": "sqlparse/__init__.py::split",
+    "why": "Returns statement strings with only their outer whitespace stripped, making exact internal text preservation observable."
+   }
+  ],
+  "expected_answer": "--- a/sqlparse/engine/statement_splitter.py\n+++ b/sqlparse/engine/statement_splitter.py\n@@ -103,7 +103,7 @@\n             return 0\n \n         # Everything after here is ttype = T.Keyword\n-        unified = value.upper()\n+        unified = ' '.join(value.upper().split())\n \n         # DDL Create though can contain more words such as \"or replace\"\n         if ttype is T.Keyword.DDL and unified.startswith('CREATE'):\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_split_closing_whitespace.py\n@@ -0,0 +1,25 @@\n+import pytest\n+\n+import sqlparse\n+\n+\n+@pytest.mark.parametrize('separator', ['   ', '\\t\\n'],\n+                         ids=['spaces', 'tab-newline'])\n+@pytest.mark.parametrize('opener, suffix', [\n+    ('IF 1 = 1 THEN', 'IF'),\n+    ('LOOP', 'LOOP'),\n+    ('FOR r IN (SELECT 1) DO', 'FOR'),\n+    ('WHILE 1 = 1 DO', 'WHILE'),\n+    ('CASE 1 WHEN 1 THEN', 'CASE'),\n+    ('FOR r IN SELECT 1 LOOP', 'LOOP'),\n+    ('WHILE 1 = 1 LOOP', 'LOOP'),\n+])\n+def test_split_closing_phrase_whitespace(opener, suffix, separator):\n+    first = (\n+        f'BEGIN\\n    {opener}\\n'\n+        '        SELECT 1;\\n'\n+        f'    END{separator}{suffix};\\n'\n+        '    SELECT 2;\\n'\n+        'END;'\n+    )\n+    assert sqlparse.split(first + '\\nSELECT 3;') == [first, 'SELECT 3;']\n",
+  "include_failure_log": false,
+  "notes": "The pinned snapshot already contains this whitespace-handling defect, so this is implementation work verified by a new hidden-test patch rather than an injected setup regression. The fourteen parameterized cases exercise all five closing phrases and the additional FOR/WHILE pairings for END LOOP. They fail on the current splitter and should pass with comparison-only whitespace normalization. Following the required artifact format, regression tests are supplied in a new test file rather than modifying tests/test_split.py; the solver returns production changes only. Run the existing suite as well to verify canonical behavior remains intact. The expected production diff is substantively different from the original task's test-ID answer.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Fix sqlparse.split so that whitespace inside a procedural closing phrase does not prevent the enclosing BEGIN...END block from ending correctly. A block containing a matching IF, LOOP, WHILE, FOR, or CASE construct must split correctly when its closing phrase uses either three spaces or a tab followed by a newline between END and the suffix. This includes FOR and WHILE constructs closed by END LOOP, as well as constructs closed by their own suffix.\n\nFor each such block, appending SELECT 3; after the outer END; must produce exactly two statements. The first statement must retain the original spelling, indentation, and internal whitespace, and the second must be SELECT 3;. Keep SQL_REGEX, lexical token boundaries, and grouping behavior unchanged; existing canonical closing phrases must continue to work.\n\nReturn a unified diff against production files only. Parameterized regression coverage will be supplied separately.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from repository-wide change-impact enumeration to focused diagnosis and implementation. Direct inspection of the lexer and splitter is sufficient to identify the mismatch; parameterized public-API tests then verify the repair across distinct block-stack branches.",
+  "change_type": "failure_condition",
+  "description": "Keep sqlparse/keywords.py::SQL_REGEX unchanged. Diagnose and repair statement splitting for closing phrases containing noncanonical whitespace. For each suffix IF, LOOP, WHILE, FOR, and CASE, construct a valid matching nested block inside BEGIN...END, close it using both multiple spaces and a tab/newline separator, and append SELECT 3;. sqlparse.split must return exactly two statements and preserve the input spelling within the first statement. Return a production diff and parameterized regression tests in tests/test_split.py. Investigate sqlparse/engine/statement_splitter.py::StatementSplitter._change_splitlevel and StatementSplitter._handle_closing_keyword; do not change lexical token boundaries or grouping behavior.",
+  "expected_answer_change": "The repair depends on canonicalizing whitespace for the splitter's keyword comparisons without rewriting stored token values. SQL_REGEX accepts separators through \\s+, while _change_splitlevel currently only uppercases the value. Consequently, a phrase such as END\\t\\nIF does not reach the END IF branch, leaving block state unbalanced. Verification must cover all five closing branches, correct pairing of their block starters, exact statement boundaries, and preservation of original text.",
+  "why_substantive": "The original removes combined closing tokens and asks for existing failing test IDs. This variation retains those tokens but exposes a mismatch between the whitespace accepted by the lexer and the exact closing strings recognized by the splitter. The investigation must distinguish lexical recognition from downstream value normalization, and the deliverable is a targeted repair with new coverage."
+ },
+ "task_id": "andialbrecht-sqlparse-r01-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[CASE 1 WHEN 1 THEN-CASE-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[CASE 1 WHEN 1 THEN-CASE-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN (SELECT 1) DO-FOR-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN (SELECT 1) DO-FOR-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN SELECT 1 LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN SELECT 1 LOOP-LOOP-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[IF 1 = 1 THEN-IF-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[IF 1 = 1 THEN-IF-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[LOOP-LOOP-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 DO-WHILE-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 DO-WHILE-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 LOOP-LOOP-tab-newline]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 522
+   },
+   "patch_files": [
+    "sqlparse/engine/statement_splitter.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[CASE 1 WHEN 1 THEN-CASE-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[CASE 1 WHEN 1 THEN-CASE-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN (SELECT 1) DO-FOR-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN (SELECT 1) DO-FOR-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN SELECT 1 LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[FOR r IN SELECT 1 LOOP-LOOP-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[IF 1 = 1 THEN-IF-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[IF 1 = 1 THEN-IF-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[LOOP-LOOP-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 DO-WHILE-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 DO-WHILE-tab-newline]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 LOOP-LOOP-spaces]",
+   "tests/test_split_closing_whitespace.py::test_split_closing_phrase_whitespace[WHILE 1 = 1 LOOP-LOOP-tab-newline]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

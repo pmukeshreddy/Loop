@@ -1,0 +1,96 @@
+--- /dev/null
++++ b/mkdocs/tests/config/test_validation_numeric_levels.py
+@@ -0,0 +1,93 @@
++import copy
++import logging
++import unittest
++
++from mkdocs.config.base import ValidationError
++from mkdocs.tests.config import config_options_tests as existing
++
++
++FIELDS = {
++    'nav': ('omitted_files', 'not_found', 'absolute_links'),
++    'links': ('not_found', 'absolute_links', 'unrecognized_links', 'anchors'),
++}
++LEVELS = (logging.DEBUG, logging.INFO, logging.WARNING)
++
++
++class NumericValidationSeverityTest(unittest.TestCase):
++    def validate_input(self, value):
++        config = existing.NestedSubConfigTest.Schema()
++        config.load_dict({'validation': copy.deepcopy(value)})
++        errors, warnings = config.validate()
++        self.assertEqual(warnings, [])
++        return config.validation, errors
++
++    def accepted(self, value):
++        config, errors = self.validate_input(value)
++        self.assertEqual(errors, [])
++        return config
++
++    def rejected(self, value, group, key):
++        _, errors = self.validate_input(value)
++        self.assertEqual(len(errors), 1)
++        name, error = errors[0]
++        self.assertEqual(name, 'validation')
++        self.assertIsInstance(error, ValidationError)
++        self.assertTrue(str(error).startswith(
++            f"Sub-option '{group}': Sub-option '{key}':"
++        ), str(error))
++
++    def test_numeric_nested(self):
++        for group, keys in FIELDS.items():
++            for key in keys:
++                for level in LEVELS:
++                    with self.subTest(group=group, key=key, level=level):
++                        config = self.accepted({group: {key: level}})
++                        self.assertEqual(config[group][key], level)
++                        self.assertIs(type(config[group][key]), int)
++
++    def test_numeric_shorthand(self):
++        for key in dict.fromkeys(k for keys in FIELDS.values() for k in keys):
++            for level in LEVELS:
++                with self.subTest(key=key, level=level):
++                    config = self.accepted({key: level})
++                    for group, keys in FIELDS.items():
++                        if key in keys:
++                            self.assertEqual(config[group][key], level)
++
++    def test_explicit_overrides_shorthand(self):
++        for shorthand, explicit in ((logging.DEBUG, 'warn'), ('ignore', logging.WARNING)):
++            config = self.accepted({'not_found': shorthand, 'links': {'not_found': explicit}})
++            self.assertEqual(config.nav.not_found, logging.DEBUG)
++            self.assertEqual(config.links.not_found, logging.WARNING)
++
++    def test_invalid_values(self):
++        invalid = (True, False, 0, 1, -1, 2, 15, logging.ERROR, logging.CRITICAL,
++                   10.0, 20.0, 30.0, '10', 'DEBUG', [], {}, b'warn')
++        for group, keys in FIELDS.items():
++            for key in keys:
++                for value in invalid:
++                    with self.subTest(group=group, key=key, value=value):
++                        self.rejected({group: {key: value}}, group, key)
++                        first_group = next(g for g, ks in FIELDS.items() if key in ks)
++                        self.rejected({key: value}, first_group, key)
++
++    def test_relative_token_is_exclusive(self):
++        baseline = self.accepted({'absolute_links': 'relative_to_docs'})
++        for group, keys in FIELDS.items():
++            config = self.accepted({group: {'absolute_links': 'relative_to_docs'}})
++            self.assertEqual(config[group].absolute_links, baseline[group].absolute_links)
++            for key in keys:
++                if key != 'absolute_links':
++                    self.rejected({group: {key: 'relative_to_docs'}}, group, key)
++                    first_group = next(g for g, ks in FIELDS.items() if key in ks)
++                    self.rejected({key: 'relative_to_docs'}, first_group, key)
++
++    def test_existing_strings_and_defaults(self):
++        config = self.accepted({})
++        self.assertEqual(config, existing.NestedSubConfigTest().defaults())
++        for token, level in (('ignore', logging.DEBUG), ('info', logging.INFO),
++                             ('warn', logging.WARNING)):
++            config = self.accepted({key: token for keys in FIELDS.values() for key in keys})
++            for group, keys in FIELDS.items():
++                for key in keys:
++                    self.assertEqual(config[group][key], level)

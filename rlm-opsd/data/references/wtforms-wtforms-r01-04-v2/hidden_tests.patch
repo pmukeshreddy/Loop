@@ -1,0 +1,58 @@
+--- /dev/null
++++ b/tests/test_week_iso_contract.py
+@@ -0,0 +1,55 @@
++from datetime import date
++
++import pytest
++
++from wtforms import Form
++from wtforms.fields import WeekField
++
++
++class FormData(dict):
++    def getlist(self, name):
++        return [self[name]]
++
++
++def make_form(submitted=None, **kwargs):
++    class WeekForm(Form):
++        week = WeekField(**kwargs)
++
++    if submitted is None:
++        return WeekForm()
++    return WeekForm(FormData(week=submitted))
++
++
++@pytest.mark.parametrize(
++    "submitted,expected",
++    [("2020-W01", date(2019, 12, 30)), ("2020-W53", date(2020, 12, 28))],
++)
++def test_default_iso_week_submission(submitted, expected):
++    form = make_form(submitted)
++    assert form.validate()
++    assert type(form.week.data) is date
++    assert form.week.data == expected
++    assert f'value="{submitted}"' in str(form.week())
++    form.week.raw_data = None
++    assert f'value="{submitted}"' in str(form.week())
++    assert form.week.data == expected
++
++
++@pytest.mark.parametrize(
++    "format,submitted,expected,rendered",
++    [
++        ("%Y-W%W", "2020-W01", date(2020, 1, 6), "2020-W01"),
++        ("%Y-W%W", "2020-W53", date(2021, 1, 4), "2021-W01"),
++        ("%Y-W%W-%w", "2020-W01-0", date(2020, 1, 12), "2020-W01-0"),
++        ("%Y-W%W-%w", "2020-W00-3", date(2020, 1, 1), "2020-W00-3"),
++    ],
++)
++def test_explicit_legacy_week_formats(format, submitted, expected, rendered):
++    form = make_form(submitted, format=format)
++    assert form.validate()
++    assert type(form.week.data) is date
++    assert form.week.data == expected
++    assert f'value="{submitted}"' in str(form.week())
++    form.week.raw_data = None
++    assert f'value="{rendered}"' in str(form.week())
++    assert form.week.data == expected

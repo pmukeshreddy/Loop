@@ -1,0 +1,81 @@
+--- /dev/null
++++ b/tests/test_footnotes_reinstallation.py
+@@ -0,0 +1,78 @@
++import pytest
++
++from mistune import create_markdown
++from mistune.plugins.footnotes import footnotes
++
++
++def _footer_count(result):
++    if isinstance(result, str):
++        return result.count('<section class="footnotes">')
++    return sum(token["type"] == "footnotes" for token in result)
++
++
++def _walk(tokens):
++    for token in tokens:
++        yield token
++        yield from _walk(token.get("children", []))
++
++
++def _assert_notes(result, items, references):
++    assert _footer_count(result) == bool(items)
++    if isinstance(result, str):
++        assert result.count('<li id="fn-') == items
++        assert result.count('class="footnote-ref"') == references
++    else:
++        tokens = list(_walk(result))
++        assert sum(t["type"] == "footnote_item" for t in tokens) == items
++        assert sum(t["type"] == "footnote_ref" for t in tokens) == references
++        footers = [t for t in result if t["type"] == "footnotes"]
++        if items:
++            assert [t["attrs"]["index"] for t in footers[0]["children"]] == list(range(1, items + 1))
++
++
++@pytest.mark.parametrize("renderer", ["html", "ast"])
++@pytest.mark.parametrize("warmup", ["none", "plain", "footnotes"])
++def test_reinstall_footnotes_keeps_output_and_hook_order(renderer, warmup):
++    md = create_markdown(renderer=renderer, plugins=[])
++    events = []
++
++    def before(md, result, state):
++        events.append(("before", _footer_count(result)))
++        return result
++
++    def after(md, result, state):
++        events.append(("after", _footer_count(result)))
++        return result
++
++    md.after_render_hooks.append(before)
++    if warmup == "plain":
++        md("warmup without notes")
++    md.use(footnotes)
++    md.after_render_hooks.extend([after, after])
++    original_hooks = tuple(md.after_render_hooks)
++    original_inline_rules = tuple(md.inline.rules)
++    original_block_rules = tuple(md.block.rules)
++    if warmup == "footnotes":
++        _assert_notes(md("Warm[^w].\n\n[^w]: warm note\n"), 1, 1)
++
++    documents = [
++        ("One[^a], two[^b], again[^a].\n\n[^b]: beta\n\n[^a]: alpha\n\n[^unused]: hidden\n", 2, 3),
++        ("New[^a].\n\n[^a]: changed *content*\n", 1, 1),
++        ("No reference.\n\n[^unused]: not rendered\n", 0, 0),
++    ]
++    for source, items, references in documents:
++        md.use(footnotes)
++        md.use(footnotes)
++        assert tuple(md.after_render_hooks) == original_hooks
++        assert tuple(md.inline.rules) == original_inline_rules
++        assert tuple(md.block.rules) == original_block_rules
++        events.clear()
++        result = md(source)
++        expected = create_markdown(renderer=renderer, plugins=[footnotes])(source)
++        assert result == expected
++        _assert_notes(result, items, references)
++        assert events == [
++            ("before", 0),
++            ("after", int(bool(items))),
++            ("after", int(bool(items))),
++        ]

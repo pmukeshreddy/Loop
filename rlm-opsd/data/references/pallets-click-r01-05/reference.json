@@ -1,0 +1,156 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -2515,8 +2515,18 @@\n \n                 # A string from default_map must be split for multi-value\n                 # parameters, matching value_from_envvar behavior.\n-                if isinstance(value, str) and self.nargs != 1:\n-                    value = self.type.split_envvar_value(value)\n+                if isinstance(value, str):\n+                    if (\n+                        isinstance(self, Option)\n+                        and self.multiple\n+                        and not self.is_flag\n+                        and not self.count\n+                    ):\n+                        value = self.type.split_envvar_value(value)\n+                        if self.nargs != 1:\n+                            value = batch(value, self.nargs)\n+                    elif self.nargs != 1:\n+                        value = self.type.split_envvar_value(value)\n \n         if value is UNSET:\n             default_value = self.get_default(ctx)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0010484635175534295,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 17,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 17 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['core', 'files']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch was constructed programmatically and inspected before submission. It handles scalar and fixed-arity repeated options while restricting the new behavior to string values on ordinary, non-count options.",
+   "inspect_locate": "The execution used 17 targeted searches without printing the whole context. The change requires relating default-map acquisition to environment-variable splitting, fixed-arity batching, and option-specific semantics.",
+   "persistent_state": "The execution reused the core and files variables across turns, although this behavior was not separately marked as established."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise unified-diff output format. Its compatibility requirements constrain one cohesive change rather than bundling unrelated checks. The question specifies desired behavior without revealing the defective implementation location or prescribing solver operations, and it is distinct from the existing accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch must consistently handle the two repeated-value shapes without changing explicit sequences, source precedence, or callable evaluation count, and should be checked against exact source text.",
+   "inspect_locate": "Default-map lookup, environment splitting, repeated-option grouping, and type conversion live in different methods. The existing environment path provides the repository-specific behavior to match.",
+   "persistent_state": "The implementation must retain the shape distinctions between a scalar string, repeated scalar values, and repeated fixed-arity groups while following source selection and conversion."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.consume_value",
+    "why": "Acquires default-map values but currently splits strings only for nargs other than one, without repeated fixed-arity grouping."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.value_from_envvar",
+    "why": "Defines the splitting and grouping behavior the new default-map support must match."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.type_cast_value",
+    "why": "Requires repeated fixed-arity values to arrive as an iterable of groups rather than a flat token list."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.lookup_default",
+    "why": "Evaluates callable map entries and distinguishes real entries through _default_map_has."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::batch",
+    "why": "The environment grouping path discards incomplete trailing groups using this repository's batching behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_default_map_repeated_strings.py\n@@ -0,0 +1,89 @@\n+import os\n+\n+import pytest\n+\n+import click\n+\n+\n+def test_repeated_scalar_default_map_string():\n+    option = click.Option([\"--number\"], type=int, multiple=True)\n+    command = click.Command(\"tool\", params=[option])\n+    ctx = command.make_context(\"tool\", [], default_map={\"number\": \"1 2 3\"})\n+    assert ctx.params[\"number\"] == (1, 2, 3)\n+    assert ctx.get_parameter_source(\"number\") is click.ParameterSource.DEFAULT_MAP\n+\n+\n+@pytest.mark.parametrize(\"text\", [\"1 2 3 4\", \"1 2 3 4 5\"])\n+def test_repeated_fixed_arity_default_map_string(text):\n+    option = click.Option([\"--pair\"], type=int, nargs=2, multiple=True)\n+    command = click.Command(\"tool\", params=[option])\n+    ctx = command.make_context(\"tool\", [], default_map={\"pair\": text})\n+    assert ctx.params[\"pair\"] == ((1, 2), (3, 4))\n+    assert ctx.get_parameter_source(\"pair\") is click.ParameterSource.DEFAULT_MAP\n+\n+\n+def test_default_map_string_uses_type_delimiter():\n+    option = click.Option([\"--path\"], type=click.Path(), multiple=True)\n+    command = click.Command(\"tool\", params=[option])\n+    text = os.pathsep.join([\"alpha\", \"beta\"])\n+    ctx = command.make_context(\"tool\", [], default_map={\"path\": text})\n+    assert ctx.params[\"path\"] == (\"alpha\", \"beta\")\n+\n+\n+def test_inherited_callable_default_map_string_is_acquired_once():\n+    calls = []\n+\n+    def default():\n+        calls.append(True)\n+        return \"1 2 3 4\"\n+\n+    option = click.Option([\"--pair\"], type=int, nargs=2, multiple=True)\n+    child = click.Command(\"child\", params=[option])\n+    parent = click.Context(\n+        click.Group(\"root\"), default_map={\"child\": {\"pair\": default}}\n+    )\n+    ctx = child.make_context(\"child\", [], parent=parent)\n+    assert calls == [True]\n+    assert ctx.params[\"pair\"] == ((1, 2), (3, 4))\n+    assert ctx.get_parameter_source(\"pair\") is click.ParameterSource.DEFAULT_MAP\n+\n+\n+@pytest.mark.parametrize(\"mapped, expected\", [([\"1\", \"2\"], (1, 2)), (None, ())])\n+def test_explicit_sequence_and_none_default_map_values(mapped, expected):\n+    option = click.Option([\"--number\"], type=int, multiple=True, default=[9])\n+    command = click.Command(\"tool\", params=[option])\n+    ctx = command.make_context(\"tool\", [], default_map={\"number\": mapped})\n+    assert ctx.params[\"number\"] == expected\n+    assert ctx.get_parameter_source(\"number\") is click.ParameterSource.DEFAULT_MAP\n+\n+\n+def test_explicit_nested_sequence_default_map_value():\n+    option = click.Option([\"--pair\"], type=int, nargs=2, multiple=True)\n+    command = click.Command(\"tool\", params=[option])\n+    ctx = command.make_context(\n+        \"tool\", [], default_map={\"pair\": [[\"1\", \"2\"], [\"3\", \"4\"]]}\n+    )\n+    assert ctx.params[\"pair\"] == ((1, 2), (3, 4))\n+\n+\n+def test_cli_and_environment_keep_precedence(monkeypatch):\n+    option = click.Option(\n+        [\"--number\"], type=int, multiple=True, envvar=\"CLICK_MAP_NUMBERS\"\n+    )\n+    command = click.Command(\"tool\", params=[option])\n+    monkeypatch.setenv(\"CLICK_MAP_NUMBERS\", \"7 8\")\n+    ctx = command.make_context(\"tool\", [], default_map={\"number\": \"1 2\"})\n+    assert ctx.params[\"number\"] == (7, 8)\n+    assert ctx.get_parameter_source(\"number\") is click.ParameterSource.ENVIRONMENT\n+    ctx = command.make_context(\n+        \"tool\", [\"--number\", \"6\"], default_map={\"number\": \"1 2\"}\n+    )\n+    assert ctx.params[\"number\"] == (6,)\n+    assert ctx.get_parameter_source(\"number\") is click.ParameterSource.COMMANDLINE\n",
+  "include_failure_log": false,
+  "notes": "The baseline fails the new string-valued repeated-option cases. Passing preservation cases additionally constrain precedence, provenance, callable evaluation count, and explicit sequence/None handling.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Allow a string in default_map to configure an ordinary value option with multiple=True, using the same splitting and fixed-arity grouping behavior as that option's environment-variable input. This should work both for nargs=1 and for nargs greater than one, including the existing environment path's treatment of an incomplete trailing group. Use the option type's delimiter rules, not an unconditional whitespace split. Apply this to inherited default maps and callable map entries too, evaluating each callable only once when acquiring its value. Keep command-line and environment precedence, DEFAULT_MAP provenance, explicit sequence values, and explicit None behavior unchanged. Do not change flag or count-option semantics. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-click-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_default_map_repeated_strings.py::test_default_map_string_uses_type_delimiter",
+   "tests/test_default_map_repeated_strings.py::test_inherited_callable_default_map_string_is_acquired_once",
+   "tests/test_default_map_repeated_strings.py::test_repeated_fixed_arity_default_map_string[1 2 3 4 5]",
+   "tests/test_default_map_repeated_strings.py::test_repeated_fixed_arity_default_map_string[1 2 3 4]",
+   "tests/test_default_map_repeated_strings.py::test_repeated_scalar_default_map_string"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2000
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_default_map_repeated_strings.py::test_default_map_string_uses_type_delimiter",
+   "tests/test_default_map_repeated_strings.py::test_inherited_callable_default_map_string_is_acquired_once",
+   "tests/test_default_map_repeated_strings.py::test_repeated_fixed_arity_default_map_string[1 2 3 4 5]",
+   "tests/test_default_map_repeated_strings.py::test_repeated_fixed_arity_default_map_string[1 2 3 4]",
+   "tests/test_default_map_repeated_strings.py::test_repeated_scalar_default_map_string"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

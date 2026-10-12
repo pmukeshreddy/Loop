@@ -1,0 +1,27 @@
+--- a/src/jinja2/utils.py
++++ b/src/jinja2/utils.py
+@@ -488,6 +488,24 @@
+             self[key] = default
+             return default
+ 
++    def resize(self, capacity: int) -> None:
++        """Change the maximum size of the cache.
++
++        Evict the least recently used items if the cache is too large.
++        ``capacity`` must be a positive integer, excluding booleans.
++        """
++        if isinstance(capacity, bool) or not isinstance(capacity, int):
++            raise TypeError("capacity must be an integer")
++
++        if capacity <= 0:
++            raise ValueError("capacity must be greater than zero")
++
++        with self._wlock:
++            self.capacity = capacity
++
++            while len(self._mapping) > capacity:
++                del self._mapping[self._popleft()]
++
+     def clear(self) -> None:
+         """Clear the cache."""
+         with self._wlock:

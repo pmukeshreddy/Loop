@@ -1,0 +1,114 @@
+--- /dev/null
++++ b/tests/test_final_kw_only_transformer.py
+@@ -0,0 +1,111 @@
++# SPDX-License-Identifier: MIT
++
++import inspect
++import sys
++
++import pytest
++
++import attrs
++
++
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize(
++    "options, forced",
++    [
++        ({"kw_only": True, "force_kw_only": True}, True),
++        ({"kw_only": True, "force_kw_only": False}, False),
++        ({"kw_only": False, "force_kw_only": True}, False),
++        ({"kw_only": False, "force_kw_only": False}, False),
++        ({"kw_only": True}, False),
++        ({}, False),
++    ],
++)
++def test_final_keyword_only_policy(options, forced, slots):
++    @attrs.define(kw_only=True, slots=slots)
++    class Base:
++        inherited: int
++
++    @attrs.define(slots=slots)
++    class Added:
++        added: int
++        extra_skipped: int = attrs.field(init=False, default=9)
++
++    def transform(cls, fields):
++        if forced:
++            assert all(a.kw_only is True for a in fields)
++        return (
++            a.evolve(kw_only=False)
++            for a in (*fields, *attrs.fields(Added))
++        )
++
++    @attrs.define(slots=slots, field_transformer=transform, **options)
++    class Child(Base):
++        own: int = attrs.field(kw_only=True)
++        skipped: int = attrs.field(init=False, default=7)
++
++    assert [a.name for a in attrs.fields(Child)] == [
++        "inherited", "own", "skipped", "added", "extra_skipped"
++    ]
++    assert all(a.kw_only is forced for a in attrs.fields(Child))
++    assert attrs.fields(Base).inherited.kw_only is True
++    params = inspect.signature(Child).parameters
++    assert list(params) == ["inherited", "own", "added"]
++    kind = (
++        inspect.Parameter.KEYWORD_ONLY
++        if forced else inspect.Parameter.POSITIONAL_OR_KEYWORD
++    )
++    assert all(p.kind is kind for p in params.values())
++    if sys.version_info >= (3, 10):
++        assert Child.__match_args__ == (
++            () if forced else ("inherited", "own", "added")
++        )
++    child = Child(inherited=1, own=2, added=3)
++    assert attrs.astuple(child) == (1, 2, 7, 3, 9)
++    if forced:
++        with pytest.raises(TypeError):
++            Child(1, 2, 3)
++    else:
++        assert Child(1, 2, 3) == child
++
++
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("kw_only, force_kw_only", [
++    (True, True), (True, False), (False, True), (False, False)
++])
++def test_transformed_default_before_mandatory(kw_only, force_kw_only, slots):
++    @attrs.define(slots=slots)
++    class Base:
++        first: int = 10
++
++    def transform(cls, fields):
++        return [a.evolve(kw_only=False) for a in fields]
++
++    def build():
++        @attrs.define(
++            kw_only=kw_only,
++            force_kw_only=force_kw_only,
++            slots=slots,
++            field_transformer=transform,
++        )
++        class Child(Base):
++            required: int
++
++        return Child
++
++    if not (kw_only and force_kw_only):
++        with pytest.raises(ValueError, match="No mandatory attributes allowed"):
++            build()
++        return
++
++    child_cls = build()
++    assert all(a.kw_only is True for a in attrs.fields(child_cls))
++    params = inspect.signature(child_cls).parameters
++    assert list(params) == ["first", "required"]
++    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params.values())
++    assert params["first"].default == 10
++    assert params["required"].default is inspect.Parameter.empty
++    assert attrs.astuple(child_cls(required=4)) == (10, 4)
++    if sys.version_info >= (3, 10):
++        assert child_cls.__match_args__ == ()
++    with pytest.raises(TypeError):
++        child_cls(10, 4)

@@ -1,0 +1,127 @@
+{
+ "answer": "--- a/src/cachetools/func.py\n+++ b/src/cachetools/func.py\n@@ -11,8 +11,8 @@\n \n \n class _UnboundTTLCache(TTLCache):\n-    def __init__(self, ttl, timer):\n-        TTLCache.__init__(self, math.inf, ttl, timer)\n+    def __init__(self, ttl, timer, getsizeof=None):\n+        TTLCache.__init__(self, math.inf, ttl, timer, getsizeof=getsizeof)\n \n     @property\n     def maxsize(self):  # type: ignore\n@@ -88,15 +88,17 @@\n         return _cache(RRCache(maxsize, choice), maxsize, typed)\n \n \n-def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False):\n+def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False, *, getsizeof=None):\n     \"\"\"Decorator to wrap a function with a memoizing callable that saves\n     up to `maxsize` results based on a Least Recently Used (LRU)\n-    algorithm with a per-item time-to-live (TTL) value.\n+    algorithm with a per-item time-to-live (TTL) value. If `getsizeof`\n+    is supplied, `maxsize` limits the total size of the cached results\n+    as determined by this function, rather than their number.\n \n     \"\"\"\n     if maxsize is None:\n-        return _cache(_UnboundTTLCache(ttl, timer), None, typed)\n+        return _cache(_UnboundTTLCache(ttl, timer, getsizeof=getsizeof), None, typed)\n     elif callable(maxsize):\n-        return _cache(TTLCache(128, ttl, timer), 128, typed)(maxsize)\n+        return _cache(TTLCache(128, ttl, timer, getsizeof=getsizeof), 128, typed)(maxsize)\n     else:\n-        return _cache(TTLCache(maxsize, ttl, timer), maxsize, typed)\n+        return _cache(TTLCache(maxsize, ttl, timer, getsizeof=getsizeof), maxsize, typed)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 3306 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution completed without sub-calls using a 3,306-character, single-file context. The change requires reasoning about the bounded, callable-first, and specialized unbounded construction paths, while preserving wrapper metadata and existing insertion-error behavior."
+  },
+  "notes": "This is a natural, narrowly scoped feature request with a precise production-only unified-diff deliverable. Naming the public option and its required semantics defines the requested API rather than leaking a defective implementation. The verified patch forwards sizing through all three branches, and the supplied tests cover weighted accounting, expiration, metadata, and oversized results. The task is distinct from the existing accounting-regression and insertion-error-propagation tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "All construction paths requiring changes are in the small func.py module. The bounded, callable, and specialized unbounded branches can be understood directly without repository-wide investigation."
+  },
+  "context": {
+   "files": [
+    "src/cachetools/func.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::ttl_cache",
+    "why": "Contains the bounded, callable-first, and unbounded construction branches."
+   },
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_UnboundTTLCache",
+    "why": "Preserves TTL behavior while presenting an unbounded public maximum."
+   },
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_cache",
+    "why": "Defines the existing adapter statistics and cache_parameters contract."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_weighted_ttl_adapter.py\n@@ -0,0 +1,72 @@\n+import unittest\n+\n+from cachetools.func import ttl_cache\n+\n+\n+class Timer:\n+    def __init__(self):\n+        self.now = 0\n+\n+    def __call__(self):\n+        return self.now\n+\n+\n+class WeightedTTLAdapterTest(unittest.TestCase):\n+    def test_bounded(self):\n+        timer = Timer()\n+        calls = []\n+\n+        @ttl_cache(maxsize=5, ttl=10, timer=timer, getsizeof=len)\n+        def load(key):\n+            calls.append(key)\n+            return key\n+\n+        self.assertEqual(load(\"aaa\"), \"aaa\")\n+        self.assertEqual(load(\"bb\"), \"bb\")\n+        self.assertEqual(load.cache_info(), (0, 2, 5, 5))\n+        self.assertEqual(load(\"aaa\"), \"aaa\")\n+        self.assertEqual(load(\"cccc\"), \"cccc\")\n+        self.assertEqual(load.cache_info(), (1, 3, 5, 4))\n+        self.assertEqual(calls, [\"aaa\", \"bb\", \"cccc\"])\n+        timer.now = 10\n+        self.assertEqual(load.cache_info(), (1, 3, 5, 0))\n+\n+    def test_unbounded(self):\n+        timer = Timer()\n+\n+        @ttl_cache(maxsize=None, ttl=3, timer=timer, typed=True, getsizeof=len)\n+        def load(key):\n+            return key\n+\n+        load(\"abcd\")\n+        load(\"ef\")\n+        self.assertEqual(load.cache_info(), (0, 2, None, 6))\n+        self.assertEqual(load.cache_parameters(), {\"maxsize\": None, \"typed\": True})\n+        self.assertIsNone(load.cache.maxsize)\n+        self.assertEqual(load.cache.currsize, 6)\n+        timer.now = 3\n+        self.assertEqual(load.cache_info(), (0, 2, None, 0))\n+        load(\"ef\")\n+        self.assertEqual(load.cache_info(), (0, 3, None, 2))\n+\n+    def test_callable_branch(self):\n+        def load(key):\n+            return key\n+\n+        wrapper = ttl_cache(load, getsizeof=len)\n+        self.assertEqual(wrapper(\"abc\"), \"abc\")\n+        self.assertEqual(wrapper.cache_info(), (0, 1, 128, 3))\n+        self.assertEqual(wrapper.cache_parameters(), {\"maxsize\": 128, \"typed\": False})\n+\n+    def test_oversized_result_is_not_cached(self):\n+        calls = []\n+\n+        @ttl_cache(maxsize=2, getsizeof=len)\n+        def load(key):\n+            calls.append(key)\n+            return key\n+\n+        self.assertEqual(load(\"abc\"), \"abc\")\n+        self.assertEqual(load(\"abc\"), \"abc\")\n+        self.assertEqual(calls, [\"abc\", \"abc\"])\n+        self.assertEqual(load.cache_info(), (0, 2, 2, 0))\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests use only the public ttl_cache adapter and exposed wrapper metadata. The existing TTLCache constructor already accepts getsizeof; the production work is adapter propagation, including the unbounded specialization.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add a keyword-only `getsizeof=None` option to `cachetools.func.ttl_cache`, allowing callers to use weighted TTL memoization. Forward it to the underlying TTL cache in all three construction forms: a configured bounded decorator, the callable-first form with its default capacity, and `maxsize=None`. Unbounded TTL caches must continue expiring entries and reporting `maxsize=None`, but their `currsize` must now reflect the supplied sizing function. Keep `cache_parameters()` limited to its existing `maxsize` and `typed` fields, preserve the current behavior when `getsizeof` is omitted, and retain the existing handling of results too large to cache. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "tkem-cachetools-r02-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_bounded",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_callable_branch",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_oversized_result_is_not_cached",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_unbounded"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 342
+   },
+   "patch_files": [
+    "src/cachetools/func.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_bounded",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_callable_branch",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_oversized_result_is_not_cached",
+   "tests/test_weighted_ttl_adapter.py::WeightedTTLAdapterTest::test_unbounded"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

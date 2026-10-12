@@ -1,0 +1,35 @@
+--- /dev/null
++++ b/tests/test_select_legacy_choice_tuples.py
+@@ -0,0 +1,32 @@
++import pytest
++
++from wtforms.fields import SelectField
++from wtforms.form import Form
++
++
++@pytest.mark.parametrize("grouped", [False, True])
++def test_legacy_and_extended_choices(grouped):
++    class CustomSelect(SelectField):
++        def iter_choices(self):
++            yield ("a", "<A>", True)
++            yield ("b", "B", False, {"title": "<tip>", "disabled": True})
++
++        def has_groups(self):
++            return grouped
++
++        def iter_groups(self):
++            yield ("<group>", self.iter_choices())
++            yield ("Empty", iter(()))
++
++    class F(Form):
++        item = CustomSelect(choices=[], validate_choice=False)
++
++    form = F(item="a")
++    html = str(form.item())
++    assert '<option selected value="a">&lt;A&gt;</option>' in html
++    assert '<option disabled title="&lt;tip&gt;" value="b">B</option>' in html
++    if grouped:
++        assert '<optgroup label="&lt;group&gt;">' in html
++        assert '<optgroup label="Empty"></optgroup>' in html
++    else:
++        assert "<optgroup" not in html

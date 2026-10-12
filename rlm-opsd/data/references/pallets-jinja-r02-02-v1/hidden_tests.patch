@@ -1,0 +1,118 @@
+--- /dev/null
++++ b/tests/test_slice_interception.py
+@@ -0,0 +1,115 @@
++import asyncio
++
++import pytest
++
++from jinja2 import Environment
++
++
++class RecordingEnvironment(Environment):
++    def __init__(self, **kwargs):
++        super().__init__(**kwargs)
++        self.lookups = []
++
++    def getitem(self, obj, argument):
++        self.lookups.append((obj, argument))
++        return super().getitem(obj, argument)
++
++
++@pytest.mark.parametrize("enable_async", [False, True])
++@pytest.mark.parametrize("optimized", [False, True])
++@pytest.mark.parametrize(
++    "expression,key",
++    [
++        ("value[:]", slice(None)),
++        ("value[1:]", slice(1, None)),
++        ("value[:4]", slice(None, 4)),
++        ("value[1:5:2]", slice(1, 5, 2)),
++        ("value[::2]", slice(None, None, 2)),
++        ("value[::-1]", slice(None, None, -1)),
++        ("value[start:stop:step]", slice(1, 5, 2)),
++        ("value[2]", 2),
++    ],
++)
++def test_slice_dispatch(enable_async, optimized, expression, key):
++    env = RecordingEnvironment(enable_async=enable_async, optimized=optimized)
++    value = "abcdef"
++    template = env.from_string("{{ " + expression + " }}")
++    assert template.render(value=value, start=1, stop=5, step=2) == value[key]
++    assert env.lookups == [(value, key)]
++
++
++@pytest.mark.parametrize("enable_async", [False, True])
++def test_override_controls_slice_result(enable_async):
++    class InterceptingEnvironment(Environment):
++        def getitem(self, obj, argument):
++            assert obj == "abcdef"
++            assert argument == slice(1, None, None)
++            return "intercepted"
++
++    env = InterceptingEnvironment(enable_async=enable_async)
++    assert env.from_string("{{ value[1:] }}").render(value="abcdef") == "intercepted"
++
++
++@pytest.mark.parametrize("enable_async", [False, True])
++def test_operand_order_and_single_evaluation(enable_async):
++    events = []
++    values = {"object": "abcdef", "start": 1, "stop": 5, "step": 2}
++
++    class OrderedEnvironment(RecordingEnvironment):
++        def getitem(self, obj, argument):
++            events.append("getitem")
++            return super().getitem(obj, argument)
++
++    def get(label):
++        events.append(label)
++        return values[label]
++
++    async def async_get(label):
++        return get(label)
++
++    env = OrderedEnvironment(enable_async=enable_async)
++    template = env.from_string(
++        "{{ get('object')[get('start'):get('stop'):get('step')] }}"
++    )
++    assert template.render(get=async_get if enable_async else get) == "bd"
++    assert events == ["object", "start", "stop", "step", "getitem"]
++    assert env.lookups == [("abcdef", slice(1, 5, 2))]
++
++
++@pytest.mark.parametrize("expression", ["(seq|add_each)[1:]", "add_each(seq)[1:]"])
++def test_async_slice_after_filter_or_call(expression):
++    async def add_each(seq):
++        return [item + 2 for item in seq]
++
++    env = RecordingEnvironment(enable_async=True)
++    env.filters["add_each"] = add_each
++    template = env.from_string("{{ " + expression + " }}")
++    result = asyncio.run(template.render_async(seq=range(3), add_each=add_each))
++    assert result == "[3, 4]"
++    assert env.lookups == [([2, 3, 4], slice(1, None, None))]
++
++
++def test_async_slice_of_awaitable_property():
++    class Data:
++        @property
++        def items(self):
++            async def resolve():
++                return [1, 2, 3]
++
++            return resolve()
++
++    env = RecordingEnvironment(enable_async=True)
++    template = env.from_string("{% for x in data.items[:1] %}{{ x }}{% endfor %}")
++    assert asyncio.run(template.render_async(data=Data())) == "1"
++    assert env.lookups == [([1, 2, 3], slice(None, 1, None))]
++
++
++def test_async_slice_hook_result_is_awaited():
++    class AwaitingEnvironment(RecordingEnvironment):
++        async def getitem(self, obj, argument):
++            return super().getitem(obj, argument)
++
++    env = AwaitingEnvironment(enable_async=True)
++    template = env.from_string("{{ value[1::2] }}")
++    assert asyncio.run(template.render_async(value="abcdef")) == "bdf"
++    assert env.lookups == [("abcdef", slice(1, None, 2))]

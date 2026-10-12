@@ -1,0 +1,127 @@
+{
+ "answer": "--- a/lark/tree.py\n+++ b/lark/tree.py\n@@ -215,7 +215,13 @@\n     def __deepcopy__(self, memo):\n         return type(self)(self.data, deepcopy(self.children, memo), meta=self._meta)\n \n-    def copy(self) -> 'Tree[_Leaf_T]':\n+    def copy(self, keep_meta: bool=False) -> 'Tree[_Leaf_T]':\n+        \"\"\"Return a shallow copy, optionally sharing already allocated metadata.\n+\n+        Children are shared. Unallocated metadata remains independent.\n+        \"\"\"\n+        if keep_meta:\n+            return type(self)(self.data, self.children, meta=self._meta)\n         return type(self)(self.data, self.children)\n \n     def set(self, data: str, children: 'List[Branch[_Leaf_T]]') -> None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8994 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The execution stayed within the small Tree module and used no sub-calls. The patch required reasoning about concrete-type preservation, shallow children sharing, and the distinction between reading already allocated metadata and triggering lazy allocation."
+  },
+  "notes": "This is a natural, precisely scoped feature request with a clear unified-diff output format. Naming Tree.copy() identifies the public API to extend rather than leaking a defective implementation or fix. The verified patch preserves the default behavior, shares existing metadata only when requested, leaves unallocated metadata independent, and does not modify deepcopy. The task is distinct from the accepted parser-placeholder and source-position regression tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The relevant implementation is confined to the small Tree module. The solver must reason about shallow child sharing, concrete types, and lazy metadata allocation, but delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "lark/tree.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.copy",
+    "why": "Currently shares children and omits metadata when constructing the copy."
+   },
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.meta",
+    "why": "Allocates metadata lazily, so accessing the property during copying would change the requested semantics."
+   },
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.__deepcopy__",
+    "why": "Defines the separate deepcopy behavior that must remain unchanged."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_tree_copy_keep_meta.py\n@@ -0,0 +1,37 @@\n+from lark.tree import Tree, SlottedTree\n+\n+\n+def test_copy_default_is_still_shallow():\n+    source = Tree('node', [Tree('child', [])])\n+    source.meta.line = 7\n+    cloned = source.copy()\n+    assert cloned is not source\n+    assert cloned.children is source.children\n+    assert cloned.data == source.data\n+    assert cloned.meta is not source.meta\n+    assert cloned.meta.empty\n+\n+\n+def test_copy_can_share_existing_metadata():\n+    source = Tree('node', ['value'])\n+    source.meta.line = 7\n+    cloned = source.copy(keep_meta=True)\n+    assert cloned.children is source.children\n+    assert cloned.meta is source.meta\n+    cloned.meta.line = 9\n+    assert source.meta.line == 9\n+\n+\n+def test_copy_preserves_concrete_type():\n+    source = SlottedTree('node', [])\n+    source.meta.column = 3\n+    cloned = source.copy(keep_meta=True)\n+    assert type(cloned) is SlottedTree\n+    assert cloned.meta is source.meta\n+\n+\n+def test_copy_does_not_create_metadata_for_source():\n+    source = Tree('node', [])\n+    cloned = source.copy(keep_meta=True)\n+    assert cloned.meta is not source.meta\n+    assert cloned.meta.empty and source.meta.empty\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests use only public Tree operations and check lazy metadata independence through object identity.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add a `keep_meta=False` keyword argument to `Tree.copy()`. The default must retain today's behavior: a distinct tree of the same concrete type, sharing the original children list but not its metadata. With `keep_meta=True`, the copy must share the source's already allocated metadata object. If the source has not allocated metadata yet, copying must not allocate it, and subsequent metadata access on the two trees must remain independent. Do not change `deepcopy` behavior. Return a unified diff against the implementation files, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lark-parser-lark-r01-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_tree_copy_keep_meta.py::test_copy_can_share_existing_metadata",
+   "tests/test_tree_copy_keep_meta.py::test_copy_does_not_create_metadata_for_source",
+   "tests/test_tree_copy_keep_meta.py::test_copy_preserves_concrete_type"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/tree.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_tree_copy_keep_meta.py::test_copy_can_share_existing_metadata",
+   "tests/test_tree_copy_keep_meta.py::test_copy_does_not_create_metadata_for_source",
+   "tests/test_tree_copy_keep_meta.py::test_copy_preserves_concrete_type"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

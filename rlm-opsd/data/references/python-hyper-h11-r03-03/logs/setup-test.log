@@ -1,0 +1,69 @@
+....F..........F...F.............................F...................... [ 92%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+__________________ test_Connection_basics_and_content_length ___________________
+h11/tests/test_connection.py:150: in test_Connection_basics_and_content_length
+    data = p.send(
+h11/tests/helpers.py:83: in send
+    new_data = self.conn[role].send(send_event)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/_connection.py:538: in send
+    data_list = self.send_with_data_passthrough(event)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/_connection.py:571: in send_with_data_passthrough
+    writer(event, data_list.append)
+h11/_writers.py:65: in __call__
+    self.send_data(event.data, write)
+h11/_writers.py:91: in send_data
+    raise LocalProtocolError("Too much data for declared Content-Length")
+E   h11._util.LocalProtocolError: Too much data for declared Content-Length
+_____________________________ test_protocol_switch _____________________________
+h11/tests/test_connection.py:650: in test_protocol_switch
+    p = setup()
+        ^^^^^^^
+h11/tests/test_connection.py:643: in setup
+    p.send(CLIENT, [Data(data=b"1"), EndOfMessage()])
+h11/tests/helpers.py:83: in send
+    new_data = self.conn[role].send(send_event)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/_connection.py:538: in send
+    data_list = self.send_with_data_passthrough(event)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/_connection.py:571: in send_with_data_passthrough
+    writer(event, data_list.append)
+h11/_writers.py:65: in __call__
+    self.send_data(event.data, write)
+h11/_writers.py:91: in send_data
+    raise LocalProtocolError("Too much data for declared Content-Length")
+E   h11._util.LocalProtocolError: Too much data for declared Content-Length
+________________________________ test_sendfile _________________________________
+h11/tests/test_connection.py:888: in test_sendfile
+    c, data = setup(("Content-Length", "10"), "1.1")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/tests/test_connection.py:886: in setup
+    return c, c.send_with_data_passthrough(Data(data=placeholder))  # type: ignore
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/_connection.py:571: in send_with_data_passthrough
+    writer(event, data_list.append)
+h11/_writers.py:65: in __call__
+    self.send_data(event.data, write)
+h11/_writers.py:91: in send_data
+    raise LocalProtocolError("Too much data for declared Content-Length")
+E   h11._util.LocalProtocolError: Too much data for declared Content-Length
+___________________________ test_ContentLengthWriter ___________________________
+h11/tests/test_io.py:479: in test_ContentLengthWriter
+    assert dowrite(w, Data(data=b"45")) == b"45"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+h11/tests/test_io.py:72: in dowrite
+    writer(obj, got_list.append)
+h11/_writers.py:65: in __call__
+    self.send_data(event.data, write)
+h11/_writers.py:91: in send_data
+    raise LocalProtocolError("Too much data for declared Content-Length")
+E   h11._util.LocalProtocolError: Too much data for declared Content-Length
+=========================== short test summary info ============================
+FAILED h11/tests/test_connection.py::test_Connection_basics_and_content_length
+FAILED h11/tests/test_connection.py::test_protocol_switch - h11._util.LocalPr...
+FAILED h11/tests/test_connection.py::test_sendfile - h11._util.LocalProtocolE...
+FAILED h11/tests/test_io.py::test_ContentLengthWriter - h11._util.LocalProtoc...
+4 failed, 74 passed in 0.19s

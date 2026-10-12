@@ -1,0 +1,158 @@
+{
+ "answer": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -427,7 +427,10 @@\n                 # triggers an actual protocol event; in that case, we want to\n                 # return that event, and then the state will change and we'll\n                 # get called again to generate the actual ConnectionClosed().\n-                event = ConnectionClosed()\n+                if hasattr(self._reader, \"read_eof\"):\n+                    event = self._reader.read_eof()\n+                else:\n+                    event = ConnectionClosed()\n         if event is None:\n             event = NEED_DATA\n         return event  # type: ignore[no-any-return]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.009393400392541707,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "index",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 326080 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files', 'index', 's']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed and inspected the final diff against the Connection source. Independent executable verification established that the repair restores both HTTP/1.0 response completion and explicit-framing truncation diagnostics; the reference itself did not execute repository tests.",
+   "inspect_locate": "The reference execution used 13 targeted searches without printing the whole context. The repair requires connecting public receive failures to EOF dispatch in Connection and the framing readers' completion and truncation behavior.",
+   "persistent_state": "The five-turn investigation reused repository and source-index variables while carrying the receive-path investigation forward. Retaining the framing distinctions is useful for identifying a shared cause rather than treating the failures independently."
+  },
+  "notes": "This is a natural, repository-dependent debugging request with a precise patch format. It describes related symptoms without exposing the defective symbol or fix, and it requires reasoning across receive dispatch and framing-specific EOF behavior. The verified patch addresses their shared cause without changing tests."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled against the exact Connection source and checked to preserve both EOF-delimited completion and fixed-length or chunked truncation diagnostics.",
+   "inspect_locate": "The failures surface in public Connection behavior, while the expected EOF outcomes are defined in framing adapters and their registrations. The relevant evidence is scattered across Connection, readers, and two test modules.",
+   "persistent_state": "The investigation reuses the failing scenarios, their selected framing adapters, and the receive-path call chain to distinguish premature closure from reader-specific message completion or truncation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._extract_next_receive_event",
+    "why": "This is the dispatch boundary between recorded EOF and the currently selected reader."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._get_io_object",
+    "why": "Body framing selects which reader supplies the EOF interpretation."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::Http10Reader.read_eof",
+    "why": "EOF completes an EOF-delimited message before ConnectionClosed is emitted."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::ContentLengthReader.read_eof",
+    "why": "The fixed-length reader reports received and expected byte counts on truncation."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::ChunkedReader.read_eof",
+    "why": "The chunked reader supplies its own incomplete-body diagnostic."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": "h11/tests/test_connection.py::test_special_exceptions_for_lost_connection_in_message_body",
+    "why": "Public receive tests require reader-specific diagnostics rather than a generic closure event."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only EOF dispatch. It should break the HTTP/1.0 response completion test and the public body-truncation diagnostic test, while ordinary complete messages remain unaffected.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "The attached CI output reports regressions when a peer closes during a message body. HTTP/1.0 responses and truncated explicitly framed bodies are no longer producing their established events or diagnostics. Find the shared cause and restore the existing receive behavior. Return a unified diff against repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -425,10 +425,7 @@\n                 # triggers an actual protocol event; in that case, we want to\n                 # return that event, and then the state will change and we'll\n                 # get called again to generate the actual ConnectionClosed().\n-                if hasattr(self._reader, \"read_eof\"):\n-                    event = self._reader.read_eof()\n-                else:\n-                    event = ConnectionClosed()\n+                event = ConnectionClosed()\n         if event is None:\n             event = NEED_DATA\n         return event  # type: ignore[no-any-return]\n"
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r01-01",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_client_talking_to_http10_server",
+   "h11/tests/test_connection.py::test_special_exceptions_for_lost_connection_in_message_body"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_connection.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_client_talking_to_http10_server",
+   "h11/tests/test_connection.py::test_special_exceptions_for_lost_connection_in_message_body"
+  ],
+  "ground_truth_symbols": [
+   "h11/_connection.py::Connection._extract_next_receive_event"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 76,
+  "stability_runs": 3
+ }
+}

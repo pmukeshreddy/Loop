@@ -1,0 +1,139 @@
+{
+ "answer": [
+  "lark/grammar.py::Terminal.renamed"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"lark/load_grammar.py::get_mangle\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0023099302026495525,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 10,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "idx",
+    "lg",
+    "logs"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 800890 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 10 targeted code searches across the repository context without printing the whole context. The investigation connects successful grammar import resolution to symbol renaming and terminal filtering, locating the upstream regression rather than the tree-building functions that expose it."
+  },
+  "notes": "The question is a natural, repository-dependent regression investigation with a precise symbol-list output format. It does not reveal the defective function or prescribe investigation operations. The verified symbol matches the supplied defect: Terminal.renamed drops filter_out when reconstructing a renamed terminal, causing previously filtered imported tokens to appear in parse-tree children. This investigation is distinct from the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "The failures concern imported parse-tree children, but the responsible change is in the symbol model. Locating it requires following grammar import mangling, symbol reconstruction, and terminal filtering rather than stopping at import resolution or tree construction."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "lark/grammar.py",
+    "symbol": "lark/grammar.py::Terminal.renamed",
+    "why": "Renaming currently preserves the terminal's filtering metadata."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::_mangle_definition_tree",
+    "why": "Imported definition trees reconstruct every Symbol through renamed."
+   },
+   {
+    "path": "lark/load_grammar.py",
+    "symbol": "lark/load_grammar.py::PrepareGrammar.terminal",
+    "why": "Underscore-prefixed terminal references receive filtering metadata before import mangling."
+   }
+  ],
+  "expected_answer": [
+   "lark/grammar.py::Terminal.renamed"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only Terminal.renamed. The failure log should be captured from the repository suite, including imported-grammar tests.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows imported grammars producing extra token children, although the imported names resolve and parsing succeeds. Identify the production function containing the regression responsible for these failures. Return a JSON list of `path::Qualname` entries; do not include downstream functions that merely expose the problem.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/lark/grammar.py\n+++ b/lark/grammar.py\n@@ -48,7 +48,7 @@\n         return '%s(%r, %r)' % (type(self).__name__, self.name, self.filter_out)\n \n     def renamed(self, f):\n-        return type(self)(f(self.name), self.filter_out)\n+        return type(self)(f(self.name))\n \n \n class NonTerminal(Symbol):\n"
+ },
+ "suggestion": null,
+ "task_id": "lark-parser-lark-r02-00",
+ "truth": {
+  "answer": [
+   "lark/grammar.py::Terminal.renamed"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "lark/grammar.py::Terminal.renamed"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "lark/grammar.py::Terminal.renamed"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "tests/__main__.py::TestCykBasic::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestCykCustom_new::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestEarleyBasic::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestEarleyCustom_old0::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestEarleyCustom_old1::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestEarleyDynamic::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestEarleyDynamic_complete::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestLalrBasic::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestLalrContextual::test_relative_import_preserves_leading_underscore",
+   "tests/__main__.py::TestLalrCustom_new::test_relative_import_preserves_leading_underscore"
+  ],
+  "ground_truth_symbols": [
+   "lark/grammar.py::Terminal.renamed"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 1117,
+  "stability_runs": 3
+ }
+}

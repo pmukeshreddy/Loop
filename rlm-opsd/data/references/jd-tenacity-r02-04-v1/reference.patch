@@ -1,0 +1,12 @@
+--- a/tenacity/wait.py
++++ b/tenacity/wait.py
+@@ -52,7 +52,8 @@
+             return NotImplemented
+         # A plain callable -- `WaitBaseT` admits those, and a function has no
+         # `__add__` of its own to handle `callable + strategy`.
+-        return wait_combine(self, other)
++        # Keep the left operand first so evaluation order is preserved.
++        return wait_combine(other, self)
+ 
+ 
+ WaitBaseT = wait_base | typing.Callable[["RetryCallState"], float | int]

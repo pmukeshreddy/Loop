@@ -1,0 +1,23 @@
+--- a/jsonschema/_legacy_keywords.py
++++ b/jsonschema/_legacy_keywords.py
+@@ -371,6 +371,20 @@
+             schema_value = schema[keyword]
+             if validator.is_type(schema_value, "boolean") and schema_value:
+                 evaluated_keys += instance.keys()
++
++            elif (
++                keyword == "additionalProperties"
++                and validator.is_type(schema_value, "object")
++            ):
++                evaluated_keys += (
++                    property
++                    for property in _utils.find_additional_properties(
++                        instance, schema,
++                    )
++                    if _utils.is_valid(
++                        validator.descend(instance[property], schema_value),
++                    )
++                )
+ 
+             elif validator.is_type(schema_value, "object"):
+                 for property in schema_value:

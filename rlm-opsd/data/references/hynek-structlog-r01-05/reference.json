@@ -1,0 +1,140 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -1140,6 +1140,10 @@\n         *record* has been patched by `wrap_for_formatter` first though, so the\n          type isn't quite right.\n         \"\"\"\n+        # Work on a copy so other handlers receive the original record,\n+        # including its message, arguments, and exception information.\n+        record = logging.makeLogRecord(record.__dict__)\n+\n         logger = getattr(record, \"_logger\", _SENTINEL)\n         meth_name = getattr(record, \"_name\", \"__structlog_sentinel__\")\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008060447721232515,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "index",
+    "logs",
+    "stdlib"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 709638 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The delivered patch establishes isolation before either record-origin branch, preserving the downstream processing and rendering logic. The reference inspected the constructed diff before delivery, and independent executable verification confirmed the repair against the regression tests.",
+   "inspect_locate": "The reference execution used 10 targeted searches without printing the whole context. The investigation required distinguishing the shared LogRecord from the structured event dictionary and checking preparation of both structured and foreign records."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise unified-diff output requirement. The question identifies the affected integration and observable symptom without prescribing the copy operation or its placement. The task is distinct from the accepted default-value and ExtraAdder changes."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must restore isolation without changing keep flags, foreign argument handling, or processor metadata. Its exact source context and the two record-origin paths should be checked before delivery.",
+   "inspect_locate": "The visible failures occur in multi-handler integration tests. Their cause requires distinguishing LogRecord isolation from the separate structured-message dictionary copy and following both foreign and structured formatter preparation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "Clears arguments and stack-related fields and replaces the message during formatting."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.wrap_for_formatter",
+    "why": "Establishes the marked structured-record path, whose message dictionary has its own isolation requirement."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter.test_other_handlers_get_original_record",
+    "why": "Checks the original message observed by a later handler."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter.test_logrecord_exc_info",
+    "why": "Checks message and exception information on both structured and foreign records after formatter processing."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "Only the LogRecord copy is removed by setup; the structured record.msg dictionary copy remains intact. The repair must retain both forms of isolation.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a handler-isolation regression in the standard-library integration: after a handler using ProcessorFormatter runs, later handlers no longer receive the original message or exception state. Repair the regression so formatting does not alter the original LogRecord supplied to other handlers. Preserve existing structured-versus-foreign processing, keep flags, and rendering behavior. Return a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -1171,10 +1171,6 @@\n         *record* has been patched by `wrap_for_formatter` first though, so the\n          type isn't quite right.\n         \"\"\"\n-        # Make a shallow copy of the record to let other handlers/formatters\n-        # process the original one\n-        record = logging.makeLogRecord(record.__dict__)\n-\n         logger = getattr(record, \"_logger\", _SENTINEL)\n         meth_name = getattr(record, \"_name\", \"__structlog_sentinel__\")\n \n"
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r01-05",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_stdlib.py::TestProcessorFormatter::test_logrecord_exc_info",
+   "tests/test_stdlib.py::TestProcessorFormatter::test_other_handlers_get_original_record"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 884
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_stdlib.py::TestProcessorFormatter::test_logrecord_exc_info",
+   "tests/test_stdlib.py::TestProcessorFormatter::test_other_handlers_get_original_record"
+  ],
+  "ground_truth_symbols": [
+   "src/structlog/stdlib.py::ProcessorFormatter.format"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 882,
+  "stability_runs": 3
+ }
+}

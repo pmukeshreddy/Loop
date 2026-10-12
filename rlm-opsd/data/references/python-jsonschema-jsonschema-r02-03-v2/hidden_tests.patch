@@ -1,0 +1,111 @@
+--- /dev/null
++++ b/jsonschema/tests/test_unevaluated_items_context.py
+@@ -0,0 +1,108 @@
++import pytest
++
++from jsonschema import Draft201909Validator, Draft202012Validator
++
++
++DRAFTS = [
++    (Draft201909Validator, "items"),
++    (Draft202012Validator, "prefixItems"),
++]
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_all_item_errors_keep_order_and_indexes(Validator, positional):
++    subschema = {"type": "integer", "minimum": 10, "multipleOf": 3}
++    schema = {positional: [{}], "unevaluatedItems": subschema}
++    instance = ["covered", 5, 12, 7, "bad"]
++    errors = list(Validator(schema).iter_errors(instance))
++    assert len(errors) == 1
++    error = errors[0]
++    assert error.validator == "unevaluatedItems"
++    assert error.message == (
++        "Unevaluated items are not allowed (5, 7, 'bad' were unexpected)"
++    )
++    assert [child.validator for child in error.context] == [
++        "minimum", "multipleOf", "minimum", "multipleOf", "type",
++    ]
++    assert [list(child.path) for child in error.context] == [[1], [1], [3], [3], [4]]
++    assert [child.instance for child in error.context] == [5, 5, 7, 7, "bad"]
++    assert all(child.parent is error for child in error.context)
++    assert all(child.schema is subschema for child in error.context)
++    assert list(error.path) == []
++    assert list(error.schema_path) == ["unevaluatedItems"]
++    assert [list(child.schema_path) for child in error.context] == [
++        ["minimum"], ["multipleOf"], ["minimum"], ["multipleOf"], ["type"],
++    ]
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_equal_failing_values_are_listed_once_per_position(Validator, positional):
++    schema = {"unevaluatedItems": {"minimum": 10, "multipleOf": 3}}
++    error, = Validator(schema).iter_errors([5, 5])
++    assert error.message == "Unevaluated items are not allowed (5, 5 were unexpected)"
++    assert [list(child.path) for child in error.context] == [[0], [0], [1], [1]]
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_nested_instance_and_schema_paths(Validator, positional):
++    subschema = {
++        "properties": {"n": {"minimum": 10, "multipleOf": 3}},
++    }
++    array_schema = {positional: [{}], "unevaluatedItems": subschema}
++    schema = {"properties": {"payload": array_schema}}
++    instance = {"payload": ["covered", {"n": 5}, {"n": 12}]}
++    error, = Validator(schema).iter_errors(instance)
++    assert list(error.path) == ["payload"]
++    assert [list(child.path) for child in error.context] == [[1, "n"], [1, "n"]]
++    assert [list(child.absolute_path) for child in error.context] == [["payload", 1, "n"], ["payload", 1, "n"]]
++    assert [child.validator for child in error.context] == ["minimum", "multipleOf"]
++    for child in error.context:
++        assert child.parent is error
++        assert list(child.absolute_schema_path) == [
++            "properties", "payload", "unevaluatedItems", "properties", "n",
++            child.validator,
++        ]
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_contains_coverage_is_preserved(Validator, positional):
++    schema = {
++        "contains": {"const": 5},
++        "unevaluatedItems": {"minimum": 10},
++    }
++    error, = Validator(schema).iter_errors([5, 7, 12])
++    assert error.message == "Unevaluated items are not allowed (7 was unexpected)"
++    child, = error.context
++    assert list(child.path) == [1]
++    assert child.validator == "minimum"
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++@pytest.mark.parametrize("tail, message", [
++    ([7], "Unevaluated items are not allowed (7 was unexpected)"),
++    ([7, 8], "Unevaluated items are not allowed (7, 8 were unexpected)"),
++])
++def test_false_schema_diagnostics_are_unchanged(Validator, positional, tail, message):
++    schema = {positional: [{}], "unevaluatedItems": False}
++    error, = Validator(schema).iter_errors(["covered", *tail])
++    assert error.message == message
++    assert error.context == []
++    assert list(error.path) == []
++    assert list(error.schema_path) == ["unevaluatedItems"]
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_successful_and_non_array_behavior_is_preserved(Validator, positional):
++    schema = {positional: [{}], "unevaluatedItems": {"minimum": 10, "multipleOf": 3}}
++    assert list(Validator(schema).iter_errors(["covered", 12, 15])) == []
++    assert list(Validator(schema).iter_errors({"not": "array"})) == []
++    assert list(Validator({"unevaluatedItems": True}).iter_errors([1, "x"])) == []
++    assert list(Validator({
++        "items": {"type": "integer"},
++        "unevaluatedItems": {"minimum": 10},
++    }).iter_errors([1, 2])) == []
++
++
++@pytest.mark.parametrize("Validator, positional", DRAFTS)
++def test_empty_schema_accepts_every_item(Validator, positional):
++    assert list(Validator({"unevaluatedItems": {}}).iter_errors([1, "x"])) == []

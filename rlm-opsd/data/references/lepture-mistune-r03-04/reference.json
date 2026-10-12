@@ -1,0 +1,212 @@
+{
+ "answer": "--- a/src/mistune/directives/_base.py\n+++ b/src/mistune/directives/_base.py\n@@ -71,7 +71,7 @@\n     parser: Type[DirectiveParser]\n     directive_pattern: Optional[str] = None\n \n-    def __init__(self, plugins: List[\"DirectivePlugin\"]):\n+    def __init__(self, plugins: List[\"DirectivePlugin\"], *, strict_options: bool = False):\n         self._methods: Dict[\n             str,\n             Callable[\n@@ -80,6 +80,7 @@\n             ],\n         ] = {}\n         self.__plugins = plugins\n+        self.strict_options = strict_options\n \n     def register(\n         self,\n@@ -98,6 +99,8 @@\n         method = self._methods.get(_type)\n         if method:\n             try:\n+                if self.strict_options:\n+                    self._validate_options(method, _type, m)\n                 token = method(block, m, state)\n             except ValueError as e:\n                 token = {\"type\": \"block_error\", \"raw\": str(e)}\n@@ -114,6 +117,39 @@\n         else:\n             state.append_token(token)\n         return token\n+\n+    def _validate_options(\n+        self,\n+        method: Callable[\n+            [\"BlockParser\", Match[str], \"BlockState\"],\n+            Union[Dict[str, Any], List[Dict[str, Any]]],\n+        ],\n+        directive_type: str,\n+        m: Match[str],\n+    ) -> None:\n+        # Check the handler, not its registered name: custom replacements and\n+        # overrides must remain free to define their own options.\n+        from .admonition import Admonition\n+        from .image import Figure, Image\n+        from .include import Include\n+        from .toc import TableOfContents\n+\n+        option_names = {\n+            Admonition.parse: {\"class\"},\n+            Image.parse: {\"alt\", \"align\", \"height\", \"width\", \"target\"},\n+            Figure.parse: {\"alt\", \"align\", \"height\", \"width\", \"target\", \"figwidth\", \"figclass\"},\n+            Include.parse: {\"encoding\"},\n+            TableOfContents.parse: {\"collapse\", \"min-level\", \"max-level\"},\n+        }\n+        allowed = option_names.get(getattr(method, \"__func__\", None))\n+        if allowed is None:\n+            return\n+\n+        # Keep source order (including duplicates) and leave value validation\n+        # to the handler.\n+        for key, _ in self.parser.parse_options(m):\n+            if key not in allowed:\n+                raise ValueError(f'Unknown option \"{key}\" for directive \"{directive_type}\"')\n \n     @abstractmethod\n     def parse_directive(self, block: \"BlockParser\", m: Match[str], state: \"BlockState\") -> Optional[int]:\n--- a/src/mistune/directives/_fenced.py\n+++ b/src/mistune/directives/_fenced.py\n@@ -90,12 +90,15 @@\n     :param plugins: list of directive plugins\n     :param markers: characters to determine the fence, default is backtick\n                     and curly-bracket\n+    :param strict_options: reject unsupported option names for built-in handlers\n     \"\"\"\n \n     parser = FencedParser\n \n-    def __init__(self, plugins: List[DirectivePlugin], markers: str = \"`~\") -> None:\n-        super(FencedDirective, self).__init__(plugins)\n+    def __init__(\n+        self, plugins: List[DirectivePlugin], markers: str = \"`~\", *, strict_options: bool = False\n+    ) -> None:\n+        super(FencedDirective, self).__init__(plugins, strict_options=strict_options)\n         self.markers = markers\n         _marker_pattern = \"|\".join(re.escape(c) for c in markers)\n         self.directive_pattern = (\n--- a/src/mistune/directives/_rst.py\n+++ b/src/mistune/directives/_rst.py\n@@ -61,6 +61,9 @@\n             # ...\n             RSTDirective([Admonition()]),\n         ])\n+\n+    :param plugins: list of directive plugins\n+    :param strict_options: reject unsupported option names for built-in handlers\n     \"\"\"\n \n     parser = RSTParser\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0010112106155289941,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "directives",
+    "files",
+    "hits",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 15928,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 15928 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 549836 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "8 turns; variables reused across turns: ['directives', 'files', 'hits', 'p']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "A sub-call on selected context supported bounded inspection of the separate handler implementations. This is useful because accepted names include shared image attributes and presence-only TOC options.",
+   "combine_verify_finish": "The final diff was assembled programmatically and inspected after construction. The supplied test evidence covers both syntaxes, supported options, and first-unsupported-option reporting.",
+   "inspect_locate": "The execution used 12 targeted searches to connect directive constructors and shared dispatch with option consumers across five built-in handlers, without printing the whole repository context.",
+   "persistent_state": "Variables holding files, directive context, and search hits were reused across turns, although persistent state was not separately listed among the established behaviors."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise compatibility and error-reporting requirements. It requires reasoning across constructors, dispatch, option parsing, and multiple handlers rather than a single lookup. The requested production-only unified diff is clear, and the task is distinct from the accepted directive parsing regressions."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining the accepted option vocabulary requires understanding the separate Image, Figure, Admonition, Include, and TableOfContents implementations, including shared image attributes and presence-only TOC options. Constructor compatibility and semantic dispatch require additional source sections.",
+   "combine_verify_finish": "The implementation spans syntax entry points and handler metadata or dispatch integration. The assembled diff should be checked for complete coverage of all five handlers and both constructors.",
+   "inspect_locate": "The two directive constructors and shared dispatch layer must be connected to the option consumers in five built-in handler classes.",
+   "persistent_state": "The accepted-option sets, syntax-specific constructor requirements, and validation-order constraints must remain available while constructing the coordinated production patch."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/directives/_base.py",
+    "symbol": "src/mistune/directives/_base.py::BaseDirective.parse_method",
+    "why": "Shared dispatch converts handler ValueErrors into block_error tokens and is the boundary for validation before invocation."
+   },
+   {
+    "path": "src/mistune/directives/_base.py",
+    "symbol": "src/mistune/directives/_base.py::DirectiveParser.parse_options",
+    "why": "Preserves the source order needed to report the first unsupported option."
+   },
+   {
+    "path": "src/mistune/directives/_fenced.py",
+    "symbol": "src/mistune/directives/_fenced.py::FencedDirective.__init__",
+    "why": "Has an explicit constructor whose plugins and markers positional API must remain compatible."
+   },
+   {
+    "path": "src/mistune/directives/image.py",
+    "symbol": "src/mistune/directives/image.py::_parse_attrs",
+    "why": "Image and Figure share several accepted options, while Figure consumes additional figure-specific names."
+   },
+   {
+    "path": "src/mistune/directives/admonition.py",
+    "symbol": "src/mistune/directives/admonition.py::Admonition.parse",
+    "why": "Consumes the class option for all supported admonition names."
+   },
+   {
+    "path": "src/mistune/directives/include.py",
+    "symbol": "src/mistune/directives/include.py::Include.parse",
+    "why": "Consumes encoding and has early error returns, making pre-invocation validation important."
+   },
+   {
+    "path": "src/mistune/directives/toc.py",
+    "symbol": "src/mistune/directives/toc.py::TableOfContents.parse",
+    "why": "Consumes min-level, max-level, and the presence-only collapse option."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_directive_strict_options.py\n@@ -0,0 +1,66 @@\n+import html\n+import pytest\n+\n+from mistune import create_markdown\n+from mistune.directives import RSTDirective, FencedDirective, Admonition, Image, Figure, Include, TableOfContents\n+\n+\n+CASES = [\n+    (\"note\", Admonition, \"Custom\", [(\"class\", \"extra\")], \"**body**\\n\"),\n+    (\"image\", Image, \"cat.png\", [(\"alt\", \"cat\"), (\"align\", \"left\"), (\"height\", \"12\"), (\"width\", \"2em\"), (\"target\", \"/go\")], \"\"),\n+    (\"figure\", Figure, \"cat.png\", [(\"alt\", \"cat\"), (\"align\", \"center\"), (\"height\", \"12\"), (\"width\", \"2em\"), (\"target\", \"/go\"), (\"figwidth\", \"80%\"), (\"figclass\", \"extra\")], \"caption\\n\\nlegend\\n\"),\n+    (\"include\", Include, \"child.txt\", [(\"encoding\", \"utf-8\")], \"\"),\n+    (\"toc\", TableOfContents, \"Contents\", [(\"min-level\", \"2\"), (\"max-level\", \"3\"), (\"collapse\", \"\")], \"\"),\n+]\n+\n+\n+def source(kind, title, options, content, fenced):\n+    lines = \"\".join(\":\" + key + \": \" + value + \"\\n\" for key, value in options)\n+    if fenced:\n+        return \"## Heading\\n\\n```{\" + kind + \"} \" + title + \"\\n\" + lines + \"\\n\" + content + \"```\\n\"\n+    return \"## Heading\\n\\n.. \" + kind + \":: \" + title + \"\\n\" + \"\".join(\"   \" + line + \"\\n\" for line in lines.splitlines()) + \"\\n\" + \"\".join(\"   \" + line + \"\\n\" for line in content.splitlines())\n+\n+\n+def make_md(factory, fenced, strict):\n+    kwargs = {} if strict is None else {\"strict_options\": strict}\n+    if fenced:\n+        directive = FencedDirective([factory()], **kwargs)\n+    else:\n+        directive = RSTDirective([factory()], **kwargs)\n+    return create_markdown(plugins=[directive])\n+\n+\n+def render(md, text, tmp_path):\n+    (tmp_path / \"child.txt\").write_text(\"included\", encoding=\"utf-8\")\n+    path = tmp_path / \"source.md\"\n+    path.write_text(text, encoding=\"utf-8\")\n+    return md.read(str(path))[0]\n+\n+\n+@pytest.mark.parametrize(\"case\", CASES)\n+@pytest.mark.parametrize(\"fenced\", [False, True])\n+def test_supported_options_keep_their_behavior(case, fenced, tmp_path):\n+    kind, factory, title, options, content = case\n+    text = source(kind, title, options, content, fenced)\n+    assert render(make_md(factory, fenced, True), text, tmp_path) == render(make_md(factory, fenced, False), text, tmp_path)\n+\n+\n+@pytest.mark.parametrize(\"case\", CASES)\n+@pytest.mark.parametrize(\"fenced\", [False, True])\n+def test_unknown_option_reports_first_name(case, fenced, tmp_path):\n+    kind, factory, title, options, content = case\n+    text = source(kind, title, options + [(\"bogus-first\", \"x\"), (\"bogus-second\", \"y\")], content, fenced)\n+    result = html.unescape(render(make_md(factory, fenced, True), text, tmp_path))\n+    assert 'Unknown option \"bogus-first\" for directive \"' + kind + '\"' in result\n+    assert \"bogus-second\" not in result\n+\n+\n+@pytest.mark.parametrize(\"fenced\", [False, True])\n+def test_legacy_and_non_directive_behavior(fenced, tmp_path):\n+    text = source(\"note\", \"Custom\", [(\"bogus\", \"ignored\")], \"body\\n\", fenced)\n+    ordinary = source(\"note\", \"Custom\", [], \"body\\n\", fenced)\n+    default_md = make_md(Admonition, fenced, None)\n+    assert render(default_md, text, tmp_path) == render(default_md, ordinary, tmp_path)\n+    strict = make_md(Admonition, fenced, True)\n+    expected = make_md(Admonition, fenced, False)\n+    assert strict(\"```python\\nx = 1\\n```\\n\") == expected(\"```python\\nx = 1\\n```\\n\")\n",
+  "include_failure_log": false,
+  "notes": "The accepted names are case-sensitive, matching current option lookup behavior. The custom-handler exemption is part of the requested contract; the verifier may add a public register-based acceptance case in addition to this patch.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "Add a keyword-only strict_options=False argument to RSTDirective and FencedDirective, preserving their existing positional arguments. When enabled, recognized built-in directives handled by Admonition, Image, Figure, Include, or TableOfContents must reject any option name that their current handler does not consume. Accept all currently consumed option names, including presence-only options, and preserve existing validation of their values. Validate names before invoking the handler; report the first unsupported option in source order through the existing block_error mechanism, with raw text exactly 'Unknown option \"KEY\" for directive \"TYPE\"'. Leave unknown directive types, ordinary fenced code, custom handlers registered with BaseDirective.register, and the default permissive behavior unchanged. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r03-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_directive_strict_options.py::test_legacy_and_non_directive_behavior[False]",
+   "tests/test_directive_strict_options.py::test_legacy_and_non_directive_behavior[True]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case0]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case1]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case2]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case3]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case4]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case0]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case1]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case2]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case3]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case4]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case0]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case1]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case2]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case3]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case4]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case0]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case1]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case2]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case3]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case4]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 22,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1177
+   },
+   "patch_files": [
+    "src/mistune/directives/_base.py",
+    "src/mistune/directives/_fenced.py",
+    "src/mistune/directives/_rst.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_directive_strict_options.py::test_legacy_and_non_directive_behavior[False]",
+   "tests/test_directive_strict_options.py::test_legacy_and_non_directive_behavior[True]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case0]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case1]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case2]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case3]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[False-case4]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case0]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case1]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case2]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case3]",
+   "tests/test_directive_strict_options.py::test_supported_options_keep_their_behavior[True-case4]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case0]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case1]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case2]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case3]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[False-case4]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case0]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case1]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case2]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case3]",
+   "tests/test_directive_strict_options.py::test_unknown_option_reports_first_name[True-case4]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

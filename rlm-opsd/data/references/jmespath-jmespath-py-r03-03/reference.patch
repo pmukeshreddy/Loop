@@ -1,0 +1,124 @@
+--- a/jmespath/visitor.py
++++ b/jmespath/visitor.py
+@@ -172,7 +172,7 @@
+ 
+     def visit_filter_projection(self, node, value):
+         base = self.visit(node['children'][0], value)
+-        if not isinstance(base, list):
++        if not isinstance(base, (list, tuple)):
+             return None
+         comparator_node = node['children'][2]
+         collected = []
+@@ -185,12 +185,12 @@
+ 
+     def visit_flatten(self, node, value):
+         base = self.visit(node['children'][0], value)
+-        if not isinstance(base, list):
+-            # Can't flatten the object if it's not a list.
++        if not isinstance(base, (list, tuple)):
++            # Can't flatten the object if it's not an array.
+             return None
+         merged_list = []
+         for element in base:
+-            if isinstance(element, list):
++            if isinstance(element, (list, tuple)):
+                 merged_list.extend(element)
+             else:
+                 merged_list.append(element)
+@@ -202,7 +202,7 @@
+     def visit_index(self, node, value):
+         # Even though we can index strings, we don't
+         # want to support that.
+-        if not isinstance(value, list):
++        if not isinstance(value, (list, tuple)):
+             return None
+         try:
+             return value[node['value']]
+@@ -216,10 +216,10 @@
+         return result
+ 
+     def visit_slice(self, node, value):
+-        if not isinstance(value, list):
++        if not isinstance(value, (list, tuple)):
+             return None
+         s = slice(*node['children'])
+-        return value[s]
++        return list(value[s]) if isinstance(value, tuple) else value[s]
+ 
+     def visit_key_val_pair(self, node, value):
+         return self.visit(node['children'][0], value)
+@@ -271,7 +271,7 @@
+ 
+     def visit_projection(self, node, value):
+         base = self.visit(node['children'][0], value)
+-        if not isinstance(base, list):
++        if not isinstance(base, (list, tuple)):
+             return None
+         collected = []
+         for element in base:
+@@ -297,8 +297,8 @@
+         # This looks weird, but we're explicitly using equality checks
+         # because the truth/false values are different between
+         # python and jmespath.
+-        return (value == '' or value == [] or value == {} or value is None or
+-                value is False)
++        return (value == '' or value == [] or value == () or value == {} or
++                value is None or value is False)
+ 
+     def _is_true(self, value):
+         return not self._is_false(value)
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -10,6 +10,7 @@
+ TYPES_MAP = {
+     'bool': 'boolean',
+     'list': 'array',
++    'tuple': 'array',
+     'dict': 'object',
+     'NoneType': 'null',
+     'unicode': 'string',
+@@ -26,7 +27,7 @@
+ # jmespath types -> python types
+ REVERSE_TYPES_MAP = {
+     'boolean': ('bool',),
+-    'array': ('list', '_Projection'),
++    'array': ('list', 'tuple', '_Projection'),
+     'object': ('dict', 'OrderedDict',),
+     'null': ('NoneType',),
+     'string': ('unicode', 'str'),
+@@ -182,6 +183,8 @@
+     def _func_to_array(self, arg):
+         if isinstance(arg, list):
+             return arg
++        elif isinstance(arg, tuple):
++            return list(arg)
+         else:
+             return [arg]
+ 
+@@ -195,7 +198,7 @@
+ 
+     @signature({'types': []})
+     def _func_to_number(self, arg):
+-        if isinstance(arg, (list, dict, bool)):
++        if isinstance(arg, (list, tuple, dict, bool)):
+             return None
+         elif arg is None:
+             return None
+@@ -297,7 +300,7 @@
+             return "string"
+         elif isinstance(arg, bool):
+             return "boolean"
+-        elif isinstance(arg, list):
++        elif isinstance(arg, (list, tuple)):
+             return "array"
+         elif isinstance(arg, dict):
+             return "object"
+@@ -309,7 +312,7 @@
+     @signature({'types': ['array']}, {'types': ['expref']})
+     def _func_sort_by(self, array, expref):
+         if not array:
+-            return array
++            return list(array) if isinstance(array, tuple) else array
+         # sort_by allows for the expref to be either a number of
+         # a string, so we have some special logic to handle this.
+         # We evaluate the first array element and verify that it's

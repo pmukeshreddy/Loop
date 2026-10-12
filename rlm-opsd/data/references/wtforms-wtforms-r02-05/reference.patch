@@ -1,0 +1,14 @@
+--- a/src/wtforms/utils.py
++++ b/src/wtforms/utils.py
+@@ -26,9 +26,8 @@
+     compatibility with strptime).
+     """
+     return [
+-        re.sub(
+-            r"[-#]",
+-            "",
++        _DATETIME_STRIP_ZERO_PADDING_FORMATS_RE.sub(
++            lambda match: match[0].replace(_LEADING_SYMBOL, ""),
+             format,
+         )
+         for format in formats

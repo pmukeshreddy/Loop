@@ -1,0 +1,128 @@
+{
+ "answer": "--- a/h11/_headers.py\n+++ b/h11/_headers.py\n@@ -180,7 +180,7 @@\n             if seen_content_length is None:\n                 seen_content_length = value\n                 new_headers.append((raw_name, name, value))\n-            elif seen_content_length == value:\n+            elif seen_content_length != value:\n                 raise LocalProtocolError(\"conflicting Content-Length headers\")\n         elif name == b\"transfer-encoding\":\n             # \"A server that receives a request message with a transfer coding\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 324457 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used nine targeted searches across the repository context without printing the whole context. Locating the shared header-normalization logic connects the observed regression to behavior used by both event construction and received-message parsing."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise patch format and scope. The question identifies the affected behavior without revealing the defective symbol or fix. The verified comparison change restores rejection of conflicting repeated Content-Length values while allowing and deduplicating matching values. It is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "Content-Length acceptance is shared between event construction and wire parsing. The attached failure evidence must be connected to the shared normalization rules rather than repaired in individual constructors or framing adapters."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_headers.py",
+    "symbol": "h11/_headers.py::normalize_and_validate",
+    "why": "The shared helper compares repeated field values and retains only the first accepted field."
+   },
+   {
+    "path": "h11/_events.py",
+    "symbol": "h11/_events.py::Request.__init__",
+    "why": "Local and parsed requests use the same header normalization."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::maybe_read_from_IDLE_client",
+    "why": "Parsed wire headers reach Request with the parsed fast path enabled."
+   },
+   {
+    "path": "h11/tests/test_headers.py",
+    "symbol": "h11/tests/test_headers.py::test_normalize_and_validate",
+    "why": "Tests specify matching duplicates, conflicting duplicates, comma-separated values, and size validation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The intended repair restores textual comparison semantics, not numeric equivalence between differently spelled decimal values.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Content-Length validation has regressed in the attached pytest output. Restore the snapshot's established acceptance, rejection, and deduplication behavior for repeated Content-Length fields, consistently for locally constructed events and received messages. Send a unified diff against non-test repository files; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/h11/_headers.py\n+++ b/h11/_headers.py\n@@ -183,7 +183,7 @@ def normalize_and_validate(\n             if seen_content_length is None:\n                 seen_content_length = value\n                 new_headers.append((raw_name, name, value))\n-            elif seen_content_length != value:\n+            elif seen_content_length == value:\n                 raise LocalProtocolError(\"conflicting Content-Length headers\")\n         elif name == b\"transfer-encoding\":\n             # \"A server that receives a request message with a transfer coding\n"
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r02-03",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_headers.py::test_normalize_and_validate"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_headers.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_headers.py::test_normalize_and_validate"
+  ],
+  "ground_truth_symbols": [
+   "h11/_headers.py::normalize_and_validate"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 77,
+  "stability_runs": 3
+ }
+}

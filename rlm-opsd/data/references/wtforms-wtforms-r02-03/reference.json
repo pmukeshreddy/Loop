@@ -1,0 +1,145 @@
+{
+ "answer": "--- a/src/wtforms/widgets/core.py\n+++ b/src/wtforms/widgets/core.py\n@@ -343,7 +343,8 @@\n     It also must provide a `has_groups()` method which tells whether choices\n     are divided into groups, and if they do, the field must have an\n     `iter_groups()` method that yields tuples of `(label, choices)`, where\n-    `choices` is a iterable of `(value, label, selected)` tuples.\n+    `choices` is an iterable of `(value, label, selected)` or\n+    `(value, label, selected, render_kw)` tuples.\n     \"\"\"\n \n     validation_attrs = [\"required\", \"disabled\"]\n@@ -366,12 +367,20 @@\n                 optgroup_params = html_params(label=group)\n                 html.append(f\"<optgroup {optgroup_params}>\")\n                 for choice in choices:\n-                    val, label, selected, render_kw = choice\n+                    if len(choice) == 3:\n+                        val, label, selected = choice\n+                        render_kw = {}\n+                    else:\n+                        val, label, selected, render_kw = choice\n                     html.append(self.render_option(val, label, selected, **render_kw))\n                 html.append(\"</optgroup>\")\n         else:\n             for choice in field.iter_choices():\n-                val, label, selected, render_kw = choice\n+                if len(choice) == 3:\n+                    val, label, selected = choice\n+                    render_kw = {}\n+                else:\n+                    val, label, selected, render_kw = choice\n                 html.append(self.render_option(val, label, selected, **render_kw))\n         html.append(\"</select>\")\n         return Markup(\"\".join(html))\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0035895730670271685,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 25,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "line",
+    "needle",
+    "old",
+    "p",
+    "start",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 25 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['files', 'line', 'needle', 'old', 'p', 'start', 'text']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff coordinates both branches, preserves the existing option-rendering calls and optgroup structure, and was inspected after construction. The supplied verification covers mixed tuple lengths, escaping, selected state, rendering attributes, and empty optgroups.",
+   "inspect_locate": "The reference execution used targeted searches rather than printing the full repository context, locating the documented tuple contract and the distinct flat and grouped rendering paths.",
+   "persistent_state": "Repository text and edit-construction variables were reused across turns to produce matching changes in both rendering branches."
+  },
+  "notes": "This is a natural, repository-dependent compatibility repair with a precise production-only unified-diff deliverable. Naming the public widget and required contract scopes the request without prescribing the implementation. The preservation requirements are directly related to the change, and no accepted task addresses the same defect."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The diff must coordinate the two branches and preserve extended-tuple attributes, selection, escaping, and empty groups.",
+   "inspect_locate": "The documented tuple contract must be compared with both native select rendering paths and the separate iterable-option implementation.",
+   "persistent_state": "The flat and grouped loop bodies and their existing four-element behavior must be retained while constructing matching edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::Select.__call__",
+    "why": "Its documentation permits both tuple lengths, but both rendering branches unconditionally unpack four elements."
+   },
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::Select.render_option",
+    "why": "Already implements escaping and option-attribute serialization."
+   },
+   {
+    "path": "src/wtforms/fields/choices.py",
+    "symbol": "src/wtforms/fields/choices.py::SelectFieldBase.__iter__",
+    "why": "Provides an existing example of accepting both tuple lengths."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_select_legacy_choice_tuples.py\n@@ -0,0 +1,32 @@\n+import pytest\n+\n+from wtforms.fields import SelectField\n+from wtforms.form import Form\n+\n+\n+@pytest.mark.parametrize(\"grouped\", [False, True])\n+def test_legacy_and_extended_choices(grouped):\n+    class CustomSelect(SelectField):\n+        def iter_choices(self):\n+            yield (\"a\", \"<A>\", True)\n+            yield (\"b\", \"B\", False, {\"title\": \"<tip>\", \"disabled\": True})\n+\n+        def has_groups(self):\n+            return grouped\n+\n+        def iter_groups(self):\n+            yield (\"<group>\", self.iter_choices())\n+            yield (\"Empty\", iter(()))\n+\n+    class F(Form):\n+        item = CustomSelect(choices=[], validate_choice=False)\n+\n+    form = F(item=\"a\")\n+    html = str(form.item())\n+    assert '<option selected value=\"a\">&lt;A&gt;</option>' in html\n+    assert '<option disabled title=\"&lt;tip&gt;\" value=\"b\">B</option>' in html\n+    if grouped:\n+        assert '<optgroup label=\"&lt;group&gt;\">' in html\n+        assert '<optgroup label=\"Empty\"></optgroup>' in html\n+    else:\n+        assert \"<optgroup\" not in html\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests exercise native rendering only, so this task does not depend on the separate iterable per-choice attribute enhancement.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Bring the native `Select` widget into line with its documented choice-tuple contract. Custom fields must be able to yield three-element `(value, label, selected)` tuples, four-element tuples whose final item is a rendering-attribute dictionary, or a mixture of the two. Support this in both flat choices and choices inside optgroups. Three-element tuples have no additional option attributes; retain existing escaping, selected-state behavior, four-element attribute handling, and empty-optgroup output. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_select_legacy_choice_tuples.py::test_legacy_and_extended_choices[False]",
+   "tests/test_select_legacy_choice_tuples.py::test_legacy_and_extended_choices[True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 8,
+    "passed": 348
+   },
+   "patch_files": [
+    "src/wtforms/widgets/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_select_legacy_choice_tuples.py::test_legacy_and_extended_choices[False]",
+   "tests/test_select_legacy_choice_tuples.py::test_legacy_and_extended_choices[True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

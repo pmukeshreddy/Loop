@@ -1,0 +1,139 @@
+{
+ "answer": "--- a/src/dotenv/main.py\n+++ b/src/dotenv/main.py\n@@ -160,34 +160,27 @@\n         source = io.StringIO(\"\")\n         original_mode = None\n \n-    with tempfile.NamedTemporaryFile(\n-        mode=\"w\",\n-        encoding=encoding,\n-        delete=False,\n-        prefix=\".tmp_\",\n-        dir=os.path.dirname(os.path.abspath(path)),\n-    ) as dest:\n-        dest_path = pathlib.Path(dest.name)\n-        error = None\n-\n-        try:\n-            with source:\n+    dest_path: Optional[pathlib.Path] = None\n+    try:\n+        with source:\n+            with tempfile.NamedTemporaryFile(\n+                mode=\"w\",\n+                encoding=encoding,\n+                delete=False,\n+                prefix=\".tmp_\",\n+                dir=os.path.dirname(os.path.abspath(path)),\n+            ) as dest:\n+                dest_path = pathlib.Path(dest.name)\n                 yield (source, dest)\n-        except BaseException as err:\n-            error = err\n-\n-    if error is None:\n-        try:\n-            if original_mode is not None:\n-                os.chmod(dest_path, original_mode)\n-\n-            os.replace(dest_path, path)\n-        except BaseException:\n+\n+        if original_mode is not None:\n+            os.chmod(dest_path, original_mode)\n+\n+        os.replace(dest_path, path)\n+    except BaseException:\n+        if dest_path is not None:\n             dest_path.unlink(missing_ok=True)\n-            raise\n-    else:\n-        dest_path.unlink(missing_ok=True)\n-        raise error from None\n+        raise\n \n \n def set_key(\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 15206 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused, single-file context supports solving the task directly. The reference execution used no sub-calls and produced a patch that reorganizes resource acquisition, finalization, cleanup, and the replacement commit point. This requires reasoning about nested context-manager exception handling rather than a simple symbol lookup."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise production-only unified-diff deliverable. The question specifies observable failure behavior without revealing the internal defective helper or prescribing the fix. The requirements form one coherent transactional-editing change, and the task is substantively distinct from both its CLI-encoding parent and the accepted symlink-option task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only main.py, under 16,000 characters. The task requires reasoning about resource acquisition, exception propagation through nested context managers, destination finalization, and the replacement commit point. Both public mutation callers are in the same file, so broader investigation or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/dotenv/main.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::rewrite",
+    "why": "The source is acquired before temporary-file creation. The body-level exception handler ends before the destination context manager finalizes, so acquisition and finalization failures currently bypass necessary cleanup."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::set_key",
+    "why": "Writes updates and appended assignments through rewrite, exposing failures both during the yielded body and during destination finalization."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::unset_key",
+    "why": "Uses the same transaction for removals and must receive the same cleanup and error-propagation guarantees."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_transaction_finalization.py\n@@ -0,0 +1,153 @@\n+import builtins\n+import os\n+import stat\n+\n+import pytest\n+\n+import dotenv.main as main\n+\n+\n+def edit(path, operation, **kwargs):\n+    if operation == \"set\":\n+        return main.set_key(path, \"REMOVE\", \"new\", quote_mode=\"never\", **kwargs)\n+    return main.unset_key(path, \"REMOVE\", **kwargs)\n+\n+\n+def record_sources(monkeypatch, path):\n+    sources = []\n+    real_open = builtins.open\n+\n+    def tracked_open(file, *args, **kwargs):\n+        stream = real_open(file, *args, **kwargs)\n+        if os.fspath(file) == os.fspath(path):\n+            sources.append(stream)\n+        return stream\n+\n+    monkeypatch.setattr(builtins, \"open\", tracked_open)\n+    return sources\n+\n+\n+class FaultyOutput:\n+    def __init__(self, wrapped, phase, failure):\n+        self.wrapped = wrapped\n+        self.phase = phase\n+        self.failure = failure\n+\n+    def __getattr__(self, name):\n+        return getattr(self.wrapped, name)\n+\n+    def __enter__(self):\n+        return self\n+\n+    def __exit__(self, exc_type, exc, traceback):\n+        self.close()\n+\n+    def write(self, value):\n+        if self.phase == \"write\":\n+            raise self.failure\n+        return self.wrapped.write(value)\n+\n+    def flush(self):\n+        self.wrapped.flush()\n+        if self.phase == \"flush\":\n+            raise self.failure\n+\n+    def close(self):\n+        try:\n+            if self.phase == \"flush\":\n+                self.flush()\n+        finally:\n+            self.wrapped.close()\n+        if self.phase == \"close\":\n+            raise self.failure\n+\n+\n+@pytest.mark.parametrize(\"operation\", [\"set\", \"unset\"])\n+@pytest.mark.parametrize(\"phase\", [\"flush\", \"close\", \"write\"])\n+def test_edit_failure_is_atomic_and_cleans_up(tmp_path, monkeypatch, operation, phase):\n+    path = tmp_path / \".env\"\n+    original = b\"KEEP=one\\nREMOVE=old\\n\"\n+    path.write_bytes(original)\n+    sources = record_sources(monkeypatch, path)\n+    failure = OSError(\"injected output failure\")\n+    factory = main.tempfile.NamedTemporaryFile\n+    outputs = []\n+    replacements = []\n+\n+    def faulty_factory(*args, **kwargs):\n+        output = FaultyOutput(factory(*args, **kwargs), phase, failure)\n+        outputs.append(output)\n+        return output\n+\n+    monkeypatch.setattr(main.tempfile, \"NamedTemporaryFile\", faulty_factory)\n+    monkeypatch.setattr(main.os, \"replace\", lambda *args, **kwargs: replacements.append(args))\n+    with pytest.raises(OSError) as caught:\n+        edit(path, operation)\n+\n+    assert caught.value is failure\n+    assert path.read_bytes() == original\n+    assert replacements == []\n+    assert outputs and all(output.wrapped.closed for output in outputs)\n+    assert sources and all(source.closed for source in sources)\n+    assert list(tmp_path.glob(\".tmp_*\")) == []\n+\n+\n+@pytest.mark.parametrize(\"operation\", [\"set\", \"unset\"])\n+def test_creation_failure_closes_source(tmp_path, monkeypatch, operation):\n+    path = tmp_path / \".env\"\n+    original = b\"KEEP=one\\nREMOVE=old\\n\"\n+    path.write_bytes(original)\n+    sources = record_sources(monkeypatch, path)\n+    failure = OSError(\"injected temporary-file creation failure\")\n+    replacements = []\n+\n+    def unavailable(*args, **kwargs):\n+        raise failure\n+\n+    monkeypatch.setattr(main.tempfile, \"NamedTemporaryFile\", unavailable)\n+    monkeypatch.setattr(main.os, \"replace\", lambda *args, **kwargs: replacements.append(args))\n+    with pytest.raises(OSError) as caught:\n+        edit(path, operation)\n+\n+    assert caught.value is failure\n+    assert path.read_bytes() == original\n+    assert replacements == []\n+    assert sources and all(source.closed for source in sources)\n+    assert list(tmp_path.glob(\".tmp_*\")) == []\n+\n+\n+@pytest.mark.parametrize(\"operation\", [\"set\", \"unset\"])\n+def test_success_preserves_mode(tmp_path, operation):\n+    path = tmp_path / \".env\"\n+    path.write_text(\"KEEP=one\\nREMOVE=old\\n\", encoding=\"utf-8\")\n+    path.chmod(0o640)\n+    result = edit(path, operation)\n+    expected = \"KEEP=one\\nREMOVE=new\\n\" if operation == \"set\" else \"KEEP=one\\n\"\n+    assert result[0] is True\n+    assert path.read_text(encoding=\"utf-8\") == expected\n+    if os.name != \"nt\":\n+        assert stat.S_IMODE(path.stat().st_mode) == 0o640\n+    assert list(tmp_path.glob(\".tmp_*\")) == []\n+\n+\n+@pytest.mark.skipif(os.name == \"nt\", reason=\"Requires POSIX symlinks\")\n+@pytest.mark.parametrize(\"operation\", [\"set\", \"unset\"])\n+@pytest.mark.parametrize(\"follow\", [False, True])\n+def test_success_preserves_symlink_policy(tmp_path, operation, follow):\n+    target = tmp_path / \"target.env\"\n+    original = \"KEEP=one\\nREMOVE=old\\n\"\n+    target.write_text(original, encoding=\"utf-8\")\n+    target.chmod(0o640)\n+    path = tmp_path / \".env\"\n+    path.symlink_to(target)\n+\n+    edit(path, operation, follow_symlinks=follow)\n+    expected = \"KEEP=one\\nREMOVE=new\\n\" if operation == \"set\" else \"KEEP=one\\n\"\n+    assert path.read_text(encoding=\"utf-8\") == expected\n+    assert path.is_symlink() is follow\n+    if follow:\n+        assert target.read_text(encoding=\"utf-8\") == expected\n+        assert stat.S_IMODE(target.stat().st_mode) == 0o640\n+    else:\n+        assert target.read_text(encoding=\"utf-8\") == original\n+    assert list(tmp_path.glob(\".tmp_*\")) == []\n",
+  "include_failure_log": false,
+  "notes": "This is transactional hardening of defects already present in the supplied snapshot, verified with a new hidden-test patch rather than an artificial setup regression. On the unmodified code, four finalization cases fail because temporary files remain, and two creation-failure cases fail because captured source streams remain open. Body-failure, successful replacement, permission, and symlink cases provide preservation checks. Fault injection closes the underlying real temporary stream before reporting finalization failure, allowing deterministic cleanup checks without relying on garbage collection. The required production answer concerns rewrite's resource lifecycle and therefore differs substantively from the original CLI-encoding implementation.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Harden transactional file editing for `dotenv.set_key` and `dotenv.unset_key`. Fault injection shows that an edit can finish writing, then raise `OSError` while the temporary output is flushing or closing: the original file survives, but a `.tmp_` file is left behind. In either finalization-failure case, propagate the error, leave the original file untouched, and remove the temporary file without attempting replacement. If temporary-file creation fails after the input has been opened, close that input and propagate the creation error. Preserve cleanup and error propagation for failures inside the edit body, successful replacement, original permission handling, and both existing symlink policies. Keep public API signatures unchanged. Deliver a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts toward focused control-flow investigation and fault-injection verification. Reading rewrite directly is more useful than broad CLI exploration; a resource-lifecycle ledger helps track source acquisition, temporary-path availability, destination finalization, cleanup, and the replacement commit point.",
+  "change_type": "failure_condition",
+  "description": "Repair transactional cleanup in `src/dotenv/main.py::rewrite` when temporary-output finalization fails. A reproducible fault-injection report shows that the body of `set_key` completes, but flushing or closing the temporary destination raises OSError before replacement; the original file is intact but a `.tmp_` file remains. Require rewrite to remove the temporary file and propagate the finalization error without replacing the original. Also require the already-open source to be closed if temporary-file creation fails. Preserve successful replacement, original permission handling, symlink policy, and existing cleanup for exceptions raised inside the yielded body. Deliver a production-only unified diff; verify both `set_key` and `unset_key` callers.",
+  "expected_answer_change": "The answer must restructure rewrite's cleanup coverage so failures during destination flush or close cannot bypass temporary-file removal, and failures before destination acquisition cannot leak the source. Replacement must remain conditional on successful body execution and successful destination finalization. The verified result is original-file preservation, no leaked temporary file, closed source resources, and propagation of the relevant failure.",
+  "why_substantive": "The defect is in resource acquisition and context-manager exit, not CLI option propagation. The existing body-level exception handler does not cover destination finalization, and temporary-file creation occurs after opening the source. Correctness therefore depends on examining exception boundaries rather than changing encoding arguments."
+ },
+ "task_id": "theskumar-python-dotenv-r02-04-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_transaction_finalization.py::test_creation_failure_closes_source[set]",
+   "tests/test_transaction_finalization.py::test_creation_failure_closes_source[unset]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[close-set]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[close-unset]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[flush-set]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[flush-unset]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 271
+   },
+   "patch_files": [
+    "src/dotenv/main.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_transaction_finalization.py::test_creation_failure_closes_source[set]",
+   "tests/test_transaction_finalization.py::test_creation_failure_closes_source[unset]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[close-set]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[close-unset]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[flush-set]",
+   "tests/test_transaction_finalization.py::test_edit_failure_is_atomic_and_cleans_up[flush-unset]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,36 @@
+--- /dev/null
++++ b/tests/test_final_mapping_contract.py
+@@ -0,0 +1,33 @@
++from collections import UserDict
++from types import MappingProxyType
++
++import pytest
++
++from structlog._generic import BoundLogger
++from structlog.testing import ReturnLogger
++
++
++@pytest.mark.parametrize("factory", [UserDict, MappingProxyType])
++def test_final_mapping(factory):
++    result = factory({"event": "rendered", "request": "r"})
++    logger = BoundLogger(ReturnLogger(), [lambda *_: result], {"bound": 1})
++    assert logger.info("original") == ((), dict(result))
++    assert logger._context == {"bound": 1}
++
++
++def test_intermediate_mapping():
++    def first(_, __, ed):
++        return UserDict(ed)
++
++    def last(_, __, ed):
++        ed["added"] = True
++        return ed
++
++    logger = BoundLogger(ReturnLogger(), [first, last], {"bound": 1})
++    assert logger.info("event") == ((), {"bound": 1, "event": "event", "added": True})
++
++
++def test_invalid_result_still_rejected():
++    logger = BoundLogger(ReturnLogger(), [lambda *_: ["not", "kwargs"]], {})
++    with pytest.raises(ValueError, match="Last processor didn't return"):
++        logger.info("event")

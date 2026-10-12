@@ -1,0 +1,45 @@
+--- /dev/null
++++ b/jsonschema/tests/test_unevaluated_property_context.py
+@@ -0,0 +1,42 @@
++import pytest
++
++from jsonschema import Draft201909Validator, Draft202012Validator
++
++
++@pytest.mark.parametrize("Validator", [Draft201909Validator, Draft202012Validator])
++@pytest.mark.parametrize(
++    "subschema, instance, keywords, paths",
++    [
++        (
++            {"type": "string", "minLength": 3},
++            {"a": 1, "b": "x", "c": "good"},
++            ["type", "minLength"],
++            [["a"], ["b"]],
++        ),
++        (
++            {"allOf": [{"type": "string"}, {"enum": ["ok"]}]},
++            {"bad": 1, "good": "ok"},
++            ["type", "enum"],
++            [["bad"], ["bad"]],
++        ),
++    ],
++)
++def test_property_context(Validator, subschema, instance, keywords, paths):
++    schema = {
++        "properties": {
++            "payload": {"unevaluatedProperties": subschema},
++        },
++    }
++    errors = list(Validator(schema).iter_errors({"payload": instance}))
++    assert len(errors) == 1
++    error = errors[0]
++    assert error.validator == "unevaluatedProperties"
++    assert [child.validator for child in error.context] == keywords
++    assert [list(child.path) for child in error.context] == paths
++    assert [list(child.absolute_path) for child in error.context] == [
++        ["payload", *path] for path in paths
++    ]
++    assert all(child.parent is error for child in error.context)
++    assert all(child.instance == instance[path[0]] for child, path in zip(
++        error.context, paths,
++    ))

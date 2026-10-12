@@ -1,0 +1,132 @@
+{
+ "answer": "--- a/src/mistune/__init__.py\n+++ b/src/mistune/__init__.py\n@@ -58,18 +58,21 @@\n html: Markdown = create_markdown(escape=False, plugins=[\"strikethrough\", \"footnotes\", \"table\"])\n \n \n-__cached_parsers: Dict[Tuple[bool, Optional[RendererRef], Optional[Iterable[Any]]], Markdown] = {}\n+__cached_parsers: Dict[Tuple[bool, Optional[RendererRef], Optional[Tuple[PluginRef, ...]]], Markdown] = {}\n \n \n def markdown(\n     text: str,\n     escape: bool = True,\n     renderer: Optional[RendererRef] = \"html\",\n-    plugins: Optional[Iterable[Any]] = None,\n+    plugins: Optional[Iterable[PluginRef]] = None,\n ) -> Union[str, List[Dict[str, Any]]]:\n     if renderer == \"ast\":\n         # explicit and more similar to 2.x's API\n         renderer = None\n+    # Snapshot the plugin specification so lists and tuples share a cache key.\n+    # Keep None distinct from an explicitly empty collection.\n+    plugins = tuple(plugins) if plugins is not None else None\n     key = (escape, renderer, plugins)\n     if key in __cached_parsers:\n         return __cached_parsers[key](text)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 7024 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 7,024-character, two-file context supports direct inspection of the convenience API's cache key and the factory's plugin installation behavior. The reference completed without sub-calls. The solution requires reasoning about ordered specifications, list/tuple equivalence, snapshotting caller-owned lists, and preserving the distinction between None and empty collections."
+  },
+  "notes": "This is a natural, precisely specified API repair with a clear production-only unified-diff output requirement. Naming the affected public API and providing a reproducer does not disclose the implementation fix. The verified patch canonicalizes plugin collections before cache lookup while retaining None separately. The investigation is substantively different from the existing inline-scanning and late-registration tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The two selected production files total less than 16,000 characters. Reading them directly exposes the convenience wrapper's cache lookup, the factory's plugin resolution, and constructor-time installation. The substantive reasoning is about parser identity across successive calls, ordered plugin specifications, caller-owned list mutation, and the distinction between None and an empty collection; delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/mistune/__init__.py",
+    "src/mistune/markdown.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/__init__.py",
+    "symbol": "src/mistune/__init__.py::markdown",
+    "why": "The convenience function includes the supplied plugin collection directly in a dictionary key, so a list raises TypeError before parser construction. Its cache-hit path bypasses construction and therefore plugin installation."
+   },
+   {
+    "path": "src/mistune/__init__.py",
+    "symbol": "src/mistune/__init__.py::create_markdown",
+    "why": "The factory accepts iterable plugin references, resolves them in iteration order, and passes the resulting plugins to Markdown."
+   },
+   {
+    "path": "src/mistune/markdown.py",
+    "symbol": "src/mistune/markdown.py::Markdown.__init__",
+    "why": "Plugins are invoked sequentially during construction. Installation counts and hook order can therefore verify parser reuse and distinguish reversed specifications."
+   }
+  ],
+  "expected_answer": "--- a/src/mistune/__init__.py\n+++ b/src/mistune/__init__.py\n@@ -78,9 +78,11 @@\n     if renderer == \"ast\":\n         # explicit and more similar to 2.x's API\n         renderer = None\n+    if plugins is not None:\n+        plugins = tuple(plugins)\n     key = (escape, renderer, plugins)\n     if key in __cached_parsers:\n         return __cached_parsers[key](text)\n \n     md = create_markdown(escape=escape, renderer=renderer, plugins=plugins)\n     # improve the speed for markdown parser creation\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_convenience_plugin_collections.py\n@@ -0,0 +1,70 @@\n+from unittest import TestCase\n+from unittest.mock import patch\n+\n+import mistune\n+\n+\n+class TestConveniencePluginCollections(TestCase):\n+    def test_named_plugins_match_factory(self):\n+        text = \"~~removed~~ **kept**\"\n+        for renderer in (\"html\", \"ast\"):\n+            expected = mistune.create_markdown(\n+                renderer=renderer, plugins=[\"strikethrough\"]\n+            )(text)\n+            for plugins in ([\"strikethrough\"], (\"strikethrough\",)):\n+                with self.subTest(renderer=renderer, plugins=plugins):\n+                    self.assertEqual(\n+                        mistune.markdown(text, renderer=renderer, plugins=plugins),\n+                        expected,\n+                    )\n+\n+    def test_order_reuse_and_caller_list_mutation(self):\n+        installed = []\n+\n+        def first(md):\n+            installed.append((\"first\", md))\n+            md.after_render_hooks.append(lambda md, result, state: result + \"A\")\n+\n+        def second(md):\n+            installed.append((\"second\", md))\n+            md.after_render_hooks.append(lambda md, result, state: result + \"B\")\n+\n+        renderer = mistune.HTMLRenderer()\n+        plugins = [first, second]\n+        expected = \"<p>x</p>\\nAB\"\n+        self.assertEqual(mistune.markdown(\"x\", renderer=renderer, plugins=plugins), expected)\n+        self.assertEqual([name for name, md in installed], [\"first\", \"second\"])\n+        original = installed[0][1]\n+        self.assertIs(installed[1][1], original)\n+        self.assertEqual(\n+            mistune.markdown(\"x\", renderer=renderer, plugins=(first, second)), expected\n+        )\n+        self.assertEqual(len(installed), 2)\n+\n+        plugins.reverse()\n+        self.assertEqual(\n+            mistune.markdown(\"x\", renderer=renderer, plugins=plugins), \"<p>x</p>\\nBA\"\n+        )\n+        self.assertEqual([name for name, md in installed], [\"first\", \"second\", \"second\", \"first\"])\n+        self.assertIsNot(installed[2][1], original)\n+        self.assertIs(installed[2][1], installed[3][1])\n+        self.assertEqual(\n+            mistune.markdown(\"x\", renderer=renderer, plugins=(second, first)), \"<p>x</p>\\nBA\"\n+        )\n+        self.assertEqual(len(installed), 4)\n+        plugins.reverse()\n+        self.assertEqual(mistune.markdown(\"x\", renderer=renderer, plugins=plugins), expected)\n+        self.assertEqual(len(installed), 4)\n+\n+    def test_none_and_empty_have_distinct_reusable_parsers(self):\n+        renderer = mistune.HTMLRenderer()\n+        with patch.object(mistune, \"create_markdown\", wraps=mistune.create_markdown) as factory:\n+            self.assertEqual(mistune.markdown(\"x\", renderer=renderer, plugins=None), \"<p>x</p>\\n\")\n+            self.assertEqual(factory.call_count, 1)\n+            for plugins in ([], (), [], ()):\n+                self.assertEqual(\n+                    mistune.markdown(\"x\", renderer=renderer, plugins=plugins), \"<p>x</p>\\n\"\n+                )\n+                self.assertEqual(factory.call_count, 2)\n+            self.assertEqual(mistune.markdown(\"y\", renderer=renderer, plugins=None), \"<p>y</p>\\n\")\n+            self.assertEqual(factory.call_count, 2)\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against a defect already present in the pinned snapshot, so no artificial setup regression is needed. The new hidden tests fail on the current code's list-based cache lookup. They verify named-plugin rendering against the public factory, observable callable-plugin installation and hook order, list/tuple cache equivalence, mutation-safe specifications, and distinct None/empty parser construction. Fresh renderer instances isolate the tests from pre-existing module-level cache entries. The expected repair changes the convenience wrapper rather than InlineParser.register, and is different from the original task's verified answer.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "mistune.markdown(\"~~removed~~\", plugins=[\"strikethrough\"]) raises TypeError, although create_markdown accepts the same plugin list. Make the convenience API accept both lists and tuples of plugin references, including names and callable plugins, while retaining parser caching. With the other arguments unchanged, lists and tuples containing the same entries in the same order must reuse one Markdown instance, without installing the plugins again. Different plugin orders must use separate instances and install plugins in the supplied order. A later mutation of a caller's list must not change an already-cached specification. Treat plugins=None as a separate cached configuration from an explicitly empty list or tuple; the two empty collection forms must share an instance. Preserve existing rendering and create_markdown behavior. Return a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains persistent-state reasoning but shifts it to the module-level convenience-parser cache and the lifecycle of plugin collections. Evidence comes from comparing markdown with create_markdown and following constructor-time plugin installation, rather than inspecting inline token fast paths.",
+  "change_type": "dependency",
+  "description": "Repair plugin installation through the markdown convenience API rather than Markdown.use. A caller passes plugins=[\"strikethrough\"] to src/mistune/__init__.py::markdown and receives TypeError before plugin registration, although the same list works with create_markdown. Require markdown to accept list and tuple plugin collections, preserve plugin order, and reuse its cached Markdown instance for equivalent list and tuple specifications. Keep None distinct from an explicitly empty collection. Return a production-only unified diff. Investigate markdown, __cached_parsers, create_markdown, and src/mistune/markdown.py::Markdown.__init__.",
+  "expected_answer_change": "The repair belongs in src/mistune/__init__.py::markdown: canonicalize supported plugin collections into an ordered, hashable representation before cache lookup and use that same representation when creating the parser. Equivalent lists and tuples should share a cache entry, reversed plugin order should not, and None should remain distinguishable from an empty tuple. InlineParser.register should remain unchanged.",
+  "why_substantive": "The failure occurs in the convenience wrapper's cache-key construction, before either parser registration or inline trigger scanning. The accepted cache-invalidation patch has no effect. The investigation follows a different caller and must reconcile the public plugin-collection contract with parser reuse."
+ },
+ "task_id": "lepture-mistune-r01-00-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_named_plugins_match_factory",
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_none_and_empty_have_distinct_reusable_parsers",
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_order_reuse_and_caller_list_mutation"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1158
+   },
+   "patch_files": [
+    "src/mistune/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_named_plugins_match_factory",
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_none_and_empty_have_distinct_reusable_parsers",
+   "tests/test_convenience_plugin_collections.py::TestConveniencePluginCollections::test_order_reuse_and_caller_list_mutation"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

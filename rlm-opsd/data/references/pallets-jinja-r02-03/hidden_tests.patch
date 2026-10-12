@@ -1,0 +1,66 @@
+--- /dev/null
++++ b/tests/test_lru_resize.py
+@@ -0,0 +1,63 @@
++import copy
++import pickle
++
++import pytest
++
++from jinja2.utils import LRUCache
++
++
++def populated():
++    cache = LRUCache(4)
++    for key in "abcd":
++        cache[key] = key.upper()
++    cache["b"]
++    return cache
++
++
++def test_shrink_grow_and_new_insertions():
++    cache = populated()
++    cache.resize(2)
++    assert cache.capacity == 2
++    assert cache.keys() == ["b", "d"]
++    assert list(cache.items()) == [("b", "B"), ("d", "D")]
++    cache["e"] = "E"
++    assert cache.keys() == ["e", "b"]
++    cache.resize(5)
++    for key in "fgh":
++        cache[key] = key.upper()
++    assert cache.capacity == 5
++    assert cache.keys() == ["h", "g", "f", "e", "b"]
++
++
++@pytest.mark.parametrize("capacity", [0, -1])
++def test_nonpositive_capacity_is_atomic(capacity):
++    cache = populated()
++    with pytest.raises(ValueError):
++        cache.resize(capacity)
++    assert cache.capacity == 4
++    assert cache.keys() == ["b", "d", "c", "a"]
++
++
++@pytest.mark.parametrize("capacity", [True, False, 1.5, "2", None])
++def test_noninteger_capacity_is_atomic(capacity):
++    cache = populated()
++    with pytest.raises(TypeError):
++        cache.resize(capacity)
++    assert cache.capacity == 4
++    assert cache.keys() == ["b", "d", "c", "a"]
++
++
++@pytest.mark.parametrize("clone", [copy.copy, lambda c: pickle.loads(pickle.dumps(c))])
++def test_resized_copy_and_pickle(clone):
++    cache = populated()
++    cache.resize(2)
++    other = clone(cache)
++    assert other.capacity == 2
++    assert list(other.items()) == list(cache.items())
++    other.resize(1)
++    assert other.keys() == ["b"]
++    assert cache.keys() == ["b", "d"]
++    cache.resize(2)
++    assert cache.keys() == ["b", "d"]
++    cache["x"] = "X"
++    assert cache.keys() == ["x", "b"]

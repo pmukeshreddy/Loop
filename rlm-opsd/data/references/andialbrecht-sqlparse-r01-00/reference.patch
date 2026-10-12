@@ -1,0 +1,13 @@
+--- a/sqlparse/keywords.py
++++ b/sqlparse/keywords.py
+@@ -67,7 +67,9 @@
+         """
+         opener_end, tag, ttype = self.openers[pos]
+         starts, ends = self._closers[tag]
+-        idx = bisect_left(starts, pos)
++        # A closer must start after the entire opener, not at the
++        # opener itself or at an overlapping delimiter within it.
++        idx = bisect_left(starts, opener_end)
+         if idx == len(starts):
+             return None
+         return ends[idx], ttype

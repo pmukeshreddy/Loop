@@ -82,7 +82,7 @@ def test_smoke_runner_runs_real_cpu_step_and_saves_honest_evidence(tmp_path,monk
         closed.append(True)
         if fault=='cleanup':raise RuntimeError('injected cleanup failure')
     backend=SimpleNamespace(trainer=trainer,model=model,kind='cpu_tensor_fixture',close=close)
-    plan=SimpleNamespace(prefixes=prefixes(),task={'info':{'task_id':'unit','family':'small_context_control'}},
+    plan=SimpleNamespace(prefixes=prefixes(),task={'info':{'task_id':'unit','family':'direct_solve'}},
                          provenance={'source':'TEST CPU FIXTURE; NOT MODEL RESULTS'},snapshot=tmp_path)
     monkeypatch.setattr(module,'prepare_smoke',lambda config:plan)
     monkeypatch.setattr(module,'load_backend',lambda *args:backend)

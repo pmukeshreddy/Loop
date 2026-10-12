@@ -1,0 +1,140 @@
+{
+ "answer": "--- a/src/wtforms/widgets/core.py\n+++ b/src/wtforms/widgets/core.py\n@@ -248,7 +248,7 @@\n \n     def __call__(self, field, **kwargs):\n         if getattr(field, \"checked\", field.data):\n-            kwargs[\"checked\"] = True\n+            kwargs.setdefault(\"checked\", True)\n         return super().__call__(field, **kwargs)\n \n \n@@ -265,7 +265,7 @@\n \n     def __call__(self, field, **kwargs):\n         if field.checked:\n-            kwargs[\"checked\"] = True\n+            kwargs.setdefault(\"checked\", True)\n         return super().__call__(field, **kwargs)\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002908181064933932,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff applies the same explicit-attribute precedence rule to both checked-state widgets while preserving their automatic defaults. The supplied verification evidence covers selected and unselected values, rendering defaults, call-time overrides, and preservation of field data and selected option state. The reference also inspected its constructed final diff before finishing.",
+   "inspect_locate": "The reference made nine targeted searches without printing the whole context. The task requires connecting public field rendering, render_kw and call-time argument merging, generated radio-option state, and boolean HTML attribute serialization; locating either named field alone does not establish the correct change."
+  },
+  "notes": "A natural, precisely scoped rendering bug report with an unambiguous production-only unified-diff deliverable. It specifies observable requirements without naming the defective widget methods or prescribing the implementation. The two affected controls share the same precedence defect, so the requirements form one coherent task rather than unrelated checks. No listed accepted task duplicates this investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must update both checked-state widgets consistently while retaining automatic checked defaults and avoiding changes to field data or option state.",
+   "inspect_locate": "Checked state travels through BooleanField data or generated radio-option state, normalized rendering defaults, widget overrides, and boolean HTML serialization."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::CheckboxInput.__call__",
+    "why": "Currently overwrites explicit checked attributes when its automatic condition is true."
+   },
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::RadioInput.__call__",
+    "why": "Has the same overwrite behavior for selected radio options."
+   },
+   {
+    "path": "src/wtforms/meta.py",
+    "symbol": "src/wtforms/meta.py::DefaultMeta.render_field",
+    "why": "Already gives call-time rendering attributes precedence over render_kw defaults."
+   },
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::html_params",
+    "why": "Already omits boolean attributes whose value is False."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_explicit_checked_rendering.py\n@@ -0,0 +1,38 @@\n+import pytest\n+\n+from wtforms.fields import BooleanField\n+from wtforms.fields import RadioField\n+from wtforms.form import Form\n+\n+\n+@pytest.mark.parametrize(\"field_type\", [BooleanField, RadioField])\n+def test_checked_precedence(field_type):\n+    kwargs = {\"choices\": [(\"a\", \"A\"), (\"b\", \"B\")]} if field_type is RadioField else {}\n+    class F(Form):\n+        item = field_type(render_kw={\"checked\": False}, **kwargs)\n+\n+    form = F(item=\"a\" if field_type is RadioField else True)\n+    node = next(iter(form.item)) if field_type is RadioField else form.item\n+    assert ' checked' not in str(node())\n+    assert ' checked' not in str(node(checked=False))\n+    assert ' checked' in str(node(checked=True))\n+    assert form.item.data == (\"a\" if field_type is RadioField else True)\n+    if field_type is RadioField:\n+        assert node.checked is True\n+\n+    other = F(item=\"b\" if field_type is RadioField else False)\n+    node = next(iter(other.item)) if field_type is RadioField else other.item\n+    assert ' checked' not in str(node())\n+    assert ' checked' in str(node(checked=True))\n+    assert other.item.data == (\"b\" if field_type is RadioField else False)\n+\n+\n+@pytest.mark.parametrize(\"field_type\", [BooleanField, RadioField])\n+def test_checked_default(field_type):\n+    kwargs = {\"choices\": [(\"a\", \"A\"), (\"b\", \"B\")]} if field_type is RadioField else {}\n+    class F(Form):\n+        item = field_type(**kwargs)\n+    form = F(item=\"a\" if field_type is RadioField else True)\n+    node = next(iter(form.item)) if field_type is RadioField else form.item\n+    assert ' checked' in str(node())\n+    assert ' checked' not in str(node(checked=False))\n",
+  "include_failure_log": false,
+  "notes": "RadioField call-time attributes apply to its list wrapper; the request deliberately targets the individual bound options. The tests use public iteration to obtain them.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Allow explicit rendering attributes to override automatic checked state. For `BooleanField` and individual options obtained by iterating a `RadioField`, an explicit `checked=False` must suppress the HTML attribute even when the field or option is selected. This must work both through `render_kw` defaults and through arguments supplied when calling the bound field or option, with call-time arguments taking precedence. Explicit `checked=True` must still render the attribute for an unselected value. When no checked attribute is supplied, retain the current automatic behavior. Rendering must not change field data or a radio option's checked state. Deliver a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_explicit_checked_rendering.py::test_checked_default[BooleanField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_default[RadioField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_precedence[BooleanField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_precedence[RadioField]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 8,
+    "passed": 350
+   },
+   "patch_files": [
+    "src/wtforms/widgets/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_explicit_checked_rendering.py::test_checked_default[BooleanField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_default[RadioField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_precedence[BooleanField]",
+   "tests/test_explicit_checked_rendering.py::test_checked_precedence[RadioField]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,101 @@
+--- /dev/null
++++ b/tests/test_contextual_diagnostic_state.py
+@@ -0,0 +1,98 @@
++import re
++import unittest
++from types import SimpleNamespace
++
++from lark.common import LexerConf
++from lark.exceptions import UnexpectedCharacters, UnexpectedToken
++from lark.lexer import BasicLexer, ContextualLexer, LexerState, PatternRE, PatternStr, TerminalDef
++from lark.utils import TextSlice
++
++
++def counter_fields(state):
++    ctr = state.line_ctr
++    return tuple(getattr(ctr, name) for name in
++                 ("char_pos", "line", "column", "line_start_pos", "newline_char"))
++
++
++class RecordingContext:
++    def __init__(self, lexer):
++        self.lexer = lexer
++        self.error = None
++        self.before = None
++        self.previous = None
++
++    def next_token(self, state, parser_state):
++        try:
++            return self.lexer.next_token(state, parser_state)
++        except UnexpectedCharacters as error:
++            self.error = error
++            self.before = counter_fields(state)
++            self.previous = state.last_token
++            raise
++
++
++class TestContextualDiagnosticState(unittest.TestCase):
++    def test_probe_does_not_consume_live_state(self):
++        for use_bytes in (False, True):
++            for root_only_ignore in (False, True):
++                for recognized in (False, True):
++                    with self.subTest(use_bytes=use_bytes,
++                                      root_only_ignore=root_only_ignore,
++                                      recognized=recognized):
++                        self.check_probe(use_bytes, root_only_ignore, recognized)
++
++    def check_probe(self, use_bytes, root_only_ignore, recognized):
++        terminals = [
++            TerminalDef("PRE", PatternStr("a")),
++            TerminalDef("EXPECTED", PatternStr("b")),
++            TerminalDef("OTHER", PatternRE("c+")),
++            TerminalDef("WS", PatternRE("[ \\n]+")),
++            TerminalDef("ROOT_SKIP", PatternStr("~\n")),
++        ]
++        conf = LexerConf(terminals, re, ignore=["WS"], use_bytes=use_bytes)
++        lexer = ContextualLexer(conf, {0: {"PRE"}, 1: {"EXPECTED"}})
++        if root_only_ignore:
++            root_conf = LexerConf(terminals, re, ignore=["WS", "ROOT_SKIP"],
++                                  use_bytes=use_bytes)
++            lexer.root_lexer = BasicLexer(root_conf)
++        recorder = RecordingContext(lexer.lexers[1])
++        lexer.lexers[1] = recorder
++        prefix = "prefix\na \n"
++        probe_prefix = "~\n" if root_only_ignore else ""
++        text = prefix + probe_prefix + ("c" if recognized else "@") + "c"
++        if use_bytes:
++            text = text.encode("ascii")
++        state = LexerState(TextSlice(text, len("prefix\n"), len(text) - 1))
++        parser_state = SimpleNamespace(position=0)
++        stream = lexer.lex(state, parser_state)
++        previous = next(stream)
++        parser_state.position = 1
++        exception_type = UnexpectedToken if recognized else UnexpectedCharacters
++        with self.assertRaises(exception_type) as caught:
++            next(stream)
++        error = caught.exception
++        self.assertEqual(counter_fields(state), recorder.before)
++        self.assertEqual(recorder.before, (len(prefix), 3, 1, len(prefix),
++                                           b"\n" if use_bytes else "\n"))
++        self.assertIs(state.last_token, previous)
++        self.assertIs(recorder.previous, previous)
++        self.assertIs(error.token_history[0], previous)
++        self.assertIs(error.state, parser_state)
++        if recognized:
++            token = error.token
++            token_pos = len(prefix) + len(probe_prefix)
++            token_line = 4 if root_only_ignore else 3
++            self.assertEqual(token.type, "OTHER")
++            self.assertEqual(token.value, b"c" if use_bytes else "c")
++            self.assertEqual((token.start_pos, token.end_pos), (token_pos, token_pos + 1))
++            self.assertEqual((token.line, token.column, token.end_line, token.end_column),
++                             (token_line, 1, token_line, 2))
++            self.assertEqual((error.pos_in_stream, error.line, error.column),
++                             (token_pos, token_line, 1))
++            self.assertEqual(error.expected, {"EXPECTED"})
++        else:
++            self.assertIs(error, recorder.error)
++            self.assertEqual((error.pos_in_stream, error.line, error.column),
++                             (len(prefix), 3, 1))
++            self.assertEqual(error.allowed, {"EXPECTED"})
++            self.assertEqual(error.char, "~" if root_only_ignore else "@")

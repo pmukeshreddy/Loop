@@ -1,0 +1,136 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -87,6 +87,22 @@\n                 submodule = import_module(module_name)\n                 module.__dict__[k] = submodule\n \n+        for k, v in slow_mod.__dict__.items():\n+            if (\n+                k.startswith('_')\n+                or k in fast_mod.__dict__\n+                or k in module.__dict__\n+            ):\n+                continue\n+            if (\n+                isinstance(v, types.ModuleType)\n+                and v.__package__ == slow_mod.__name__\n+            ):\n+                package, dot, submodules = v.__name__.partition('.')\n+                module_name = ''.join(['tlz', dot, submodules])\n+                v = import_module(module_name)\n+            module.__dict__[k] = v\n+\n \n tlz_loader = TlzLoader()\n sys.meta_path.append(tlz_loader)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.9298041496994377,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 8,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "addition",
+    "anchor",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5157 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference assembled the production diff programmatically and inspected the final value before finishing. The verified fixture covers supplemental object identities, owned-child mirroring, foreign modules, private-name exclusion, existing bindings, and unchanged metadata and backend preference.",
+   "direct_solve": "The reference worked directly with a compact, three-document context and used no sub-calls. The change requires reasoning about supplemental exports, backend preference, module ownership, and preservation of existing target bindings."
+  },
+  "notes": "A natural, precisely scoped feature request with an explicit production-only unified-diff format. The question specifies desired behavior without revealing a defective symbol or patch. The investigation depends on the repository's loader policy, and supplemental slow-backend exports are distinct from the previously accepted loader tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must combine supplemental namespace construction with child-module treatment while preserving the original policy. Checking the assembled hunks against the exact source is useful because changes affect more than one stage of population.",
+   "direct_solve": "The relevant source is small enough to understand directly without delegation. The reasoning concerns the interaction between fast exports, supplemental slow exports, ownership predicates, and metadata."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "The current initial merge and export loop consider only the fast namespace, so slow-only exports are absent."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "The existing ownership test and backend-prefix substitution establish how supplemental owned modules should be mirrored."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "Existing metadata, module identity, and pipe assertions constrain preservation of current behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_supplemental_exports.py\n@@ -0,0 +1,52 @@\n+import types\n+\n+import toolz\n+import tlz._build_tlz as builder\n+\n+\n+def test_slow_only_public_exports_are_added(monkeypatch):\n+    fast = types.ModuleType('cytoolz.audit', 'fast docs')\n+    slow = types.ModuleType('toolz.audit', 'slow docs')\n+    fast.__package__ = 'cytoolz.audit'\n+    slow.__package__ = 'toolz.audit'\n+    slow.__file__ = 'slow.py'\n+    fast.shared = object()\n+    slow.shared = object()\n+    fast.fast_only = object()\n+    slow.fallback = {'items': [1, 2]}\n+    slow.alias = toolz.pipe\n+    slow._private = object()\n+    slow.preexisting = object()\n+    owned = types.ModuleType('toolz.audit.child')\n+    owned.__package__ = slow.__name__\n+    slow.child = owned\n+    foreign = types.ModuleType('outside.child')\n+    foreign.__package__ = 'outside'\n+    slow.foreign = foreign\n+    mirrored = types.ModuleType('tlz.audit.child')\n+    modules = {'cytoolz.audit': fast, 'toolz.audit': slow,\n+               'tlz.audit.child': mirrored}\n+    calls = []\n+\n+    def resolve(name):\n+        calls.append(name)\n+        return modules[name]\n+\n+    monkeypatch.setattr(builder, 'import_module', resolve)\n+    target = types.ModuleType('tlz.audit')\n+    marker = object()\n+    target.preexisting = marker\n+    builder.TlzLoader().exec_module(target)\n+    assert target.fallback is slow.fallback\n+    assert target.alias is toolz.pipe\n+    assert target.child is mirrored\n+    assert target.foreign is foreign\n+    assert target.shared is fast.shared\n+    assert target.fast_only is fast.fast_only\n+    assert target.preexisting is marker\n+    assert not hasattr(target, '_private')\n+    assert target.__name__ == 'tlz.audit'\n+    assert target.__package__ == 'tlz.audit'\n+    assert target.__doc__ == 'fast docs'\n+    assert target.__file__ == 'slow.py'\n+    assert calls == ['cytoolz.audit', 'toolz.audit', 'tlz.audit.child']\n",
+  "include_failure_log": false,
+  "notes": "The acceptance fixture distinguishes owned and foreign slow modules and includes an unhashable supplemental value. The task does not require supplementing private exports.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Extend `tlz` namespace population to expose public exports that exist only in the pure-Python backend. When both corresponding backends are available, names in the slow backend that do not start with `_` and are absent from the fast backend should be added unless the target already has that name. Preserve their object identities, except that a supplemental `ModuleType` whose `__package__` equals the slow backend's `__name__` must be imported and exposed under its corresponding `tlz` name, using the same prefix substitution as existing child mirroring. Foreign module-valued exports must remain untouched. Do not add slow-only private names or change metadata handling, fast-backend preference for shared names, or the existing `toolz.pipe` exception. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_supplemental_exports.py::test_slow_only_public_exports_are_added"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 193
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_supplemental_exports.py::test_slow_only_public_exports_are_added"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

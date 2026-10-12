@@ -1,0 +1,90 @@
+--- /dev/null
++++ b/tests/test_token_update_subclasses.py
+@@ -0,0 +1,87 @@
++import warnings
++
++import pytest
++
++from lark import Token
++
++
++class DerivedToken(Token):
++    __slots__ = ()
++
++
++class LeafToken(DerivedToken):
++    __slots__ = ()
++
++
++POSITION_FIELDS = (
++    "start_pos", "line", "column", "end_line", "end_column", "end_pos"
++)
++POSITIONS = [
++    (7, 2, 3, 4, 5, 12),
++    (None,) * 6,
++    (0, None, 0, None, 0, None),
++] + [
++    tuple(None if i == missing else value for i, value in enumerate((7, 2, 3, 4, 5, 12)))
++    for missing in range(6)
++]
++
++
++@pytest.mark.parametrize("token_class", [Token, DerivedToken, LeafToken])
++@pytest.mark.parametrize("positions", POSITIONS)
++def test_update_retains_concrete_class_and_positions(token_class, positions):
++    source = token_class("OLD", "original", *positions)
++    cases = [
++        ((), {}, "OLD", "original"),
++        (("NEW",), {}, "NEW", "original"),
++        ((), {"type": "NEW"}, "NEW", "original"),
++        ((), {"value": "replacement"}, "OLD", "replacement"),
++        (("NEW", "replacement"), {}, "NEW", "replacement"),
++        ((), {"type": "NEW", "value": "replacement"}, "NEW", "replacement"),
++        ((), {"type": None, "value": None}, "OLD", "original"),
++        ((None, ""), {}, "OLD", ""),
++        ((), {"type": "", "value": ""}, "", ""),
++        ((), {"value": 0}, "OLD", 0),
++        ((), {"value": False}, "OLD", False),
++    ]
++    for args, kwargs, expected_type, expected_value in cases:
++        result = source.update(*args, **kwargs)
++        assert result is not source
++        assert type(result) is token_class
++        assert result.type == expected_type
++        assert result.value == expected_value
++        assert type(result.value) is type(expected_value)
++        assert str(result) == str(expected_value)
++        assert tuple(getattr(result, field) for field in POSITION_FIELDS) == positions
++        assert source.type == "OLD"
++        assert source.value == "original"
++        assert str(source) == "original"
++        assert tuple(getattr(source, field) for field in POSITION_FIELDS) == positions
++
++
++@pytest.mark.parametrize("token_class", [Token, DerivedToken, LeafToken])
++@pytest.mark.parametrize("replacement", ["NEW", "", None])
++def test_update_deprecated_keyword(token_class, replacement):
++    source = token_class("OLD", "original", *POSITIONS[2])
++    with pytest.warns(DeprecationWarning, match="`type_` is deprecated use `type` instead") as caught:
++        result = source.update(type_=replacement, value="")
++    assert len(caught) == 1
++    assert type(result) is token_class
++    assert result is not source
++    assert result.type == ("OLD" if replacement is None else replacement)
++    assert result.value == ""
++    assert str(result) == ""
++    assert tuple(getattr(result, field) for field in POSITION_FIELDS) == POSITIONS[2]
++
++
++@pytest.mark.parametrize("token_class", [Token, DerivedToken, LeafToken])
++@pytest.mark.parametrize("replacement", ["NEW", None])
++def test_update_conflicting_type_keywords(token_class, replacement):
++    source = token_class("OLD", "original")
++    with warnings.catch_warnings(record=True) as caught:
++        warnings.simplefilter("always")
++        with pytest.raises(TypeError) as error:
++            source.update(type=replacement, type_="OTHER")
++    assert str(error.value) == "Error: using both 'type' and the deprecated 'type_' as arguments."
++    assert len(caught) == 1
++    assert caught[0].category is DeprecationWarning
++    assert str(caught[0].message) == "`type_` is deprecated use `type` instead"

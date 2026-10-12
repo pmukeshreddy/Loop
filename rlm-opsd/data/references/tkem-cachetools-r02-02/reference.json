@@ -1,0 +1,179 @@
+{
+ "answer": [
+  "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+  "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+  "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_fifo.py::FIFOCacheTest::test_fifo\",\n  \"tests/test_lru.py::LRUCacheTest::test_lru\",\n  \"tests/test_lfu.py::LFUCacheTest::test_lfu\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "index",
+    "n",
+    "p",
+    "s",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 19878,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 7,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "7 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final node-ID list was computed in code and inspected after construction. The verified result combines the affected tests across the three cache policies.",
+   "inspect_locate": "The reference execution performed 12 repository-context searches to locate policy implementations and relevant tests. Identifying the affected tests requires distinguishing replacement-write priority changes from unchanged read behavior and eviction followed by reinsertion.",
+   "recursive_decomposition": "Seven sub-calls were made, but their results did not reach the final answer. Recursive decomposition was attempted, not established as useful to the completed solution."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request with an explicit answer format. It does not disclose failing tests or prescribe solver operations. The answer depends on repository-specific tests and eviction semantics, and the investigation is distinct from the previously accepted accounting and expiration repairs."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact union of newly failing node IDs across the policy investigations, requiring deduplication and checking that inherited tests are attributed to their concrete test classes.",
+   "inspect_locate": "Policy implementations and their tests must be located in the repository, including inherited mapping tests and callers that exercise replacement writes.",
+   "recursive_decomposition": "The proposal has three independent policy-specific consequences: FIFO insertion order, LRU recency, and LFU frequency. Each requires judging its own read and replacement semantics before combining the affected tests."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::Cache.__setitem__",
+    "why": "Capacity adjustment can evict the replacement target, distinguishing a surviving replacement from a reinserted entry."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::FIFOCache.__setitem__",
+    "why": "Currently changes FIFO order for existing keys."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::LRUCache.__setitem__",
+    "why": "Currently touches both new and replacement assignments."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::LFUCache.__setitem__",
+    "why": "Currently increments the frequency of a surviving replacement."
+   },
+   {
+    "path": "tests/test_fifo.py",
+    "symbol": "tests/test_fifo.py::FIFOCacheTest.test_fifo_update_existing",
+    "why": "Observes the eviction consequence of a replacement write."
+   },
+   {
+    "path": "tests/test_lru.py",
+    "symbol": "tests/test_lru.py::LRUCacheTest.test_lru_update_existing",
+    "why": "Observes replacement recency without an intervening read."
+   },
+   {
+    "path": "tests/test_lfu.py",
+    "symbol": "tests/test_lfu.py::LFUCacheTest.test_lfu_update_existing",
+    "why": "Relies on replacement increasing the use count."
+   }
+  ],
+  "expected_answer": [
+   "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+   "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+   "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe intentionally leaves reads unchanged. Membership in the policy metadata is checked after base insertion, so eviction of the replacement target still leads to normal new-entry initialization. Verify the expected set against the entire existing suite.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -182,10 +182,8 @@\n \n     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):\n         cache_setitem(self, key, value)\n-        if key in self.__order:\n-            self.__order.move_to_end(key)\n-        else:\n+        if key not in self.__order:\n             self.__order[key] = None\n \n     def __delitem__(self, key, cache_delitem=Cache.__delitem__):\n         cache_delitem(self, key)\n@@ -243,7 +241,6 @@\n     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):\n         cache_setitem(self, key, value)\n         if key in self.__links:\n-            self.__touch(key)\n             return\n         root = self.__root\n         link = root.next\n         if link.count != 1:\n@@ -319,9 +316,10 @@\n         return value\n \n     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):\n         cache_setitem(self, key, value)\n-        self.__touch(key)\n+        if key not in self.__order:\n+            self.__touch(key)\n \n     def __delitem__(self, key, cache_delitem=Cache.__delitem__):\n         cache_delitem(self, key)\n         del self.__order[key]\n",
+  "question": "We plan to make replacement writes leave eviction priority unchanged in `FIFOCache`, `LRUCache`, and `LFUCache`: replacing a key that survives the capacity adjustment would no longer move it to the end of FIFO or LRU order, or increment its LFU use count. A key evicted while making room and then stored again would still receive the normal new-entry priority. Successful reads and every other cache policy would retain their current behavior. Which existing tests would newly fail after this change? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "tkem-cachetools-r02-02",
+ "truth": {
+  "answer": [
+   "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+   "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+   "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+    "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+    "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+    "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+    "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_fifo.py::FIFOCacheTest::test_fifo_update_existing",
+   "tests/test_lfu.py::LFUCacheTest::test_lfu_update_existing",
+   "tests/test_lru.py::LRUCacheTest::test_lru_update_existing"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

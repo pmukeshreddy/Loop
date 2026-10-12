@@ -1,0 +1,116 @@
+--- /dev/null
++++ b/tests/test_reprocess_submission.py
+@@ -0,0 +1,113 @@
++from datetime import datetime
++
++from tests.common import DummyPostData
++from wtforms.fields import DateTimeField
++from wtforms.fields import Field
++from wtforms.fields import StringField
++from wtforms.form import Form
++from wtforms.validators import Disabled
++from wtforms.validators import InputRequired
++
++
++def test_reprocessing_input_required():
++    class RequiredForm(Form):
++        value = StringField(validators=[InputRequired()])
++
++    form = RequiredForm(DummyPostData(value=["sent"]))
++    field = form.value
++    assert form.validate()
++
++    form.process(formdata=None, data={"value": "python"})
++    assert form.value is field
++    assert field.data == "python"
++    assert not form.validate()
++    assert field.errors == ["This field is required."]
++    assert field.raw_data is None
++
++    form.process(DummyPostData(value=["again"]))
++    assert form.validate()
++    assert field.raw_data == ["again"]
++
++
++def test_reprocessing_disabled():
++    class DisabledForm(Form):
++        value = StringField(validators=[Disabled()])
++
++    form = DisabledForm(DummyPostData(value=["sent"]))
++    field = form.value
++    assert not form.validate()
++
++    form.process(formdata=None, data={"value": "python"})
++    assert form.value is field
++    assert field.data == "python"
++    assert form.validate()
++    assert field.errors == []
++    assert field.raw_data is None
++
++    form.process(DummyPostData(), data={"value": "python"})
++    assert field.raw_data == []
++    assert form.validate()
++
++
++def test_reprocessing_datetime_rendering():
++    class DateTimeForm(Form):
++        value = DateTimeField()
++
++    submitted = "2025-04-06 07:08:09"
++    replacement = datetime(2030, 2, 3, 4, 5, 6)
++    form = DateTimeForm(DummyPostData(value=[submitted]))
++    field = form.value
++    assert field.data == datetime(2025, 4, 6, 7, 8, 9)
++    assert f'value="{submitted}"' in str(field())
++
++    form.process(formdata=None, data={"value": replacement})
++    assert form.value is field
++    assert field.data == replacement
++    assert field.object_data == replacement
++    assert 'value="2030-02-03 04:05:06"' in str(field())
++    assert field.raw_data is None
++
++
++def test_reprocessing_defaults_filters_and_empty_submission():
++    class SubmissionField(Field):
++        def process_formdata(self, valuelist):
++            self.data = valuelist[0] if valuelist else "empty"
++
++    class LifecycleForm(Form):
++        value = SubmissionField(
++            default=lambda: "default",
++            filters=[lambda value: f"{value}:field"],
++        )
++
++    form = LifecycleForm(DummyPostData(value=["sent"]))
++    field = form.value
++    assert field.data == "sent:field"
++
++    form.process(
++        formdata=None,
++        data={"value": "python"},
++        extra_filters={"value": [lambda value: f"{value}:extra"]},
++    )
++    assert form.value is field
++    assert field.raw_data is None
++    assert field.object_data == "python"
++    assert field.data == "python:field:extra"
++
++    form.process(formdata=None)
++    assert field.raw_data is None
++    assert field.object_data == "default"
++    assert field.data == "default:field"
++
++    form.process(DummyPostData(), data={"value": "python"})
++    assert field.raw_data == []
++    assert field.object_data == "python"
++    assert field.data == "empty:field"
++
++    form.process(DummyPostData(other=["unrelated"]), data={"value": "python"})
++    assert field.raw_data == []
++    assert field.data == "empty:field"
++
++    form.process(DummyPostData(value=["new"]), data={"value": "python"})
++    assert field.raw_data == ["new"]
++    assert field.object_data == "python"
++    assert field.data == "new:field"

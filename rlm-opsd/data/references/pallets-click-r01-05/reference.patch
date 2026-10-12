@@ -1,0 +1,23 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -2515,8 +2515,18 @@
+ 
+                 # A string from default_map must be split for multi-value
+                 # parameters, matching value_from_envvar behavior.
+-                if isinstance(value, str) and self.nargs != 1:
+-                    value = self.type.split_envvar_value(value)
++                if isinstance(value, str):
++                    if (
++                        isinstance(self, Option)
++                        and self.multiple
++                        and not self.is_flag
++                        and not self.count
++                    ):
++                        value = self.type.split_envvar_value(value)
++                        if self.nargs != 1:
++                            value = batch(value, self.nargs)
++                    elif self.nargs != 1:
++                        value = self.type.split_envvar_value(value)
+ 
+         if value is UNSET:
+             default_value = self.get_default(ctx)

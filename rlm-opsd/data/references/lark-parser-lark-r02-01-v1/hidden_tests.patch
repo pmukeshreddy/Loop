@@ -1,0 +1,79 @@
+--- /dev/null
++++ b/tests/test_dotall_coordinates.py
+@@ -0,0 +1,76 @@
++import re
++import unittest
++from unittest.mock import patch
++
++from lark.common import LexerConf
++from lark.lexer import BasicLexer, LexerThread, LineCounter, PatternRE, PatternStr, TerminalDef
++from lark.utils import TextSlice
++
++
++class TestDotallCoordinates(unittest.TestCase):
++    def test_coordinates(self):
++        for use_bytes in (False, True):
++            for sliced in (False, True):
++                for inline in (False, True):
++                    for mode in ('emitted', 'ignored', 'callback'):
++                        with self.subTest(use_bytes=use_bytes, sliced=sliced, inline=inline, mode=mode):
++                            seen = []
++                            def callback(token):
++                                seen.append(token)
++                                return token
++                            dot = PatternRE('.', flags=('s',) if inline else ())
++                            terminals = [
++                                TerminalDef('DOT', dot),
++                                TerminalDef('WORD', PatternRE('[a-z]+'), priority=2),
++                            ]
++                            conf = LexerConf(
++                                terminals, re,
++                                ignore=() if mode == 'emitted' else ('DOT',),
++                                callbacks={'DOT': callback} if mode == 'callback' else {},
++                                g_regex_flags=0 if inline else re.DOTALL,
++                                use_bytes=use_bytes,
++                            )
++                            raw = 'p\nq\nzTAIL' if sliced else '\nz'
++                            if use_bytes:
++                                raw = raw.encode('ascii')
++                            text = TextSlice(raw, 3, 5) if sliced else raw
++                            thread = LexerThread.from_text(BasicLexer(conf), text)
++                            tokens = list(thread.lex(None))
++                            start = 3 if sliced else 0
++                            line = 2 if sliced else 1
++                            column = 2 if sliced else 1
++                            def positions(token):
++                                return (token.start_pos, token.line, token.column,
++                                        token.end_pos, token.end_line, token.end_column)
++                            if mode == 'emitted':
++                                self.assertEqual([t.type for t in tokens], ['DOT', 'WORD'])
++                                dot_token = tokens[0]
++                            else:
++                                self.assertEqual([t.type for t in tokens], ['WORD'])
++                                dot_token = seen[0] if mode == 'callback' else None
++                            if dot_token is not None:
++                                self.assertEqual(positions(dot_token),
++                                                 (start, line, column, start + 1, line + 1, 1))
++                            self.assertEqual(positions(tokens[-1]),
++                                             (start + 1, line + 1, 1, start + 2, line + 1, 2))
++                            self.assertEqual(thread.state.line_ctr.char_pos, start + 2)
++
++    def test_newline_free_fast_path(self):
++        for flags in (0, re.DOTALL):
++            with self.subTest(flags=flags):
++                terminals = [
++                    TerminalDef('LITERAL', PatternStr('.'), priority=2),
++                    TerminalDef('WORD', PatternRE('[a-z]+'), priority=2),
++                    TerminalDef('DOT', PatternRE('.')),
++                ]
++                lexer = BasicLexer(LexerConf(terminals, re, g_regex_flags=flags))
++                calls = []
++                original_feed = LineCounter.feed
++                def recording_feed(counter, value, test_newline=True):
++                    calls.append((value, test_newline))
++                    return original_feed(counter, value, test_newline)
++                with patch.object(LineCounter, 'feed', recording_feed):
++                    tokens = list(LexerThread.from_text(lexer, 'a.x!').lex(None))
++                self.assertEqual([t.type for t in tokens], ['WORD', 'LITERAL', 'WORD', 'DOT'])
++                self.assertEqual(calls[:3], [('a', False), ('.', False), ('x', False)])
++                self.assertEqual(calls[3], ('!', bool(flags & re.DOTALL)))

@@ -1,0 +1,180 @@
+{
+ "answer": "--- a/src/dotenv/main.py\n+++ b/src/dotenv/main.py\n@@ -160,21 +160,21 @@\n         source = io.StringIO(\"\")\n         original_mode = None\n \n-    with tempfile.NamedTemporaryFile(\n-        mode=\"w\",\n-        encoding=encoding,\n-        delete=False,\n-        prefix=\".tmp_\",\n-        dir=os.path.dirname(os.path.abspath(path)),\n-    ) as dest:\n-        dest_path = pathlib.Path(dest.name)\n-        error = None\n-\n-        try:\n-            with source:\n+    with source:\n+        with tempfile.NamedTemporaryFile(\n+            mode=\"w\",\n+            encoding=encoding,\n+            delete=False,\n+            prefix=\".tmp_\",\n+            dir=os.path.dirname(os.path.abspath(path)),\n+        ) as dest:\n+            dest_path = pathlib.Path(dest.name)\n+            error = None\n+\n+            try:\n                 yield (source, dest)\n-        except BaseException as err:\n-            error = err\n+            except BaseException as err:\n+                error = err\n \n     if error is None:\n         try:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 8,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 15206 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the single-file context with no sub-calls and produced a focused production patch. The task requires local reasoning about context-manager entry failures, source-stream ownership, and the rewrite commit boundary rather than repository-wide investigation."
+  },
+  "notes": "This is a natural, repository-dependent resource-cleanup request with precise failure and preservation requirements and a clear unified-diff output format. It describes the required behavior without prescribing the implementation. The symlink cases exercise the same cleanup defect rather than adding unrelated requirements, and the task is substantively different from the existing CLI symlink-policy task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only src/dotenv/main.py. The task requires reasoning about resource ownership across context-manager entry, exception propagation, and the commit boundary in rewrite; repository-wide investigation or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/dotenv/main.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::rewrite",
+    "why": "The source is opened before temporary-output setup, but its context-manager scope currently begins only after temporary-output entry succeeds. The separate lstat exception handler already closes the source."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::set_key",
+    "why": "Setting an assignment delegates source and destination ownership to rewrite, including the selected symlink policy."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::unset_key",
+    "why": "Removing an existing assignment uses the same rewriting lifecycle through an independent public mutation API."
+   },
+   {
+    "path": "tests/test_main.py",
+    "symbol": "tests/test_main.py::test_rewrite_closes_file_handle_on_lstat_failure",
+    "why": "The existing fault-injection test covers the contrasting metadata-failure cleanup path, which must remain intact."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_rewrite_setup_cleanup.py\n@@ -0,0 +1,79 @@\n+import builtins\n+import os\n+import stat\n+import sys\n+\n+import pytest\n+\n+import dotenv\n+import dotenv.main as main\n+\n+\n+@pytest.mark.parametrize(\"operation\", [\"set\", \"unset\"])\n+@pytest.mark.parametrize(\"error_type\", [PermissionError, OSError])\n+@pytest.mark.parametrize(\"failure_stage\", [\"create\", \"enter\"])\n+@pytest.mark.parametrize(\"path_kind\", [\"regular\", \"replace-link\", \"follow-link\"])\n+def test_temp_output_setup_closes_source(\n+    tmp_path, monkeypatch, operation, error_type, failure_stage, path_kind\n+):\n+    if path_kind != \"regular\" and sys.platform == \"win32\":\n+        pytest.skip(\"symlinks require elevated privileges on Windows\")\n+\n+    target = tmp_path / \"target.env\"\n+    original = b\"a=x\\nb=y\\n\"\n+    target.write_bytes(original)\n+    if sys.platform != \"win32\":\n+        target.chmod(0o640)\n+    original_mode = stat.S_IMODE(target.stat().st_mode)\n+    path = target\n+    link_value = None\n+    if path_kind != \"regular\":\n+        path = tmp_path / \".env\"\n+        path.symlink_to(target.name)\n+        link_value = os.readlink(path)\n+\n+    handles = []\n+    error = error_type(\"temporary output unavailable\")\n+\n+    def tracking_open(*args, **kwargs):\n+        handle = builtins.open(*args, **kwargs)\n+        handles.append(handle)\n+        return handle\n+\n+    class BrokenContext:\n+        def __enter__(self):\n+            raise error\n+\n+        def __exit__(self, *args):\n+            raise AssertionError(\"failed entry must not invoke __exit__\")\n+\n+    def temporary_output(*args, **kwargs):\n+        if failure_stage == \"create\":\n+            raise error\n+        return BrokenContext()\n+\n+    monkeypatch.setattr(main, \"open\", tracking_open, raising=False)\n+    monkeypatch.setattr(main.tempfile, \"NamedTemporaryFile\", temporary_output)\n+\n+    try:\n+        with pytest.raises(error_type) as caught:\n+            if operation == \"set\":\n+                dotenv.set_key(\n+                    path, \"a\", \"new\", follow_symlinks=path_kind == \"follow-link\"\n+                )\n+            else:\n+                dotenv.unset_key(\n+                    path, \"a\", follow_symlinks=path_kind == \"follow-link\"\n+                )\n+        assert caught.value is error\n+        assert handles\n+        assert target.read_bytes() == original\n+        assert stat.S_IMODE(target.stat().st_mode) == original_mode\n+        if link_value is not None:\n+            assert path.is_symlink()\n+            assert os.readlink(path) == link_value\n+        assert not list(tmp_path.glob(\".tmp_*\"))\n+        assert all(handle.closed for handle in handles)\n+    finally:\n+        for handle in handles:\n+            handle.close()\n",
+  "include_failure_log": false,
+  "notes": "This implements an existing unmet cleanup guarantee using hidden acceptance tests rather than introducing an artificial production regression. The suggestion's request for solver-written tests is replaced by a new hidden test file, as required by the task format. The 24 cases retain references to opened source handles, inject constructor or context-entry failures, and check exception identity, unchanged contents and modes, preserved symlinks, and handle closure before test cleanup. On the supplied implementation, these cases fail at the handle-closure assertion. Run the existing suite as well, particularly the lstat cleanup, file-mode preservation, and symlink mutation tests. The resulting production repair concerns rewrite resource ownership, not CLI options, and therefore differs from the original accepted answer.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make dotenv file rewriting release its source stream when temporary-output setup fails. If creating or entering the temporary-output context raises PermissionError or OSError after the source has been opened, the source must be closed before that same exception propagates. This must hold for both set_key and unset_key, on regular files and on existing symlinks with either follow_symlinks policy. Failure must leave the original file contents and permissions unchanged, preserve any symlink and its target, and leave no temporary output behind when creation fails before producing a file. Preserve successful rewriting, mode preservation, symlink behavior, and cleanup on lstat failure or exceptions from the rewrite body. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts toward direct inspection of a small context-manager implementation and fault-injection verification. The useful reasoning is lifecycle analysis across context entry and exception propagation; repository-wide searching or delegated investigations are unnecessary.",
+  "change_type": "failure_condition",
+  "description": "Repair resource cleanup when temporary-output creation fails. In src/dotenv/main.py::rewrite, an existing source file is opened before tempfile.NamedTemporaryFile is entered. If temporary-file creation raises PermissionError or OSError, the source handle must be closed and the original exception propagated without modifying the original file or a followed symlink's target. Deliver production changes plus tests in tests/test_main.py that track opened source handles and inject temporary-file creation failures. Use test_rewrite_closes_file_handle_on_lstat_failure as a contrasting, already-covered cleanup path.",
+  "expected_answer_change": "The answer requires restructuring resource ownership in rewrite so the source is protected while temporary-output setup occurs. Tests must prove closure on setup failure, preservation of the exception and original contents, and continued operation of existing mode-preservation and symlink behavior. No CLI option or wrapper-signature changes are needed.",
+  "why_substantive": "This investigates a failure before the rewrite body is reached, not symlink-policy exposure or the default symlink regression listed among the other tasks. The current source-closing scope begins inside the temporary-file context, so failure to establish that context bypasses cleanup."
+ },
+ "task_id": "theskumar-python-dotenv-r02-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-PermissionError-unset]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 24,
+   "full_suite": {
+    "failed": 0,
+    "passed": 281
+   },
+   "patch_files": [
+    "src/dotenv/main.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[follow-link-enter-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[regular-enter-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-create-PermissionError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-OSError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-OSError-unset]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-PermissionError-set]",
+   "tests/test_rewrite_setup_cleanup.py::test_temp_output_setup_closes_source[replace-link-enter-PermissionError-unset]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

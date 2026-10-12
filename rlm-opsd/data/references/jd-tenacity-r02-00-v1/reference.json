@@ -1,0 +1,174 @@
+{
+ "answer": [
+  "tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts\",\n  \"tests/test_asyncio.py::TestAsyncRetrying::test_after\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0016833938358602036,
+  "facts": {
+   "code_blocks": 11,
+   "context_searches": 21,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "batch",
+    "batches",
+    "contract",
+    "files",
+    "n",
+    "records",
+    "repo",
+    "results",
+    "tests"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 18730,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 10,
+   "turns": 13,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 21 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "13 turns; variables reused across turns: ['batch', 'batches', 'contract', 'files', 'n', 'records', 'repo', 'results', 'tests']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference combined candidate findings into a computed, deduplicated final collection and inspected it before finishing. Executable impact verification established the resulting test ID.",
+   "inspect_locate": "The reference execution searched repository context and used scoped subcalls to distinguish controller-driven callbacks from direct helper calls and to examine synchronous and asynchronous consumers of the shared action sequence.",
+   "persistent_state": "The investigation retained the proposed action order and candidate findings across turns. This was relevant because moving `after` across the stop decision and evaluating wait twice can change callback-maintained state and scheduled sleep values."
+  },
+  "notes": "The question specifies an exact behavioral change and an unambiguous output format without revealing failing tests or prescribing investigation operations. Although the double wait evaluation is unusual, it is explicitly part of the proposed contract and constrains the impact analysis. This variation is substantive: unlike its parent, it suppresses exhausted-outcome callbacks and changes policy evaluation order and frequency. Identifying affected tests requires repository-specific reasoning."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The answer is an exact set of complete pytest node IDs. Findings about exhaustion callbacks and policy evaluation must be combined, checked against test assertions and adapter inheritance, and deduplicated.",
+   "inspect_locate": "The shared controller builds the callback sequence, but its observable effects must be located across callback tests, custom policy tests, and synchronous and asynchronous execution adapters. Direct calls to callback helpers must be distinguished from controller-driven calls.",
+   "persistent_state": "The investigation must retain the revised action order and candidate-test findings while separating accepted outcomes, exhausted retry-eligible outcomes, and scheduled retries. Callback-maintained state and repeated wait evaluation can affect later decisions."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._post_retry_check_actions",
+    "why": "Separates accepted outcomes from retry-eligible outcomes and schedules the preliminary wait and stop evaluations."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._post_stop_check_actions",
+    "why": "Separates exhaustion handling from scheduling another attempt; the probe places after and the second wait evaluation only in the scheduling branch."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._run_wait",
+    "why": "Each evaluation overwrites upcoming_sleep, so the second result controls the subsequent retry action."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._run_stop",
+    "why": "Evaluates the stop policy using the preliminary upcoming_sleep and records its decision before after can run."
+   },
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.iter",
+    "why": "Awaits the inherited dynamically appended actions, including asynchronous callbacks and both wait evaluations."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestRetryingName.test_get_fn_name_decorator",
+    "why": "Requires an after callback to capture state from a call that exhausts its one-attempt stop policy."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestBeforeAfterAttempts.test_after_attempts",
+    "why": "Exercises callback-maintained state on scheduled retries and distinguishes this contract from invoking after on accepted outcomes."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe intentionally evaluates wait twice on scheduled retries: once so the stop policy sees a populated upcoming_sleep, and again after after to preserve the requested scheduled-retry ordering. Stop is evaluated only once. Determine the complete failure set by comparing baseline and probe suite runs, including tests/test_asyncio.py, whose contents were omitted from the supplied file listing. The one-attempt exhausted callback-capture test provides a concrete failure distinct from the original task's accepted-outcome failures.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": "--- a/tenacity/__init__.py\n+++ b/tenacity/__init__.py\n@@ -508,10 +508,7 @@\n         if not (self.iter_state.is_explicit_retry or self.iter_state.retry_run_result):\n             self._add_action_func(lambda rs: rs.outcome.result())\n             return\n \n-        if self.after is not None:\n-            self._add_action_func(self.after)\n-\n         self._add_action_func(self._run_wait)\n         self._add_action_func(self._run_stop)\n         self._add_action_func(self._post_stop_check_actions)\n@@ -532,6 +529,11 @@\n             self._add_action_func(exc_check)\n             return\n \n+        if self.after is not None:\n+            self._add_action_func(self.after)\n+\n+        self._add_action_func(self._run_wait)\n+\n         def next_action(rs: \"RetryCallState\") -> None:\n             sleep = rs.upcoming_sleep\n             rs.next_action = RetryAction(sleep)\n",
+  "question": "Would the existing suite tolerate making `after` a notification only for outcomes that schedule another attempt? Under this proposed contract, accepted results and exceptions declined by the retry policy would remain unchanged, and retry-eligible outcomes that exhaust the stop policy would no longer invoke `after`.\n\nFor each retry-eligible outcome, including an explicit `TryAgain`, first evaluate the wait policy to populate `upcoming_sleep`, then evaluate the stop policy once. If it stops, retain the existing exhaustion handling without calling `after`. Otherwise, invoke `after`, evaluate the wait policy again, perform retry bookkeeping, invoke `before_sleep`, and sleep. The second wait result determines the scheduled sleep and bookkeeping; do not reevaluate the stop policy after `after`. This deliberately means two wait-policy calls for each scheduled retry, even when `after` is unset. Leave `before` and accepted-outcome handling unchanged, and apply the same sequence to synchronous and asynchronous controllers.\n\nWhich existing tests would newly fail with that change? Return a JSON list of complete pytest node IDs, without duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains repository-wide inspection and exact-set verification, but shifts candidate selection to exhaustion paths and policy dependencies. Maintaining a branch-and-order ledger is useful for separating retry eligibility from the decision to schedule another attempt and for checking synchronous and asynchronous adapters.",
+  "change_type": "constraint",
+  "description": "Review a different callback contract: invoke `after` only when a completed outcome actually leads to another scheduled attempt. Accepted outcomes and outcomes that exhaust the stop policy must not invoke it. For scheduled retries, preserve the order `after`, wait evaluation, retry bookkeeping, `before_sleep`, sleep; evaluate the stop policy before `after`, with `upcoming_sleep` already populated. Return the exact set of existing pytest node IDs that newly fail. Investigate `BaseRetrying._post_retry_check_actions`, `_run_wait`, `_run_stop`, and `_post_stop_check_actions` in `tenacity/__init__.py`, their asynchronous execution through `AsyncRetrying.iter` in `tenacity/asyncio/__init__.py`, and callback assertions in `tests/test_tenacity.py` and `tests/test_asyncio.py`.",
+  "expected_answer_change": "The answer depends on tests that require `after` on the last exhausted attempt or depend on its running before wait or stop evaluation. In particular, `tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator` would fail because its one-attempt exhausted call would no longer populate `captured`. The original failure in `TestBeforeAfterAttempts.test_after_attempts` would not arise from an extra accepted-outcome callback.",
+  "why_substantive": "The original expands `after` to accepted outcomes. This variation removes it from exhausted outcomes and changes its position relative to stop evaluation. It therefore requires tracing exhaustion, callback side effects on policies, and wait/stop ordering rather than locating assertions affected by an extra final-success callback."
+ },
+ "task_id": "jd-tenacity-r02-00-v1",
+ "truth": {
+  "answer": [
+   "tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_tenacity.py::TestRetryingName::test_get_fn_name_decorator"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

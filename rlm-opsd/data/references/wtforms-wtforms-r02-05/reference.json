@@ -1,0 +1,147 @@
+{
+ "answer": "--- a/src/wtforms/utils.py\n+++ b/src/wtforms/utils.py\n@@ -26,9 +26,8 @@\n     compatibility with strptime).\n     \"\"\"\n     return [\n-        re.sub(\n-            r\"[-#]\",\n-            \"\",\n+        _DATETIME_STRIP_ZERO_PADDING_FORMATS_RE.sub(\n+            lambda match: match[0].replace(_LEADING_SYMBOL, \"\"),\n             format,\n         )\n         for format in formats\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 14,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "log"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 7817,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 383392 chars; 14 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 14 targeted context searches and a focused sub-call, without printing the whole repository context. The investigation connected failures across date and datetime field families to shared parse-format preparation in utils.py, while preserving the distinction between parsing and display formats."
+  },
+  "notes": "This is a natural regression-repair request with a precise unified-diff output requirement. The question identifies the affected behavior but does not disclose the defective symbol or fix. The verified patch repairs the shared cleanup logic rather than individual fields, and the fail-to-pass tests cover multiple affected field families. Existing accepted datetime tasks concern canonicalized rendering or ISO week-year handling, not this format-cleanup regression."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "Failures occur in multiple datetime field families, while their shared parse-format preparation lives outside those field classes. The log, parsing loops, and display-format handling must be connected."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/utils.py",
+    "symbol": "src/wtforms/utils.py::clean_datetime_format_for_strptime",
+    "why": "Transforms display formats into parsing formats and must distinguish directive modifiers from literal characters."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeField.__init__",
+    "why": "Keeps original display formats separately from cleaned parsing formats."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateField.process_formdata",
+    "why": "Consumes the shared cleaned formats and reports failures through processing errors."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.process",
+    "why": "Records parsing ValueErrors that later appear in validation results."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup introduces an overly broad modifier-cleaning expression. Compare against the baseline and include the real failure log, excluding pre-existing failures from regression assessment.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows new failures across date and datetime input processing after a format-compatibility cleanup. Repair the regression without changing the established accepted formats or display-format behavior. Account for the shared parsing infrastructure rather than special-casing the failing field classes. Return a unified diff against production files, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/wtforms/utils.py\n+++ b/src/wtforms/utils.py\n@@ -28,11 +28,11 @@\n     \"\"\"\n     return [\n         re.sub(\n-            _DATETIME_STRIP_ZERO_PADDING_FORMATS_RE,\n-            lambda m: m[0].replace(_LEADING_SYMBOL, \"\"),\n+            r\"[-#]\",\n+            \"\",\n             format,\n         )\n         for format in formats\n     ]\n \n"
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r02-05",
+ "truth": {
+  "fail_to_pass": [
+   "tests/fields/test_date.py::test_basic",
+   "tests/fields/test_datetime.py::test_basic",
+   "tests/fields/test_datetime.py::test_microseconds",
+   "tests/fields/test_datetime.py::test_multiple_formats",
+   "tests/fields/test_datetimelocal.py::test_basic",
+   "tests/fields/test_datetimelocal.py::test_microseconds",
+   "tests/fields/test_datetimelocal.py::test_separators",
+   "tests/fields/test_html5.py::test_simple",
+   "tests/fields/test_month.py::test_basic",
+   "tests/fields/test_week.py::test_basic"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 8,
+    "passed": 346
+   },
+   "patch_files": [
+    "src/wtforms/utils.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/fields/test_date.py::test_basic",
+   "tests/fields/test_datetime.py::test_basic",
+   "tests/fields/test_datetime.py::test_microseconds",
+   "tests/fields/test_datetime.py::test_multiple_formats",
+   "tests/fields/test_datetimelocal.py::test_basic",
+   "tests/fields/test_datetimelocal.py::test_microseconds",
+   "tests/fields/test_datetimelocal.py::test_separators",
+   "tests/fields/test_html5.py::test_simple",
+   "tests/fields/test_month.py::test_basic",
+   "tests/fields/test_week.py::test_basic"
+  ],
+  "ground_truth_symbols": [
+   "src/wtforms/utils.py::clean_datetime_format_for_strptime"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 336,
+  "stability_runs": 3
+ }
+}

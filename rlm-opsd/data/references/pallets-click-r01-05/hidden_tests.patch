@@ -1,0 +1,85 @@
+--- /dev/null
++++ b/tests/test_default_map_repeated_strings.py
+@@ -0,0 +1,89 @@
++import os
++
++import pytest
++
++import click
++
++
++def test_repeated_scalar_default_map_string():
++    option = click.Option(["--number"], type=int, multiple=True)
++    command = click.Command("tool", params=[option])
++    ctx = command.make_context("tool", [], default_map={"number": "1 2 3"})
++    assert ctx.params["number"] == (1, 2, 3)
++    assert ctx.get_parameter_source("number") is click.ParameterSource.DEFAULT_MAP
++
++
++@pytest.mark.parametrize("text", ["1 2 3 4", "1 2 3 4 5"])
++def test_repeated_fixed_arity_default_map_string(text):
++    option = click.Option(["--pair"], type=int, nargs=2, multiple=True)
++    command = click.Command("tool", params=[option])
++    ctx = command.make_context("tool", [], default_map={"pair": text})
++    assert ctx.params["pair"] == ((1, 2), (3, 4))
++    assert ctx.get_parameter_source("pair") is click.ParameterSource.DEFAULT_MAP
++
++
++def test_default_map_string_uses_type_delimiter():
++    option = click.Option(["--path"], type=click.Path(), multiple=True)
++    command = click.Command("tool", params=[option])
++    text = os.pathsep.join(["alpha", "beta"])
++    ctx = command.make_context("tool", [], default_map={"path": text})
++    assert ctx.params["path"] == ("alpha", "beta")
++
++
++def test_inherited_callable_default_map_string_is_acquired_once():
++    calls = []
++
++    def default():
++        calls.append(True)
++        return "1 2 3 4"
++
++    option = click.Option(["--pair"], type=int, nargs=2, multiple=True)
++    child = click.Command("child", params=[option])
++    parent = click.Context(
++        click.Group("root"), default_map={"child": {"pair": default}}
++    )
++    ctx = child.make_context("child", [], parent=parent)
++    assert calls == [True]
++    assert ctx.params["pair"] == ((1, 2), (3, 4))
++    assert ctx.get_parameter_source("pair") is click.ParameterSource.DEFAULT_MAP
++
++
++@pytest.mark.parametrize("mapped, expected", [(["1", "2"], (1, 2)), (None, ())])
++def test_explicit_sequence_and_none_default_map_values(mapped, expected):
++    option = click.Option(["--number"], type=int, multiple=True, default=[9])
++    command = click.Command("tool", params=[option])
++    ctx = command.make_context("tool", [], default_map={"number": mapped})
++    assert ctx.params["number"] == expected
++    assert ctx.get_parameter_source("number") is click.ParameterSource.DEFAULT_MAP
++
++
++def test_explicit_nested_sequence_default_map_value():
++    option = click.Option(["--pair"], type=int, nargs=2, multiple=True)
++    command = click.Command("tool", params=[option])
++    ctx = command.make_context(
++        "tool", [], default_map={"pair": [["1", "2"], ["3", "4"]]}
++    )
++    assert ctx.params["pair"] == ((1, 2), (3, 4))
++
++
++def test_cli_and_environment_keep_precedence(monkeypatch):
++    option = click.Option(
++        ["--number"], type=int, multiple=True, envvar="CLICK_MAP_NUMBERS"
++    )
++    command = click.Command("tool", params=[option])
++    monkeypatch.setenv("CLICK_MAP_NUMBERS", "7 8")
++    ctx = command.make_context("tool", [], default_map={"number": "1 2"})
++    assert ctx.params["number"] == (7, 8)
++    assert ctx.get_parameter_source("number") is click.ParameterSource.ENVIRONMENT
++    ctx = command.make_context(
++        "tool", ["--number", "6"], default_map={"number": "1 2"}
++    )
++    assert ctx.params["number"] == (6,)
++    assert ctx.get_parameter_source("number") is click.ParameterSource.COMMANDLINE

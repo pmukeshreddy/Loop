@@ -1,0 +1,167 @@
+--- a/h11/_connection.py
++++ b/h11/_connection.py
+@@ -1,5 +1,6 @@
+ # This contains the main Connection class. Everything in h11 revolves around
+ # this.
++from functools import partial
+ from typing import (
+     Any,
+     Callable,
+@@ -23,7 +24,12 @@
+     Response,
+ )
+ from ._headers import get_comma_header, has_expect_100_continue, set_comma_header
+-from ._readers import READERS, ReadersType
++from ._readers import (
++    maybe_read_from_IDLE_client,
++    maybe_read_from_SEND_RESPONSE_server,
++    READERS,
++    ReadersType,
++)
+ from ._receivebuffer import ReceiveBuffer
+ from ._state import (
+     _SWITCH_CONNECT,
+@@ -162,14 +168,24 @@
+             exceeded, then :meth:`next_event` will raise
+             :exc:`RemoteProtocolError`.
+ 
++        allow_obsolete_folding (bool):
++            If ``True`` (the default), unfold obsolete header continuation
++            lines beginning with space or tab. If ``False``, reject them with
++            :exc:`RemoteProtocolError`. This applies to received request and
++            response headers and chunked trailers, across all request/response
++            cycles, and does not affect outgoing messages.
++
+     """
+ 
+     def __init__(
+         self,
+         our_role: Type[Sentinel],
+         max_incomplete_event_size: int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
++        *,
++        allow_obsolete_folding: bool = True,
+     ) -> None:
+         self._max_incomplete_event_size = max_incomplete_event_size
++        self._allow_obsolete_folding = allow_obsolete_folding
+         # State and role tracking
+         if our_role not in (CLIENT, SERVER):
+             raise ValueError(f"expected CLIENT or SERVER, not {our_role!r}")
+@@ -331,11 +347,24 @@
+             framing_type, args = _body_framing(
+                 cast(bytes, self._request_method), cast(Union[Request, Response], event)
+             )
++            if io_dict is READERS and framing_type == "chunked":
++                return io_dict[SEND_BODY][framing_type](  # type: ignore[index]
++                    *args, allow_obsolete_folding=self._allow_obsolete_folding
++                )
+             return io_dict[SEND_BODY][framing_type](*args)  # type: ignore[index]
+         else:
+             # General case: the io_dict just has the appropriate reader/writer
+             # for this state
+-            return io_dict.get((role, state))  # type: ignore[return-value]
++            io_object = io_dict.get((role, state))
++            if io_dict is READERS and io_object in (
++                maybe_read_from_IDLE_client,
++                maybe_read_from_SEND_RESPONSE_server,
++            ):
++                return partial(
++                    io_object,  # type: ignore[arg-type]
++                    allow_obsolete_folding=self._allow_obsolete_folding,
++                )
++            return io_object  # type: ignore[return-value]
+ 
+     # This must be called after any action that might have caused
+     # self._cstate.states to change.
+--- a/h11/_readers.py
++++ b/h11/_readers.py
+@@ -40,12 +40,16 @@
+ obs_fold_re = re.compile(rb"[ \t]+")
+ 
+ 
+-def _obsolete_line_fold(lines: Iterable[bytes]) -> Iterable[bytes]:
++def _obsolete_line_fold(
++    lines: Iterable[bytes], allow_obsolete_folding: bool = True
++) -> Iterable[bytes]:
+     it = iter(lines)
+     last: Optional[bytes] = None
+     for line in it:
+         match = obs_fold_re.match(line)
+         if match:
++            if not allow_obsolete_folding:
++                raise LocalProtocolError("obsolete line folding is not allowed")
+             if last is None:
+                 raise LocalProtocolError("continuation line at start of headers")
+             if not isinstance(last, bytearray):
+@@ -62,9 +66,9 @@
+ 
+ 
+ def _decode_header_lines(
+-    lines: Iterable[bytes],
++    lines: Iterable[bytes], allow_obsolete_folding: bool = True
+ ) -> Iterable[Tuple[bytes, bytes]]:
+-    for line in _obsolete_line_fold(lines):
++    for line in _obsolete_line_fold(lines, allow_obsolete_folding):
+         matches = validate(header_field_re, line, "illegal header line: {!r}", line)
+         yield (matches["field_name"], matches["field_value"])
+ 
+@@ -72,7 +76,9 @@
+ request_line_re = re.compile(request_line.encode("ascii"))
+ 
+ 
+-def maybe_read_from_IDLE_client(buf: ReceiveBuffer) -> Optional[Request]:
++def maybe_read_from_IDLE_client(
++    buf: ReceiveBuffer, allow_obsolete_folding: bool = True
++) -> Optional[Request]:
+     lines = buf.maybe_extract_lines()
+     if lines is None:
+         if buf.is_next_line_obviously_invalid_request_line():
+@@ -84,7 +90,9 @@
+         request_line_re, lines[0], "illegal request line: {!r}", lines[0]
+     )
+     return Request(
+-        headers=list(_decode_header_lines(lines[1:])), _parsed=True, **matches
++        headers=list(_decode_header_lines(lines[1:], allow_obsolete_folding)),
++        _parsed=True,
++        **matches,
+     )
+ 
+ 
+@@ -92,7 +100,7 @@
+ 
+ 
+ def maybe_read_from_SEND_RESPONSE_server(
+-    buf: ReceiveBuffer,
++    buf: ReceiveBuffer, allow_obsolete_folding: bool = True
+ ) -> Union[InformationalResponse, Response, None]:
+     lines = buf.maybe_extract_lines()
+     if lines is None:
+@@ -111,7 +119,7 @@
+         InformationalResponse if status_code < 200 else Response
+     )
+     return class_(
+-        headers=list(_decode_header_lines(lines[1:])),
++        headers=list(_decode_header_lines(lines[1:], allow_obsolete_folding)),
+         _parsed=True,
+         status_code=status_code,
+         reason=reason,
+@@ -146,7 +154,8 @@
+ 
+ 
+ class ChunkedReader:
+-    def __init__(self) -> None:
++    def __init__(self, allow_obsolete_folding: bool = True) -> None:
++        self._allow_obsolete_folding = allow_obsolete_folding
+         self._bytes_in_chunk = 0
+         # After reading a chunk, we have to throw away the trailing \r\n.
+         # This tracks the bytes that we need to match and throw away.
+@@ -158,7 +167,9 @@
+             lines = buf.maybe_extract_lines()
+             if lines is None:
+                 return None
+-            return EndOfMessage(headers=list(_decode_header_lines(lines)))
++            return EndOfMessage(
++                headers=list(_decode_header_lines(lines, self._allow_obsolete_folding))
++            )
+         if self._bytes_to_discard:
+             data = buf.maybe_extract_at_most(len(self._bytes_to_discard))
+             if data is None:

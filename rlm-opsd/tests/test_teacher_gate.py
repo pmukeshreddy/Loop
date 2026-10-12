@@ -77,19 +77,20 @@ def fixture_pool(tmp_path):
     pool=tmp_path/'pool'; (pool/'contexts').mkdir(parents=True)
     rows=[]; grid=[]
     for i,family in enumerate(FAMILIES):
-        task=Task(task_id=f'fixture-{i}',family=family,split='dev_behavior',context='PRIVATE_CONTEXT',
-            query='Return the length of the context.',answer=15,answer_type='numeric',knobs={'target_chars':128},
-            seed=i,source='test fixture only',source_refs=[],tags=['small_context'])
+        task=Task(task_id=f'fixture-{i}',split='dev_behavior',family=family,rlm_behaviors=[family],
+            behavior_rationale={family:'test fixture only'},setting='fixture',context=['PRIVATE_CONTEXT'],
+            query='Return the length of the context.',answer=15,answer_type='value',answer_format='scalar',
+            size_bucket=128,repo={},source='test fixture only',source_refs=[],tags=['small_context'])
         relative=f'contexts/{i}.json'
         (pool/relative).write_text(canonical(task.context))
         rows.append(task.manifest(relative))
-        grid.append(dict(split='dev_behavior',family=family,bucket=128,structure='str',encoding='plain',count=1))
+        grid.append(dict(split='dev_behavior',family=family,size_bucket=128,count=1))
     train=copy.deepcopy(rows[0]);train.update(task_id='train-secret',split='train',answer='DO_NOT_SEND_ANSWER')
     heldout=copy.deepcopy(rows[0]);heldout.update(task_id='heldout-secret',split='eval_heldout')
     rows.extend([train,heldout])
     manifest=''.join(canonical(row)+'\n' for row in rows)
     (pool/'manifest.jsonl').write_text(manifest)
-    report=dict(manifest_sha256=digest(manifest),decontamination={'coverage_complete':True},generated_grid=grid,written_grid=grid)
+    report=dict(manifest_sha256=digest(manifest),decontamination={'coverage_complete':True},released_grid=grid)
     (pool/'build-report.json').write_text(json.dumps(report))
     return pool
 
@@ -139,7 +140,7 @@ def test_preflight_rejects_invalid_inputs_before_requests(tmp_path,fault,monkeyp
     elif fault in ('missing_grid','empty_dev'):
         from rlm_opsd.tasks.models import digest
         rows=[json.loads(line) for line in (pool/'manifest.jsonl').read_text().splitlines()]
-        rows=[r for r in rows if r['split']!='dev_behavior' or (fault=='missing_grid' and r['family']!='multi_hop')]
+        rows=[r for r in rows if r['split']!='dev_behavior' or (fault=='missing_grid' and r['family']!='persistent_state')]
         text=''.join(json.dumps(r)+'\n' for r in rows);(pool/'manifest.jsonl').write_text(text)
         report['manifest_sha256']=digest(text)
     elif fault=='unknown_limits':
@@ -194,7 +195,7 @@ async def serve_fixture(tmp_path,mode='success'):
         elif request.path.startswith('/leaf'):
             text='15'
         elif len(body['messages'])==2:
-            text='```repl\nprint(type(context),len(context))\nanswer=llm_query(context[:5])\nprint(answer)\n```'
+            text='```repl\nprint(type(context),len(context))\nanswer=llm_query(context[0][:5])\nprint(answer)\n```'
         else:text='FINAL_VAR(answer)'
         payload=response_payload(body,text,reasoning='fixture reasoning')
         if mode=='wrong_model':payload['model']='different-weights'

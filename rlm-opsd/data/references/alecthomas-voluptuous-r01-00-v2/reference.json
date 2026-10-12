@@ -1,0 +1,162 @@
+{
+ "answer": "--- a/voluptuous/validators.py\n+++ b/voluptuous/validators.py\n@@ -276,7 +276,9 @@\n         return self._exec(self._compiled, value, path)\n \n     def __call__(self, v):\n-        return self._exec((Schema(val) for val in self.validators), v)\n+        return self._exec(\n+            (Schema(val, required=self.required) for val in self.validators), v\n+        )\n \n     def __repr__(self):\n         return '%s(%s, msg=%r)' % (\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 87632 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 10 targeted context searches without printing the whole context. Locating the shared standalone entry point and distinguishing it from Schema-mediated compilation was useful for propagating required-key configuration while preserving lazy child construction and existing Schema bindings."
+  },
+  "notes": "This is a natural, repository-dependent bug-fix request with a precise production-only unified-diff format. It describes observable failures and compatibility constraints without revealing the defective shared function or prescribing solver operations. The variation is substantive: it repairs standalone invocation rather than identifying a regression in the enclosing-Schema compilation hook."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The supplied production modules exceed the direct-solve context limit, but the relevant evidence is concentrated in a few definitions. The solver must distinguish standalone combinator invocation from Schema-mediated compilation, connect both paths to required-key handling, and locate the shared entry point without changing Any or All execution semantics."
+  },
+  "context": {
+   "files": [
+    "voluptuous/validators.py",
+    "voluptuous/schema_builder.py",
+    "voluptuous/error.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::_WithSubValidators.__call__",
+    "why": "Standalone invocation lazily constructs child Schema objects but currently omits the combinator's required setting."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__",
+    "why": "The enclosing-Schema path already propagates the combinator's required option and restores the parent's setting in this snapshot."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::Any._exec",
+    "why": "Defines first-success selection, deepest-error selection, and custom AnyInvalid messages."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::All._exec",
+    "why": "Defines sequential transformations, early termination, and custom AllInvalid messages."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::Schema._compile_mapping",
+    "why": "Required-key membership is determined during compilation from the child Schema's required setting."
+   },
+   {
+    "path": "voluptuous/tests/tests.py",
+    "symbol": "voluptuous/tests/tests.py::test_any_required_with_subschema",
+    "why": "Existing coverage establishes the Schema-mediated behavior that the new standalone acceptance cases extend."
+   }
+  ],
+  "expected_answer": "--- a/voluptuous/validators.py\n+++ b/voluptuous/validators.py\n@@ -287,7 +287,7 @@\n         return self._exec(self._compiled, value, path)\n \n     def __call__(self, v):\n-        return self._exec((Schema(val) for val in self.validators), v)\n+        return self._exec((Schema(val, required=self.required) for val in self.validators), v)\n \n     def __repr__(self):\n         return '%s(%s, msg=%r)' % (\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_direct_required.py\n@@ -0,0 +1,96 @@\n+import pytest\n+\n+from voluptuous import (\n+    All,\n+    AllInvalid,\n+    Any,\n+    AnyInvalid,\n+    Coerce,\n+    MultipleInvalid,\n+    Schema,\n+)\n+\n+\n+@pytest.mark.parametrize(\n+    \"validator\",\n+    [\n+        Any({\"a\": int}, {\"b\": str}, required=True),\n+        Any(\n+            {\"a\": Any(float, int)}, {\"b\": int}, {\"c\": {\"aa\": int}}, required=True\n+        ),\n+        All({\"a\": int}, required=True),\n+    ],\n+)\n+def test_direct_required_missing(validator):\n+    with pytest.raises(MultipleInvalid) as caught:\n+        validator({})\n+    assert str(caught.value) == \"required key not provided @ data['a']\"\n+    assert caught.value.path == [\"a\"]\n+\n+\n+def test_direct_required_nested_dictionary():\n+    validator = Any({\"a\": int}, {\"c\": {\"aa\": int}}, required=True)\n+    with pytest.raises(MultipleInvalid) as caught:\n+        validator({\"c\": {}})\n+    assert caught.value.path == [\"c\", \"aa\"]\n+    assert str(caught.value) == \"required key not provided @ data['c']['aa']\"\n+\n+\n+@pytest.mark.parametrize(\"combinator\", [Any, All])\n+@pytest.mark.parametrize(\"options\", [{}, {\"required\": False}])\n+def test_direct_optional_dictionary(combinator, options):\n+    assert combinator({\"a\": int}, **options)({}) == {}\n+\n+\n+@pytest.mark.parametrize(\"required\", [False, True])\n+def test_direct_success_and_transformations(required):\n+    alternative = Any({\"a\": Coerce(int)}, {\"b\": str}, required=required)\n+    assert alternative({\"a\": \"12\"}) == {\"a\": 12}\n+    assert alternative({\"b\": \"text\"}) == {\"b\": \"text\"}\n+    pipeline = All(\n+        {\"a\": Coerce(int)}, lambda value: value[\"a\"] + 1, required=required\n+    )\n+    assert pipeline({\"a\": \"12\"}) == 13\n+\n+\n+@pytest.mark.parametrize(\"combinator,error_type\", [(Any, AnyInvalid), (All, AllInvalid)])\n+def test_direct_required_custom_message(combinator, error_type):\n+    validator = combinator({\"a\": int}, required=True, msg=\"supply a\")\n+    with pytest.raises(error_type) as caught:\n+        validator({})\n+    assert str(caught.value) == \"supply a\"\n+    assert caught.value.path == []\n+\n+\n+def test_direct_any_leaves_unused_child_uncompiled():\n+    validator = Any({\"a\": int}, object(), required=True)\n+    assert validator({\"a\": 1}) == {\"a\": 1}\n+\n+\n+def test_direct_all_stops_before_compiling_later_child():\n+    validator = All({\"a\": int}, object(), required=True)\n+    with pytest.raises(MultipleInvalid) as caught:\n+        validator({})\n+    assert caught.value.path == [\"a\"]\n+\n+\n+def test_direct_call_does_not_compile_the_combinator():\n+    class DirectAny(Any):\n+        def __voluptuous_compile__(self, schema):\n+            raise AssertionError(\"standalone combinator entered enclosing-schema hook\")\n+\n+    validator = DirectAny({\"a\": int}, required=True)\n+    assert validator({\"a\": 1}) == {\"a\": 1}\n+    with pytest.raises(MultipleInvalid):\n+        validator({})\n+\n+\n+def test_direct_call_preserves_existing_schema_binding():\n+    validator = Any({\"a\": int}, {\"b\": str}, required=True)\n+    wrapped = Schema(validator)\n+    assert validator({\"b\": \"ok\"}) == {\"b\": \"ok\"}\n+    assert wrapped({\"a\": 1}) == {\"a\": 1}\n+    with pytest.raises(MultipleInvalid):\n+        validator({})\n+    with pytest.raises(MultipleInvalid):\n+        wrapped({})\n",
+  "include_failure_log": false,
+  "notes": "Use the supplied snapshot as the starting state: the seed compilation-hook regression is already repaired. This task addresses an existing missing capability, so no setup defect is introduced. Acceptance coverage is added in a new file under voluptuous/tests rather than editing tests.py. Run that file alongside the existing suite. Several required=True cases fail on the starting code; optional and successful cases guard existing behavior. Unsupported unused children expose eager compilation, and a public Any subclass checks that standalone invocation does not enter the enclosing-Schema hook. The complete production files exceed 16,000 characters, so the focused file selection is labeled inspect_locate rather than direct_solve.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Standalone combinators are ignoring their required option: `Any({'a': int}, {'b': str}, required=True)({})` accepts the empty dictionary, although wrapping the same validator in `Schema` rejects it. Make standalone invocation honor this option for Any and All, including nested dictionary children. Missing unmarked dictionary keys must be rejected with `required=True`; the default and explicit `required=False` must remain optional. Preserve successful value transformations, Any's first-success behavior, All's sequential execution, and their existing error types, paths, and custom-message behavior. Keep standalone invocation independent of the combinator's enclosing-Schema `__voluptuous_compile__` hook, retain lazy child-schema construction, and do not disturb an existing Schema binding when the same combinator is called directly. Return a unified diff changing production code only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises comparison of two public entry points and tracing their distinct dependencies. Direct inspection of __call__, __voluptuous_compile__, Any._exec, All._exec, and Schema.__init__ is sufficient; a repository-wide failure search or delegated investigation is unnecessary for this focused discrepancy.",
+  "change_type": "dependency",
+  "description": "With the seed regression repaired, make direct combinator invocation honor its required option. In voluptuous/validators.py, Any({'a': int}, {'b': str}, required=True)({}) currently succeeds, whereas Schema(Any({'a': int}, {'b': str}, required=True))({}) rejects the input. Repair the shared direct-call path in _WithSubValidators.__call__, without routing standalone invocation through the enclosing-schema compilation hook. Add tests in voluptuous/tests/tests.py extending the coverage represented by test_any_required and test_any_required_with_subschema, and cover All with a required dictionary child, required=False, successful validation, and custom error messages.",
+  "expected_answer_change": "The relevant symbol is voluptuous/validators.py::_WithSubValidators.__call__. Child Schema construction must receive required=self.required instead of silently using Schema's default required=False. The existing lazy child-schema iteration and Any/All execution and message behavior should remain intact.",
+  "why_substantive": "This switches the entry point from Schema-mediated compilation to standalone validator invocation. That path constructs independent child Schema objects and never executes the seed's problematic hook. Its configuration loss therefore requires a different symbol, different tests, and a different fix."
+ },
+ "task_id": "alecthomas-voluptuous-r01-00-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_direct_required.py::test_direct_all_stops_before_compiling_later_child",
+   "voluptuous/tests/test_direct_required.py::test_direct_call_does_not_compile_the_combinator",
+   "voluptuous/tests/test_direct_required.py::test_direct_call_preserves_existing_schema_binding",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_custom_message[All-AllInvalid]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_custom_message[Any-AnyInvalid]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator0]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator1]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator2]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_nested_dictionary"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 9,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_direct_required.py::test_direct_all_stops_before_compiling_later_child",
+   "voluptuous/tests/test_direct_required.py::test_direct_call_does_not_compile_the_combinator",
+   "voluptuous/tests/test_direct_required.py::test_direct_call_preserves_existing_schema_binding",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_custom_message[All-AllInvalid]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_custom_message[Any-AnyInvalid]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator0]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator1]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_missing[validator2]",
+   "voluptuous/tests/test_direct_required.py::test_direct_required_nested_dictionary"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,35 @@
+--- a/src/wtforms/fields/datetime.py
++++ b/src/wtforms/fields/datetime.py
+@@ -119,12 +119,13 @@
+ class WeekField(DateField):
+     """
+     Same as :class:`~wtforms.fields.DateField`, except represents a week,
+-    stores a :class:`datetime.date` of the monday of the given week.
++    stores a :class:`datetime.date` of the Monday of the given week.
++    The default format uses the ISO week-year and week number.
+     """
+ 
+     widget = widgets.WeekInput()
+ 
+-    def __init__(self, label=None, validators=None, format="%Y-W%W", **kwargs):
++    def __init__(self, label=None, validators=None, format="%G-W%V", **kwargs):
+         super().__init__(label, validators, format, **kwargs)
+ 
+     def process_formdata(self, valuelist):
+@@ -134,11 +135,12 @@
+         time_str = " ".join(valuelist)
+         for format in self.strptime_format:
+             try:
+-                if "%w" not in format:
+-                    # The '%w' week starting day is needed. This defaults it to monday
+-                    # like ISO 8601 indicates.
++                if "%w" not in format and "%u" not in format:
++                    # Week parsing requires a weekday. Default to Monday,
++                    # using ISO weekdays for ISO week-number formats.
++                    weekday = "%u" if "%V" in format else "%w"
+                     self.data = datetime.datetime.strptime(
+-                        f"{time_str}-1", f"{format}-%w"
++                        f"{time_str}-1", f"{format}-{weekday}"
+                     ).date()
+                 else:
+                     self.data = datetime.datetime.strptime(time_str, format).date()

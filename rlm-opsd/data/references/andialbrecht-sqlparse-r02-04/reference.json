@@ -1,0 +1,139 @@
+{
+ "answer": [
+  "sqlparse/engine/grouping.py::group"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"sqlparse/engine/grouping.py::group_functions\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 340883 chars; 13 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 targeted context searches without printing the whole repository context. Inspection connected the window-tree and Function.get_window() failures to the ordering of grouping passes, locating the responsible orchestration function rather than stopping at the consumer or assertion site."
+  },
+  "notes": "This is a natural, repository-dependent regression investigation with a precise symbol-list output format. The question describes symptoms without revealing the defective function or the fix. Identifying the changed function requires reasoning about grouping producers and consumers. The verified defect is consistent with that investigation, and the task is distinct from the existing lexer and statement-splitting tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "The attached failures surface through function inspection and window-clause tree assertions. The responsible change is elsewhere in the grouping orchestration, requiring inspection of the producers and consumers rather than identifying the traceback endpoint."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group",
+    "why": "The ordering of these two passes determines whether a function can absorb its window clause."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group_functions",
+    "why": "The function grouper absorbs the next clause only when it is already an Over instance."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group_over",
+    "why": "This pass constructs the Over group from the keyword and its named or parenthesized window."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Function.get_window",
+    "why": "Window inspection expects an Over group directly inside the Function."
+   },
+   {
+    "path": "tests/test_grouping.py",
+    "symbol": "tests/test_grouping.py::test_grouping_identifier_function",
+    "why": "The assertions expose the changed ownership and shape of named and parenthesized window clauses."
+   }
+  ],
+  "expected_answer": [
+   "sqlparse/engine/grouping.py::group"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only the grouping schedule. Ground truth for symbols is the function changed by that patch.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output reports regressions in windowed function trees and Function.get_window(), while the SQL text still round-trips. Which production function or functions contain the regression responsible for these failures? Return a JSON list of `path::Qualname` entries identifying the changed functions, not merely the functions where an assertion or exception surfaces.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -430,8 +430,8 @@\n         group_for,\n         group_begin,\n \n-        group_over,\n         group_functions,\n+        group_over,\n         group_where,\n         group_period,\n         group_arrays,\n"
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r02-04",
+ "truth": {
+  "answer": [
+   "sqlparse/engine/grouping.py::group"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "sqlparse/engine/grouping.py::group"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "sqlparse/engine/grouping.py::group"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "tests/test_grouping.py::test_grouping_function",
+   "tests/test_grouping.py::test_grouping_identifier_function"
+  ],
+  "ground_truth_symbols": [
+   "sqlparse/engine/grouping.py::group"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 506,
+  "stability_runs": 3
+ }
+}

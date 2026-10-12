@@ -1,0 +1,141 @@
+{
+ "answer": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -907,10 +907,13 @@\n \n         If there are other files in the template folder besides the\n         actual templates, the returned list can be filtered.  There are two\n-        ways: either `extensions` is set to a list of file extensions for\n+        ways: `extensions` can be set to a collection of file extensions for\n         templates, or a `filter_func` can be provided which is a callable that\n         is passed a template name and should return `True` if it should end up\n-        in the result list.\n+        in the result list. If both are provided, only templates matching\n+        both filters are returned. Extension matching is case-sensitive, and\n+        an empty extension collection returns no templates. The loader's\n+        ordering is preserved.\n \n         If the loader does not support that, a :exc:`TypeError` is raised.\n \n@@ -920,13 +923,11 @@\n         names = self.loader.list_templates()\n \n         if extensions is not None:\n-            if filter_func is not None:\n-                raise TypeError(\n-                    \"either extensions or filter_func can be passed, but not both\"\n-                )\n-\n-            def filter_func(x: str) -> bool:\n-                return \".\" in x and x.rsplit(\".\", 1)[1] in extensions\n+            names = [\n+                name\n+                for name in names\n+                if \".\" in name and name.rsplit(\".\", 1)[1] in extensions\n+            ]\n \n         if filter_func is not None:\n             names = [name for name in names if filter_func(name)]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0010100402564299329,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 964318 chars; 9 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "4 turns; variables reused across turns: ['files', 'old', 'path']; hand-copied literals 2"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed and inspected a unified diff against the source. The supplied verification covers combined selection, unchanged standalone modes, predicate exception propagation, and compilation that excludes invalid unselected templates even with ignore_errors=False.",
+   "inspect_locate": "The reference execution used two targeted searches without printing the whole repository context. The task requires connecting listing behavior, the existing extension rule, and compilation's use of the selected names."
+  },
+  "notes": "This is a natural, repository-dependent API change with clear requirements and an explicit deliverable. Naming the affected public methods identifies the requested interface rather than leaking an implementation fix. The patch is focused, and the task is distinct from the accepted globals-handling regression task. Persistent state is evidenced by reused variables, although it is not listed among the established behaviors."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The completed patch must satisfy the conjunction contract without altering either standalone filtering mode, and must be assembled against the exact source.",
+   "inspect_locate": "The public listing API, its extension-matching rule, and the compilation API that consumes its results must be connected.",
+   "persistent_state": "The solver must retain the existing one-filter behavior and ordering guarantees while adding the combined-filter path and considering compile_templates callers."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.list_templates",
+    "why": "Currently rejects simultaneous filters and contains the extension predicate whose semantics must be retained."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.compile_templates",
+    "why": "Delegates selection to list_templates before fetching or compiling template sources."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_combined_template_selection.py\n@@ -0,0 +1,63 @@\n+import pytest\n+\n+from jinja2 import DictLoader\n+from jinja2 import Environment\n+from jinja2 import TemplateNotFound\n+from jinja2.loaders import ModuleLoader\n+\n+\n+@pytest.mark.parametrize(\n+    \"extensions, expected\",\n+    [\n+        ([\"html\"], [\"a.html\", \"nested/d.html\"]),\n+        ([\"html\", \"txt\"], [\"a.html\", \"b.txt\", \"nested/d.html\"]),\n+        ([], []),\n+    ],\n+)\n+def test_combined_listing(extensions, expected):\n+    names = [\"a.html\", \"b.txt\", \"c.HTML\", \"nested/d.html\", \"reject.html\", \"plain\"]\n+    env = Environment(loader=DictLoader(dict.fromkeys(names, \"ok\")))\n+    assert env.list_templates(\n+        extensions=extensions, filter_func=lambda name: not name.startswith(\"reject\")\n+    ) == expected\n+\n+\n+def test_standalone_selection_is_unchanged():\n+    env = Environment(loader=DictLoader({\"b.txt\": \"\", \"a.html\": \"\", \"plain\": \"\"}))\n+    assert env.list_templates() == [\"a.html\", \"b.txt\", \"plain\"]\n+    assert env.list_templates(extensions=[\"html\"]) == [\"a.html\"]\n+    assert env.list_templates(filter_func=lambda name: name == \"plain\") == [\"plain\"]\n+\n+\n+def test_combined_predicate_exception_propagates():\n+    env = Environment(loader=DictLoader({\"a.html\": \"ok\"}))\n+\n+    def predicate(name):\n+        raise ValueError(\"selection failed\")\n+\n+    with pytest.raises(ValueError, match=\"selection failed\"):\n+        env.list_templates(extensions=[\"html\"], filter_func=predicate)\n+\n+\n+def test_compile_only_combined_selection(tmp_path):\n+    env = Environment(\n+        loader=DictLoader(\n+            {\n+                \"keep.html\": \"selected\",\n+                \"reject.html\": \"{% if %}\",\n+                \"other.txt\": \"{% if %}\",\n+            }\n+        )\n+    )\n+    env.compile_templates(\n+        tmp_path,\n+        extensions=[\"html\"],\n+        filter_func=lambda name: name != \"reject.html\",\n+        zip=None,\n+        ignore_errors=False,\n+    )\n+    compiled = Environment(loader=ModuleLoader(str(tmp_path)))\n+    assert compiled.get_template(\"keep.html\").render() == \"selected\"\n+    for name in [\"reject.html\", \"other.txt\"]:\n+        with pytest.raises(TemplateNotFound):\n+            compiled.get_template(name)\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests intentionally do not constrain whether the predicate is called for names rejected by the extension filter. Update the public documentation in environment.py so it no longer describes the filters as mutually exclusive.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Allow `Environment.list_templates` and `Environment.compile_templates` to receive both `extensions` and `filter_func`. When both are provided, include only names accepted by both filters, using the existing case-sensitive extension rule and preserving the loader's ordering. An empty extension collection must select nothing. Supplying only one filter, or neither, must keep its existing behavior. Exceptions raised by the predicate must still propagate. Compilation must operate only on the selected names, including when `ignore_errors=False`. Deliver a unified diff against the repository files, without changing existing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions0-expected0]",
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions1-expected1]",
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions2-expected2]",
+   "tests/test_combined_template_selection.py::test_combined_predicate_exception_propagates",
+   "tests/test_combined_template_selection.py::test_compile_only_combined_selection"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 915
+   },
+   "patch_files": [
+    "src/jinja2/environment.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions0-expected0]",
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions1-expected1]",
+   "tests/test_combined_template_selection.py::test_combined_listing[extensions2-expected2]",
+   "tests/test_combined_template_selection.py::test_combined_predicate_exception_propagates",
+   "tests/test_combined_template_selection.py::test_compile_only_combined_selection"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

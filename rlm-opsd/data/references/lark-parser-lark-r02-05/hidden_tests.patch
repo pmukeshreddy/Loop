@@ -1,0 +1,43 @@
+--- /dev/null
++++ b/tests/test_literal_lexer_callbacks.py
+@@ -0,0 +1,40 @@
++import pytest
++
++from lark import Lark
++
++
++@pytest.mark.parametrize("lexer", ["basic", "contextual"])
++@pytest.mark.parametrize("change_type", [False, True])
++def test_retagged_literal_callback(lexer, change_type):
++    events = []
++    def keyword(t):
++        events.append(("KEYWORD", str(t)))
++        return t.update(type="NAME" if change_type else "KEYWORD", value="literal")
++    def name(t):
++        events.append(("NAME", str(t)))
++        return t.update(value="identifier")
++    parser = Lark(
++        'start: (KEYWORD | NAME)+\nKEYWORD: "if"\nNAME: /[a-z]+/\n%ignore " "',
++        parser="lalr", lexer=lexer,
++        lexer_callbacks={"KEYWORD": keyword, "NAME": name},
++    )
++    tree = parser.parse("if word")
++    assert events == [("KEYWORD", "if"), ("NAME", "word")]
++    assert [(t.type, str(t)) for t in tree.children] == [
++        ("NAME" if change_type else "KEYWORD", "literal"),
++        ("NAME", "identifier"),
++    ]
++
++
++def test_retagging_without_literal_callback():
++    events = []
++    def name(t):
++        events.append(str(t))
++        return t
++    parser = Lark(
++        'start: (KEYWORD | NAME)+\nKEYWORD: "if"\nNAME: /[a-z]+/\n%ignore " "',
++        parser="lalr", lexer="basic", lexer_callbacks={"NAME": name},
++    )
++    tree = parser.parse("if word")
++    assert events == ["word"]
++    assert tree.children == ["if", "word"]

@@ -1,0 +1,106 @@
+--- /dev/null
++++ b/tests/test_frozen_omitted_field_hooks.py
+@@ -0,0 +1,103 @@
++# SPDX-License-Identifier: MIT
++
++import inspect
++
++import pytest
++
++import attr
++
++
++def _base(slots, inherited):
++    if inherited:
++        @attr.define(slots=slots, frozen=True)
++        class Base:
++            pass
++    else:
++        Base = object
++    return Base
++
++
++@pytest.mark.parametrize("slots", [True, False])
++@pytest.mark.parametrize("inherited", [True, False])
++@pytest.mark.parametrize("generated_init", [True, False])
++@pytest.mark.parametrize("default_kind", ["missing", "value", "factory"])
++def test_frozen_rejects_field_hook(slots, inherited, generated_init, default_kind):
++    events = []
++
++    def hook(inst, attribute, value):
++        events.append((inst, attribute.name, value))
++        return value
++
++    kwargs = {"init": False, "on_setattr": hook}
++    if default_kind == "value":
++        kwargs["default"] = 1
++    elif default_kind == "factory":
++        kwargs["factory"] = lambda: 1
++    base = _base(slots, inherited)
++
++    with pytest.raises(ValueError, match="^Frozen classes can't use on_setattr[.]$"):
++        @attr.define(slots=slots, frozen=not inherited, init=generated_init)
++        class C(base):
++            delayed: int = attr.field(**kwargs)
++
++    assert events == []
++
++
++@pytest.mark.parametrize("slots", [True, False])
++@pytest.mark.parametrize("inherited", [True, False])
++@pytest.mark.parametrize("generated_init", [True, False])
++def test_frozen_no_op_preserves_initialization(slots, inherited, generated_init):
++    def forbidden(*args):
++        raise AssertionError("An omitted field callback ran during initialization")
++
++    base = _base(slots, inherited)
++
++    @attr.define(slots=slots, frozen=not inherited, init=generated_init)
++    class C(base):
++        marker: int = 7
++        delayed: int = attr.field(
++            init=False,
++            on_setattr=attr.setters.NO_OP,
++            converter=forbidden,
++            validator=forbidden,
++        )
++        defaulted: int = attr.field(init=False, default=11, on_setattr=attr.setters.NO_OP)
++        made: list = attr.field(init=False, factory=list, on_setattr=attr.setters.NO_OP)
++
++    c = C()
++    if not generated_init:
++        c.__attrs_init__()
++    assert c.marker == 7
++    assert not hasattr(c, "delayed")
++    assert c.defaulted == 11
++    assert c.made == []
++    initializer = C.__init__ if generated_init else C.__attrs_init__
++    assert "delayed" not in inspect.signature(initializer).parameters
++    with pytest.raises(attr.exceptions.FrozenInstanceError):
++        c.delayed = 5
++
++
++@pytest.mark.parametrize("slots", [True, False])
++@pytest.mark.parametrize("generated_init", [True, False])
++def test_mutable_omitted_field_hook(slots, generated_init):
++    calls = []
++
++    def hook(inst, attribute, value):
++        calls.append((inst, attribute.name, value))
++        return value + 1
++
++    @attr.define(slots=slots, init=generated_init)
++    class C:
++        marker: int = 7
++        delayed: int = attr.field(init=False, on_setattr=hook)
++
++    c = C()
++    if not generated_init:
++        c.__attrs_init__()
++    assert c.marker == 7
++    assert not hasattr(c, "delayed")
++    assert calls == []
++    c.delayed = 4
++    assert c.delayed == 5
++    assert calls == [(c, "delayed", 4)]
++    assert attr.fields(C).delayed.init is False

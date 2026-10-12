@@ -1,0 +1,109 @@
+--- /dev/null
++++ b/jsonschema/tests/test_reference_item_dialects.py
+@@ -0,0 +1,106 @@
++import pytest
++from referencing import Registry, Resource
++from referencing.jsonschema import DRAFT201909, DRAFT202012
++
++from jsonschema import Draft201909Validator, Draft202012Validator
++
++
++DIALECTS = {
++    "old": (
++        Draft201909Validator,
++        "https://json-schema.org/draft/2019-09/schema",
++        DRAFT201909,
++    ),
++    "new": (
++        Draft202012Validator,
++        "https://json-schema.org/draft/2020-12/schema",
++        DRAFT202012,
++    ),
++}
++
++
++def make_validator(outer, path, coverage):
++    outer_class, outer_uri, _ = DIALECTS[outer]
++    base = "https://coverage.example/"
++    resources = []
++    inherited = outer
++    for index, declared in enumerate(path):
++        if declared is not None:
++            inherited = declared
++        _, dialect_uri, specification = DIALECTS[inherited]
++        uri = f"{base}step{index}/schema"
++        schema = {"$id": uri}
++        if declared is not None:
++            schema["$schema"] = dialect_uri
++        if index + 1 < len(path):
++            schema["$ref"] = f"../step{index + 1}/schema"
++        elif coverage == "prefix":
++            keyword = "items" if inherited == "old" else "prefixItems"
++            schema[keyword] = [{"type": "integer"}]
++        elif coverage == "all":
++            schema["items"] = {}
++        elif coverage == "additional":
++            assert inherited == "old"
++            schema.update(items=[{}], additionalItems={})
++        resources.append((uri, Resource.from_contents(
++            schema, default_specification=specification,
++        )))
++    registry = Registry().with_resources(resources)
++    return outer_class(
++        {
++            "$schema": outer_uri,
++            "$id": f"{base}root",
++            "$ref": f"{base}step0/schema",
++            "unevaluatedItems": False,
++        },
++        registry=registry,
++    )
++
++
++@pytest.mark.parametrize("outer,target", [
++    ("new", "old"), ("old", "new"),
++    ("new", "new"), ("old", "old"),
++    ("new", None), ("old", None),
++])
++@pytest.mark.parametrize("coverage", ["prefix", "all"])
++def test_direct_reference_item_coverage(outer, target, coverage):
++    validator = make_validator(outer, [target], coverage)
++    assert validator.is_valid([])
++    assert validator.is_valid([1])
++    errors = list(validator.iter_errors([1, 2]))
++    if coverage == "prefix":
++        assert len(errors) == 1
++        assert errors[0].validator == "unevaluatedItems"
++    else:
++        assert errors == []
++    if coverage == "prefix":
++        errors = list(validator.iter_errors(["not an integer"]))
++        assert [error.validator for error in errors] == ["type"]
++
++
++@pytest.mark.parametrize("outer,path", [
++    ("new", ["old", "new", "old"]),
++    ("old", ["new", "old", "new"]),
++    ("new", ["old", None]),
++    ("old", ["new", None]),
++    ("new", ["old", None, "new"]),
++    ("old", ["new", None, "old"]),
++])
++@pytest.mark.parametrize("coverage", ["prefix", "all"])
++def test_reference_chains_keep_scope_and_dialect(outer, path, coverage):
++    validator = make_validator(outer, path, coverage)
++    assert validator.is_valid([])
++    assert validator.is_valid([1])
++    errors = list(validator.iter_errors([1, 2]))
++    if coverage == "prefix":
++        assert len(errors) == 1
++        assert errors[0].validator == "unevaluatedItems"
++    else:
++        assert errors == []
++
++
++@pytest.mark.parametrize("outer", ["old", "new"])
++def test_2019_additional_items_cover_tail(outer):
++    validator = make_validator(outer, ["old"], "additional")
++    assert validator.is_valid([1])
++    assert validator.is_valid([1, 2, 3])

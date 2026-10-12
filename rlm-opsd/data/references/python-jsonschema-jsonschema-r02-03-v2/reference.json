@@ -1,0 +1,163 @@
+{
+ "answer": "--- a/jsonschema/_keywords.py\n+++ b/jsonschema/_keywords.py\n@@ -395,13 +395,27 @@\n     evaluated_item_indexes = find_evaluated_item_indexes_by_schema(\n         validator, instance, schema,\n     )\n-    unevaluated_items = [\n-        item for index, item in enumerate(instance)\n-        if index not in evaluated_item_indexes\n-    ]\n+    unevaluated_items = []\n+    errors = []\n+    for index, item in enumerate(instance):\n+        if index in evaluated_item_indexes:\n+            continue\n+        if unevaluatedItems is False:\n+            unevaluated_items.append(item)\n+        else:\n+            item_errors = list(validator.descend(\n+                item, unevaluatedItems, path=index,\n+            ))\n+            if item_errors:\n+                unevaluated_items.append(item)\n+                errors.extend(item_errors)\n+\n     if unevaluated_items:\n         error = \"Unevaluated items are not allowed (%s %s unexpected)\"\n-        yield ValidationError(error % extras_msg(unevaluated_items))\n+        yield ValidationError(\n+            error % extras_msg(unevaluated_items),\n+            context=errors,\n+        )\n \n \n def unevaluatedProperties(validator, unevaluatedProperties, instance, schema):\n--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -323,13 +323,27 @@\n     evaluated_item_indexes = find_evaluated_item_indexes_by_schema(\n         validator, instance, schema,\n     )\n-    unevaluated_items = [\n-        item for index, item in enumerate(instance)\n-        if index not in evaluated_item_indexes\n-    ]\n+    unevaluated_items = []\n+    errors = []\n+    for index, item in enumerate(instance):\n+        if index in evaluated_item_indexes:\n+            continue\n+        if unevaluatedItems is False:\n+            unevaluated_items.append(item)\n+        else:\n+            item_errors = list(validator.descend(\n+                item, unevaluatedItems, path=index,\n+            ))\n+            if item_errors:\n+                unevaluated_items.append(item)\n+                errors.extend(item_errors)\n+\n     if unevaluated_items:\n         error = \"Unevaluated items are not allowed (%s %s unexpected)\"\n-        yield ValidationError(error % _utils.extras_msg(unevaluated_items))\n+        yield ValidationError(\n+            error % _utils.extras_msg(unevaluated_items),\n+            context=errors,\n+        )\n \n \n def find_evaluated_property_keys_by_schema(validator, instance, schema):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0004534172155182042,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 23,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "hits",
+    "new_files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 23 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff consistently updates both implementations, collecting every child error in item order while preserving original indexes, aggregate message multiplicity, and the false-schema special case. The execution constructed and inspected the final diff programmatically, though it reports no repository execution.",
+   "inspect_locate": "The reference execution used 23 targeted searches without printing the whole context. The task requires locating both draft-specific keyword implementations and understanding how coverage helpers and validator descent affect child diagnostics."
+  },
+  "notes": "A natural, precisely specified diagnostic enhancement with a clear production-only unified-diff format. The question describes the desired contract without revealing implementation locations or prescribing solver operations. It is materially different from the resolver-coverage parent task. Although related to the accepted unevaluatedProperties diagnostic task, array-position paths, positional coverage, and per-position message multiplicity make this a distinct change."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must implement the same diagnostic contract in both drafts while preserving coverage and false-schema behavior. Its two edits must consistently retain all child errors, preserve actual instance indexes, and avoid duplicating an item in the aggregate message.",
+   "inspect_locate": "The request spans two draft-specific keyword implementations. Relevant evidence also includes their registrations, the distinct positional coverage helpers, and generated validator error enrichment; these are a small fraction of the repository context."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::unevaluatedItems",
+    "why": "The Draft 2020-12 implementation currently aggregates uncovered values without retaining their subschema validation errors."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::unevaluatedItems_draft2019",
+    "why": "Draft 2019-09 has a separate keyword implementation requiring the same diagnostic enhancement."
+   },
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_evaluated_item_indexes_by_schema",
+    "why": "Modern coverage includes prefixItems, contains, and successful unevaluatedItems validation; those decisions must remain unchanged."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_item_indexes_by_schema",
+    "why": "Legacy coverage distinguishes tuple items from schema-valued items and determines the original indexes to use in child paths."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "Generated descend and iter_errors enrich child paths and aggregate schema paths; the draft registrations select the two keyword implementations."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_unevaluated_items_context.py\n@@ -0,0 +1,108 @@\n+import pytest\n+\n+from jsonschema import Draft201909Validator, Draft202012Validator\n+\n+\n+DRAFTS = [\n+    (Draft201909Validator, \"items\"),\n+    (Draft202012Validator, \"prefixItems\"),\n+]\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_all_item_errors_keep_order_and_indexes(Validator, positional):\n+    subschema = {\"type\": \"integer\", \"minimum\": 10, \"multipleOf\": 3}\n+    schema = {positional: [{}], \"unevaluatedItems\": subschema}\n+    instance = [\"covered\", 5, 12, 7, \"bad\"]\n+    errors = list(Validator(schema).iter_errors(instance))\n+    assert len(errors) == 1\n+    error = errors[0]\n+    assert error.validator == \"unevaluatedItems\"\n+    assert error.message == (\n+        \"Unevaluated items are not allowed (5, 7, 'bad' were unexpected)\"\n+    )\n+    assert [child.validator for child in error.context] == [\n+        \"minimum\", \"multipleOf\", \"minimum\", \"multipleOf\", \"type\",\n+    ]\n+    assert [list(child.path) for child in error.context] == [[1], [1], [3], [3], [4]]\n+    assert [child.instance for child in error.context] == [5, 5, 7, 7, \"bad\"]\n+    assert all(child.parent is error for child in error.context)\n+    assert all(child.schema is subschema for child in error.context)\n+    assert list(error.path) == []\n+    assert list(error.schema_path) == [\"unevaluatedItems\"]\n+    assert [list(child.schema_path) for child in error.context] == [\n+        [\"minimum\"], [\"multipleOf\"], [\"minimum\"], [\"multipleOf\"], [\"type\"],\n+    ]\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_equal_failing_values_are_listed_once_per_position(Validator, positional):\n+    schema = {\"unevaluatedItems\": {\"minimum\": 10, \"multipleOf\": 3}}\n+    error, = Validator(schema).iter_errors([5, 5])\n+    assert error.message == \"Unevaluated items are not allowed (5, 5 were unexpected)\"\n+    assert [list(child.path) for child in error.context] == [[0], [0], [1], [1]]\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_nested_instance_and_schema_paths(Validator, positional):\n+    subschema = {\n+        \"properties\": {\"n\": {\"minimum\": 10, \"multipleOf\": 3}},\n+    }\n+    array_schema = {positional: [{}], \"unevaluatedItems\": subschema}\n+    schema = {\"properties\": {\"payload\": array_schema}}\n+    instance = {\"payload\": [\"covered\", {\"n\": 5}, {\"n\": 12}]}\n+    error, = Validator(schema).iter_errors(instance)\n+    assert list(error.path) == [\"payload\"]\n+    assert [list(child.path) for child in error.context] == [[1, \"n\"], [1, \"n\"]]\n+    assert [list(child.absolute_path) for child in error.context] == [[\"payload\", 1, \"n\"], [\"payload\", 1, \"n\"]]\n+    assert [child.validator for child in error.context] == [\"minimum\", \"multipleOf\"]\n+    for child in error.context:\n+        assert child.parent is error\n+        assert list(child.absolute_schema_path) == [\n+            \"properties\", \"payload\", \"unevaluatedItems\", \"properties\", \"n\",\n+            child.validator,\n+        ]\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_contains_coverage_is_preserved(Validator, positional):\n+    schema = {\n+        \"contains\": {\"const\": 5},\n+        \"unevaluatedItems\": {\"minimum\": 10},\n+    }\n+    error, = Validator(schema).iter_errors([5, 7, 12])\n+    assert error.message == \"Unevaluated items are not allowed (7 was unexpected)\"\n+    child, = error.context\n+    assert list(child.path) == [1]\n+    assert child.validator == \"minimum\"\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+@pytest.mark.parametrize(\"tail, message\", [\n+    ([7], \"Unevaluated items are not allowed (7 was unexpected)\"),\n+    ([7, 8], \"Unevaluated items are not allowed (7, 8 were unexpected)\"),\n+])\n+def test_false_schema_diagnostics_are_unchanged(Validator, positional, tail, message):\n+    schema = {positional: [{}], \"unevaluatedItems\": False}\n+    error, = Validator(schema).iter_errors([\"covered\", *tail])\n+    assert error.message == message\n+    assert error.context == []\n+    assert list(error.path) == []\n+    assert list(error.schema_path) == [\"unevaluatedItems\"]\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_successful_and_non_array_behavior_is_preserved(Validator, positional):\n+    schema = {positional: [{}], \"unevaluatedItems\": {\"minimum\": 10, \"multipleOf\": 3}}\n+    assert list(Validator(schema).iter_errors([\"covered\", 12, 15])) == []\n+    assert list(Validator(schema).iter_errors({\"not\": \"array\"})) == []\n+    assert list(Validator({\"unevaluatedItems\": True}).iter_errors([1, \"x\"])) == []\n+    assert list(Validator({\n+        \"items\": {\"type\": \"integer\"},\n+        \"unevaluatedItems\": {\"minimum\": 10},\n+    }).iter_errors([1, 2])) == []\n+\n+\n+@pytest.mark.parametrize(\"Validator, positional\", DRAFTS)\n+def test_empty_schema_accepts_every_item(Validator, positional):\n+    assert list(Validator({\"unevaluatedItems\": {}}).iter_errors([1, \"x\"])) == []\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work on the unmodified snapshot, verified with a new acceptance-test file under jsonschema/tests. The diagnostic edits belong in the two unevaluated-item keyword functions, not the original task's reference-coverage branches. Tests exercise multiple errors per item, equal values at different positions, successful items, original positional indexes, nested paths and parent links, contains coverage, and unchanged boolean-schema diagnostics.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Expose the reasons that array items fail a schema-valued `unevaluatedItems` constraint in Draft 2019-09 and Draft 2020-12. The aggregate `ValidationError` should retain every error produced by descending into each uncovered item in its `context`, ordered by original array index and then by the subschema's error order. Child instance paths must start with the item's actual index, including when tuple `items` or `prefixItems` covers preceding elements; preserve any deeper paths and nested error contexts. Child schema paths should be relative to the shared `unevaluatedItems` subschema, without inserting an array index.\n\nKeep the current aggregate message wording, listing each failing item once per array position even if it produces several errors. Successful items must not contribute diagnostics. Preserve the current message and empty context for `unevaluatedItems: false`, and do not change which indexes the coverage helpers mark as evaluated or the drafts' different positional coverage rules. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts toward implementation with acceptance tests and metadata verification. Direct inspection of the two keyword functions and generated `descend` error enrichment is useful; a repository-wide resolver investigation is unnecessary.",
+  "change_type": "deliverable",
+  "description": "Implement per-item diagnostics for schema-valued `unevaluatedItems` in both drafts, with acceptance tests permitted. In `jsonschema/_keywords.py::unevaluatedItems` and `jsonschema/_legacy_keywords.py::unevaluatedItems_draft2019`, validate each uncovered item through `descend` and retain every resulting ValidationError in the aggregate error's `context`, in array-index order and then subschema error order. Each child must carry its original instance index. Keep the existing aggregate message and context-free behavior for `unevaluatedItems: false`; do not alter which indexes the coverage helpers classify as evaluated. Include cases where one uncovered item produces multiple errors and where preceding items are covered by tuple `items` or `prefixItems`.",
+  "expected_answer_change": "The patch belongs in the two unevaluated-item keyword functions, rather than the four reference-traversal branches. It must collect child errors using `validator.descend` with the actual array index, include each failing uncovered item only once in the aggregate message even when it produces multiple errors, and preserve all of that item's child errors in context. Tests must verify child paths, ordering, successful uncovered items, and unchanged false-schema diagnostics.",
+  "why_substantive": "This changes the deliverable from reference-resolution correctness to diagnostic implementation and tests. The current item keyword functions construct an aggregate error from uncovered values without retaining the errors explaining why those values fail the subschema. Unlike the existing repository task about unevaluated properties, this requires array-index metadata and verification against the drafts' distinct positional coverage rules."
+ },
+ "task_id": "python-jsonschema-jsonschema-r02-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_unevaluated_items_context.py::test_all_item_errors_keep_order_and_indexes[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_all_item_errors_keep_order_and_indexes[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_contains_coverage_is_preserved[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_contains_coverage_is_preserved[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_equal_failing_values_are_listed_once_per_position[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_equal_failing_values_are_listed_once_per_position[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_nested_instance_and_schema_paths[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_nested_instance_and_schema_paths[Draft202012Validator-prefixItems]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7304
+   },
+   "patch_files": [
+    "jsonschema/_keywords.py",
+    "jsonschema/_legacy_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_unevaluated_items_context.py::test_all_item_errors_keep_order_and_indexes[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_all_item_errors_keep_order_and_indexes[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_contains_coverage_is_preserved[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_contains_coverage_is_preserved[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_equal_failing_values_are_listed_once_per_position[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_equal_failing_values_are_listed_once_per_position[Draft202012Validator-prefixItems]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_nested_instance_and_schema_paths[Draft201909Validator-items]",
+   "jsonschema/tests/test_unevaluated_items_context.py::test_nested_instance_and_schema_paths[Draft202012Validator-prefixItems]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

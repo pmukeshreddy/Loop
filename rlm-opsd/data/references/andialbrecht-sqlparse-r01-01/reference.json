@@ -1,0 +1,202 @@
+{
+ "answer": [
+  "tests/test_grouping.py::test_forloops[FOR]",
+  "tests/test_grouping.py::test_forloops[FOREACH]",
+  "tests/test_grouping.py::test_nested_for",
+  "tests/test_regressions.py::test_issue194_splitting_function",
+  "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+  "tests/test_split.py::test_split_procedural_case_end_case",
+  "tests/test_tokenize.py::test_parse_endifloop[END IF]",
+  "tests/test_tokenize.py::test_parse_endifloop[END   IF]",
+  "tests/test_tokenize.py::test_parse_endifloop[END\\t\\nIF]",
+  "tests/test_tokenize.py::test_parse_endifloop[END LOOP]",
+  "tests/test_tokenize.py::test_parse_endifloop[END   LOOP]",
+  "tests/test_tokenize.py::test_parse_endifloop[END\\t\\nLOOP]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_grouping.py::test_grouping_if\",\n  \"tests/test_grouping.py::test_grouping_for\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "n",
+    "p",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "chunked_subcalls",
+  "results": {
+   "chunked_subcalls": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); 0 call sites on selected context, 0 on the whole context; max prompt 0 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Not established: the reference execution used no sub-calls.",
+   "combine_verify_finish": "The reference execution computed and checked the final collection of complete pytest node IDs, including parameter IDs. The executable verification establishes the exact affected set.",
+   "inspect_locate": "The reference execution made 18 context searches to investigate the lexer rule and its downstream consumers. Identifying the affected tests requires connecting tokenization changes to grouping and statement splitting.",
+   "recursive_decomposition": "Not established: the reference execution used no recursive sub-calls."
+  },
+  "notes": "A natural, precisely scoped change-impact request with a clear output format. Describing the proposed lexer change is necessary input, not disclosure of the affected tests. The answer depends on repository-specific lexical rules, downstream processing, and test coverage. The task is distinct from the existing dollar-quoted SQL repair task."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining assertion failures requires semantic reading of multiple test modules and SQL fixtures, rather than merely collecting occurrences of closing keywords. The tokenizer, procedural splitting, grouping, and formatting evidence can be evaluated in bounded sections.",
+   "combine_verify_finish": "Parameterized tests and overlapping consumer paths require an exact, deduplicated collection of pytest node IDs.",
+   "inspect_locate": "The lexical rule is an entry point, but its consumers include statement splitting, matching-delimiter grouping, and formatting reached through several public APIs.",
+   "recursive_decomposition": "The impact separates into lexical assertions, block-state transitions, and grouped-tree consumers. These independent findings must be reconciled into one suite-wide result."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/keywords.py",
+    "symbol": "sqlparse/keywords.py::SQL_REGEX",
+    "why": "Defines the precise lexical change and the remaining rules that classify suffix words."
+   },
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter._handle_closing_keyword",
+    "why": "Distinguishes combined closing keywords from a generic END."
+   },
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter._handle_nested_block",
+    "why": "A suffix emitted separately can be interpreted as a new block starter."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::If",
+    "why": "Its closing marker depends on the combined END IF token."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::For",
+    "why": "Its closing marker depends on the combined END LOOP token."
+   },
+   {
+    "path": "tests/test_tokenize.py",
+    "symbol": "tests/test_tokenize.py::test_parse_endifloop",
+    "why": "Checks the token count and classification of combined closing phrases."
+   },
+   {
+    "path": "tests/test_split.py",
+    "symbol": "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+    "why": "Exercises repeated loop closures followed by a separate statement."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Compute newly failing node IDs relative to the baseline. Existing xfails are not currently passing tests and should not be included.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/sqlparse/keywords.py\n+++ b/sqlparse/keywords.py\n@@ -180,7 +180,7 @@\n     (r'(?<![\\w\\])])(\\[[^\\]\\[]+\\])', tokens.Name),\n     (r'((LEFT\\s+|RIGHT\\s+|FULL\\s+)?(INNER\\s+|OUTER\\s+|STRAIGHT\\s+)?'\n      r'|(CROSS\\s+|NATURAL\\s+)?)?JOIN\\b', tokens.Keyword),\n-    (r'END(\\s+IF|\\s+LOOP|\\s+WHILE|\\s+FOR|\\s+CASE)?\\b', tokens.Keyword),\n+    (r'END\\b', tokens.Keyword),\n     (r'IF\\s+(NOT\\s+)?EXISTS\\b', tokens.Keyword),\n     (r'NOT\\s+NULL\\b', tokens.Keyword),\n     (r'(ASC|DESC)(\\s+NULLS\\s+(FIRST|LAST))?\\b', tokens.Keyword.Order),\n",
+  "question": "We are reviewing a lexer simplification: replace the dedicated SQL_REGEX rule that recognizes END together with an optional IF, LOOP, WHILE, FOR, or CASE suffix with a rule recognizing only the standalone word END. Leave every other regex, keyword dictionary, and pipeline stage unchanged, so a suffix is subsequently processed by the remaining lexical rules. Which currently passing tests in this snapshot would newly fail? Return only a JSON list of their complete pytest node IDs, including parameter IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r01-01",
+ "truth": {
+  "answer": [
+   "tests/test_grouping.py::test_forloops",
+   "tests/test_grouping.py::test_nested_for",
+   "tests/test_regressions.py::test_issue194_splitting_function",
+   "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+   "tests/test_split.py::test_split_procedural_case_end_case",
+   "tests/test_tokenize.py::test_parse_endifloop"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_grouping.py::test_forloops",
+    "tests/test_grouping.py::test_nested_for",
+    "tests/test_regressions.py::test_issue194_splitting_function",
+    "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+    "tests/test_split.py::test_split_procedural_case_end_case",
+    "tests/test_tokenize.py::test_parse_endifloop"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_grouping.py::test_forloops",
+    "tests/test_grouping.py::test_nested_for",
+    "tests/test_regressions.py::test_issue194_splitting_function",
+    "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+    "tests/test_split.py::test_split_procedural_case_end_case",
+    "tests/test_tokenize.py::test_parse_endifloop"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_grouping.py::test_forloops",
+   "tests/test_grouping.py::test_nested_for",
+   "tests/test_regressions.py::test_issue194_splitting_function",
+   "tests/test_split.py::test_split_multiple_for_loops_in_begin_end",
+   "tests/test_split.py::test_split_procedural_case_end_case",
+   "tests/test_tokenize.py::test_parse_endifloop"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,169 @@
+{
+ "answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -1612,7 +1612,10 @@\n     def mapping_type(self) -> type[_MappingT]: ...\n \n     #: Default error messages.\n-    default_error_messages = {\"invalid\": \"Not a valid mapping type.\"}\n+    default_error_messages = {\n+        \"invalid\": \"Not a valid mapping type.\",\n+        \"duplicate\": \"Duplicate key.\",\n+    }\n \n     def __init__(\n         self,\n@@ -1696,11 +1699,19 @@\n             keys = {k: k for k in value}\n         else:\n             keys = {}\n+            seen_keys = set()\n             for key in value:\n                 try:\n-                    keys[key] = self.key_field.deserialize(key, **kwargs)\n+                    deser_key = self.key_field.deserialize(key, **kwargs)\n                 except ValidationError as error:\n                     errors[key][\"key\"] = error.messages\n+                else:\n+                    if deser_key in seen_keys:\n+                        errors[key][\"key\"] = self.make_error(\"duplicate\").messages\n+                    else:\n+                        # Reserve the key even if its value fails validation.\n+                        seen_keys.add(deser_key)\n+                        keys[key] = deser_key\n \n         # Deserialize values\n         result = self.mapping_type()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "end",
+    "files",
+    "mapping",
+    "src",
+    "start"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 77682 chars; 19 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was constructed programmatically and inspected before delivery. It combines configurable duplicate errors with first-key ownership while preserving the existing value-deserialization path, including errors and partial values.",
+   "inspect_locate": "The execution used 19 focused context searches without printing the whole context. Locating Mapping's key/value deserialization phases and the existing error and partial-result machinery was useful for implementing collision detection without changing container behavior."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise collision semantics and a clear production-only unified-diff format. The stated behavior requires reasoning about separate key and value loading phases, rather than a trivial lookup. The verified patch is focused, and the task is substantively different from both its parent variation and the accepted repository tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must consistently enforce first-key ownership across successful values, failed values with partial data, and dictionaries without value conversion. Its exact hunks and error coordinates should be checked together before delivery.",
+   "inspect_locate": "The focused file selection still contains a large fields module. The relevant evidence is concentrated in Mapping's separate key and value loading phases, Field's configurable error machinery, and List and Tuple's propagation of child errors and partial results."
+  },
+  "context": {
+   "files": [
+    "src/marshmallow/fields.py",
+    "src/marshmallow/exceptions.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Mapping._deserialize",
+    "why": "Key conversion currently retains all successful raw-to-converted mappings, allowing later value insertions to overwrite earlier entries. Independent value validation already aggregates errors and partial data."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field.make_error",
+    "why": "Provides configurable message lookup and ValidationError normalization for the new duplicate error."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::List._deserialize",
+    "why": "Wraps dictionary errors under list indices and retains child valid_data."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Tuple._deserialize",
+    "why": "Preserves indexed errors and uses a list for partial results when tuple loading fails."
+   }
+  ],
+  "expected_answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -1587,7 +1587,10 @@\n     def mapping_type(self) -> type[_MappingT]: ...\n \n     #: Default error messages.\n-    default_error_messages = {\"invalid\": \"Not a valid mapping type.\"}\n+    default_error_messages = {\n+        \"invalid\": \"Not a valid mapping type.\",\n+        \"duplicate\": \"Duplicate key.\",\n+    }\n \n     def __init__(\n         self,\n@@ -1696,11 +1699,16 @@\n         else:\n             keys = {}\n+            seen = set()\n             for key in value:\n                 try:\n-                    keys[key] = self.key_field.deserialize(key, **kwargs)\n+                    deser_key = self.key_field.deserialize(key, **kwargs)\n+                    if deser_key in seen:\n+                        raise self.make_error(\"duplicate\")\n+                    seen.add(deser_key)\n+                    keys[key] = deser_key\n                 except ValidationError as error:\n                     errors[key][\"key\"] = error.messages\n \n         # Deserialize values\n         result = self.mapping_type()\n         if self.value_field is None:\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_dict_duplicate_keys.py\n@@ -0,0 +1,114 @@\n+import pytest\n+\n+from marshmallow import ValidationError, fields\n+\n+\n+DUPLICATE = \"Duplicate key.\"\n+INTEGER = \"Not a valid integer.\"\n+\n+\n+@pytest.mark.parametrize(\"convert_values\", [False, True])\n+def test_duplicate_keeps_first_entry(convert_values):\n+    field = fields.Dict(\n+        keys=fields.Int(), values=fields.Int() if convert_values else None\n+    )\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"01\": \"10\", \"1\": \"20\", \"2\": \"30\"})\n+    assert exc.value.messages == {\"1\": {\"key\": [DUPLICATE]}}\n+    expected = {1: 10, 2: 30} if convert_values else {1: \"10\", 2: \"30\"}\n+    assert exc.value.valid_data == expected\n+\n+\n+@pytest.mark.parametrize(\"message\", [\"Key already present.\", [\"Collision.\"]])\n+def test_duplicate_message_override(message):\n+    field = fields.Dict(keys=fields.Int(), error_messages={\"duplicate\": message})\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"01\": \"first\", \"1\": \"second\"})\n+    expected = [message] if isinstance(message, str) else message\n+    assert exc.value.messages == {\"1\": {\"key\": expected}}\n+    assert exc.value.valid_data == {1: \"first\"}\n+\n+\n+def test_equal_converted_keys_need_not_have_the_same_type():\n+    key_field = fields.Function(\n+        deserialize=lambda raw: 1 if raw == \"integer\" else 1.0\n+    )\n+    field = fields.Dict(keys=key_field)\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"integer\": \"first\", \"float\": \"second\"})\n+    assert exc.value.messages == {\"float\": {\"key\": [DUPLICATE]}}\n+    assert exc.value.valid_data == {1: \"first\"}\n+\n+\n+def test_all_later_duplicates_are_errors():\n+    field = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"01\": \"10\", \"1\": \"20\", \"001\": \"40\", \"2\": \"30\"})\n+    assert exc.value.messages == {\n+        \"1\": {\"key\": [DUPLICATE]},\n+        \"001\": {\"key\": [DUPLICATE]},\n+    }\n+    assert exc.value.valid_data == {1: 10, 2: 30}\n+\n+\n+def test_first_key_reserves_slot_even_when_its_value_is_invalid():\n+    field = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"01\": \"bad\", \"1\": \"20\", \"2\": \"30\"})\n+    assert exc.value.messages == {\n+        \"01\": {\"value\": [INTEGER]},\n+        \"1\": {\"key\": [DUPLICATE]},\n+    }\n+    assert exc.value.valid_data == {2: 30}\n+\n+\n+def test_partial_values_do_not_overwrite_first_entry():\n+    field = fields.Dict(keys=fields.Int(), values=fields.List(fields.Int()))\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize(\n+            {\"01\": [\"10\", \"bad\"], \"1\": [\"20\", \"bad\"], \"2\": [\"30\"]}\n+        )\n+    assert exc.value.messages == {\n+        \"01\": {\"value\": {1: [INTEGER]}},\n+        \"1\": {\"key\": [DUPLICATE], \"value\": {1: [INTEGER]}},\n+    }\n+    assert exc.value.valid_data == {1: [10], 2: [30]}\n+\n+\n+def test_values_are_validated_even_for_failed_keys():\n+    field = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize({\"01\": \"10\", \"1\": \"bad\", \"bad\": \"bad\", \"2\": \"30\"})\n+    assert exc.value.messages == {\n+        \"1\": {\"key\": [DUPLICATE], \"value\": [INTEGER]},\n+        \"bad\": {\"key\": [INTEGER], \"value\": [INTEGER]},\n+    }\n+    assert exc.value.valid_data == {1: 10, 2: 30}\n+\n+\n+@pytest.mark.parametrize(\"container\", [\"list\", \"tuple\"])\n+def test_duplicate_errors_and_partial_results_in_containers(container):\n+    child = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    field = fields.List(child) if container == \"list\" else fields.Tuple((child,))\n+    with pytest.raises(ValidationError) as exc:\n+        field.deserialize([{\"01\": \"10\", \"1\": \"20\", \"2\": \"30\"}])\n+    assert exc.value.messages == {0: {\"1\": {\"key\": [DUPLICATE]}}}\n+    assert exc.value.valid_data == [{1: 10, 2: 30}]\n+\n+\n+def test_duplicate_tracking_is_per_call():\n+    field = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    with pytest.raises(ValidationError):\n+        field.deserialize({\"01\": \"10\", \"1\": \"20\"})\n+    assert field.deserialize({\"1\": \"40\"}) == {1: 40}\n+\n+\n+def test_serialization_still_allows_converted_key_overwrites():\n+    field = fields.Dict(keys=fields.Int(), values=fields.Int())\n+    obj = {\"items\": {\"01\": \"10\", \"1\": \"20\", \"2\": \"30\"}}\n+    assert field.serialize(\"items\", obj) == {1: 20, 2: 30}\n+\n+\n+def test_without_key_conversion_distinct_raw_keys_remain_distinct():\n+    field = fields.Dict(values=fields.Int())\n+    assert field.deserialize({\"01\": \"10\", \"1\": \"20\"}) == {\"01\": 10, \"1\": 20}\n",
+  "include_failure_log": false,
+  "notes": "This is an existing silent-data-loss condition, so the task uses new hidden acceptance tests rather than introducing an artificial regression with a setup patch. The expected production patch differs from the seed's argument-forwarding change. The selected fields module exceeds the direct_solve size limit; investigation is localized, but the context is not labeled direct_solve. Hidden tests exercise public APIs only and require no changes to attr/data forwarding.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Prevent `fields.Dict` loading from silently losing entries when different raw keys convert to equal dictionary keys. For example, `fields.Dict(keys=fields.Int(), values=fields.Int()).deserialize({'01': '10', '1': '20', '2': '30'})` should raise `ValidationError`, with a key error for raw key `'1'` and `valid_data` equal to `{1: 10, 2: 30}`.\n\nAdd a `duplicate` error message to `Mapping`, defaulting to `\"Duplicate key.\"` and configurable through the existing `error_messages` mechanism. In input iteration order, the first successfully deserialized key owns its converted key; every later successful key conversion that collides under normal dictionary-key equality must report that message under the later raw key's `'key'` coordinate. Ownership is established by successful key conversion even if that entry's value subsequently fails validation. Later colliding entries must never supply a replacement value or partial value.\n\nContinue deserializing every value, including values whose keys failed or collided, so an entry can report both `'key'` and `'value'` errors. Preserve existing partial-value handling for noncolliding entries. This must work with key-only dictionaries and dictionaries inside `List` or `Tuple`, preserving their existing error coordinates and partial-result shapes. Dictionaries without a key field and all serialization behavior must remain unchanged.\n\nReturn a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused inspect_locate and combine_verify_finish around Mapping._deserialize, with persistent_state useful for tracking raw keys, converted keys, accepted entries, and independent value failures. A direct module read is appropriate; repository-wide investigation or forced sub-calls are unnecessary.",
+  "change_type": "failure_condition",
+  "description": "Repair silent overwrites when distinct raw dictionary keys deserialize to the same key. In src/marshmallow/fields.py, update Mapping._deserialize, which implements Dict loading, so Dict(keys=fields.Int(), values=fields.Int()).deserialize({'01': '10', '1': '20', '2': '30'}) raises ValidationError rather than silently replacing 10 with 20. Define a configurable 'duplicate' error message on Mapping; report the collision under the later raw key's 'key' coordinate, keep the first successfully converted key's entry in valid_data, and continue validating every value so a colliding entry can also have a 'value' error. Add regression tests for key-only dictionaries, converted values, value failures with partial data, and dictionaries inside List or Tuple. Leave serialization unchanged.",
+  "expected_answer_change": "The patch must detect equality-based collisions among successfully deserialized keys and prevent later colliding entries from entering the result. Ground truth includes a 'key' error at raw key '1' and valid_data containing {1: 10, 2: 30} for the stated example. Forwarding attr and data alone cannot address this defect.",
+  "why_substantive": "The seed repairs missing context arguments at child-call sites. This variation introduces a distinct failure condition: successful key conversions can destroy previously loaded entries. It requires examining the mapping's two-phase key/value algorithm, deciding which converted keys remain eligible for result insertion, and preserving simultaneous key and value errors."
+ },
+ "task_id": "marshmallow-code-marshmallow-r02-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_dict_duplicate_keys.py::test_all_later_duplicates_are_errors",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_errors_and_partial_results_in_containers[list]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_errors_and_partial_results_in_containers[tuple]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_keeps_first_entry[False]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_keeps_first_entry[True]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_message_override[Key already present.]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_message_override[message1]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_tracking_is_per_call",
+   "tests/test_dict_duplicate_keys.py::test_equal_converted_keys_need_not_have_the_same_type",
+   "tests/test_dict_duplicate_keys.py::test_first_key_reserves_slot_even_when_its_value_is_invalid",
+   "tests/test_dict_duplicate_keys.py::test_partial_values_do_not_overwrite_first_entry",
+   "tests/test_dict_duplicate_keys.py::test_values_are_validated_even_for_failed_keys"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 12,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1202
+   },
+   "patch_files": [
+    "src/marshmallow/fields.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_dict_duplicate_keys.py::test_all_later_duplicates_are_errors",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_errors_and_partial_results_in_containers[list]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_errors_and_partial_results_in_containers[tuple]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_keeps_first_entry[False]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_keeps_first_entry[True]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_message_override[Key already present.]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_message_override[message1]",
+   "tests/test_dict_duplicate_keys.py::test_duplicate_tracking_is_per_call",
+   "tests/test_dict_duplicate_keys.py::test_equal_converted_keys_need_not_have_the_same_type",
+   "tests/test_dict_duplicate_keys.py::test_first_key_reserves_slot_even_when_its_value_is_invalid",
+   "tests/test_dict_duplicate_keys.py::test_partial_values_do_not_overwrite_first_entry",
+   "tests/test_dict_duplicate_keys.py::test_values_are_validated_even_for_failed_keys"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

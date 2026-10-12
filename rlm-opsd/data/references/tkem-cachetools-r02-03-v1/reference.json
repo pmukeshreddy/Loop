@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -633,21 +633,23 @@\n \n     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):\n         with self.timer as time:\n+            expires = self.__ttu(key, value, time)\n+            # Validate the deadline before expiring or otherwise mutating items.\n+            expired = not (time < expires)\n             self.expire(time)\n-            expires = self.__ttu(key, value, time)\n-            if not (time < expires):\n+            if expired:\n                 # updating an existing item with an already expired\n                 # one should remove the existing item\n                 return self.__delitem(key)\n             cache_setitem(self, key, value)\n-        # removing an existing item would break the heap structure, so\n-        # only mark it as removed for now\n-        try:\n-            self.__getitem(key).removed = True\n-        except KeyError:\n-            pass\n-        self.__items[key] = item = TLRUCache._Item(key, expires)\n-        heapq.heappush(self.__order, item)\n+            # removing an existing item would break the heap structure, so\n+            # only mark it as removed for now\n+            try:\n+                self.__getitem(key).removed = True\n+            except KeyError:\n+                pass\n+            self.__items[key] = item = TLRUCache._Item(key, expires)\n+            heapq.heappush(self.__order, item)\n \n     def __delitem__(self, key, cache_delitem=Cache.__delitem__):\n         with self.timer as time:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "path",
+    "pos"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 11955,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 11 targeted searches without printing the whole context. The investigation required connecting TLRU assignment with expiration records, base-cache storage and size accounting, eviction order, and nested timer contexts. These connections are necessary to preserve physically stored expired entries on exceptional paths while retaining cleanup and eviction on successful paths."
+  },
+  "notes": "This is a natural, repository-dependent exception-safety change with a precise patch format. The question specifies observable requirements without prescribing the fix or solver operations. It differs substantively from the existing TLRU replacement-regression task: callback and comparison failures must preserve state, while successful and already-expired assignments must retain their established behavior. The verified patch addresses those requirements by validating the deadline before mutation and retaining the frozen timer through assignment."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The repository context is larger than a direct-read task permits, but the relevant evidence is concentrated in TLRU assignment, its expiration and deletion paths, the base Cache storage methods, the timer context manager, and the Timer-based tests. Locating these pieces is necessary to distinguish physical storage from observations that themselves trigger expiration."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.__setitem__",
+    "why": "The baseline performs expiration before invoking the callback or validating its deadline, so a rejected assignment can already have removed unrelated entries."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::_TimedCache._Timer",
+    "why": "Nested timer contexts reuse the captured time, which must continue to govern callback execution, expiration, and capacity eviction."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::_TimedCache.currsize",
+    "why": "This accessor expires entries; using it to inspect a failed assignment would conceal premature cleanup."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.expire",
+    "why": "Explicit expiration results expose whether failed assignment consumed expiration records or altered existing deadlines."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.__delitem",
+    "why": "The private deletion path implements the existing already-expired replacement behavior without storing or sizing the incoming value."
+   },
+   {
+    "path": "tests/test_tlru.py",
+    "symbol": "tests/test_tlru.py::Timer",
+    "why": "The existing deterministic timer supports both expired-but-still-stored fixtures and verification of frozen time during nested operations."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_tlru_assignment_safety.py\n@@ -0,0 +1,105 @@\n+import pytest\n+\n+from cachetools import Cache, TLRUCache\n+\n+from .test_tlru import Timer\n+\n+\n+class DeadlineError(Exception):\n+    pass\n+\n+\n+class BadDeadline:\n+    def __gt__(self, other):\n+        raise DeadlineError(\"comparison\")\n+\n+\n+def raw_state(cache):\n+    keys = tuple(Cache.__iter__(cache))\n+    values = tuple((key, Cache.__getitem__(cache, key)) for key in keys)\n+    return keys, values, Cache.currsize.fget(cache)\n+\n+\n+@pytest.mark.parametrize(\"failure\", [\"callback\", \"comparison\"])\n+@pytest.mark.parametrize(\"key\", [\"target\", \"new\"])\n+@pytest.mark.parametrize(\"check\", [\"lru\", \"expiry\"])\n+def test_rejected_deadline_preserves_state(failure, key, check):\n+    timer = Timer()\n+    reject = False\n+    error = DeadlineError(\"callback\")\n+\n+    def ttu(key, value, now):\n+        if reject:\n+            if failure == \"callback\":\n+                raise error\n+            return BadDeadline()\n+        return now + value[0]\n+\n+    cache = TLRUCache(6, ttu, timer=timer, getsizeof=lambda value: value[1])\n+    cache[\"stale\"] = (1, 2, \"stale\")\n+    cache[\"target\"] = (10, 3, \"old\")\n+    cache[\"peer\"] = (12, 1, \"peer\")\n+    timer.tick()\n+    before = raw_state(cache)\n+    reject = True\n+    with pytest.raises(DeadlineError) as exc:\n+        cache[key] = (20, 4, \"incoming\")\n+    if failure == \"callback\":\n+        assert exc.value is error\n+    assert raw_state(cache) == before\n+    assert timer.time == 1\n+\n+    assert cache.expire() == [(\"stale\", (1, 2, \"stale\"))]\n+    if check == \"lru\":\n+        assert cache.popitem() == (\"target\", (10, 3, \"old\"))\n+        assert cache.expire(12) == [(\"peer\", (12, 1, \"peer\"))]\n+    else:\n+        assert cache.expire(10) == [(\"target\", (10, 3, \"old\"))]\n+        assert cache.expire(12) == [(\"peer\", (12, 1, \"peer\"))]\n+    assert raw_state(cache) == ((), (), 0)\n+\n+\n+def test_successful_assignment_uses_frozen_time_and_normal_eviction():\n+    timer = Timer()\n+    events = []\n+\n+    class RecordingCache(TLRUCache):\n+        def expire(self, time=None):\n+            events.append((\"expire\", time, self.timer()))\n+            return super().expire(time)\n+\n+    def ttu(key, value, now):\n+        events.append((\"ttu\", now, cache.timer()))\n+        return now + value[0]\n+\n+    cache = RecordingCache(6, ttu, timer=timer, getsizeof=lambda value: value[1])\n+    cache[\"stale\"] = (1, 2, \"stale\")\n+    cache[\"target\"] = (10, 3, \"old\")\n+    cache[\"peer\"] = (12, 1, \"peer\")\n+    events.clear()\n+    timer.auto = True\n+    cache[\"fresh\"] = (20, 3, \"fresh\")\n+    assert timer.time == 1\n+    assert sum(kind == \"ttu\" for kind, _, _ in events) == 1\n+    assert all(left == right == 1 for _, left, right in events)\n+    assert Cache.currsize.fget(cache) == 4\n+    assert tuple(Cache.__iter__(cache)) == (\"peer\", \"fresh\")\n+    assert Cache.__getitem__(cache, \"fresh\") == (20, 3, \"fresh\")\n+\n+\n+@pytest.mark.parametrize(\"key\", [\"target\", \"new\"])\n+def test_already_expired_assignment_keeps_existing_cleanup_behavior(key):\n+    timer = Timer()\n+    cache = TLRUCache(6, lambda key, value, now: now + value[0], timer=timer, getsizeof=lambda value: value[1])\n+    cache[\"stale\"] = (1, 2, \"stale\")\n+    cache[\"target\"] = (10, 3, \"old\")\n+    cache[\"peer\"] = (12, 1, \"peer\")\n+    timer.tick()\n+    cache[key] = (0, 99, \"dead\")\n+    expected = (\"peer\",) if key == \"target\" else (\"target\", \"peer\")\n+    assert tuple(Cache.__iter__(cache)) == expected\n+    assert Cache.currsize.fget(cache) == (1 if key == \"target\" else 4)\n+    assert key not in cache\n+    assert cache.expire(10) == ([] if key == \"target\" else [(\"target\", (10, 3, \"old\"))])\n+    assert cache.expire(12) == [(\"peer\", (12, 1, \"peer\"))]\n+    assert raw_state(cache) == ((), (), 0)\n",
+  "include_failure_log": false,
+  "notes": "Use the supplied snapshot unchanged as the starting state, including its correct removed=True tombstone handling. This is an implementation task verified by a new hidden test file, rather than a setup regression. The eight rejected-deadline cases should fail on the baseline because assignment removes the stale entry before raising. Raw observations use public Cache base methods to avoid triggering expiration or changing TLRU recency; subsequent expire() and popitem() calls verify deadline records and eviction order. The original tombstone-only repair cannot satisfy these tests. Repository scope is intentional: the complete production module exceeds the 16,000-character direct_solve limit, although the semantic investigation is focused.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Strengthen exception safety for `TLRUCache` assignment. If the user-supplied `ttu` callback raises, or determining whether its returned deadline is strictly later than the captured time raises, propagate that exception without changing stored values, size accounting, LRU order, or expiration records. This must hold for both new keys and replacements, including when unrelated expired entries are still physically stored. Assume the callback and deadline comparison do not themselves mutate the cache.\n\nKeep one frozen timer value throughout the assignment, including nested timer access and capacity eviction. Successful assignments must retain the existing expiration, replacement, and capacity behavior. An already-expired returned deadline is not an exception: it must still remove an existing value for that key without storing the incoming value, and retain the existing cleanup of unrelated expired entries.\n\nReturn a unified diff against `src/cachetools/__init__.py` only. Leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused invariant analysis and careful verification rather than traceback-driven heap debugging. Persistent state is useful for distinguishing preexisting expired storage from visible entries, and direct inspection of TLRUCache.__setitem__, _TimedCache._Timer, and the side-effecting size accessors is sufficient; repository-wide sub-calls are unnecessary.",
+  "change_type": "constraint",
+  "description": "Change the exception-safety contract of TLRU assignment: if the user-supplied ttu callback raises, or comparing its returned deadline with the captured time raises, the assignment must leave stored values, size accounting, LRU order, and expiration records unchanged\u2014even when unrelated entries are already expired. Implement this in src/cachetools/__init__.py::TLRUCache.__setitem__, retaining one frozen timer value and preserving successful-write and already-expired-replacement behavior. Add focused tests in tests/test_tlru.py using Timer, including an expired unrelated entry and a live replacement target. Use the shown correct removed=True implementation as the baseline.",
+  "expected_answer_change": "The repair must evaluate the callback and determine whether its deadline is usable before running expiration or changing storage, while keeping these operations within the same timer context. Tests must distinguish physical storage from public observations: len() and currsize themselves expire entries, so they cannot alone establish that a failed assignment left state unchanged. Successful expiration, dead-on-arrival replacement removal through TLRUCache.__delitem, and normal capacity eviction must remain intact.",
+  "why_substantive": "The original defect concerns obsolete heap records deleting replacement values. This variation concerns mutation before deadline validation: TLRUCache.__setitem__ currently calls expire(time) before invoking ttu. The original one-line tombstone repair cannot satisfy the new exception-safety requirement."
+ },
+ "task_id": "tkem-cachetools-r02-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-new-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-new-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-target-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-target-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-new-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-new-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-target-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-target-comparison]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 349
+   },
+   "patch_files": [
+    "src/cachetools/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-new-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-new-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-target-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[expiry-target-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-new-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-new-comparison]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-target-callback]",
+   "tests/test_tlru_assignment_safety.py::test_rejected_deadline_preserves_state[lru-target-comparison]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

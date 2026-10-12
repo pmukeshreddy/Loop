@@ -1,0 +1,117 @@
+--- /dev/null
++++ b/voluptuous/tests/test_validate_parameter_kinds.py
+@@ -0,0 +1,114 @@
++import pytest
++
++from voluptuous import Coerce, Invalid, validate
++
++
++def test_named_schemas_for_positional_and_keyword_only():
++    @validate(x=int, y=int, __return__=int)
++    def add(x, /, *, y):
++        return x + y
++
++    assert add(2, y=3) == 5
++
++
++def test_positional_schema_mapping_and_transformed_invocation():
++    token = object()
++
++    @validate(Coerce(int), y=Coerce(int), __return__=tuple)
++    def collect(x, /, z, *, y):
++        return x, z, y
++
++    assert collect('2', token, y='3') == (2, token, 3)
++    assert collect('4', z=token, y='5') == (4, token, 5)
++
++
++def test_keyword_schema_overrides_positional_schema():
++    @validate(str, x=Coerce(int), y=Coerce(int))
++    def add(x, /, *, y):
++        return x + y
++
++    assert add('2', y='3') == 5
++
++
++def test_keyword_only_function_and_named_input_errors():
++    @validate(y=int)
++    def only(*, y):
++        return y
++
++    assert only(y=4) == 4
++    with pytest.raises(Invalid) as exc:
++        only(y='bad')
++    assert exc.value.path == ['y']
++
++
++def test_defaults_are_not_added_to_validation_input():
++    left, middle, right = object(), object(), object()
++    seen = []
++
++    def convert(value):
++        seen.append(value)
++        return int(value)
++
++    @validate(x=convert, z=convert, y=convert)
++    def collect(x=left, /, z=middle, *, y=right):
++        return x, z, y
++
++    result = collect()
++    assert result[0] is left
++    assert result[1] is middle
++    assert result[2] is right
++    assert seen == []
++
++    assert collect(y='3') == (left, middle, 3)
++    assert seen == ['3']
++    seen.clear()
++    assert collect(z='2', y='3') == (left, 2, 3)
++    assert sorted(seen) == ['2', '3']
++    seen.clear()
++    assert collect('1', '2', y='3') == (1, 2, 3)
++    assert sorted(seen) == ['1', '2', '3']
++
++
++@pytest.mark.parametrize(
++    'args, kwargs',
++    [
++        ((), {'z': 2, 'y': 3}),
++        ((1,), {'y': 3}),
++        ((1, 2), {}),
++        ((1, 2), {'z': 4, 'y': 3}),
++        ((1, 2, 3), {'y': 4}),
++        ((1, 2), {'y': 3, 'extra': 4}),
++        ((), {'x': 1, 'z': 2, 'y': 3}),
++        ((1, 2, 3), {}),
++    ],
++)
++def test_invalid_bindings_run_no_validation_or_body(args, kwargs):
++    events = []
++
++    def record(value):
++        events.append('validator')
++        raise AssertionError('validator must not run')
++
++    @validate(x=record, z=record, y=record, __return__=record)
++    def target(x, /, z, *, y):
++        events.append('body')
++        return x + z + y
++
++    with pytest.raises(TypeError):
++        target(*args, **kwargs)
++    assert events == []
++
++
++def test_return_only_validation_with_positional_only_input():
++    @validate(__return__=Coerce(int))
++    def good(x, /, *, y):
++        return str(x + y)
++
++    assert good(2, y=3) == 5
++
++    @validate(__return__=int)
++    def bad(x, /, *, y):
++        return 'bad'
++
++    with pytest.raises(Invalid):
++        bad(2, y=3)

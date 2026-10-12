@@ -1,0 +1,252 @@
+--- /dev/null
++++ b/tests/test_record_local_schema_skip.py
+@@ -0,0 +1,249 @@
++import pytest
++
++from marshmallow import Schema, ValidationError, fields, pre_load, validates, validates_schema
++
++
++def invoke(schema, data, method, many=True):
++    if method == "validate":
++        return schema.validate(data, many=many)
++    with pytest.raises(ValidationError) as exc:
++        schema.load(data, many=many)
++    return exc.value.messages
++
++
++@pytest.mark.parametrize("indexed", [True, False])
++@pytest.mark.parametrize("method", ["load", "validate"])
++def test_record_local_skip(indexed, method):
++    events = {name: [] for name in ("one", "two", "forced", "collection", "always")}
++
++    class Batch(Schema):
++        tag = fields.Str()
++        number = fields.Int(required=True)
++
++        class Meta:
++            index_errors = indexed
++
++        @validates("number")
++        def reject_number(self, value, **kwargs):
++            if value == 13:
++                raise ValidationError("field rejection")
++
++        @validates_schema
++        def one(self, data, **kwargs):
++            events["one"].append(data.get("tag"))
++            raise ValidationError("one")
++
++        @validates_schema
++        def two(self, data, **kwargs):
++            events["two"].append(data.get("tag"))
++            raise ValidationError("two")
++
++        @validates_schema(skip_on_field_errors=False)
++        def forced(self, data, **kwargs):
++            events["forced"].append(data.get("tag"))
++            raise ValidationError("forced")
++
++        @validates_schema(pass_collection=True)
++        def collection(self, data, **kwargs):
++            events["collection"].append("called")
++
++        @validates_schema(pass_collection=True, skip_on_field_errors=False)
++        def always(self, data, **kwargs):
++            events["always"].append("called")
++            raise ValidationError("collection failure")
++
++    raw = [
++        {"tag": "a", "number": 1},
++        {"tag": "b", "number": "invalid"},
++        {"tag": "c", "number": 13},
++        {"tag": "d", "number": 2},
++        {"tag": "e"},
++        {"tag": "f", "number": 3, "unknown": True},
++        None,
++    ]
++    schema = Batch()
++    errors = invoke(schema, raw, method)
++    assert events["one"] == ["a", "d"]
++    assert events["two"] == ["a", "d"]
++    assert events["forced"] == ["a", "b", "c", "d", "e", "f", None]
++    assert events["collection"] == []
++    assert events["always"] == ["called"]
++    if indexed:
++        for idx in (0, 3):
++            assert sorted(errors[idx]["_schema"]) == ["forced", "one", "two"]
++        for idx in (1, 2, 4):
++            assert "number" in errors[idx]
++        assert "unknown" in errors[5]
++        assert sorted(errors[6]["_schema"]) == ["Invalid input type.", "forced"]
++        assert errors["_schema"] == ["collection failure"]
++    else:
++        assert not any(isinstance(key, int) for key in errors)
++        assert sorted(errors["_schema"]) == sorted(
++            ["collection failure", "Invalid input type."] + ["forced"] * 7
++            + ["one", "two"] * 2
++        )
++
++    for calls in events.values():
++        calls.clear()
++    invoke(schema, [{"tag": "a", "number": 1}, {"tag": "b", "number": 2}], method)
++    assert events["one"] == ["a", "b"]
++    assert events["two"] == ["a", "b"]
++    assert events["collection"] == ["called"]
++
++
++@pytest.mark.parametrize("indexed", [True, False])
++@pytest.mark.parametrize("method", ["load", "validate"])
++@pytest.mark.parametrize("mode", ["filter", "expand"])
++def test_count_changes_use_processed_records(indexed, method, mode):
++    events = {"selected": [], "forced": []}
++
++    class Batch(Schema):
++        tag = fields.Str()
++        number = fields.Int(required=True)
++
++        class Meta:
++            index_errors = indexed
++
++        @pre_load(pass_collection=True)
++        def reshape(self, data, **kwargs):
++            result = data[1:]
++            if mode == "expand":
++                result = result + [{"tag": "e", "number": 3}, {"tag": "f", "number": "bad"}]
++            return result
++
++        @validates("number")
++        def reject_number(self, value, **kwargs):
++            if value == 13:
++                raise ValidationError("field rejection")
++
++        @validates_schema
++        def selected(self, data, **kwargs):
++            events["selected"].append(data["tag"])
++            raise ValidationError("selected")
++
++        @validates_schema(skip_on_field_errors=False)
++        def forced(self, data, **kwargs):
++            events["forced"].append(data["tag"])
++
++    raw = [
++        {"tag": "drop", "number": "bad"},
++        {"tag": "a", "number": 1},
++        {"tag": "b", "number": "bad"},
++        {"tag": "c", "number": 13},
++        {"tag": "d", "number": 2},
++    ]
++    errors = invoke(Batch(), raw, method)
++    selected = ["a", "d"] + (["e"] if mode == "expand" else [])
++    assert events["selected"] == selected
++    assert events["forced"] == ["a", "b", "c", "d"] + (["e", "f"] if mode == "expand" else [])
++    if indexed:
++        expected = {0, 1, 2, 3} | ({4, 5} if mode == "expand" else set())
++        assert set(errors) == expected
++        assert errors[0]["_schema"] == ["selected"]
++        assert errors[3]["_schema"] == ["selected"]
++        if mode == "expand":
++            assert errors[4]["_schema"] == ["selected"]
++    else:
++        assert set(errors) == {"number", "_schema"}
++        assert errors["_schema"] == ["selected"] * len(selected)
++
++
++@pytest.mark.parametrize("indexed", [True, False])
++@pytest.mark.parametrize("method", ["load", "validate"])
++def test_pass_original_remains_positional(indexed, method):
++    events = {"selected": [], "forced": []}
++
++    class Batch(Schema):
++        tag = fields.Str()
++        number = fields.Int(required=True)
++
++        class Meta:
++            index_errors = indexed
++
++        @pre_load(pass_collection=True)
++        def reverse(self, data, **kwargs):
++            return list(reversed(data))
++
++        @validates_schema(pass_original=True)
++        def selected(self, data, original, **kwargs):
++            events["selected"].append((data["tag"], original["tag"]))
++
++        @validates_schema(pass_original=True, skip_on_field_errors=False)
++        def forced(self, data, original, **kwargs):
++            events["forced"].append((data["tag"], original["tag"]))
++
++    raw = [
++        {"tag": "a", "number": 1},
++        {"tag": "b", "number": "bad"},
++        {"tag": "c", "number": 2},
++    ]
++    invoke(Batch(), raw, method)
++    assert events["selected"] == [("c", "a"), ("a", "c")]
++    assert events["forced"] == [("c", "a"), ("b", "b"), ("a", "c")]
++
++
++@pytest.mark.parametrize("mode", ["filter", "expand"])
++@pytest.mark.parametrize("skip", [True, False])
++@pytest.mark.parametrize("method", ["load", "validate"])
++def test_pass_original_keeps_strict_length_check(mode, skip, method):
++    class Batch(Schema):
++        number = fields.Int()
++
++        @pre_load(pass_collection=True)
++        def reshape(self, data, **kwargs):
++            return data[:-1] if mode == "filter" else data + [{"number": 3}]
++
++        @validates_schema(pass_original=True, skip_on_field_errors=skip)
++        def check(self, data, original, **kwargs):
++            pass
++
++    with pytest.raises(ValueError):
++        getattr(Batch(), method)([{"number": 1}, {"number": 2}], many=True)
++
++
++@pytest.mark.parametrize("indexed", [True, False])
++@pytest.mark.parametrize("method", ["load", "validate"])
++def test_nested_and_container_errors_skip_only_parent_record(indexed, method):
++    calls = []
++
++    class Child(Schema):
++        number = fields.Int(required=True)
++
++    class Parent(Schema):
++        tag = fields.Str()
++        child = fields.Nested(Child, required=True)
++        values = fields.List(fields.Int(), required=True)
++
++        class Meta:
++            index_errors = indexed
++
++        @validates_schema
++        def check(self, data, **kwargs):
++            calls.append(data["tag"])
++
++    raw = [
++        {"tag": "a", "child": {"number": 1}, "values": [1]},
++        {"tag": "b", "child": {"number": "bad"}, "values": [1]},
++        {"tag": "c", "child": {"number": 1}, "values": ["bad"]},
++    ]
++    assert invoke(Parent(), raw, method)
++    assert calls == ["a"]
++
++
++@pytest.mark.parametrize("method", ["load", "validate"])
++def test_single_record_skip_is_unchanged(method):
++    calls = []
++
++    class Single(Schema):
++        number = fields.Int(required=True)
++
++        @validates_schema
++        def selected(self, data, **kwargs):
++            calls.append("selected")
++
++        @validates_schema(skip_on_field_errors=False)
++        def forced(self, data, **kwargs):
++            calls.append("forced")
++
++    assert invoke(Single(), {"number": "bad"}, method, many=False)
++    assert calls == ["forced"]

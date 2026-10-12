@@ -1,0 +1,49 @@
+--- /dev/null
++++ b/tests/test_indeterminate_tasks.py
+@@ -0,0 +1,46 @@
++from unittest import TestCase
++
++from mistune import create_markdown
++
++
++class TestIndeterminateTasks(TestCase):
++    def test_ast_marker_and_attributes(self):
++        md = create_markdown(renderer="ast", plugins=["task_lists"])
++        token = md("- [-] todo\n")[0]["children"][0]
++        self.assertEqual(token["type"], "task_list_item")
++        self.assertEqual(token["attrs"], {"checked": False, "indeterminate": True})
++        self.assertEqual(token["children"][0]["children"], [{"type": "text", "raw": "todo"}])
++
++    def test_html_mixed_checkbox(self):
++        md = create_markdown(plugins=["task_lists"])
++        html = md("- [-] todo\n")
++        self.assertIn('class="task-list-item"', html)
++        self.assertIn('type="checkbox"', html)
++        self.assertIn('aria-checked="mixed"', html)
++        self.assertIn('data-indeterminate="true"', html)
++        self.assertRegex(html, r"<input\b[^>]*\sdisabled(?:\s|/|>)")
++        self.assertNotRegex(html, r"<input\b[^>]*\schecked(?:\s|=|/|>)")
++        self.assertNotIn("[-]", html)
++
++    def test_nested_items_are_rewritten(self):
++        md = create_markdown(renderer="ast", plugins=["task_lists"])
++        tokens = md("> - [-] outer\n>   - [-] inner\n")
++        pending = list(tokens)
++        tasks = []
++        while pending:
++            token = pending.pop()
++            pending.extend(token.get("children", []))
++            if token["type"] == "task_list_item":
++                tasks.append(token["attrs"])
++        self.assertEqual(tasks, [{"checked": False, "indeterminate": True}] * 2)
++
++    def test_existing_markers_and_missing_space(self):
++        md = create_markdown(renderer="ast", plugins=["task_lists"])
++        for mark, checked in (("[ ]", False), ("[x]", True), ("[X]", True)):
++            token = md("- " + mark + " todo\n")[0]["children"][0]
++            self.assertEqual(token["attrs"], {"checked": checked})
++        token = md("- [-]word\n")[0]["children"][0]
++        self.assertEqual(token["type"], "list_item")
++        html = create_markdown(plugins=["task_lists"])("- [x] done\n")
++        self.assertNotIn('aria-checked="mixed"', html)
++        self.assertNotIn('data-indeterminate="true"', html)

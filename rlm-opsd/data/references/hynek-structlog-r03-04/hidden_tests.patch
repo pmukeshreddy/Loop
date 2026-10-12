@@ -1,0 +1,52 @@
+--- /dev/null
++++ b/tests/test_ambient_merge_overwrite.py
+@@ -0,0 +1,49 @@
++import pytest
++import structlog
++from structlog import contextvars, threadlocal
++from structlog.testing import ReturnLogger
++
++
++pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
++
++
++@pytest.fixture(autouse=True)
++def clean_contexts():
++    contextvars.clear_contextvars()
++    threadlocal.clear_threadlocal()
++    yield
++    contextvars.clear_contextvars()
++    threadlocal.clear_threadlocal()
++
++
++@pytest.mark.parametrize("api", [contextvars, threadlocal])
++@pytest.mark.parametrize("overwrite", [None, False, True])
++@pytest.mark.parametrize("ambient", [1, None])
++def test_processor_policy(api, overwrite, ambient):
++    suffix = "contextvars" if api is contextvars else "threadlocal"
++    getattr(api, f"bind_{suffix}")(shared=ambient, only_local=2)
++    event = {"shared": "call", "only_event": 3}
++    kwargs = {} if overwrite is None else {"overwrite": overwrite}
++    result = getattr(api, f"merge_{suffix}")(None, "info", event, **kwargs)
++    expected = ambient if overwrite else "call"
++    assert result == {"shared": expected, "only_local": 2, "only_event": 3}
++    assert (result is event) is (api is contextvars)
++    if api is threadlocal:
++        assert event == {"shared": "call", "only_event": 3}
++    assert getattr(api, f"get_{suffix}")() == {"shared": ambient, "only_local": 2}
++
++
++@pytest.mark.parametrize("api", [contextvars, threadlocal])
++@pytest.mark.parametrize("overwrite", [None, False, True])
++@pytest.mark.parametrize("ambient", [1, None])
++def test_retrieval_policy(api, overwrite, ambient):
++    suffix = "contextvars" if api is contextvars else "threadlocal"
++    getattr(api, f"bind_{suffix}")(shared=ambient, only_local=2)
++    log = structlog.wrap_logger(ReturnLogger(), processors=[]).bind(
++        shared="bound", only_bound=3
++    )
++    kwargs = {} if overwrite is None else {"overwrite": overwrite}
++    result = getattr(api, f"get_merged_{suffix}")(log, **kwargs)
++    expected = ambient if overwrite else "bound"
++    assert result == {"shared": expected, "only_local": 2, "only_bound": 3}
++    assert structlog.get_context(log) == {"shared": "bound", "only_bound": 3}

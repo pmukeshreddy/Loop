@@ -1,0 +1,94 @@
+--- /dev/null
++++ b/voluptuous/tests/test_humanize_objects.py
+@@ -0,0 +1,91 @@
++import pytest
++
++from voluptuous import Error, Invalid, MultipleInvalid, Object, Required, Schema
++from voluptuous.humanize import humanize_error, validate_with_humanized_errors
++
++
++class Value:
++    def __init__(self, value=None):
++        self.value = value
++
++
++class SlottedValue:
++    __slots__ = ('value',)
++
++    def __init__(self, value=None):
++        self.value = value
++
++
++class Subscriptable:
++    value = 'attribute'
++
++    def __init__(self, failure=None):
++        self.failure = failure
++
++    def __getitem__(self, key):
++        if self.failure is not None:
++            raise self.failure(key)
++        return 'subscription'
++
++
++@pytest.mark.parametrize('cls', [Value, SlottedValue])
++def test_object_inside_dictionary(cls):
++    data = {'payload': cls('bad')}
++    schema = Schema({'payload': Object({'value': int}, cls=cls)})
++    with pytest.raises(MultipleInvalid) as caught:
++        schema(data)
++    assert humanize_error(data, caught.value) == (
++        "expected int for object value @ data['payload']['value']. Got 'bad'"
++    )
++
++
++def test_mixed_attribute_and_subscription_path():
++    data = {'payload': [SlottedValue(({'n': 'bad'},))]}
++    schema = Schema({'payload': [Object({'value': ({'n': int},)})]})
++    with pytest.raises(Error) as caught:
++        validate_with_humanized_errors(data, schema)
++    assert str(caught.value) == (
++        "expected int for dictionary value "
++        "@ data['payload'][0]['value'][0]['n']. Got 'bad'"
++    )
++
++
++def test_missing_dictionary_items_key():
++    schema = Schema({Required('items'): int})
++    with pytest.raises(MultipleInvalid) as caught:
++        schema({})
++    assert humanize_error({}, caught.value) == (
++        "required key not provided @ data['items']. Got None"
++    )
++
++
++@pytest.mark.parametrize('cls', [Value, SlottedValue])
++@pytest.mark.parametrize('path', [['absent'], [0], ['value', 'absent']])
++def test_unresolvable_object_paths(cls, path):
++    error = Invalid('bad', path=path)
++    assert humanize_error(cls(42), error) == '%s. Got None' % error
++
++
++@pytest.mark.parametrize('failure', [None, KeyError, IndexError, TypeError])
++def test_custom_subscription_never_falls_back_to_attributes(failure):
++    data = Subscriptable(failure)
++    error = Invalid('bad', path=['value'])
++    summary = "'subscription'" if failure is None else 'None'
++    assert humanize_error(data, error) == '%s. Got %s' % (error, summary)
++
++
++@pytest.mark.parametrize('data,path', [([], [0]), ((), [0]), ([1], ['append'])])
++def test_sequence_lookup_failures_still_return_none(data, path):
++    error = Invalid('bad', path=path)
++    assert humanize_error(data, error) == '%s. Got None' % error
++
++
++def test_recursive_sorted_rendering_with_object_values():
++    data = Value({'z': 'long value', 'a': 12})
++    alpha = Invalid('alpha', path=['value', 'a'])
++    zeta = Invalid('zeta', path=['value', 'z'])
++    errors = MultipleInvalid([zeta, MultipleInvalid([alpha])])
++    assert humanize_error(data, errors, max_sub_error_length=6) == (
++        "alpha @ data['value']['a']. Got 12\n"
++        "zeta @ data['value']['z']. Got 'lo..."
++    )

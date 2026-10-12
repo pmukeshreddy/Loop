@@ -1,0 +1,84 @@
+--- a/lark/load_grammar.py
++++ b/lark/load_grammar.py
+@@ -867,8 +867,51 @@
+ 
+ 
+ 
+-def resolve_term_references(term_dict):
+-    # TODO Solve with transitive closure (maybe)
++def resolve_term_references(term_dict, validate_declares=True):
++    # Inspect dependencies before inlining mutates the trees. In particular,
++    # start at outermost terminals so diagnostics don't depend on definition
++    # order.
++    dependencies = {}
++    dependents = {name: set() for name in term_dict}
++    for name, tree in term_dict.items():
++        dependencies[name] = []
++        if tree is not None:
++            for exp in tree.find_data('value'):
++                item, = exp.children
++                if isinstance(item, Terminal):
++                    dependencies[name].append(item.name)
++                    if item.name in dependents:
++                        dependents[item.name].add(name)
++
++    # Imports are resolved before the importing grammar has been loaded.
++    # Leave references leading to declarations intact until we can report
++    # the outermost terminal using the final, mangled names.
++    unresolved = {name for name, tree in term_dict.items() if tree is None}
++    pending = list(unresolved)
++    while pending:
++        for name in dependents[pending.pop()]:
++            if name not in unresolved:
++                unresolved.add(name)
++                pending.append(name)
++
++    if validate_declares:
++        roots = [name for name in term_dict if not dependents[name]]
++        for name in roots + list(term_dict):
++            if term_dict[name] is None or name not in unresolved:
++                continue
++            seen = set()
++            pending = [name]
++            while pending:
++                dependency = pending.pop()
++                if dependency in seen or dependency not in term_dict:
++                    continue
++                seen.add(dependency)
++                if term_dict[dependency] is None:
++                    raise GrammarError(
++                        "Terminal %s depends on declared terminal %s, which has no pattern"
++                        % (name, dependency)
++                    )
++                pending.extend(dependencies[dependency])
+ 
+     while True:
+         changed = False
+@@ -884,7 +927,8 @@
+                         term_value = term_dict[item.name]
+                     except KeyError:
+                         raise GrammarError("Terminal used but not defined: %s" % item.name)
+-                    assert term_value is not None
++                    if item.name in unresolved:
++                        continue
+                     exp.children[0] = term_value
+                     changed = True
+                 else:
+@@ -1287,7 +1331,7 @@
+             for name, d in self._definitions.items()
+             if d.is_term
+         }
+-        resolve_term_references(term_defs)
++        resolve_term_references(term_defs, validate_declares=mangle is None)
+ 
+ 
+     def _remove_unused(self, used):
+@@ -1296,7 +1340,7 @@
+                 d = self._definitions[symbol]
+             except KeyError:
+                 return []
+-            if d.is_term:
++            if d.tree is None:
+                 return []
+             return _find_used_symbols(d.tree) - set(d.params)
+ 

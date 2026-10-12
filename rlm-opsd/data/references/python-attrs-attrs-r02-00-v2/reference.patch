@@ -1,0 +1,22 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -474,6 +474,19 @@
+ 
+     if field_transformer is not None:
+         attrs = tuple(field_transformer(cls, attrs))
++
++    # Normalize the final hooks, including inherited and newly added fields.
++    # Attribute.evolve() bypasses the syntactic sugar applied by attrib().
++    normalized_attrs = []
++    for a in attrs:
++        if isinstance(a.on_setattr, (list, tuple)):
++            for hook in a.on_setattr:
++                if not callable(hook):
++                    msg = "on_setattr sequence members must be callable."
++                    raise TypeError(msg)
++            a = a.evolve(on_setattr=setters.pipe(*a.on_setattr))
++        normalized_attrs.append(a)
++    attrs = normalized_attrs
+ 
+     # Check attr order after executing the field_transformer.
+     # Mandatory vs non-mandatory attr order only matters when they are part of

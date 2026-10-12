@@ -1,0 +1,143 @@
+{
+ "answer": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -1130,7 +1130,7 @@\n         if d is None:\n             d = {}\n \n-        return ChainMap(self.globals, d)\n+        return ChainMap(d, self.globals)\n \n \n class Template:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.08104871844230144,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "env",
+    "files",
+    "logs"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 966246 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['env', 'files', 'logs']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution constructed and inspected the final diff. The verified patch restores template-first ChainMap ordering while preserving the environment mapping as a live fallback.",
+   "inspect_locate": "The reference execution performed 19 targeted searches without printing the whole context. Connecting global-map construction, cached-template updates, and runtime precedence is useful for distinguishing a correct repair from a merged or copied mapping that loses isolation or live fallback.",
+   "persistent_state": "Across five turns, the execution reused investigation variables and retained the relevant distinctions between environment globals, template overrides, cached updates, and render arguments."
+  },
+  "notes": "This is a natural maintainer request with a precise patch format. It states the required observable contract without naming the defective symbol or prescribing the repair. Although the fix is one line, establishing that it preserves cached-template isolation and render precedence requires repository-specific reasoning. Executable verification confirms the supplied regression tests pass."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final diff must restore precedence without losing isolation or the live environment-global fallback, and its hunk must match the modified source.",
+   "inspect_locate": "The failing behavior concerns template-specific values, but establishing the cause requires connecting template creation, cached loading, global-map construction, and runtime context precedence.",
+   "persistent_state": "The investigation reuses the distinctions between environment globals, template globals, cached-template updates, and render arguments while evaluating possible repairs."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.make_globals",
+    "why": "Constructs the two-layer globals mapping whose lookup and mutation precedence govern template isolation."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment._load_template",
+    "why": "Updates globals on cached templates, exposing the consequences of writing to the wrong ChainMap layer."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Template.new_context",
+    "why": "Passes template globals and render variables into runtime context construction."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only ChainMap layer order. Verify with the complete baseline suite, including template-global and import behavior.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions involving template globals after a globals-handling cleanup. Restore the existing contract: template-specific globals override environment globals, updates to a cached template remain local to that template, and environment-global changes remain visible where the template has no override. Render arguments must retain their existing precedence. Send a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -1130,7 +1130,7 @@\n         if d is None:\n             d = {}\n \n-        return ChainMap(d, self.globals)\n+        return ChainMap(self.globals, d)\n \n \n class Template:\n"
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+   "tests/test_regression.py::TestBug::test_cached_extends[include]"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 909
+   },
+   "patch_files": [
+    "src/jinja2/environment.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_regression.py::TestBug::test_cached_extends[extends]",
+   "tests/test_regression.py::TestBug::test_cached_extends[include]"
+  ],
+  "ground_truth_symbols": [
+   "src/jinja2/environment.py::Environment.make_globals"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 907,
+  "stability_runs": 3
+ }
+}

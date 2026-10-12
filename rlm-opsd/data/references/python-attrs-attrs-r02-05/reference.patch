@@ -1,0 +1,46 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -187,10 +187,10 @@
+     if isinstance(on_setattr, (list, tuple)):
+         on_setattr = setters.pipe(*on_setattr)
+ 
+-    if validator and isinstance(validator, (list, tuple)):
+-        validator = and_(*validator)
+-
+-    if converter and isinstance(converter, (list, tuple)):
++    if isinstance(validator, (list, tuple)):
++        validator = and_(*validator) if len(validator) else None
++
++    if isinstance(converter, (list, tuple)) and len(converter):
+         converter = pipe(*converter)
+ 
+     return _CountingAttr(
+@@ -2197,7 +2197,7 @@
+     annotations = {"return": None}
+ 
+     for a in attrs:
+-        if a.validator:
++        if a.validator is not None:
+             attrs_to_validate.append(a)
+ 
+         attr_name = a.name
+--- a/src/attr/setters.py
++++ b/src/attr/setters.py
+@@ -45,7 +45,7 @@
+         return new_value
+ 
+     v = attrib.validator
+-    if not v:
++    if v is None:
+         return new_value
+ 
+     v(instance, attrib, new_value)
+@@ -61,7 +61,7 @@
+     .. versionadded:: 20.1.0
+     """
+     c = attrib.converter
+-    if c:
++    if c is not None:
+         # This can be removed once we drop 3.8 and use attrs.Converter instead.
+         from ._make import Converter
+ 

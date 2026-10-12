@@ -1,0 +1,35 @@
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -182,10 +182,8 @@
+ 
+     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):
+         cache_setitem(self, key, value)
+-        if key in self.__order:
+-            self.__order.move_to_end(key)
+-        else:
++        if key not in self.__order:
+             self.__order[key] = None
+ 
+     def __delitem__(self, key, cache_delitem=Cache.__delitem__):
+         cache_delitem(self, key)
+@@ -243,7 +241,6 @@
+     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):
+         cache_setitem(self, key, value)
+         if key in self.__links:
+-            self.__touch(key)
+             return
+         root = self.__root
+         link = root.next
+         if link.count != 1:
+@@ -319,9 +316,10 @@
+         return value
+ 
+     def __setitem__(self, key, value, cache_setitem=Cache.__setitem__):
+         cache_setitem(self, key, value)
+-        self.__touch(key)
++        if key not in self.__order:
++            self.__touch(key)
+ 
+     def __delitem__(self, key, cache_delitem=Cache.__delitem__):
+         cache_delitem(self, key)
+         del self.__order[key]

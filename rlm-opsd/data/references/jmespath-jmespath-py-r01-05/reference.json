@@ -1,0 +1,145 @@
+{
+ "answer": "--- a/jmespath/lexer.py\n+++ b/jmespath/lexer.py\n@@ -23,7 +23,7 @@\n         '}': 'rbrace',\n     }\n \n-    def tokenize(self, expression):\n+    def tokenize(self, expression, allow_legacy_literals=True):\n         self._initialize_for_expression(expression)\n         while self._current is not None:\n             if self._current in self.SIMPLE_TOKENS:\n@@ -61,7 +61,7 @@\n             elif self._current == '&':\n                 yield self._match_or_else('&', 'and', 'expref')\n             elif self._current == '`':\n-                yield self._consume_literal()\n+                yield self._consume_literal(allow_legacy_literals)\n             elif self._current in self.VALID_NUMBER:\n                 start = self._position\n                 buff = self._consume_number()\n@@ -155,13 +155,17 @@\n         self._next()\n         return buff\n \n-    def _consume_literal(self):\n+    def _consume_literal(self, allow_legacy_literals=True):\n         start = self._position\n         lexeme = self._consume_until('`').replace('\\\\`', '`')\n         try:\n             # Assume it is valid JSON and attempt to parse.\n             parsed_json = loads(lexeme)\n         except ValueError:\n+            if not allow_legacy_literals:\n+                raise LexerError(lexer_position=start,\n+                                 lexer_value=self._expression[start:],\n+                                 message=\"Bad token %s\" % lexeme)\n             try:\n                 # Invalid JSON values should be converted to quoted\n                 # JSON strings during the JEP-12 deprecation period.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8600 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 8,600-character lexer context supports a focused implementation without sub-calls. The reference execution used targeted context searches and direct reasoning to connect the tokenization argument to backtick decoding, fallback rejection, warning suppression, and preservation of other quoting paths."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise behavioral constraints and a clear unified-diff deliverable. Naming the public entry point and requested argument defines the API rather than leaking the implementation. The verified patch preserves default behavior and keeps strictness local to each tokenization call. The task is distinct from the accepted lexer token-stream fixture and collection-expression repair."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The capability is confined to the lexer's backtick consumer and tokenization entry point. The focused file is under 16,000 characters, and direct reasoning can distinguish successful JSON decoding, deprecated fallback, warnings, and other quoted-token paths."
+  },
+  "context": {
+   "files": [
+    "jmespath/lexer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer.tokenize",
+    "why": "The new argument is per-call configuration at the existing lexer entry point."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._consume_literal",
+    "why": "This consumer distinguishes JSON decoding from the deprecated fallback and emits its warning."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._consume_until",
+    "why": "Delimiter and escape handling must remain unchanged before strict JSON validation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_strict_backtick_literals.py\n@@ -0,0 +1,48 @@\n+import warnings\n+\n+import pytest\n+\n+from jmespath.lexer import Lexer\n+from jmespath.exceptions import LexerError\n+\n+\n+@pytest.mark.parametrize(\"expression,expected\", [\n+    (\"`null`\", None),\n+    (\"`true`\", True),\n+    (\"`[1, false]`\", [1, False]),\n+    ('`{\"a\": 1}`', {\"a\": 1}),\n+    ('`\"word\"`', \"word\"),\n+    (\"`  12  `\", 12),\n+])\n+def test_strict_json(expression, expected):\n+    with warnings.catch_warnings(record=True) as caught:\n+        warnings.simplefilter(\"always\")\n+        tokens = list(Lexer().tokenize(expression, allow_legacy_literals=False))\n+    assert tokens[0][\"value\"] == expected\n+    assert tokens[0][\"type\"] == \"literal\"\n+    assert not caught\n+\n+\n+@pytest.mark.parametrize(\"expression\", [\"`word`\", \"``\", \"`  word`\", \"foo.`word`\"])\n+def test_strict_rejects_fallback(expression):\n+    with warnings.catch_warnings(record=True) as caught:\n+        warnings.simplefilter(\"always\")\n+        with pytest.raises(LexerError) as error:\n+            list(Lexer().tokenize(expression, allow_legacy_literals=False))\n+    assert error.value.lex_position == expression.index(\"`\")\n+    assert not caught\n+\n+\n+def test_legacy_default_after_strict_call():\n+    lexer = Lexer()\n+    with pytest.raises(LexerError):\n+        list(lexer.tokenize(\"`word`\", allow_legacy_literals=False))\n+    with pytest.warns(PendingDeprecationWarning):\n+        tokens = list(lexer.tokenize(\"`word`\"))\n+    assert tokens[0][\"value\"] == \"word\"\n+\n+\n+def test_other_quotes_unchanged():\n+    tokens = list(Lexer().tokenize(\"'word' \\\"word\\\"\", allow_legacy_literals=False))\n+    assert [t[\"type\"] for t in tokens] == [\"literal\", \"quoted_identifier\", \"eof\"]\n+    assert [t[\"value\"] for t in tokens] == [\"word\", \"word\", \"\"]\n",
+  "include_failure_log": false,
+  "notes": "The new tests call only the public lexer entry point and inspect observable tokens, warnings, exception type, and error position. Default calls must preserve all existing lexer and parser behavior.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add an optional `allow_legacy_literals=True` argument to `Lexer.tokenize`. With `False`, backtick literals must be accepted only when their contents decode as JSON after the existing escaped-backtick handling. A literal that would require the deprecated string fallback must instead raise `LexerError` at its opening backtick, without emitting a deprecation warning. Keep the default behavior, valid JSON values, raw single-quoted strings, and double-quoted identifiers unchanged. The setting must be supplied per tokenization call, so a strict call must not make a later default call strict on the same lexer instance. Deliver a unified diff against non-test files.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_strict_backtick_literals.py::test_legacy_default_after_strict_call",
+   "tests/test_strict_backtick_literals.py::test_other_quotes_unchanged",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`  12  `-12]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`\"word\"`-word]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`[1, false]`-expected2]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`null`-None]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`true`-True]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`{\"a\": 1}`-expected3]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[`  word`]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[``]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[`word`]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[foo.`word`]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 12,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1003
+   },
+   "patch_files": [
+    "jmespath/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_strict_backtick_literals.py::test_legacy_default_after_strict_call",
+   "tests/test_strict_backtick_literals.py::test_other_quotes_unchanged",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`  12  `-12]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`\"word\"`-word]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`[1, false]`-expected2]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`null`-None]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`true`-True]",
+   "tests/test_strict_backtick_literals.py::test_strict_json[`{\"a\": 1}`-expected3]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[`  word`]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[``]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[`word`]",
+   "tests/test_strict_backtick_literals.py::test_strict_rejects_fallback[foo.`word`]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

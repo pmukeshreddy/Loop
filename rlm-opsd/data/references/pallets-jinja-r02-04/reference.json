@@ -1,0 +1,153 @@
+{
+ "answer": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -1053,27 +1053,30 @@\n         if isinstance(names, Undefined):\n             names._fail_with_undefined_error()\n \n-        if not names:\n-            raise TemplatesNotFound(\n-                message=\"Tried to select from an empty list of templates.\"\n-            )\n+        tried: t.List[str] = []\n \n         for name in names:\n             if isinstance(name, Template):\n                 return name\n+            tried.append(name)\n             if parent is not None:\n                 name = self.join_path(name, parent)\n             try:\n                 return self._load_template(name, globals)\n             except (TemplateNotFound, UndefinedError):\n                 pass\n-        raise TemplatesNotFound(names)  # type: ignore\n+        if not tried:\n+            raise TemplatesNotFound(\n+                message=\"Tried to select from an empty list of templates.\"\n+            )\n+\n+        raise TemplatesNotFound(tried)\n \n     @internalcode\n     def get_or_select_template(\n         self,\n         template_name_or_list: t.Union[\n-            str, \"Template\", t.List[t.Union[str, \"Template\"]]\n+            str, \"Template\", t.Iterable[t.Union[str, \"Template\"]]\n         ],\n         parent: t.Optional[str] = None,\n         globals: t.Optional[t.MutableMapping[str, t.Any]] = None,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0010888524324963343,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "env",
+    "p",
+    "paths",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 964318 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "5 turns; variables reused across turns: ['env', 'p', 'paths', 's']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The completed diff was constructed and inspected before submission. The verification evidence covers exhausted and empty iterables, original-name retention, lazy success, and iterator-error propagation.",
+   "inspect_locate": "The execution used 19 targeted searches without printing the whole context. The patch connects iterable consumption, Template passthrough, parent-relative joining, loader failures, exception construction, and the forwarding API.",
+   "persistent_state": "Variables were reused across turns, although this supports only modest state reuse rather than a distinct, substantial persistent-state requirement."
+  },
+  "notes": "A natural, repository-dependent maintenance request with a precise output format. The behavioral requirements constrain the repair without prescribing its implementation: eager materialization would violate lazy success, while retaining the exhausted iterator would lose diagnostics. Naming the affected public APIs does not reveal the faulty statement or fix. The task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch needs to satisfy both lazy success and complete exhaustion diagnostics without accidentally swallowing iterator errors.",
+   "inspect_locate": "The selection APIs, name joining, loader failures, Template passthrough, and exception construction must be connected to establish the observable contract.",
+   "persistent_state": "The solver must retain the distinction between original candidate names, joined lookup names, consumed candidates, and the successful stopping point while drafting the change."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.select_template",
+    "why": "The current method consumes names before passing the same iterable to TemplatesNotFound."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.get_or_select_template",
+    "why": "Iterable dispatch must inherit the corrected diagnostics and lazy stopping behavior."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.join_path",
+    "why": "Lookup names may differ from the original candidates that belong in the diagnostic."
+   },
+   {
+    "path": "tests/test_api.py",
+    "symbol": "tests/test_api.py::TestExtendedAPI.test_template_passthrough",
+    "why": "Existing Template passthrough behavior must remain intact."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_selection_iterable_diagnostics.py\n@@ -0,0 +1,63 @@\n+import pytest\n+\n+from jinja2 import DictLoader\n+from jinja2 import Environment\n+from jinja2 import TemplatesNotFound\n+\n+\n+@pytest.mark.parametrize(\"api\", [\"select_template\", \"get_or_select_template\"])\n+def test_exhausted_generator_retains_candidates(api):\n+    env = Environment(loader=DictLoader({}))\n+    with pytest.raises(TemplatesNotFound) as caught:\n+        getattr(env, api)((n for n in [\"one\", \"two\"]))\n+    assert caught.value.templates == [\"one\", \"two\"]\n+    assert caught.value.name == \"two\"\n+    with pytest.raises(TemplatesNotFound) as baseline:\n+        env.select_template([\"one\", \"two\"])\n+    assert str(caught.value) == str(baseline.value)\n+\n+\n+@pytest.mark.parametrize(\"api\", [\"select_template\", \"get_or_select_template\"])\n+def test_empty_iterator_matches_empty_list(api):\n+    env = Environment(loader=DictLoader({}))\n+    with pytest.raises(TemplatesNotFound) as baseline:\n+        env.select_template([])\n+    with pytest.raises(TemplatesNotFound) as caught:\n+        getattr(env, api)(iter(()))\n+    assert caught.value.templates == []\n+    assert caught.value.name is None\n+    assert str(caught.value) == str(baseline.value)\n+\n+\n+def test_selection_stays_lazy():\n+    env = Environment(loader=DictLoader({\"found\": \"ok\"}))\n+    def names():\n+        yield \"missing\"\n+        yield \"found\"\n+        raise AssertionError(\"read past success\")\n+    assert env.select_template(names()).render() == \"ok\"\n+    template = env.get_template(\"found\")\n+    def objects():\n+        yield template\n+        raise AssertionError(\"read past template object\")\n+    assert env.get_or_select_template(objects()) is template\n+\n+\n+def test_original_names_survive_parent_joining():\n+    class RelativeEnvironment(Environment):\n+        def join_path(self, template, parent):\n+            return parent + \"/\" + template\n+    env = RelativeEnvironment(loader=DictLoader({}))\n+    with pytest.raises(TemplatesNotFound) as caught:\n+        env.select_template(iter([\"one\", \"two\"]), parent=\"dir\")\n+    assert caught.value.templates == [\"one\", \"two\"]\n+    assert caught.value.name == \"two\"\n+\n+\n+def test_iteration_errors_propagate():\n+    env = Environment(loader=DictLoader({}))\n+    def names():\n+        yield \"missing\"\n+        raise RuntimeError(\"iterator failed\")\n+    with pytest.raises(RuntimeError, match=\"iterator failed\"):\n+        env.select_template(names())\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests use public selection APIs and public exception attributes. Existing Undefined candidate handling must continue to pass the repository suite.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Fix diagnostics when template selection receives a one-shot iterable. If `Environment.select_template` exhausts an iterable without finding a template, TemplatesNotFound must retain every original candidate name, in order, in its `templates` attribute, use the last original candidate as its `name`, and produce the same message as selection from the equivalent concrete list. A zero-item iterable must produce the same explicit empty-list diagnostic as an empty list. Parent-relative joining must not replace the original names in these diagnostics. Preserve lazy success: stop consuming candidates as soon as a template is found or a Template object is encountered. Exceptions raised by the candidate iterator itself must propagate. The same behavior must hold when an iterable is passed through `get_or_select_template`. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_selection_iterable_diagnostics.py::test_empty_iterator_matches_empty_list[get_or_select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_empty_iterator_matches_empty_list[select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_exhausted_generator_retains_candidates[get_or_select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_exhausted_generator_retains_candidates[select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_original_names_survive_parent_joining"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 916
+   },
+   "patch_files": [
+    "src/jinja2/environment.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_selection_iterable_diagnostics.py::test_empty_iterator_matches_empty_list[get_or_select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_empty_iterator_matches_empty_list[select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_exhausted_generator_retains_candidates[get_or_select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_exhausted_generator_retains_candidates[select_template]",
+   "tests/test_selection_iterable_diagnostics.py::test_original_names_survive_parent_joining"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

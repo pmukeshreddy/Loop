@@ -1,0 +1,85 @@
+--- a/src/cachetools/_cached.py
++++ b/src/cachetools/_cached.py
+@@ -5,6 +5,7 @@
+ __all__ = ()
+ 
+ import functools
++import threading
+ import warnings
+ 
+ # At least for now, the implementation prefers clarity and performance
+@@ -15,19 +16,22 @@
+ 
+ def _condition_info(func, cache, key, lock, cond, info):
+     hits = misses = 0
+-    pending = set()
+-
+-    def wrapper(*args, **kwargs):
+-        nonlocal hits, misses
+-        k = key(*args, **kwargs)
+-        with lock:
++    pending = {}
++
++    def wrapper(*args, **kwargs):
++        nonlocal hits, misses
++        k = key(*args, **kwargs)
++        with lock:
++            ident = threading.get_ident()
++            if pending.get(k) == ident:
++                raise RuntimeError("recursive call with the same cache key")
+             cond.wait_for(lambda: k not in pending)
+             try:
+                 result = cache[k]
+                 hits += 1
+                 return result
+             except KeyError:
+-                pending.add(k)
++                pending[k] = ident
+                 misses += 1
+         try:
+             v = func(*args, **kwargs)
+@@ -39,7 +43,7 @@
+                 return v
+         finally:
+             with lock:
+-                pending.remove(k)
++                del pending[k]
+                 cond.notify_all()
+ 
+     def cache_clear():
+@@ -145,17 +149,20 @@
+ 
+ 
+ def _condition(func, cache, key, lock, cond):
+-    pending = set()
+-
+-    def wrapper(*args, **kwargs):
+-        k = key(*args, **kwargs)
+-        with lock:
++    pending = {}
++
++    def wrapper(*args, **kwargs):
++        k = key(*args, **kwargs)
++        with lock:
++            ident = threading.get_ident()
++            if pending.get(k) == ident:
++                raise RuntimeError("recursive call with the same cache key")
+             cond.wait_for(lambda: k not in pending)
+             try:
+                 result = cache[k]
+                 return result
+             except KeyError:
+-                pending.add(k)
++                pending[k] = ident
+         try:
+             v = func(*args, **kwargs)
+             with lock:
+@@ -166,7 +173,7 @@
+                 return v
+         finally:
+             with lock:
+-                pending.remove(k)
++                del pending[k]
+                 cond.notify_all()
+ 
+     def cache_clear():

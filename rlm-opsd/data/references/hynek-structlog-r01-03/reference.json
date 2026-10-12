@@ -1,0 +1,158 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -899,20 +899,29 @@\n             that do not exist on a standard `logging.LogRecord` object will be\n             copied to event dictionaries.\n \n+        overwrite:\n+            Whether to overwrite existing event dictionary values. If False,\n+            only attributes whose keys are absent from the event dictionary\n+            are copied, even if an existing value is None, False, or empty.\n+\n     .. versionadded:: 21.5.0\n     \"\"\"\n \n     __slots__ = (\"_copier\",)\n \n-    def __init__(self, allow: Collection[str] | None = None) -> None:\n+    def __init__(\n+        self, allow: Collection[str] | None = None, *, overwrite: bool = True\n+    ) -> None:\n         self._copier: Callable[[EventDict, logging.LogRecord], None]\n         if allow is not None:\n             # The contents of allow is copied to a new list so that changes to\n             # the list passed into the constructor does not change the\n             # behaviour of this processor.\n-            self._copier = functools.partial(self._copy_allowed, [*allow])\n+            self._copier = functools.partial(\n+                self._copy_allowed, [*allow], overwrite=overwrite\n+            )\n         else:\n-            self._copier = self._copy_all\n+            self._copier = functools.partial(self._copy_all, overwrite=overwrite)\n \n     def __call__(\n         self, logger: logging.Logger, name: str, event_dict: EventDict\n@@ -924,10 +933,16 @@\n \n     @classmethod\n     def _copy_all(\n-        cls, event_dict: EventDict, record: logging.LogRecord\n+        cls,\n+        event_dict: EventDict,\n+        record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if key not in _LOG_RECORD_KEYS and (\n+                overwrite or key not in event_dict\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -936,9 +951,11 @@\n         allow: Collection[str],\n         event_dict: EventDict,\n         record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if key in record.__dict__ and (overwrite or key not in event_dict):\n                 event_dict[key] = record.__dict__[key]\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008951651168884514,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "start",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 's', 'start', 't']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines signature, documentation, dispatch, and collision-check changes. It was computed and inspected before submission, and the supplied verification covers both allow modes, default overwriting, snapshot preservation, standard fields, missing records, and formatter integration.",
+   "inspect_locate": "The execution used targeted searches to locate ExtraAdder's constructor, both copying paths, and ProcessorFormatter integration. Understanding these repository-specific paths is necessary to implement the option consistently.",
+   "persistent_state": "Source and patch-construction variables were reused across turns, supporting coordinated edits while preserving the existing allow-list snapshot behavior."
+  },
+  "notes": "This is a natural, precisely scoped feature request with a clear unified-diff deliverable. Naming the public API to extend does not leak the implementation. The task requires repository-specific reasoning about two copying paths and formatter behavior rather than a simple lookup. The verified patch uses key membership, correctly preserving existing falsey values."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "Several coordinated edits may be needed within the class. The final patch must be checked against both allow modes, existing default behavior, and formatter integration.",
+   "inspect_locate": "ExtraAdder's constructor selects different copying implementations, and its formatter integration establishes which event fields already exist before extra attributes are copied.",
+   "persistent_state": "The implementation must preserve the constructor's allow-list snapshot and carry one collision policy consistently through both copying paths while retaining the exact source for the resulting diff."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ExtraAdder",
+    "why": "Owns allow-list selection, snapshotting, record lookup, and both attribute-copying paths."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "Creates the foreign event field before invoking foreign_pre_chain."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestExtraAdder",
+    "why": "Defines the established allow=None, empty allow, missing attribute, and end-to-end contracts that must remain compatible."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_extra_adder_collision_policy.py\n@@ -0,0 +1,61 @@\n+import logging\n+\n+import pytest\n+\n+from structlog.stdlib import ExtraAdder, ProcessorFormatter\n+\n+\n+@pytest.mark.parametrize(\"allow\", [None, [\"shared\", \"fresh\"], []])\n+@pytest.mark.parametrize(\"overwrite\", [True, False])\n+def test_collision_policy(allow, overwrite):\n+    rec = logging.LogRecord(\"sample\", logging.INFO, \"app.py\", 1, \"original\", (), None)\n+    rec.shared = \"record\"\n+    rec.fresh = 7\n+    ed = {\"_record\": rec, \"shared\": \"event\", \"untouched\": None}\n+    expected = ed.copy()\n+    if allow is None or \"shared\" in allow:\n+        expected[\"shared\"] = \"record\" if overwrite else \"event\"\n+    if allow is None or \"fresh\" in allow:\n+        expected[\"fresh\"] = 7\n+    assert ExtraAdder(allow, overwrite=overwrite)(None, \"info\", ed) == expected\n+\n+\n+def test_default_still_overwrites():\n+    rec = logging.LogRecord(\"sample\", logging.INFO, \"app.py\", 1, \"original\", (), None)\n+    rec.shared = \"record\"\n+    ed = {\"_record\": rec, \"shared\": \"event\"}\n+    assert ExtraAdder()(None, \"info\", ed)[\"shared\"] == \"record\"\n+\n+\n+def test_allow_is_snapshotted():\n+    rec = logging.LogRecord(\"sample\", logging.INFO, \"app.py\", 1, \"original\", (), None)\n+    rec.shared = \"record\"\n+    rec.fresh = 7\n+    allow = [\"shared\"]\n+    proc = ExtraAdder(allow, overwrite=False)\n+    allow.append(\"fresh\")\n+    ed = {\"_record\": rec, \"shared\": \"event\"}\n+    assert proc(None, \"info\", ed) == {\"_record\": rec, \"shared\": \"event\"}\n+\n+\n+def test_foreign_formatter_preserves_preexisting_event():\n+    rec = logging.LogRecord(\"sample\", logging.INFO, \"app.py\", 1, \"original\", (), None)\n+    rec.event = \"extra\"\n+    fmt = ProcessorFormatter(\n+        foreign_pre_chain=[ExtraAdder(overwrite=False)],\n+        processors=[lambda logger, method, ed: ed[\"event\"]],\n+    )\n+    assert fmt.format(rec) == \"original\"\n+\n+\n+def test_false_policy_can_copy_standard_fields_when_allowed():\n+    rec = logging.LogRecord(\"sample\", logging.INFO, \"app.py\", 1, \"original\", (), None)\n+    ed = {\"_record\": rec, \"name\": None}\n+    result = ExtraAdder([\"name\", \"levelno\"], overwrite=False)(None, \"info\", ed)\n+    assert result[\"name\"] is None\n+    assert result[\"levelno\"] == logging.INFO\n+\n+\n+def test_without_record_is_noop():\n+    ed = {\"shared\": \"event\"}\n+    assert ExtraAdder(overwrite=False)(None, \"info\", ed) == {\"shared\": \"event\"}\n",
+  "include_failure_log": false,
+  "notes": "Hidden tests use public processors and observable event dictionaries. The implementation should also document the new option. Existing values must be tested by key membership, not truthiness.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Add a keyword-only `overwrite: bool = True` option to `structlog.stdlib.ExtraAdder`. The default must retain current behavior. With `overwrite=False`, copy eligible LogRecord attributes only when their keys are absent from the event dictionary; an existing value of `None`, `False`, or an empty string still counts as present. This policy must work both with `allow=None` and with an explicit allow collection, including explicitly allowed standard LogRecord fields. Preserve the existing allow-list snapshot behavior and the no-op behavior when `_record` is absent. In a ProcessorFormatter foreign pre-chain, this should let an existing event field win over an extra attribute of the same name. Deliver a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_extra_adder_collision_policy.py::test_allow_is_snapshotted",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-None]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-allow1]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-allow2]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-None]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-allow1]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-allow2]",
+   "tests/test_extra_adder_collision_policy.py::test_false_policy_can_copy_standard_fields_when_allowed",
+   "tests/test_extra_adder_collision_policy.py::test_foreign_formatter_preserves_preexisting_event",
+   "tests/test_extra_adder_collision_policy.py::test_without_record_is_noop"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 0,
+    "passed": 895
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_extra_adder_collision_policy.py::test_allow_is_snapshotted",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-None]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-allow1]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[False-allow2]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-None]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-allow1]",
+   "tests/test_extra_adder_collision_policy.py::test_collision_policy[True-allow2]",
+   "tests/test_extra_adder_collision_policy.py::test_false_policy_can_copy_standard_fields_when_allowed",
+   "tests/test_extra_adder_collision_policy.py::test_foreign_formatter_preserves_preexisting_event",
+   "tests/test_extra_adder_collision_policy.py::test_without_record_is_noop"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/jsonschema/exceptions.py\n+++ b/jsonschema/exceptions.py\n@@ -315,21 +315,44 @@\n class ErrorTree:\n     \"\"\"\n     ErrorTrees make it easier to check which validations failed.\n+\n+    Arguments:\n+        errors:\n+            The validation errors to index.\n+        include_context:\n+            If true, also index recursively nested context errors, using\n+            absolute instance paths for all errors. Errors are visited in\n+            input order, each before its context children in list order.\n+            The last error at a given path and validator wins.\n+            If false (the default), index only the supplied errors using\n+            their relative paths.\n     \"\"\"\n \n     _instance = _unset\n \n-    def __init__(self, errors: Iterable[ValidationError] = ()):\n+    def __init__(\n+        self,\n+        errors: Iterable[ValidationError] = (),\n+        *,\n+        include_context: bool = False,\n+    ):\n         self.errors: MutableMapping[str, ValidationError] = {}\n         self._contents: Mapping[str, ErrorTree] = defaultdict(self.__class__)\n \n         for error in errors:\n-            container = self\n-            for element in error.path:\n-                container = container[element]\n-            container.errors[error.validator] = error\n-\n-            container._instance = error.instance\n+            pending = [error]\n+            while pending:\n+                current = pending.pop()\n+                container = self\n+                path = current.absolute_path if include_context else current.path\n+                for element in path:\n+                    container = container[element]\n+                container.errors[current.validator] = current\n+\n+                container._instance = current.instance\n+\n+                if include_context:\n+                    pending.extend(reversed(current.context))\n \n     def __contains__(self, index: str | int):\n         \"\"\"\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.00048675671665924863,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 15 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "5 turns; variables reused across turns: ['files', 'src']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines absolute-path indexing, ordered recursive context traversal, collision replacement, and preservation of default behavior. The final diff was computed and inspected before submission; the supplied verification tests cover nested paths, unchanged error relationships, traversal precedence, and stored-entry counts.",
+   "inspect_locate": "The execution used 15 targeted searches without printing the whole context. The change requires understanding ErrorTree indexing alongside ValidationError parent links and absolute-path derivation; locating the named class alone does not determine the implementation.",
+   "persistent_state": "The reference reused `files` and `src` across turns, although the supplied record does not establish this as a substantive task requirement."
+  },
+  "notes": "A natural, repository-dependent feature request with precise compatibility, traversal, mutation, counting, and output requirements. Naming the public API to extend does not reveal the implementation. The task neither prescribes solver operations nor duplicates the accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The implementation must reconcile recursive context expansion with exact tree counts and last-error-wins indexing, then assemble and check the production diff.",
+   "inspect_locate": "ErrorTree's indexing contract must be joined with parent links, relative versus absolute paths, and applicator context construction elsewhere in the repository.",
+   "persistent_state": "The solver must retain the default compatibility rules, traversal order, duplicate-key behavior, and non-mutation requirement while constructing the change."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::ErrorTree.__init__",
+    "why": "Currently indexes only supplied errors, using relative paths, and overwrites entries by validator name."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.absolute_path",
+    "why": "Computes the location required for recursively nested context errors."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.__init__",
+    "why": "Establishes parent links for context errors."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::ErrorTree.total_errors",
+    "why": "Counts stored entries recursively, which must remain the counting contract."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::anyOf",
+    "why": "Produces aggregate errors containing branch failures in context."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_error_tree_contexts.py\n@@ -0,0 +1,47 @@\n+from jsonschema.exceptions import ErrorTree, ValidationError\n+\n+\n+def test_contexts_use_absolute_paths_without_mutating_errors():\n+    leaf = ValidationError(\"leaf\", validator=\"type\", path=[0])\n+    branch = ValidationError(\n+        \"branch\", validator=\"oneOf\", path=[\"n\"], context=[leaf],\n+    )\n+    sibling = ValidationError(\"sibling\", validator=\"minLength\", path=[\"s\"])\n+    outer = ValidationError(\n+        \"outer\", validator=\"anyOf\", path=[\"box\"], context=[branch, sibling],\n+    )\n+    before = [list(e.path) for e in (outer, branch, sibling, leaf)]\n+    default = ErrorTree([outer])\n+    assert default.total_errors == 1\n+    assert \"n\" not in default[\"box\"]\n+    tree = ErrorTree([outer], include_context=True)\n+    assert tree[\"box\"].errors[\"anyOf\"] is outer\n+    assert tree[\"box\"][\"n\"].errors[\"oneOf\"] is branch\n+    assert tree[\"box\"][\"n\"][0].errors[\"type\"] is leaf\n+    assert tree[\"box\"][\"s\"].errors[\"minLength\"] is sibling\n+    assert tree.total_errors == 4\n+    assert [list(e.path) for e in (outer, branch, sibling, leaf)] == before\n+    assert leaf.parent is branch\n+    assert branch.parent is outer\n+\n+\n+def test_context_traversal_preserves_last_error_wins():\n+    first = ValidationError(\"first\", validator=\"type\", path=[\"p\"])\n+    second = ValidationError(\"second\", validator=\"type\", path=[\"p\"])\n+    outer = ValidationError(\"outer\", validator=\"anyOf\", context=[first, second])\n+    later = ValidationError(\"later\", validator=\"type\", path=[\"p\"])\n+    tree = ErrorTree([outer, later], include_context=True)\n+    assert tree[\"p\"].errors[\"type\"] is later\n+    assert tree.total_errors == 2\n+    tree = ErrorTree([outer], include_context=True)\n+    assert tree[\"p\"].errors[\"type\"] is second\n+    assert tree.total_errors == 2\n+\n+\n+def test_explicit_false_keeps_contexts_out_of_the_tree():\n+    child = ValidationError(\"child\", validator=\"type\", path=[\"p\"])\n+    outer = ValidationError(\"outer\", validator=\"anyOf\", context=[child])\n+    tree = ErrorTree([outer], include_context=False)\n+    assert tree.errors == {\"anyOf\": outer}\n+    assert \"p\" not in tree\n+    assert tree.total_errors == 1\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests cover nested absolute locations, traversal ordering, duplicate entries, default compatibility, explicit False, and preservation of error paths and parent links.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Add a keyword-only `include_context=False` option to `jsonschema.exceptions.ErrorTree`. The default and explicit `False` must preserve current behavior. With `True`, index each supplied error and all of its recursively nested `context` errors using their absolute instance paths, without modifying the errors' paths or parent links. Traverse supplied errors in input order; within each error, visit the error itself before its context children, with children visited in list order. Retain the existing last-error-wins rule when multiple visited errors have the same tree location and validator name, and let `total_errors` count the resulting stored entries rather than the number of visits. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_error_tree_contexts.py::test_context_traversal_preserves_last_error_wins",
+   "jsonschema/tests/test_error_tree_contexts.py::test_contexts_use_absolute_paths_without_mutating_errors",
+   "jsonschema/tests/test_error_tree_contexts.py::test_explicit_false_keeps_contexts_out_of_the_tree"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7291
+   },
+   "patch_files": [
+    "jsonschema/exceptions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_error_tree_contexts.py::test_context_traversal_preserves_last_error_wins",
+   "jsonschema/tests/test_error_tree_contexts.py::test_contexts_use_absolute_paths_without_mutating_errors",
+   "jsonschema/tests/test_error_tree_contexts.py::test_explicit_false_keeps_contexts_out_of_the_tree"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

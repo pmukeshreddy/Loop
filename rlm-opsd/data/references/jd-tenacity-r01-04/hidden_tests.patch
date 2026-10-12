@@ -1,0 +1,68 @@
+--- /dev/null
++++ b/tests/test_cause_context.py
+@@ -0,0 +1,65 @@
++import pytest
++
++from tenacity import Future, RetryCallState, Retrying, retry_if_exception_cause_type
++
++
++def state_for(exc):
++    state = RetryCallState(Retrying(), None, (), {})
++    state.outcome = Future.construct(1, exc, True)
++    return state
++
++
++def test_default_still_ignores_implicit_context():
++    exc = RuntimeError("outer")
++    exc.__context__ = ValueError("inner")
++    policy = retry_if_exception_cause_type(ValueError)
++    assert policy(state_for(exc)) is False
++
++
++def test_opt_in_follows_multiple_implicit_links():
++    root = RuntimeError("outer")
++    middle = LookupError("middle")
++    root.__context__ = middle
++    middle.__context__ = ValueError("inner")
++    policy = retry_if_exception_cause_type(ValueError, include_context=True)
++    assert policy(state_for(root)) is True
++
++
++def test_explicit_cause_takes_precedence_over_context():
++    root = RuntimeError("outer")
++    root.__cause__ = LookupError("explicit")
++    root.__context__ = ValueError("implicit")
++    policy = retry_if_exception_cause_type(ValueError, include_context=True)
++    assert policy(state_for(root)) is False
++    root.__cause__.__context__ = ValueError("deeper")
++    assert policy(state_for(root)) is True
++
++
++def test_suppressed_context_and_root_are_not_matches():
++    policy = retry_if_exception_cause_type(ValueError, include_context=True)
++    root = ValueError("outer")
++    assert policy(state_for(root)) is False
++    root.__context__ = ValueError("inner")
++    root.__suppress_context__ = True
++    assert policy(state_for(root)) is False
++
++
++def test_cycles_terminate_but_matching_link_still_counts():
++    root = RuntimeError("outer")
++    middle = LookupError("middle")
++    root.__context__ = middle
++    middle.__context__ = root
++    policy = retry_if_exception_cause_type(ValueError, include_context=True)
++    assert policy(state_for(root)) is False
++    middle.__context__ = ValueError("inner")
++    middle.__context__.__cause__ = root
++    assert policy(state_for(root)) is True
++
++
++def test_success_and_unset_outcomes_keep_existing_contract():
++    policy = retry_if_exception_cause_type(ValueError, include_context=True)
++    state = RetryCallState(Retrying(), None, (), {})
++    with pytest.raises(RuntimeError):
++        policy(state)
++    state.set_result("ok")
++    assert policy(state) is False

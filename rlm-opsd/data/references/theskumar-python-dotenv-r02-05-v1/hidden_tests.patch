@@ -1,0 +1,79 @@
+--- /dev/null
++++ b/tests/test_unset_filesystem_neutral.py
+@@ -0,0 +1,76 @@
++import os
++import stat
++import sys
++
++import pytest
++
++import dotenv
++
++
++def _identity(path):
++    info = path.stat()
++    return (
++        info.st_dev,
++        info.st_ino,
++        stat.S_IMODE(info.st_mode),
++    )
++
++
++@pytest.mark.parametrize("policy", [None, False, True])
++@pytest.mark.parametrize(
++    "contents",
++    [b"", b"a=x\nc=d", b"\xef\xbb\xbfexport a='x'\r\nc=d\r\n"],
++)
++def test_missing_unset_regular_is_neutral(tmp_path, caplog, policy, contents):
++    path = tmp_path / ".env"
++    path.write_bytes(contents)
++    if sys.platform != "win32":
++        path.chmod(0o640)
++    before = _identity(path)
++    kwargs = {} if policy is None else {"follow_symlinks": policy}
++
++    with caplog.at_level("WARNING", logger="dotenv.main"):
++        result = dotenv.unset_key(path, "missing", **kwargs)
++
++    assert result == (None, "missing")
++    assert path.read_bytes() == contents
++    if sys.platform != "win32":
++        assert _identity(path) == before
++    assert caplog.messages == [
++        f"Key missing not removed from {path} - key doesn't exist."
++    ]
++    assert set(tmp_path.iterdir()) == {path}
++
++
++@pytest.mark.skipif(sys.platform == "win32", reason="Unix symlink semantics")
++@pytest.mark.parametrize("policy", [None, False, True])
++def test_missing_unset_symlink_is_neutral(tmp_path, caplog, policy):
++    target = tmp_path / "target.env"
++    contents = b"\xef\xbb\xbfexport a='x'\r\nc=d\r\n"
++    target.write_bytes(contents)
++    target.chmod(0o640)
++    link = tmp_path / ".env"
++    link.symlink_to(target.name)
++    link_before = link.lstat()
++    target_before = _identity(target)
++    kwargs = {} if policy is None else {"follow_symlinks": policy}
++
++    with caplog.at_level("WARNING", logger="dotenv.main"):
++        result = dotenv.unset_key(link, "missing", **kwargs)
++
++    assert result == (None, "missing")
++    assert link.is_symlink()
++    assert os.readlink(link) == target.name
++    link_after = link.lstat()
++    assert (link_after.st_dev, link_after.st_ino, link_after.st_mode) == (
++        link_before.st_dev,
++        link_before.st_ino,
++        link_before.st_mode,
++    )
++    assert _identity(target) == target_before
++    assert target.read_bytes() == contents
++    assert link.read_bytes() == contents
++    assert caplog.messages == [
++        f"Key missing not removed from {link} - key doesn't exist."
++    ]
++    assert set(tmp_path.iterdir()) == {link, target}

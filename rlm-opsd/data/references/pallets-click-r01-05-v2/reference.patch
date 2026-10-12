@@ -1,0 +1,49 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -2470,6 +2470,10 @@
+         if value is None and not ctx._default_map_has(self.name):
+             value = self.default
+ 
++        return self._get_default_value(value, call=call)
++
++    def _get_default_value(self, value: t.Any, call: bool = True) -> t.Any:
++        """Resolve a default without consulting the context's default map."""
+         if call and callable(value):
+             value = value()
+ 
+@@ -2509,7 +2513,9 @@
+ 
+         if value is UNSET:
+             default_map_value = ctx.lookup_default(self.name)
+-            if default_map_value is not None or ctx._default_map_has(self.name):
++            if default_map_value is not UNSET and (
++                default_map_value is not None or ctx._default_map_has(self.name)
++            ):
+                 value = default_map_value
+                 source = ParameterSource.DEFAULT_MAP
+ 
+@@ -2519,7 +2525,12 @@
+                     value = self.type.split_envvar_value(value)
+ 
+         if value is UNSET:
+-            default_value = self.get_default(ctx)
++            if default_map_value is UNSET:
++                # The factory declined for this acquisition. Do not consult it
++                # again, or remove it from the map for later acquisitions.
++                default_value = self._get_default_value(self.default)
++            else:
++                default_value = self.get_default(ctx)
+             if default_value is not UNSET:
+                 value = default_value
+                 source = ParameterSource.DEFAULT
+@@ -3215,7 +3226,9 @@
+             flags, fixing negative boolean flags like
+             ``flag_value=False, default=True``.
+         """
+-        raw = super().get_default(ctx, call=False)
++        return super().get_default(ctx, call=call)
++
++    def _get_default_value(self, raw: t.Any, call: bool = True) -> t.Any:
+         value = self._resolve_lazy_default(raw)
+         # Only invoke the value as a callable when the lazy resolver passed it through
+         # unchanged. If the resolver substituted ``True`` -> :attr:`flag_value`, the

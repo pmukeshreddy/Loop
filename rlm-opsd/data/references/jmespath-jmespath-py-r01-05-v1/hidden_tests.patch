@@ -1,0 +1,98 @@
+--- /dev/null
++++ b/tests/test_lexer_iterator_isolation.py
+@@ -0,0 +1,95 @@
++import warnings
++
++import pytest
++
++from jmespath.exceptions import EmptyExpressionError, LexerError
++from jmespath.lexer import Lexer
++
++
++def advance(iterator):
++    with warnings.catch_warnings(record=True) as emitted:
++        warnings.simplefilter("always")
++        try:
++            outcome = ("token", next(iterator))
++        except StopIteration:
++            outcome = ("stop",)
++        except LexerError as error:
++            outcome = ("error", type(error), error.lexer_position,
++                       error.lexer_value, error.message, error.expression)
++        except EmptyExpressionError as error:
++            outcome = ("error", type(error), str(error))
++    return outcome, [(w.category, str(w.message)) for w in emitted]
++
++
++def assert_schedule(expressions, schedule):
++    shared = Lexer()
++    actual = [shared.tokenize(expression) for expression in expressions]
++    expected = [Lexer().tokenize(expression) for expression in expressions]
++    for index in schedule:
++        assert advance(actual[index]) == advance(expected[index])
++    for index in range(len(expressions)):
++        for _ in range(100):
++            want = advance(expected[index])
++            assert advance(actual[index]) == want
++            if want[0][0] == "stop":
++                break
++        else:
++            pytest.fail("token stream did not terminate")
++
++
++@pytest.mark.parametrize("expressions", [
++    ("foo.bar[0]", "other[*].name"),
++    (".@(*)", "a[] | b[?c >= `2`]"),
++    ("'left\\'side'.x", '"right\\"side"[1]'),
++    ('`{"a": [1, true, null]}`.a', '`"tick\\`value"` | z'),
++    ("a || b && !c == d", "e <= -12 | f != g > 3 < 4 &h"),
++    ("`legacy text`.tail", "x.` other legacy `"),
++    ("x./", "ok.name"),
++    ("prefix.'unterminated", "valid.`false`"),
++    ("ok.more", "/"),
++    ("ok.more", ""),
++])
++@pytest.mark.parametrize("schedule", [
++    [0, 1, 0, 1, 0, 1],
++    [1, 1, 0, 1, 0, 0, 1],
++])
++def test_interleaved_tokenization_matches_separate_lexers(expressions, schedule):
++    assert_schedule(expressions, schedule)
++
++
++def test_three_iterators_can_finish_in_a_different_order():
++    assert_schedule(
++        [".alpha[2]", "`legacy`.tail", "bad.'unfinished"],
++        [0, 1, 2, 1, 1, 1, 1, 2, 0, 2, 0, 0])
++
++
++@pytest.mark.parametrize("close", [False, True])
++def test_abandoned_iterator_does_not_disturb_a_suspended_iterator(close):
++    shared = Lexer()
++    survivor = shared.tokenize(".alpha[2].omega")
++    expected = Lexer().tokenize(".alpha[2].omega")
++    assert advance(survivor) == advance(expected)
++    abandoned = shared.tokenize("other.`legacy`.tail")
++    assert next(abandoned)["value"] == "other"
++    if close:
++        abandoned.close()
++    del abandoned
++    assert list(survivor) == list(expected)
++    assert list(shared.tokenize("fresh.name")) == list(Lexer().tokenize("fresh.name"))
++
++
++def test_creating_unstarted_iterators_remains_lazy():
++    shared = Lexer()
++    survivor = shared.tokenize(".alpha")
++    expected = Lexer().tokenize(".alpha")
++    assert advance(survivor) == advance(expected)
++    with warnings.catch_warnings(record=True) as emitted:
++        warnings.simplefilter("always")
++        legacy = shared.tokenize("`legacy`")
++        malformed = shared.tokenize("'unfinished")
++        empty = shared.tokenize("")
++    assert not emitted
++    assert list(survivor) == list(expected)
++    assert advance(legacy) == advance(Lexer().tokenize("`legacy`"))
++    assert advance(malformed) == advance(Lexer().tokenize("'unfinished"))
++    assert advance(empty) == advance(Lexer().tokenize(""))

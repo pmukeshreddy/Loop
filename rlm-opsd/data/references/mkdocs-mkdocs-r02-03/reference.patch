@@ -1,0 +1,36 @@
+--- a/mkdocs/utils/yaml.py
++++ b/mkdocs/utils/yaml.py
+@@ -127,7 +127,24 @@
+ 
+ def yaml_load(source: IO | str, loader: type[yaml.BaseLoader] | None = None) -> dict[str, Any]:
+     """Return dict of source YAML file using loader, recursively deep merging inherited parent."""
+-    loader = loader or get_yaml_loader()
++    return _yaml_load(source, loader or get_yaml_loader(), ())
++
++
++def _yaml_load(
++    source: IO | str, loader: type[yaml.BaseLoader], active_paths: tuple[str, ...]
++) -> dict[str, Any]:
++    # Track only this inheritance chain, not other (independent) loads. Real
++    # paths ensure that a symlink alias of an active file also closes a cycle.
++    name = getattr(source, 'name', None)
++    if not isinstance(source, str) and isinstance(name, (str, bytes, os.PathLike)):
++        path = os.path.normcase(os.path.realpath(os.path.abspath(os.fsdecode(name))))
++        if path in active_paths:
++            cycle = active_paths[active_paths.index(path) :] + (path,)
++            raise exceptions.ConfigurationError(
++                f"INHERIT cycle detected: {' -> '.join(cycle)}"
++            )
++        active_paths += (path,)
++
+     try:
+         result = yaml.load(source, Loader=loader)
+     except yaml.YAMLError as e:
+@@ -145,6 +162,6 @@
+             )
+         log.debug(f"Loading inherited configuration file: {abspath}")
+         with open(abspath, 'rb') as fd:
+-            parent = yaml_load(fd, loader)
++            parent = _yaml_load(fd, loader, active_paths)
+         result = mergedeep.merge(parent, result)
+     return result

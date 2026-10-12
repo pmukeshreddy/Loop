@@ -1,0 +1,86 @@
+--- /dev/null
++++ b/h11/tests/test_receive_body_limit.py
+@@ -0,0 +1,83 @@
++import pytest
++
++from h11 import CLIENT, SERVER, ERROR, NEED_DATA, Connection, Data, EndOfMessage, RemoteProtocolError, Request, Response
++
++
++def opened(mode, limit):
++    c = Connection(CLIENT if mode == "eof" else SERVER, max_receive_body_size=limit)
++    if mode == "eof":
++        c.send(Request(method="GET", target="/", headers=[("Host", "example")]))
++        c.send(EndOfMessage())
++        head = b"HTTP/1.0 200 OK\r\n\r\n"
++    elif mode == "length":
++        head = b"POST / HTTP/1.1\r\nHost: example\r\nContent-Length: 3\r\n\r\n"
++    else:
++        head = b"POST / HTTP/1.1\r\nHost: example\r\nTransfer-Encoding: chunked\r\n\r\n"
++    c.receive_data(head)
++    assert isinstance(c.next_event(), (Request, Response))
++    return c
++
++
++@pytest.mark.parametrize("mode", ["length", "chunked", "eof"])
++def test_limit_is_cumulative_and_attributed_to_peer(mode):
++    c = opened(mode, 2)
++    c.receive_data(b"2\r\nab\r\n" if mode == "chunked" else b"ab")
++    assert c.next_event().data == b"ab"
++    assert c.next_event() is NEED_DATA
++    c.receive_data(b"1\r\nc\r\n0\r\n\r\n" if mode == "chunked" else b"c")
++    with pytest.raises(RemoteProtocolError) as caught:
++        c.next_event()
++    assert caught.value.error_status_hint == 413
++    assert c.their_state is ERROR
++    with pytest.raises(RemoteProtocolError):
++        c.next_event()
++
++
++@pytest.mark.parametrize("mode", ["length", "chunked", "eof"])
++def test_exact_limit_excludes_framing_headers_and_trailers(mode):
++    c = opened(mode, 3)
++    if mode == "chunked":
++        wire = b"3\r\nabc\r\n0\r\nX-Trailer: longer-than-the-body\r\n\r\n"
++    else:
++        wire = b"abc"
++    c.receive_data(wire)
++    assert c.next_event().data == b"abc"
++    if mode == "eof":
++        c.receive_data(b"")
++    assert isinstance(c.next_event(), EndOfMessage)
++
++
++def test_zero_limit_allows_bodyless_request():
++    c = Connection(SERVER, max_receive_body_size=0)
++    c.receive_data(b"GET / HTTP/1.1\r\nHost: example\r\n\r\n")
++    assert isinstance(c.next_event(), Request)
++    assert isinstance(c.next_event(), EndOfMessage)
++
++
++def test_count_resets_for_next_cycle_and_does_not_count_sent_body():
++    c = Connection(SERVER, max_receive_body_size=2)
++    for _ in range(2):
++        c.receive_data(b"POST / HTTP/1.1\r\nHost: example\r\nContent-Length: 2\r\n\r\nab")
++        assert isinstance(c.next_event(), Request)
++        assert c.next_event().data == b"ab"
++        assert isinstance(c.next_event(), EndOfMessage)
++        c.send(Response(status_code=200, headers=[("Content-Length", "4")]))
++        c.send(Data(data=b"wxyz"))
++        c.send(EndOfMessage())
++        c.start_next_cycle()
++
++
++def test_none_remains_unlimited():
++    c = opened("length", None)
++    c.receive_data(b"abc")
++    assert c.next_event().data == b"abc"
++    assert isinstance(c.next_event(), EndOfMessage)
++
++
++def test_rejects_entire_over_limit_event_not_a_shortened_fragment():
++    c = opened("length", 2)
++    c.receive_data(b"abc")
++    with pytest.raises(RemoteProtocolError) as caught:
++        c.next_event()
++    assert caught.value.error_status_hint == 413
++    assert c.their_state is ERROR

@@ -1,0 +1,36 @@
+--- a/src/cachetools/func.py
++++ b/src/cachetools/func.py
+@@ -11,8 +11,8 @@
+ 
+ 
+ class _UnboundTTLCache(TTLCache):
+-    def __init__(self, ttl, timer):
+-        TTLCache.__init__(self, math.inf, ttl, timer)
++    def __init__(self, ttl, timer, getsizeof=None):
++        TTLCache.__init__(self, math.inf, ttl, timer, getsizeof=getsizeof)
+ 
+     @property
+     def maxsize(self):  # type: ignore
+@@ -88,15 +88,17 @@
+         return _cache(RRCache(maxsize, choice), maxsize, typed)
+ 
+ 
+-def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False):
++def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False, *, getsizeof=None):
+     """Decorator to wrap a function with a memoizing callable that saves
+     up to `maxsize` results based on a Least Recently Used (LRU)
+-    algorithm with a per-item time-to-live (TTL) value.
++    algorithm with a per-item time-to-live (TTL) value. If `getsizeof`
++    is supplied, `maxsize` limits the total size of the cached results
++    as determined by this function, rather than their number.
+ 
+     """
+     if maxsize is None:
+-        return _cache(_UnboundTTLCache(ttl, timer), None, typed)
++        return _cache(_UnboundTTLCache(ttl, timer, getsizeof=getsizeof), None, typed)
+     elif callable(maxsize):
+-        return _cache(TTLCache(128, ttl, timer), 128, typed)(maxsize)
++        return _cache(TTLCache(128, ttl, timer, getsizeof=getsizeof), 128, typed)(maxsize)
+     else:
+-        return _cache(TTLCache(maxsize, ttl, timer), maxsize, typed)
++        return _cache(TTLCache(maxsize, ttl, timer, getsizeof=getsizeof), maxsize, typed)

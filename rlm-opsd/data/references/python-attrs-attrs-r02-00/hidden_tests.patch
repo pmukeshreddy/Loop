@@ -1,0 +1,39 @@
+--- /dev/null
++++ b/tests/test_setters_nested_pipe.py
+@@ -0,0 +1,36 @@
++import pytest
++
++from attr import setters
++
++
++def test_nested_order():
++    events = []
++    inst = object()
++    field = object()
++
++    def add(instance, attrib, value):
++        assert instance is inst
++        assert attrib is field
++        events.append(("add", value))
++        return value + 1
++
++    def double(instance, attrib, value):
++        assert instance is inst
++        assert attrib is field
++        events.append(("double", value))
++        return value * 2
++
++    hook = setters.pipe([add, (double, [], [add])], double)
++    assert hook(inst, field, 2) == 14
++    assert events == [("add", 2), ("double", 3), ("add", 6), ("double", 7)]
++
++
++def test_empty_nested_identity():
++    value = object()
++    assert setters.pipe([], ((), []))(None, None, value) is value
++
++
++@pytest.mark.parametrize("bad", [42, None, setters.NO_OP])
++def test_bad_leaf_is_rejected_eagerly(bad):
++    with pytest.raises(TypeError):
++        setters.pipe([lambda i, a, v: v, (bad,)])

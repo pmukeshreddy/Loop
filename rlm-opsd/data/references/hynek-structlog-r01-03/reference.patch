@@ -1,0 +1,67 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -899,20 +899,29 @@
+             that do not exist on a standard `logging.LogRecord` object will be
+             copied to event dictionaries.
+ 
++        overwrite:
++            Whether to overwrite existing event dictionary values. If False,
++            only attributes whose keys are absent from the event dictionary
++            are copied, even if an existing value is None, False, or empty.
++
+     .. versionadded:: 21.5.0
+     """
+ 
+     __slots__ = ("_copier",)
+ 
+-    def __init__(self, allow: Collection[str] | None = None) -> None:
++    def __init__(
++        self, allow: Collection[str] | None = None, *, overwrite: bool = True
++    ) -> None:
+         self._copier: Callable[[EventDict, logging.LogRecord], None]
+         if allow is not None:
+             # The contents of allow is copied to a new list so that changes to
+             # the list passed into the constructor does not change the
+             # behaviour of this processor.
+-            self._copier = functools.partial(self._copy_allowed, [*allow])
++            self._copier = functools.partial(
++                self._copy_allowed, [*allow], overwrite=overwrite
++            )
+         else:
+-            self._copier = self._copy_all
++            self._copier = functools.partial(self._copy_all, overwrite=overwrite)
+ 
+     def __call__(
+         self, logger: logging.Logger, name: str, event_dict: EventDict
+@@ -924,10 +933,16 @@
+ 
+     @classmethod
+     def _copy_all(
+-        cls, event_dict: EventDict, record: logging.LogRecord
++        cls,
++        event_dict: EventDict,
++        record: logging.LogRecord,
++        *,
++        overwrite: bool = True,
+     ) -> None:
+         for key, value in record.__dict__.items():
+-            if key not in _LOG_RECORD_KEYS:
++            if key not in _LOG_RECORD_KEYS and (
++                overwrite or key not in event_dict
++            ):
+                 event_dict[key] = value
+ 
+     @classmethod
+@@ -936,9 +951,11 @@
+         allow: Collection[str],
+         event_dict: EventDict,
+         record: logging.LogRecord,
++        *,
++        overwrite: bool = True,
+     ) -> None:
+         for key in allow:
+-            if key in record.__dict__:
++            if key in record.__dict__ and (overwrite or key not in event_dict):
+                 event_dict[key] = record.__dict__[key]
+ 
+ 

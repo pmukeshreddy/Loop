@@ -1,0 +1,145 @@
+--- /dev/null
++++ b/tests/test_converter_annotation_ownership.py
+@@ -0,0 +1,142 @@
++# SPDX-License-Identifier: MIT
++
++import copy
++import inspect
++import pickle
++
++from types import MappingProxyType
++
++import attr
++import pytest
++
++
++class SignatureOnly:
++    __slots__ = ("__signature__", "calls", "takes_self", "takes_field")
++
++    def __init__(self, takes_self, takes_field):
++        self.takes_self = takes_self
++        self.takes_field = takes_field
++        self.calls = []
++        names = ["value"]
++        if takes_self:
++            names.append("instance")
++        if takes_field:
++            names.append("field")
++        self.__signature__ = inspect.Signature(
++            [
++                inspect.Parameter(
++                    name,
++                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
++                    annotation=str if index == 0 else inspect.Parameter.empty,
++                )
++                for index, name in enumerate(names)
++            ],
++            return_annotation=int,
++        )
++
++    def __call__(self, value, *context):
++        self.calls.append((value, context))
++        result = int(value)
++        if self.takes_self:
++            result += context[0].offset
++        if self.takes_field:
++            result += len(context[-1].name)
++        return result
++
++
++class ReadOnlyAnnotations(SignatureOnly):
++    __slots__ = ()
++
++    @property
++    def __annotations__(self):
++        return MappingProxyType({"value": bytes, "return": bytes})
++
++
++def exercise(wrapped):
++    @attr.define
++    class Model:
++        offset: int = attr.field(init=False, default=3)
++        value: int = attr.field(converter=wrapped)
++
++    field = attr.fields(Model).value
++    obj = Model("10")
++    expected = 10 + (3 if wrapped.takes_self else 0)
++    expected += 5 if wrapped.takes_field else 0
++    assert obj.value == expected
++    assert Model.__init__.__annotations__["value"] is str
++    assert wrapped.__call__.__annotations__["return"] is int
++
++    context = ()
++    if wrapped.takes_self:
++        context += (obj,)
++    if wrapped.takes_field:
++        context += (field,)
++    assert wrapped.converter.calls[-1][0] == "10"
++    assert len(wrapped.converter.calls[-1][1]) == len(context)
++    assert all(a is b for a, b in zip(wrapped.converter.calls[-1][1], context))
++
++    assert attr.setters.convert(obj, field, "20") == expected + 10
++    assert obj.value == expected
++    obj.value = "30"
++    assert obj.value == expected + 20
++    assert [v for v, _ in wrapped.converter.calls] == ["10", "20", "30"]
++    for _, actual in wrapped.converter.calls:
++        assert len(actual) == len(context)
++        assert all(a is b for a, b in zip(actual, context))
++
++
++@pytest.mark.parametrize("takes_self,takes_field", [(False, False), (True, False), (False, True), (True, True)])
++@pytest.mark.parametrize("callable_type", [SignatureOnly, ReadOnlyAnnotations])
++def test_callable_protocol(callable_type, takes_self, takes_field):
++    callback = callable_type(takes_self, takes_field)
++    before = dict(callback.__annotations__) if callable_type is ReadOnlyAnnotations else None
++    wrapped = attr.Converter(callback, takes_self=takes_self, takes_field=takes_field)
++    exercise(wrapped)
++    if before is not None:
++        assert dict(callback.__annotations__) == before
++    else:
++        assert not hasattr(callback, "__annotations__")
++
++
++def test_function_annotation_ownership():
++    def callback(value: bytes, instance, field) -> bytes:
++        return int(value) + instance.offset + len(field.name)
++
++    callback.__signature__ = inspect.signature(callback).replace(
++        parameters=[
++            p.replace(annotation=str) if p.name == "value" else p
++            for p in inspect.signature(callback).parameters.values()
++        ],
++        return_annotation=int,
++    )
++    annotations = callback.__annotations__
++    before = dict(annotations)
++    first = attr.Converter(callback, takes_self=True, takes_field=True)
++    second = attr.Converter(callback, takes_self=True, takes_field=True)
++    assert callback.__annotations__ is annotations
++    assert annotations == before
++    assert first.__call__ is not callback
++    assert first.__call__ is not second.__call__
++    assert first.__call__.__annotations__["return"] is int
++    assert second.__call__.__annotations__["return"] is int
++
++
++@pytest.mark.parametrize("takes_self,takes_field", [(False, False), (True, False), (False, True), (True, True)])
++@pytest.mark.parametrize("method", ["copy", "deepcopy", "pickle"])
++def test_serialization(method, takes_self, takes_field):
++    callback = SignatureOnly(takes_self, takes_field)
++    original = attr.Converter(callback, takes_self=takes_self, takes_field=takes_field)
++    assert original.__getstate__() == {
++        "converter": callback,
++        "takes_self": takes_self,
++        "takes_field": takes_field,
++    }
++    if method == "pickle":
++        restored = pickle.loads(pickle.dumps(original, protocol=pickle.HIGHEST_PROTOCOL))
++    else:
++        restored = getattr(copy, method)(original)
++    assert restored.takes_self is takes_self
++    assert restored.takes_field is takes_field
++    exercise(restored)
++    assert not hasattr(callback, "__annotations__")
++    assert not hasattr(restored.converter, "__annotations__")

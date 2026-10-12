@@ -1,0 +1,54 @@
+--- a/jsonschema/exceptions.py
++++ b/jsonschema/exceptions.py
+@@ -315,21 +315,44 @@
+ class ErrorTree:
+     """
+     ErrorTrees make it easier to check which validations failed.
++
++    Arguments:
++        errors:
++            The validation errors to index.
++        include_context:
++            If true, also index recursively nested context errors, using
++            absolute instance paths for all errors. Errors are visited in
++            input order, each before its context children in list order.
++            The last error at a given path and validator wins.
++            If false (the default), index only the supplied errors using
++            their relative paths.
+     """
+ 
+     _instance = _unset
+ 
+-    def __init__(self, errors: Iterable[ValidationError] = ()):
++    def __init__(
++        self,
++        errors: Iterable[ValidationError] = (),
++        *,
++        include_context: bool = False,
++    ):
+         self.errors: MutableMapping[str, ValidationError] = {}
+         self._contents: Mapping[str, ErrorTree] = defaultdict(self.__class__)
+ 
+         for error in errors:
+-            container = self
+-            for element in error.path:
+-                container = container[element]
+-            container.errors[error.validator] = error
+-
+-            container._instance = error.instance
++            pending = [error]
++            while pending:
++                current = pending.pop()
++                container = self
++                path = current.absolute_path if include_context else current.path
++                for element in path:
++                    container = container[element]
++                container.errors[current.validator] = current
++
++                container._instance = current.instance
++
++                if include_context:
++                    pending.extend(reversed(current.context))
+ 
+     def __contains__(self, index: str | int):
+         """

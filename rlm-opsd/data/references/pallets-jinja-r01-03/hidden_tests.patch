@@ -1,0 +1,66 @@
+--- /dev/null
++++ b/tests/test_combined_template_selection.py
+@@ -0,0 +1,63 @@
++import pytest
++
++from jinja2 import DictLoader
++from jinja2 import Environment
++from jinja2 import TemplateNotFound
++from jinja2.loaders import ModuleLoader
++
++
++@pytest.mark.parametrize(
++    "extensions, expected",
++    [
++        (["html"], ["a.html", "nested/d.html"]),
++        (["html", "txt"], ["a.html", "b.txt", "nested/d.html"]),
++        ([], []),
++    ],
++)
++def test_combined_listing(extensions, expected):
++    names = ["a.html", "b.txt", "c.HTML", "nested/d.html", "reject.html", "plain"]
++    env = Environment(loader=DictLoader(dict.fromkeys(names, "ok")))
++    assert env.list_templates(
++        extensions=extensions, filter_func=lambda name: not name.startswith("reject")
++    ) == expected
++
++
++def test_standalone_selection_is_unchanged():
++    env = Environment(loader=DictLoader({"b.txt": "", "a.html": "", "plain": ""}))
++    assert env.list_templates() == ["a.html", "b.txt", "plain"]
++    assert env.list_templates(extensions=["html"]) == ["a.html"]
++    assert env.list_templates(filter_func=lambda name: name == "plain") == ["plain"]
++
++
++def test_combined_predicate_exception_propagates():
++    env = Environment(loader=DictLoader({"a.html": "ok"}))
++
++    def predicate(name):
++        raise ValueError("selection failed")
++
++    with pytest.raises(ValueError, match="selection failed"):
++        env.list_templates(extensions=["html"], filter_func=predicate)
++
++
++def test_compile_only_combined_selection(tmp_path):
++    env = Environment(
++        loader=DictLoader(
++            {
++                "keep.html": "selected",
++                "reject.html": "{% if %}",
++                "other.txt": "{% if %}",
++            }
++        )
++    )
++    env.compile_templates(
++        tmp_path,
++        extensions=["html"],
++        filter_func=lambda name: name != "reject.html",
++        zip=None,
++        ignore_errors=False,
++    )
++    compiled = Environment(loader=ModuleLoader(str(tmp_path)))
++    assert compiled.get_template("keep.html").render() == "selected"
++    for name in ["reject.html", "other.txt"]:
++        with pytest.raises(TemplateNotFound):
++            compiled.get_template(name)

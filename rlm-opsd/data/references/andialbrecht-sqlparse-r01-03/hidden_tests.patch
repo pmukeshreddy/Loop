@@ -1,0 +1,58 @@
+--- /dev/null
++++ b/tests/test_explicit_lexer.py
+@@ -0,0 +1,55 @@
++from io import StringIO
++
++import pytest
++
++import sqlparse
++from sqlparse import keywords, tokens as T
++from sqlparse.lexer import Lexer, tokenize
++
++
++def make_lexer():
++    lex = Lexer()
++    lex.clear()
++    lex.set_SQL_REGEX([(r';', T.Whitespace)] + keywords.SQL_REGEX)
++    lex.add_keywords({'SELECT': T.Name, 'BACON': T.Keyword})
++    return lex
++
++
++@pytest.mark.parametrize('entry', ['parse', 'parsestream', 'split', 'format', 'tokenize'])
++def test_explicit_lexer(entry):
++    lex = make_lexer()
++    text = 'select 1; select 2;'
++    if entry == 'tokenize':
++        result = list(tokenize(text, lexer=lex))
++        assert result[0] == (T.Name, 'select')
++        assert [tt for tt, value in result if value == ';'] == [T.Whitespace] * 2
++    elif entry == 'format':
++        assert sqlparse.format(text, lexer=lex, keyword_case='upper') == text
++    elif entry == 'split':
++        assert sqlparse.split(text, lexer=lex) == [text]
++        assert sqlparse.split(text, lexer=lex, strip_semicolon=True) == [text[:-1]]
++    else:
++        result = list(getattr(sqlparse, entry)(text, lexer=lex))
++        assert len(result) == 1
++        assert str(result[0]) == text
++    assert len(sqlparse.parse(text)) == 2
++    assert list(tokenize('select')) == [(T.Keyword.DML, 'select')]
++    assert list(tokenize('select', lexer=None)) == [(T.Keyword.DML, 'select')]
++
++
++def test_explicit_lexer_streams_and_bytes():
++    lex = make_lexer()
++    text = 'select 1; select 2;'
++    pending = sqlparse.parsestream(StringIO(text), lexer=lex)
++    assert len(sqlparse.parse(text, lexer=None)) == 2
++    assert [str(stmt) for stmt in pending] == [text]
++    assert sqlparse.split(text.encode('utf-8'), encoding='utf-8', lexer=lex) == [text]
++    assert sqlparse.format(text.encode('utf-8'), encoding='utf-8', lexer=lex,
++                           keyword_case='upper') == text
++    assert [str(stmt) for stmt in sqlparse.parse(text.encode('utf-8'),
++                                               encoding='utf-8', lexer=lex)] == [text]
++    assert list(tokenize(StringIO('BACON'), lexer=lex)) == [(T.Keyword, 'BACON')]
++    assert sqlparse.format('BACON', lexer=lex, keyword_case='lower') == 'bacon'
++    other = Lexer()
++    other.default_initialization()
++    assert list(tokenize('BACON', lexer=other)) == [(T.Name, 'BACON')]

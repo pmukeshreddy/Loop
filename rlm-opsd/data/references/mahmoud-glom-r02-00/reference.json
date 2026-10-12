@@ -1,0 +1,131 @@
+{
+ "answer": "--- a/glom/mutation.py\n+++ b/glom/mutation.py\n@@ -174,7 +174,9 @@\n             if not self.missing:\n                 raise\n \n-            remaining_path = self._orig_path[pae.part_idx:]\n+            # The new container replaces the missing segment; only assign\n+            # the remaining path inside it before attaching it to the target.\n+            remaining_path = self._orig_path[pae.part_idx + 1:]\n             val = scope[glom](self.missing(), Assign(remaining_path, val, missing=self.missing), scope)\n \n             op, arg = self._orig_path.items()[pae.part_idx]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.8334358848141767,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 16252 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution resolved the regression within a single focused production module, using five context searches and no sub-calls. The verified patch corrects the reconstruction boundary so the factory-created container replaces the missing segment rather than nesting that segment again. The four fail-to-pass tests cover missing dictionaries, objects, unassignable branches, and preservation of existing keys."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise unified-diff output requirement. The question describes the required behavior without revealing the defective expression or fix. Its small scope is appropriate for direct_solve, and the investigation is distinct from the existing task about recursive literal-value preparation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused mutation module documents missing-prefix reconstruction and contains its entire implementation. The attached failures distinguish reconstruction from ordinary assignment, so the defect can be reasoned about locally without investigating the full evaluator."
+  },
+  "context": {
+   "files": [
+    "glom/mutation.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "glom/mutation.py",
+    "symbol": "glom/mutation.py::Assign.glomit",
+    "why": "Reconstructs a missing branch using the failing path index, recursively assigns into the factory result, and then attaches that result."
+   },
+   {
+    "path": "glom/test/test_mutation.py",
+    "symbol": "glom/test/test_mutation.py::test_assign_missing_with_extant_keys",
+    "why": "Checks preservation of existing nested containers and the missing factory's call count."
+   },
+   {
+    "path": "glom/test/test_mutation.py",
+    "symbol": "glom/test/test_mutation.py::test_assign_missing_unassignable",
+    "why": "Checks that unsuccessful reconstruction does not modify the original target."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "Run the existing suite after applying the setup patch and include its real failure output. The focused source context should contain only mutation.py, plus that output.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Automatic backfilling in deep assignment has regressed. The attached pytest output shows failures when assigning through absent intermediate containers, while ordinary assignments still work. Restore the documented missing-factory behavior: construct only absent path segments, preserve existing containers, and attach the constructed branch only after its assignments succeed. Return a unified diff against the production files, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/glom/mutation.py\n+++ b/glom/mutation.py\n@@ -176,10 +176,10 @@\n         except PathAccessError as pae:\n             if not self.missing:\n                 raise\n \n-            remaining_path = self._orig_path[pae.part_idx + 1:]\n+            remaining_path = self._orig_path[pae.part_idx:]\n             val = scope[glom](self.missing(), Assign(remaining_path, val, missing=self.missing), scope)\n \n             op, arg = self._orig_path.items()[pae.part_idx]\n             path = self._orig_path[:pae.part_idx]\n             dest = scope[glom](dest_target, path, scope)\n"
+ },
+ "suggestion": null,
+ "task_id": "mahmoud-glom-r02-00",
+ "truth": {
+  "fail_to_pass": [
+   "glom/test/test_mutation.py::test_assign_missing_dict",
+   "glom/test/test_mutation.py::test_assign_missing_object",
+   "glom/test/test_mutation.py::test_assign_missing_unassignable",
+   "glom/test/test_mutation.py::test_assign_missing_with_extant_keys"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 200
+   },
+   "patch_files": [
+    "glom/mutation.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "glom/test/test_mutation.py::test_assign_missing_dict",
+   "glom/test/test_mutation.py::test_assign_missing_object",
+   "glom/test/test_mutation.py::test_assign_missing_unassignable",
+   "glom/test/test_mutation.py::test_assign_missing_with_extant_keys"
+  ],
+  "ground_truth_symbols": [
+   "glom/mutation.py::Assign.glomit"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 196,
+  "stability_runs": 3
+ }
+}

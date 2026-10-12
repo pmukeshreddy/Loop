@@ -1,0 +1,156 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -60,6 +60,15 @@\n _HELP_OPTION_STORAGE_NAME = \"_click_default_help\"\n \n \n+def _complete_name_matches(ctx: Context, name: str, incomplete: str) -> bool:\n+    \"\"\"Match a completion name using its owning context's normalization.\"\"\"\n+    if ctx.token_normalize_func is not None:\n+        name = ctx.token_normalize_func(name)\n+        incomplete = ctx.token_normalize_func(incomplete)\n+\n+    return name.startswith(incomplete)\n+\n+\n def _complete_visible_commands(\n     ctx: Context, incomplete: str\n ) -> cabc.Iterator[tuple[str, Command]]:\n@@ -72,7 +81,7 @@\n     multi = t.cast(Group, ctx.command)\n \n     for name in multi.list_commands(ctx):\n-        if name.startswith(incomplete):\n+        if _complete_name_matches(ctx, name, incomplete):\n             command = multi.get_command(ctx, name)\n \n             if command is not None and not command.hidden:\n@@ -1446,7 +1455,7 @@\n                 results.extend(\n                     CompletionItem(name, help=param.help)\n                     for name in [*param.opts, *param.secondary_opts]\n-                    if name.startswith(incomplete)\n+                    if _complete_name_matches(ctx, name, incomplete)\n                 )\n \n         while ctx.parent is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009451173520712155,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "corepath",
+    "files",
+    "testpath"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 20710,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['core', 'corepath', 'files', 'testpath']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines option and command matching through an owning-context helper while leaving custom parameter completion untouched. The final artifact was computed and inspected after construction.",
+   "inspect_locate": "The reference execution used 18 targeted searches to locate option-name, group-command, and chained-ancestor completion paths and distinguish them from parameter completion.",
+   "persistent_state": "Repository and source variables were reused across turns while coordinating changes and preserving candidate ownership, filtering, spelling, and ordering invariants."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. Its requirements constrain one cohesive completion change rather than bundling unrelated checks. The question states desired behavior without revealing the internal edit locations or implementation. The supplied verification evidence covers normalized option aliases, source filtering, distinct command spellings, ancestor-specific normalization, unchanged unnormalized behavior, and custom completion bypass. No accepted task duplicates this investigation. Recursive decomposition was not established, and the task appropriately does not claim it among the established behaviors."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must combine the matching changes without accidentally changing provenance filtering, hidden filtering, emitted spellings, or custom parameter completion.",
+   "inspect_locate": "Completion candidates come from separate option, group-command, and chained-ancestor paths, with filtering and custom completion handled elsewhere.",
+   "persistent_state": "The implementation must retain the candidate-generation paths and their invariants while assembling coordinated edits.",
+   "recursive_decomposition": "The option-prefix path, direct subcommand path, and chained sibling path can be investigated independently. They must agree on normalized matching while using the correct owning context and preserving different exclusion rules."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::_complete_visible_commands",
+    "why": "Shared command candidate generator used by groups and chained ancestors."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Command.shell_complete",
+    "why": "Matches option aliases and traverses chained ancestors."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Group.shell_complete",
+    "why": "Adds the current group's subcommands before inherited completion results."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.shell_complete",
+    "why": "Custom and type-provided value completions must remain outside the new filtering."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_normalized_name_completion.py\n@@ -0,0 +1,60 @@\n+import click\n+\n+\n+def normalize(value):\n+    return value.casefold().replace(\"_\", \"-\")\n+\n+\n+def values(items):\n+    return [item.value for item in items]\n+\n+\n+def test_option_prefixes_and_source_filtering():\n+    command = click.Command(\n+        \"cli\",\n+        params=[\n+            click.Option([\"--dry_run/--no_dry_run\"]),\n+            click.Option([\"--tag_name\"], multiple=True),\n+            click.Option([\"--hidden_name\"], hidden=True),\n+        ],\n+    )\n+    ctx = command.make_context(\n+        \"cli\", [\"--dry_run\", \"--tag_name\", \"x\"],\n+        token_normalize_func=normalize, resilient_parsing=True,\n+    )\n+    assert values(command.shell_complete(ctx, \"--TAG-\")) == [\"--tag_name\"]\n+    assert values(command.shell_complete(ctx, \"--NO-\")) == []\n+    assert values(command.shell_complete(ctx, \"--HIDDEN-\")) == []\n+    fresh = command.make_context(\n+        \"cli\", [], token_normalize_func=normalize, resilient_parsing=True,\n+    )\n+    assert values(command.shell_complete(fresh, \"--NO-\")) == [\"--no_dry_run\"]\n+    assert values(command.shell_complete(fresh, \"--DRY-\")) == [\"--dry_run\"]\n+\n+\n+def test_groups_preserve_original_names_and_distinct_matches():\n+    group = click.Group(\"cli\", commands=[\n+        click.Command(\"Load_Data\"), click.Command(\"load-data\"),\n+        click.Command(\"Load_Secret\", hidden=True),\n+    ])\n+    ctx = click.Context(group, token_normalize_func=normalize)\n+    assert values(group.shell_complete(ctx, \"LOAD-\")) == [\"Load_Data\", \"load-data\"]\n+    plain = click.Context(group)\n+    assert values(group.shell_complete(plain, \"LOAD-\")) == []\n+\n+\n+def test_chained_siblings_use_their_owning_context_normalizer():\n+    child = click.Command(\"child\")\n+    group = click.Group(\"cli\", chain=True, commands=[\n+        child, click.Command(\"Build_Task\"), click.Command(\"Build_Secret\", hidden=True),\n+    ])\n+    parent = click.Context(group, token_normalize_func=normalize)\n+    ctx = click.Context(child, parent=parent, token_normalize_func=lambda s: s)\n+    assert values(child.shell_complete(ctx, \"BUILD-\")) == [\"Build_Task\"]\n+\n+\n+def test_parameter_custom_completions_are_not_prefix_filtered():\n+    option = click.Option([\"--value\"], shell_complete=lambda c, p, i: [\"Unrelated\"])\n+    command = click.Command(\"cli\", params=[option])\n+    ctx = click.Context(command, token_normalize_func=normalize)\n+    assert values(option.shell_complete(ctx, \"LOAD-\")) == [\"Unrelated\"]\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests exercise original spellings, normalized collisions, provenance filtering, ancestor ownership, and custom value completion. Prefix matching changes do not require changing command lookup semantics.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Make option-name and command-name shell completion honor Context.token_normalize_func. For prefix matching, normalize both the candidate spelling and the incomplete string using the context that owns that candidate. Return the original spelling, not the normalized spelling, and preserve candidate order and distinct spellings even when normalization makes them equal. This must cover a command's option aliases, a group's own subcommands, and sibling commands offered through chained ancestor groups; an ancestor's candidates must use that ancestor's normalizer rather than the child's. When no normalizer is configured, behavior must remain unchanged. Preserve existing exclusions for hidden candidates, consumed non-repeatable options, and chained command availability, along with existing help metadata. Do not apply this new prefix filtering to Parameter.shell_complete results supplied by a custom callback or parameter type. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-click-r03-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_normalized_name_completion.py::test_chained_siblings_use_their_owning_context_normalizer",
+   "tests/test_normalized_name_completion.py::test_groups_preserve_original_names_and_distinct_matches",
+   "tests/test_normalized_name_completion.py::test_option_prefixes_and_source_filtering"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1995
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_normalized_name_completion.py::test_chained_siblings_use_their_owning_context_normalizer",
+   "tests/test_normalized_name_completion.py::test_groups_preserve_original_names_and_distinct_matches",
+   "tests/test_normalized_name_completion.py::test_option_prefixes_and_source_filtering"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

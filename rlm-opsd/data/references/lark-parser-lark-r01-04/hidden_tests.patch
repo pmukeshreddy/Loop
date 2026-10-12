@@ -1,0 +1,40 @@
+--- /dev/null
++++ b/tests/test_tree_copy_keep_meta.py
+@@ -0,0 +1,37 @@
++from lark.tree import Tree, SlottedTree
++
++
++def test_copy_default_is_still_shallow():
++    source = Tree('node', [Tree('child', [])])
++    source.meta.line = 7
++    cloned = source.copy()
++    assert cloned is not source
++    assert cloned.children is source.children
++    assert cloned.data == source.data
++    assert cloned.meta is not source.meta
++    assert cloned.meta.empty
++
++
++def test_copy_can_share_existing_metadata():
++    source = Tree('node', ['value'])
++    source.meta.line = 7
++    cloned = source.copy(keep_meta=True)
++    assert cloned.children is source.children
++    assert cloned.meta is source.meta
++    cloned.meta.line = 9
++    assert source.meta.line == 9
++
++
++def test_copy_preserves_concrete_type():
++    source = SlottedTree('node', [])
++    source.meta.column = 3
++    cloned = source.copy(keep_meta=True)
++    assert type(cloned) is SlottedTree
++    assert cloned.meta is source.meta
++
++
++def test_copy_does_not_create_metadata_for_source():
++    source = Tree('node', [])
++    cloned = source.copy(keep_meta=True)
++    assert cloned.meta is not source.meta
++    assert cloned.meta.empty and source.meta.empty

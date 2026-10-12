@@ -1,0 +1,217 @@
+{
+  "task_id": "hynek-structlog-r02-05",
+  "family": "combine_verify_finish",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 706015,
+    "context_lengths": [
+      132,
+      1005,
+      519,
+      54740,
+      7432,
+      11402,
+      8732,
+      4554,
+      4989,
+      7230,
+      6802,
+      2493,
+      4535,
+      10499,
+      2666,
+      3845,
+      1062,
+      4964,
+      4492,
+      6064,
+      8971,
+      23020,
+      2899,
+      6915,
+      4330,
+      1923,
+      4767,
+      7850,
+      1113,
+      2945,
+      7395,
+      14044,
+      2427,
+      1670,
+      1242,
+      2010,
+      9472,
+      10042,
+      965,
+      5664,
+      37212,
+      935,
+      30968,
+      41937,
+      5805,
+      9253,
+      16618,
+      10151,
+      795,
+      8617,
+      252,
+      522,
+      1557,
+      1000,
+      23821,
+      18411,
+      7303,
+      13305,
+      9121,
+      35544,
+      5648,
+      1706,
+      11072,
+      12244,
+      1531,
+      50696,
+      6614,
+      13855,
+      33229,
+      10307,
+      2198,
+      12420,
+      3547
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint(context[0][:200])\nprint(context[len(context)//2][:180])\nprint(context[-1][:180])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint(list(files))\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint(context[0][:200])\nprint(context[len(context)//2][:180])\nprint(context[-1][:180])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint(list(files))"
+      ],
+      "stdout_raw_chars": 2303,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 73\n# File: .git_archival.txt\nnode: 8174a86a2f14b5bd295eded733ff5fffc12aa173\nnode-date: 2026-06-06T09:18:48+02:00\ndescribe-name: 26.1.0\n\n# File: src/structlog/_native.py\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License\n# File: tox.ini\n[tox]\nrequires =\n    tox>=4.51.0\n    tox-uv\nenv_list =\n    pre-commit,\n    3.1{0-5}-{tests,mypy}\n    3.1{0,3}-tests-{colorama,be,rich},\n    typing-{mypy,pyright,ty,\n['.git_archival.txt', '.pre-commit-config.yaml', '.readthedocs.yaml', 'CHANGELOG.md', 'README.md', 'docs/api.rst', 'docs/bound-loggers.md', 'docs/conf.py', 'docs/configuration.md', 'docs/console-output.md', 'docs/contextvars.md', 'docs/exceptions.md', 'docs/frameworks.md', 'docs/getting-started.md', 'docs/glossary.md', 'docs/index.md', 'docs/license.md', 'docs/logging-best-practices.md', 'docs/performance.md', 'docs/processors.md', 'docs/recipes.md', 'docs/standard-library.md', 'docs/testing.md', 'docs/thread-local.md', 'docs/twisted.md', 'docs/typing.md', 'docs/why.md', 'pyproject.toml', 'show_off.py', 'src/structlog/__init__.py', 'src/structlog/_base.py', 'src/structlog/_config.py', 'src/structlog/_frames.py', 'src/structlog/_generic.py', 'src/structlog/_greenlets.py', 'src/structlog/_log_levels.py', 'src/structlog/_native.py', 'src/structlog/_output.py', 'src/structlog/_utils.py', 'src/structlog/contextvars.py', 'src/structlog/dev.py', 'src/structlog/exceptions.py', 'src/structlog/processors.py', 'src/structlog/stdlib.py', 'src/structlog/testing.py', 'src/structlog/threadlocal.py', 'src/structlog/tracebacks.py', 'src/structlog/twisted.py', 'src/structlog/types.py', 'src/structlog/typing.py', 'tests/__init__.py', 'tests/additional_frame.py', 'tests/conftest.py', 'tests/helpers.py', 'tests/processors/test_processors.py', 'tests/processors/test_renderers.py', 'tests/test_base.py', 'tests/test_config.py', 'tests/test_contextvars.py', 'tests/test_dev.py', 'tests/test_frames.py', 'tests/test_generic.py', 'tests/test_native.py', 'tests/test_output.py', 'tests/test_packaging.py', 'tests/test_stdlib.py', 'tests/test_testing.py', 'tests/test_threadlocal.py', 'tests/test_tracebacks.py', 'tests/test_twisted.py', 'tests/test_utils.py', 'tests/typing/api.py', 'tox.ini']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re,ast\nnative=files['src/structlog/_native.py']\nfor term in ['def log(', 'def alog(', 'def make_filtering']:\n p=native.find(term); print(native[max(0,p-100):p+1050])\nhits={}\nfor path,text in files.items():\n if path.startswith('tests/'):\n  matches=list(re.finditer(r'\\.(?:a?log)\\(',text))\n  if matches:\n   hits[path]=matches\n   print(path,[(text.count('\\n',0,m.start())+1,text[m.start():m.start()+95].split('\\n')[0]) for m in matches])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re,ast\nnative=files['src/structlog/_native.py']\nfor term in ['def log(', 'def alog(', 'def make_filtering']:\n p=native.find(term); print(native[max(0,p-100):p+1050])\nhits={}\nfor path,text in files.items():\n if path.startswith('tests/'):\n  matches=list(re.finditer(r'\\.(?:a?log)\\(',text))\n  if matches:\n   hits[path]=matches\n   print(path,[(text.count('\\n',0,m.start())+1,text[m.start():m.start()+95].split('\\n')[0]) for m in matches])"
+      ],
+      "stdout_raw_chars": 4300,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "\n\n        meth.__name__ = name\n        ameth.__name__ = f\"a{name}\"\n\n        return meth, ameth\n\n    def log(self: Any, level: int, event: str, *args: Any, **kw: Any) -> Any:\n        if level < min_level:\n            return None\n        name = LEVEL_TO_NAME[level]\n\n        return self._proxy_to_logger(\n            name, _maybe_interpolate(event, args), **kw\n        )\n\n    async def alog(\n        self: Any, level: int, event: str, *args: Any, **kw: Any\n    ) -> Any:\n        \"\"\"\n        .. versionchanged:: 23.3.0\n           Callsite parameters are now also collected under asyncio.\n        \"\"\"\n        if level < min_level:\n            return None\n        name = LEVEL_TO_NAME[level]\n        event = _maybe_interpolate(event, args)\n\n        # Capture thread-specific info before handing off to the executor.\n        thread_token = _ASYNC_CALLING_THREAD.set(\n            (threading.get_ident(), threading.current_thread().name)\n        )\n        scs_token = _ASYNC_CALLING_STACK.set(sys._getframe().f_back)  # type: ignore[arg-type]\n        ctx = contextvars.copy_context()\n\n        try:\n            runner = await asyncio.get_running_loop().run_in\nself._proxy_to_logger(\n            name, _maybe_interpolate(event, args), **kw\n        )\n\n    async def alog(\n        self: Any, level: int, event: str, *args: Any, **kw: Any\n    ) -> Any:\n        \"\"\"\n        .. versionchanged:: 23.3.0\n           Callsite parameters are now also collected under asyncio.\n        \"\"\"\n        if level < min_level:\n            return None\n        name = LEVEL_TO_NAME[level]\n        event = _maybe_interpolate(event, args)\n\n        # Capture thread-specific info before handing off to the executor.\n        thread_token = _ASYNC_CALLING_THREAD.set(\n            (threading.get_ident(), threading.current_thread().name)\n        )\n        scs_token = _ASYNC_CALLING_STACK.set(sys._getframe().f_back)  # type: ignore[arg-type]\n        ctx = contextvars.copy_context()\n\n        try:\n            runner = await asyncio.get_running_loop().run_in_executor(\n                None,\n                lambda: ctx.run(\n                    lambda: self._proxy_to_logger(name, event, **kw)\n                ),\n            )\n        finally:\n            _ASYNC_CALLING_STACK.reset(scs_token)\n            _ASYNC_CALLING_THREAD.reset(threa\nLLING_STACK.reset(scs_token)\n        _ASYNC_CALLING_THREAD.reset(thread_token)\n\n    return runner\n\n\ndef make_filtering_bound_logger(\n    min_level: int | str,\n) -> type[FilteringBoundLogger]:\n    \"\"\"\n    Create a new `FilteringBoundLogger` that only logs *min_level* or higher.\n\n    The logger is optimized such that log levels below *min_level* only consist\n    of a ``return None``.\n\n    All familiar log methods are present, with async variants of each that are\n    prefixed by an ``a``. Therefore, the async version of ``log.info(\"hello\")``\n    is ``await log.ainfo(\"hello\")``.\n\n    Additionally it has a ``log(self, level: int, **kw: Any)`` method to mirror\n    `logging.Logger.log` and `structlog.stdlib.BoundLogger.log`.\n\n    Compared to using *structlog*'s standard library integration and the\n    `structlog.stdlib.filter_by_level` processor:\n\n    - It's faster because once the logger is built at program start; it's a\n      static class.\n    - For the same reason you can't change the log level once configured. Use\n      the dynamic approach of `standard-library` instead, if you need this\n      feature.\n    - You *can* have (much) more \ntests/test_native.py [(115, '.log(logging.INFO, \"yep\")'), (123, '.alog(logging.INFO, \"yep\")'), (131, '.log(logging.DEBUG, \"nope\")'), (139, '.alog(logging.DEBUG, \"nope\")'), (149, '.alog(logging.INFO, 42)'), (157, '.log(logging.INFO, \"answer is %d.\", 42)'), (165, '.log(logging.INFO, \"answer is %(answer)d.\", {\"answer\": 42})'), (173, '.alog(logging.INFO, \"answer is %d.\", 42)'), (181, '.alog(logging.INFO, \"answer is %(answer)d.\", {\"answer\": 42})')]\ntests/test_stdlib.py [(222, '.log() is proxied to the appropriate method.'), (226, '.log(50, \"event\")'), (227, '.log(10, \"event\")'), (417, '.alog(logging.INFO, \"foo %s\", \"bar\")'), (1576, '.log(logging.ERROR, \"42\")')]\ntests/typing/api.py [(301, '.log(logging.CRITICAL, \"this is synchronously CRITICAL\")'), (315, '.alog(logging.CRITICAL, \"async log\")'), (327, '.alog(logging.CRITICAL, \"async log\")')]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nt=files['tests/test_native.py']\nprint(t[:7800][:4000])\nprint(\"AST tests/classes\",[(n.name,n.lineno) for n in ast.walk(ast.parse(t)) if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef))])\nprint(files['tests/conftest.py'][:1500])\nprint(\"LOGS\", [s[:200] for s in context if s.startswith('# Log:')])\n``` scratch\nWe shouldn't suffix block malformed?\n\n```repl\nt=files['tests/test_native.py']\nprint(t[:4000])\nprint(\"AST tests/classes\",[(n.name,n.lineno) for n in ast.walk(ast.parse(t)) if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef))])\nprint(files['tests/conftest.py'][:1500])\nprint(\"LOGS\", [s[:200] for s in context if s.startswith('# Log:')])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "t=files['tests/test_native.py']\nprint(t[:7800][:4000])\nprint(\"AST tests/classes\",[(n.name,n.lineno) for n in ast.walk(ast.parse(t)) if isinstance(n,(ast.ClassDef,ast.FunctionDef,ast.AsyncFunctionDef))])\nprint(files['tests/conftest.py'][:1500])\nprint(\"LOGS\", [s[:200] for s in context if s.startswith('# Log:')])"
+      ],
+      "stdout_raw_chars": 6773,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\nimport logging\nimport pickle\n\nimport pytest\n\nfrom structlog import make_filtering_bound_logger\nfrom structlog._log_levels import LEVEL_TO_NAME\nfrom structlog._native import _nop\nfrom structlog.contextvars import (\n    bind_contextvars,\n    clear_contextvars,\n    merge_contextvars,\n)\n\n\n@pytest.fixture(name=\"bl\")\ndef _bl(cl):\n    return make_filtering_bound_logger(logging.INFO)(cl, [], {})\n\n\nclass TestNativeFilteringLogger:\n    def test_is_enabled_for(self, bl):\n        \"\"\"\n        is_enabled_for returns True if the log level is enabled.\n        \"\"\"\n        assert bl.is_enabled_for(20)\n        assert bl.is_enabled_for(logging.INFO)\n\n        assert not bl.is_enabled_for(19)\n        assert not bl.is_enabled_for(logging.DEBUG)\n\n    def test_get_effective_level(self, bl):\n        \"\"\"\n        get_effective_level returns the log level.\n        \"\"\"\n        assert 20 == logging.INFO == bl.get_effective_level()\n\n    def test_exact_level(self, bl, cl):\n        \"\"\"\n        if log level is exactly the min_level, log.\n        \"\"\"\n        bl.info(\"yep\")\n\n        assert [(\"info\", (), {\"event\": \"yep\"})] == cl.calls\n\n    async def test_async_exact_level(self, bl, cl):\n        \"\"\"\n        if log level is exactly the min_level, log.\n        \"\"\"\n        await bl.ainfo(\"yep\")\n\n        assert [(\"info\", (), {\"event\": \"yep\"})] == cl.calls\n\n    def test_one_below(self, bl, cl):\n        \"\"\"\n        if log level is below the min_level, don't log.\n        \"\"\"\n        bl.debug(\"nope\")\n\n        assert [] == cl.calls\n\n    async def test_async_one_below(self, bl, cl):\n        \"\"\"\n        if log level is below the min_level, don't log.\n        \"\"\"\n        await bl.adebug(\"nope\")\n\n        assert [] == cl.calls\n\n    def test_filtered_interp(self, bl, cl):\n        \"\"\"\n        Passing interpolation args works if the log entry is filtered out.\n        \"\"\"\n        bl.debug(\"hello %s!\", \"world\")\n\n        assert [] == cl.calls\n\n    async def test_async_filtered_interp(self, bl, cl):\n        \"\"\"\n        Passing interpolation args works if the log entry is filtered out.\n        \"\"\"\n        await bl.adebug(\"hello %s!\", \"world\")\n\n        assert [] == cl.calls\n\n    def test_no_args(self, bl, cl):\n        \"\"\"\n        If no args are passed, don't attempt interpolation.\n\n        See also #473\n        \"\"\"\n        bl.info(42)\n\n        assert 42 == cl.calls[0][2][\"event\"]\n\n    async def test_async_no_args(self, bl, cl):\n        \"\"\"\n        If no args are passed, don't attempt interpolation.\n\n        See also #473\n        \"\"\"\n        await bl.ainfo(42)\n\n        assert 42 == cl.calls[0][2][\"event\"]\n\n    def test_log_exact_level(self, bl, cl):\n        \"\"\"\n        if log level is exactly the min_level, log.\n        \"\"\"\n        bl.log(logging.INFO, \"yep\")\n\n        assert [(\"info\", (), {\"event\": \"yep\"})] == cl.calls\n\n    async def test_alog_exact_level(self, bl, cl):\n        \"\"\"\n        if log level is exactly the min_level, log.\n        \"\"\"\n        await bl.alog(logging.INFO, \"yep\")\n\n        assert [(\"info\", (), {\"event\": \"yep\"})] == cl.calls\n\n    def test_log_one_below(self, bl, cl):\n        \"\"\"\n        if log level is below the min_level, don't log.\n        \"\"\"\n        bl.log(logging.DEBUG, \"nope\")\n\n        assert [] == cl.calls\n\n    async def test_alog_one_below(self, bl, cl):\n        \"\"\"\n        if log level is below the min_level, don't log.\n        \"\"\"\n        await bl.alog(logging.DEBUG, \"nope\")\n\n        assert [] == cl.calls\n\n    async def test_alog_no_args(self, bl, cl):\n        \"\"\"\n        If no args are passed, interpolation is not attempted.\n\n        See also #473\n        \"\"\"\n        await bl.alog(logging.INFO, 42)\n\n        assert 42 == cl.calls[0][2][\"event\"]\n\n    def test_log_interp(self, bl, cl):\n        \"\"\"\n        Interpolation happens if args a\nAST tests/classes [('_bl', 22), ('TestNativeFilteringLogger', 26), ('test_is_enabled_for', 27), ('test_get_effective_level', 37), ('test_exact_level', 43), ('test_async_exact_level', 51), ('test_one_below', 59), ('test_async_one_below', 67), ('test_filtered_interp', 75), ('test_async_filtered_interp', 83), ('test_no_args', 91), ('test_async_no_args', 101), ('test_log_exact_level', 111), ('test_alog_exact_level', 119), ('test_log_one_below', 127), ('test_alog_one_below', 135), ('test_alog_no_args', 143), ('test_log_interp', 153), ('test_log_interp_dict', 161), ('test_alog_interp', 169), ('test_alog_interp_dict', 177), ('test_filter_bound_below_missing_event_string', 185), ('test_filter_bound_exact_missing_event_string', 196), ('test_exception', 207), ('test_async_exception', 216), ('test_exception_positional_args', 231), ('test_exception_dict_args', 241), ('test_aexception_positional_args', 253), ('test_aexception_dict_args', 262), ('test_async_exception_true', 273), ('test_exception_passed', 288), ('test_async_exception_passed', 296), ('test_exception_pass_exception', 305), ('test_pickle', 320), ('test_pos_args', 328), ('test_async_pos_args', 336), ('test_async_contextvars_merged', 352), ('test_log_percent', 367), ('test_log_level_str', 375)]\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\nimport logging\n\nfrom io import StringIO\n\nimport pytest\n\nimport structlog\n\nfrom structlog._log_levels import NAME_TO_LEVEL\nfrom structlog.testing import CapturingLogger\n\n\ntry:\n    import twisted\nexcept ImportError:\n    twisted = None\n\nLOGGER = logging.getLogger()\n\n\n@pytest.fixture(autouse=True)\ndef _ensure_logging_framework_not_altered():\n    \"\"\"\n    Prevents 'ValueError: I/O operation on closed file.' errors.\n    \"\"\"\n    before_handlers = list(LOGGER.handlers)\n    before_level = LOGGER.level\n\n    yield\n\n    LOGGER.handlers = before_handlers\n    LOGGER.setLevel(before_level)\n\n\n@pytest.fixture(name=\"sio\")\ndef _sio():\n    \"\"\"\n    A new StringIO instance.\n    \"\"\"\n    return StringIO()\n\n\n@pytest.fixture(name=\"event_dict\")\ndef _event_dict():\n    \"\"\"\n    An example event dictionary with multiple value types w/o the event itself.\n    \"\"\"\n\n    class A:\n        def __repr__(self):\n            return r\"<A(\\o/)>\"\n\n    return {\"a\": A(), \"b\": [3, 4], \"x\": 7, \"y\": \"test\", \"z\": (1, 2)}\n\n\n@pytest.fixture(\n    name=\"stdlib_log_method\",\n    params=[m for m in NAME_TO_LEVEL if m != \"notset\"],\n)\ndef _stdlib_log_methods(request):\n    return request.param\n\n\n@pytest.fixture(name=\"cl\")\ndef _cl():\n    return CapturingLogger()\n\n\n@pytest.fixture(autouse=True)\ndef _reset_config():\n\nLOGS []\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(t[3950:5400])\n# search all tests for numeric method references dynamic or direct not previously seen\nfor path,text in files.items():\n if path.startswith('tests/') and path!='tests/test_native.py':\n  for i,line in enumerate(text.splitlines()):\n   if re.search(r'[\"\\']a?log[\"\\']|make_filtering_bound_logger',line):\n    print(path,i+1,line[:180])\nprint(t[8000:])\n``` scratch\n\n\n```repl\nprint(t[3950:5400])\nfor path,text in files.items():\n if path.startswith('tests/') and path!='tests/test_native.py':\n  for i,line in enumerate(text.splitlines()):\n   if re.search(r'[\"\\']a?log[\"\\']|make_filtering_bound_logger',line):\n    print(path,i+1,line[:180])\nprint(t[8000:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(t[3950:5400])\n# search all tests for numeric method references dynamic or direct not previously seen\nfor path,text in files.items():\n if path.startswith('tests/') and path!='tests/test_native.py':\n  for i,line in enumerate(text.splitlines()):\n   if re.search(r'[\"\\']a?log[\"\\']|make_filtering_bound_logger',line):\n    print(path,i+1,line[:180])\nprint(t[8000:])"
+      ],
+      "stdout_raw_chars": 4603,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "       \"\"\"\n        Interpolation happens if args are passed.\n        \"\"\"\n        bl.log(logging.INFO, \"answer is %d.\", 42)\n\n        assert \"answer is 42.\" == cl.calls[0][2][\"event\"]\n\n    def test_log_interp_dict(self, bl, cl):\n        \"\"\"\n        Dict-based interpolation happens if a mapping is passed.\n        \"\"\"\n        bl.log(logging.INFO, \"answer is %(answer)d.\", {\"answer\": 42})\n\n        assert \"answer is 42.\" == cl.calls[0][2][\"event\"]\n\n    async def test_alog_interp(self, bl, cl):\n        \"\"\"\n        Interpolation happens if args are passed.\n        \"\"\"\n        await bl.alog(logging.INFO, \"answer is %d.\", 42)\n\n        assert \"answer is 42.\" == cl.calls[0][2][\"event\"]\n\n    async def test_alog_interp_dict(self, bl, cl):\n        \"\"\"\n        Dict-based interpolation happens if a mapping is passed.\n        \"\"\"\n        await bl.alog(logging.INFO, \"answer is %(answer)d.\", {\"answer\": 42})\n\n        assert \"answer is 42.\" == cl.calls[0][2][\"event\"]\n\n    def test_filter_bound_below_missing_event_string(self, bl):\n        \"\"\"\n        Missing event arg causes exception below min_level.\n        \"\"\"\n        with pytest.raises(TypeError) as exc_info:\n            bl.debug(missing=\"event string!\")\n        assert exc_info.type is TypeError\n\n        message = \"missing 1 required positional argument: 'event'\"\n        assert message in exc_info.value.args[0]\n\n    def test_filter_bound_exact_missing_event_string(self, bl):\n        \"\"\"\n        \ntests/test_generic.py 18         return \"log\", msg\ntests/test_threadlocal.py 59 @pytest.fixture(name=\"log\")\nert 1 == len(cl.calls)\n        assert isinstance(cl.calls[0][2][\"exc_info\"], tuple)\n        assert exc is cl.calls[0][2][\"exc_info\"][1]\n\n    def test_exception_passed(self, bl, cl):\n        \"\"\"\n        exception if exc_info has a value, exception doesn't tamper with it.\n        \"\"\"\n        bl.exception(\"boom\", exc_info=42)\n\n        assert [(\"error\", (), {\"event\": \"boom\", \"exc_info\": 42})] == cl.calls\n\n    async def test_async_exception_passed(self, bl, cl):\n        \"\"\"\n        exception if exc_info has a value (other than True), exception doesn't\n        tamper with it.\n        \"\"\"\n        await bl.aexception(\"boom\", exc_info=42)\n\n        assert [(\"error\", (), {\"event\": \"boom\", \"exc_info\": 42})] == cl.calls\n\n    def test_exception_pass_exception(self, bl, cl):\n        \"\"\"\n        If an Exception is passed for the event, don't explode.\n\n        Not a documented feature, but a regression for some people. See #473.\n        \"\"\"\n        try:\n            raise Exception(\"foo\")\n        except Exception as e:\n            bl.exception(e)\n            exc = e\n\n        assert exc is cl.calls[0][2][\"event\"]\n\n    @pytest.mark.parametrize(\"level\", tuple(LEVEL_TO_NAME.keys()))\n    def test_pickle(self, level):\n        \"\"\"\n        FilteringBoundLogger are pickleable.\n        \"\"\"\n        bl = make_filtering_bound_logger(level)\n\n        assert bl == pickle.loads(pickle.dumps(bl))\n\n    def test_pos_args(self, bl, cl):\n        \"\"\"\n        Positional arguments are used for string interpolation.\n        \"\"\"\n        bl.info(\"hello %s -- %d!\", \"world\", 42)\n\n        assert [(\"info\", (), {\"event\": \"hello world -- 42!\"})] == cl.calls\n\n    async def test_async_pos_args(self, bl, cl):\n        \"\"\"\n        Positional arguments are used for string interpolation.\n        \"\"\"\n        await bl.ainfo(\"hello %s -- %d!\", \"world\", 42)\n\n        assert [(\"info\", (), {\"event\": \"hello world -- 42!\"})] == cl.calls\n\n    @pytest.mark.parametrize(\n        (\"meth\", \"args\"),\n        [\n            (\"aexception\", (\"ev\",)),\n            (\"ainfo\", (\"ev\",)),\n            (\"alog\", (logging.INFO, \"ev\")),\n        ],\n    )\n    async def test_async_contextvars_merged(self, meth, args, cl):\n        \"\"\"\n        Contextvars are merged into the event dict.\n        \"\"\"\n        clear_contextvars()\n        bl = make_filtering_bound_logger(logging.INFO)(\n            cl, [merge_contextvars], {}\n        )\n        bind_contextvars(context_included=\"yep\")\n\n        await getattr(bl, meth)(*args)\n\n        assert len(cl.calls) == 1\n        assert \"context_included\" in cl.calls[0].kwargs\n\n    def test_log_percent(self, bl, cl):\n        \"\"\"\n        As long as there's no positional args passed, logging % is possible.\n        \"\"\"\n        bl.info(\"hey %! %%!\")\n\n        assert [(\"info\", (), {\"event\": \"hey %! %%!\"})] == cl.calls\n\n    def test_log_level_str(self):\n        \"\"\"\n        *min_level* can be a string and the case doesn't matter.\n        \"\"\"\n        bl = make_filtering_bound_logger(\"wArNiNg\")\n\n        assert bl.warning is not _nop\n        assert bl.info is _nop\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nst=files['tests/test_stdlib.py']\nfor pos in [st.find('.alog('),st.find('.log(50'),st.find('.log(logging.ERROR')]:\n print(st[max(0,pos-850):pos+350])\nprint(\"hooks/ids\",[(p,l) for p,x in files.items() if p.startswith('tests/') or p=='pyproject.toml' for l in x.splitlines() if 'pytest_make_parametrize_id' in l or 'ids=' in l][:30])\n# identify node names from parsed native numeric direct equality tests\ntree=ast.parse(t)\ncls=next(n for n in tree.body if isinstance(n,ast.ClassDef))\nselected=[]\nfor fn in cls.body:\n if not isinstance(fn,(ast.FunctionDef,ast.AsyncFunctionDef)): continue\n calls=[n for n in ast.walk(fn) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('log','alog')]\n if any(n.args and ast.unparse(n.args[0])=='logging.INFO' for n in calls):\n  selected.append('tests/test_native.py::'+cls.name+'::'+fn.name)\nprint(selected)\n``` scratch\n\n```repl\nst=files['tests/test_stdlib.py']\nfor pos in [st.find('.alog('),st.find('.log(50'),st.find('.log(logging.ERROR')]:\n print(st[max(0,pos-850):pos+350])\nprint(\"hooks/ids\",[(p,l) for p,x in files.items() if p.startswith('tests/') or p=='pyproject.toml' for l in x.splitlines() if 'pytest_make_parametrize_id' in l or 'ids=' in l][:30])\ntree=ast.parse(t)\ncls=next(n for n in tree.body if isinstance(n,ast.ClassDef))\nselected=[]\nfor fn in cls.body:\n if not isinstance(fn,(ast.FunctionDef,ast.AsyncFunctionDef)): continue\n calls=[n for n in ast.walk(fn) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('log','alog')]\n if any(n.args and ast.unparse(n.args[0])=='logging.INFO' for n in calls):\n  selected.append('tests/test_native.py::'+cls.name+'::'+fn.name)\nprint(selected)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "st=files['tests/test_stdlib.py']\nfor pos in [st.find('.alog('),st.find('.log(50'),st.find('.log(logging.ERROR')]:\n print(st[max(0,pos-850):pos+350])\nprint(\"hooks/ids\",[(p,l) for p,x in files.items() if p.startswith('tests/') or p=='pyproject.toml' for l in x.splitlines() if 'pytest_make_parametrize_id' in l or 'ids=' in l][:30])\n# identify node names from parsed native numeric direct equality tests\ntree=ast.parse(t)\ncls=next(n for n in tree.body if isinstance(n,ast.ClassDef))\nselected=[]\nfor fn in cls.body:\n if not isinstance(fn,(ast.FunctionDef,ast.AsyncFunctionDef)): continue\n calls=[n for n in ast.walk(fn) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr in ('log','alog')]\n if any(n.args and ast.unparse(n.args[0])=='logging.INFO' for n in calls):\n  selected.append('tests/test_native.py::'+cls.name+'::'+fn.name)\nprint(selected)"
+      ],
+      "stdout_raw_chars": 4118,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "ical\"]\n    )\n    async def test_async_log_methods(self, meth, cl):\n        \"\"\"\n        Async methods log async.\n        \"\"\"\n        bl = build_bl(cl, processors=[])\n\n        await getattr(bl, f\"a{meth}\")(\"Async!\")\n\n        assert [\n            CapturedCall(method_name=meth, args=(), kwargs={\"event\": \"Async!\"})\n        ] == cl.calls\n\n    async def test_async_log_methods_special_cases(self, cl):\n        \"\"\"\n        afatal maps to critical.\n        \"\"\"\n        bl = build_bl(cl, processors=[])\n\n        await bl.afatal(\"Async!\")\n\n        assert [\n            CapturedCall(\n                method_name=\"critical\", args=(), kwargs={\"event\": \"Async!\"}\n            )\n        ] == cl.calls\n\n    async def test_alog(self, cl):\n        \"\"\"\n        Alog logs async at the correct level.\n        \"\"\"\n        bl = build_bl(cl, processors=[])\n\n        await bl.alog(logging.INFO, \"foo %s\", \"bar\")\n\n        assert [\n            CapturedCall(\n                method_name=\"info\",\n                args=(),\n                kwargs={\"positional_args\": (\"bar\",), \"event\": \"foo %s\"},\n            )\n        ] == cl.calls\n\n    async def test_aexception_exc_info_true(self, cl):\n        \"\"\"\n        aexception passes curre\n \"exception\", \"critical\"],\n    )\n    def test_proxies_to_correct_method(self, method_name):\n        \"\"\"\n        The basic proxied methods are proxied to the correct counterparts.\n        \"\"\"\n        bl = BoundLogger(ReturnLogger(), [return_method_name], {})\n\n        assert method_name == getattr(bl, method_name)(\"event\")\n\n    def test_proxies_to_correct_method_special_cases(self):\n        \"\"\"\n        Fatal maps to critical and warn to warning.\n        \"\"\"\n        bl = BoundLogger(ReturnLogger(), [return_method_name], {})\n\n        assert \"warning\" == bl.warn(\"event\")\n        assert \"critical\" == bl.fatal(\"event\")\n\n    def test_proxies_log(self):\n        \"\"\"\n        BoundLogger.exception.log() is proxied to the appropriate method.\n        \"\"\"\n        bl = BoundLogger(ReturnLogger(), [return_method_name], {})\n\n        assert \"critical\" == bl.log(50, \"event\")\n        assert \"debug\" == bl.log(10, \"event\")\n\n    def test_positional_args_proxied(self):\n        \"\"\"\n        Positional arguments supplied are proxied as kwarg.\n        \"\"\"\n        bl = BoundLogger(ReturnLogger(), [], {})\n        _args, kwargs = bl.debug(\"event\", \"foo\", bar=\"baz\")\n\n        assert \"baz\" == kwargs.get(\"bar\")\n     \n\n\n    @pytest.mark.asyncio\n    async def test_correct_levels(self, abl, cl, stdlib_log_method):\n        \"\"\"\n        The proxy methods call the correct upstream methods.\n        \"\"\"\n        await getattr(abl.bind(foo=\"bar\"), stdlib_log_method)(\"42\")\n\n        aliases = {\"warn\": \"warning\"}\n\n        expect = aliases.get(stdlib_log_method, stdlib_log_method)\n\n        assert expect == cl.calls[0].method_name\n\n    @pytest.mark.asyncio\n    async def test_correct_level_fatal(self, abl, cl):\n        \"\"\"\n        fatal, that I have no idea why we support, maps to critical.\n        \"\"\"\n        await abl.bind(foo=\"bar\").fatal(\"42\")\n\n        assert \"critical\" == cl.calls[0].method_name\n\n    @pytest.mark.asyncio\n    async def test_log_method(self, abl, cl):\n        \"\"\"\n        The `log` method is proxied too.\n        \"\"\"\n        await abl.bind(foo=\"bar\").log(logging.ERROR, \"42\")\n\n        assert \"error\" == cl.calls[0].method_name\n\n    @pytest.mark.asyncio\n    async def test_exception(self, abl, cl):\n        \"\"\"\n        `exception` makes sure 'exc_info\" is set, if it's not set already.\n        \"\"\"\n        try:\n            raise ValueError(\"omg\")\n        except ValueError:\n            await abl.excep\nhooks/ids []\n['tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level', 'tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level', 'tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args', 'tests/test_native.py::TestNativeFilteringLogger::test_log_interp', 'tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict', 'tests/test_native.py::TestNativeFilteringLogger::test_alog_interp', 'tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(st[:1800])\nparam_fn=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='test_async_contextvars_merged')\nprint(ast.get_source_segment(t,param_fn.decorator_list[0]))\n# Confirm no other dynamic numeric dispatch candidates anywhere in tests\ndynamic_hits=[(p,i+1,line.strip()) for p,x in files.items() if p.startswith('tests/') for i,line in enumerate(x.splitlines()) if 'getattr(' in line and ('log' in line or 'meth' in line)]\nprint(dynamic_hits)\nimport json\nselected.append(f\"tests/test_native.py::{cls.name}::{param_fn.name}[alog-args2]\")\nassert len(selected)==len(set(selected))==8\nanswer_json=json.dumps(selected)\nprint(answer_json)\n``` scratch\n\n```repl\nprint(st[:1800])\nparam_fn=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='test_async_contextvars_merged')\nprint(ast.get_source_segment(t,param_fn.decorator_list[0]))\ndynamic_hits=[(p,i+1,line.strip()) for p,x in files.items() if p.startswith('tests/') for i,line in enumerate(x.splitlines()) if 'getattr(' in line and ('log' in line or 'meth' in line)]\nprint(dynamic_hits)\nimport json\nselected.append(f\"tests/test_native.py::{cls.name}::{param_fn.name}[alog-args2]\")\nassert len(selected)==len(set(selected))==8\nanswer_json=json.dumps(selected)\nprint(answer_json)\n```  scratch\n\n\n```repl\nprint(st[:1100])\nparam_fn=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='test_async_contextvars_merged')\nprint(ast.get_source_segment(t,param_fn.decorator_list[0]))\ndynamic_hits=[(p,i+1,line.strip()) for p,x in files.items() if p.startswith('tests/') for i,line in enumerate(x.splitlines()) if 'getattr(' in line and ('log' in line or 'meth' in line)]\nprint(dynamic_hits)\nimport json\nselected.append(f\"tests/test_native.py::{cls.name}::{param_fn.name}[alog-args2]\")\nassert len(selected)==len(set(selected))==8\nanswer_json=json.dumps(selected)\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(st[:1800])\nparam_fn=next(n for n in cls.body if isinstance(n,ast.AsyncFunctionDef) and n.name=='test_async_contextvars_merged')\nprint(ast.get_source_segment(t,param_fn.decorator_list[0]))\n# Confirm no other dynamic numeric dispatch candidates anywhere in tests\ndynamic_hits=[(p,i+1,line.strip()) for p,x in files.items() if p.startswith('tests/') for i,line in enumerate(x.splitlines()) if 'getattr(' in line and ('log' in line or 'meth' in line)]\nprint(dynamic_hits)\nimport json\nselected.append(f\"tests/test_native.py::{cls.name}::{param_fn.name}[alog-args2]\")\nassert len(selected)==len(set(selected))==8\nanswer_json=json.dumps(selected)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 3963,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\nfrom __future__ import annotations\n\nimport json\nimport logging\nimport logging.config\nimport os\nimport sys\n\nfrom collections.abc import Callable, Collection\nfrom io import StringIO\nfrom typing import Any\nfrom unittest.mock import patch\n\nimport pytest\nimport pytest_asyncio\n\nfrom structlog import (\n    BytesLogger,\n    PrintLogger,\n    ReturnLogger,\n    configure,\n    get_context,\n    wrap_logger,\n)\nfrom structlog._config import _CONFIG\nfrom structlog._log_levels import CRITICAL, DEBUG, NAME_TO_LEVEL, WARN\nfrom structlog.dev import ConsoleRenderer\nfrom structlog.exceptions import DropEvent\nfrom structlog.processors import JSONRenderer, KeyValueRenderer\nfrom structlog.stdlib import (\n    AsyncBoundLogger,\n    BoundLogger,\n    ExtraAdder,\n    LoggerFactory,\n    PositionalArgumentsFormatter,\n    ProcessorFormatter,\n    _FixedFindCallerLogger,\n    add_log_level,\n    add_log_level_number,\n    add_logger_name,\n    filter_by_level,\n    get_logger,\n    recreate_defaults,\n    render_to_log_args_and_kwargs,\n    render_to_log_kwargs,\n)\nfrom structlog.testing import CapturedCall\nfrom structlog.typing import BindableLogger, EventDict\n\nfrom .additional_frame import additional_frame\nfrom .helpers import call_recorder, stub\n\n\ndef build_bl(logger=None, processors=None, context=None):\n    \"\"\"\n    Convenience function to build BoundLogger with sane defaults.\n    \"\"\"\n    return BoundLogger(logger or ReturnLogger(), processors, {})\n\n\ndef return_method_name(_, method_name, __):\n    \"\"\"\n    A final renderer that returns the name of the logging method.\n    \"\"\"\n    return me\npytest.mark.parametrize(\n        (\"meth\", \"args\"),\n        [\n            (\"aexception\", (\"ev\",)),\n            (\"ainfo\", (\"ev\",)),\n            (\"alog\", (logging.INFO, \"ev\")),\n        ],\n    )\n[('tests/processors/test_processors.py', 419, 'await getattr(logger, method_name)(\"baz\")'), ('tests/test_native.py', 362, 'await getattr(bl, meth)(*args)'), ('tests/test_output.py', 106, 'getattr(logger_cls(sio), method)(\"hello\")'), ('tests/test_output.py', 294, 'getattr(BytesLogger(sio), method)(b\"hello\")'), ('tests/test_stdlib.py', 209, 'assert method_name == getattr(bl, method_name)(\"event\")'), ('tests/test_stdlib.py', 248, 'stdlib_logger_attribute = getattr(stdlib_logger, attribute_name)'), ('tests/test_stdlib.py', 250, 'bound_logger_attribute = getattr(bl, attribute_name)'), ('tests/test_stdlib.py', 291, 'stdlib_logger_method = getattr(stdlib_logger, method_name, None)'), ('tests/test_stdlib.py', 295, 'bound_logger_method = getattr(bl, method_name)'), ('tests/test_stdlib.py', 391, 'await getattr(bl, f\"a{meth}\")(\"Async!\")'), ('tests/test_stdlib.py', 770, 'getattr(stdlib_logger, method_name)(*args, **kwargs)'), ('tests/test_stdlib.py', 794, 'getattr(stdlib_logger, method_name)(*args, **kwargs)'), ('tests/test_stdlib.py', 823, 'getattr(stdlib_logger, method_name)(*args, **kwargs)'), ('tests/test_stdlib.py', 861, 'getattr(stdlib_logger, method_name)(*args, **kwargs)'), ('tests/test_stdlib.py', 1554, 'await getattr(abl.bind(foo=\"bar\"), stdlib_log_method)(\"42\")'), ('tests/test_testing.py', 150, 'v = getattr(ReturnLogger(), stdlib_log_method)(\"hello\")')]\n[\"tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args\", \"tests/test_native.py::TestNativeFilteringLogger::test_log_interp\", \"tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_interp\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict\", \"tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged[alog-args2]\"]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nx=files['tests/processors/test_processors.py']\np=x.find('await getattr(logger, method_name)')\nprint(x[p-1500:p+400])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "x=files['tests/processors/test_processors.py']\np=x.find('await getattr(logger, method_name)')\nprint(x[p-1500:p+400])"
+      ],
+      "stdout_raw_chars": 1901,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "        None,\n            None,\n            \"func\",\n        )\n        event_dict: EventDict = {\n            \"event\": \"message\",\n            \"_record\": record,\n            \"_from_structlog\": False,\n        }\n        actual = processor(None, None, event_dict)\n\n        assert \"qual_name\" not in actual\n\n    @pytest.mark.asyncio\n    @pytest.mark.parametrize(\n        (\"wrapper_class\", \"method_name\"),\n        [\n            (structlog.stdlib.BoundLogger, \"ainfo\"),\n            (structlog.stdlib.AsyncBoundLogger, \"info\"),\n        ],\n    )\n    async def test_async(self, wrapper_class, method_name) -> None:\n        \"\"\"\n        Callsite information for async invocations are correct.\n        Thread information is now correctly captured before async bridge.\n        \"\"\"\n        string_io = StringIO()\n\n        class StringIOLogger(structlog.PrintLogger):\n            def __init__(self):\n                super().__init__(file=string_io)\n\n        processor = self.make_processor(None, [\"concurrent\", \"threading\"])\n        structlog.configure(\n            processors=[processor, JSONRenderer()],\n            logger_factory=StringIOLogger,\n            wrapper_class=wrapper_class,\n            cache_logger_on_first_use=True,\n        )\n\n        logger = structlog.stdlib.get_logger()\n\n        # Capture thread info before async call\n        expected_thread = threading.get_ident()\n        expected_thread_name = threading.current_thread().name\n\n        callsite_params = self.get_callsite_parameters()\n        await getattr(logger, method_name)(\"baz\")\n        logger_params = json.loads(string_io.getvalue())\n\n        assert expected_thread == logger_params[\"thread\"]\n        assert expected_thread_name == logger_params[\"thread_name\"]\n\n        # Remove thread info from comparison for remaining params\n        for key in [\"thread\", \"thread_name\"]:\n            callsite_params.pop(key)\n            logger_param\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "[\"tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args\", \"tests/test_native.py::TestNativeFilteringLogger::test_log_interp\", \"tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_interp\", \"tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict\", \"tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged[alog-args2]\"]",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 1118.9228575829984
+  }
+}

@@ -1,0 +1,14 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -1192,8 +1192,10 @@
+         # If required, unset stack-related attributes on the record copy so
+         # that the base implementation doesn't append stacktraces to the
+         # output.
++        # Clear any exception text cached by another formatter so that the
++        # base implementation uses this formatter's formatException method.
++        record.exc_text = None
+         if not self.keep_exc_info:
+-            record.exc_text = None
+             record.exc_info = None
+         if not self.keep_stack_info:
+             record.stack_info = None

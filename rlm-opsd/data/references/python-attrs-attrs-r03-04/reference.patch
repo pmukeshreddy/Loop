@@ -1,0 +1,151 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -2209,7 +2209,13 @@
+         arg_name = a.alias
+ 
+         has_factory = isinstance(a.default, Factory)
+-        maybe_self = "self" if has_factory and a.default.takes_self else ""
++        factory_args = []
++        if has_factory:
++            if a.default.takes_self:
++                factory_args.append("self")
++            if a.default.takes_field:
++                factory_args.append(f"attr_dict['{attr_name}']")
++        factory_args = ", ".join(factory_args)
+ 
+         if a.converter is not None and not isinstance(a.converter, Converter):
+             converter = Converter(a.converter)
+@@ -2223,7 +2229,7 @@
+                     lines.append(
+                         fmt_setter_with_converter(
+                             attr_name,
+-                            init_factory_name + f"({maybe_self})",
++                            init_factory_name + f"({factory_args})",
+                             has_on_setattr,
+                             converter,
+                         )
+@@ -2235,7 +2241,7 @@
+                     lines.append(
+                         fmt_setter(
+                             attr_name,
+-                            init_factory_name + f"({maybe_self})",
++                            init_factory_name + f"({factory_args})",
+                             has_on_setattr,
+                         )
+                     )
+@@ -2302,7 +2308,7 @@
+                     "    "
+                     + fmt_setter_with_converter(
+                         attr_name,
+-                        init_factory_name + "(" + maybe_self + ")",
++                        init_factory_name + "(" + factory_args + ")",
+                         has_on_setattr,
+                         converter,
+                     )
+@@ -2319,7 +2325,7 @@
+                     "    "
+                     + fmt_setter(
+                         attr_name,
+-                        init_factory_name + "(" + maybe_self + ")",
++                        init_factory_name + "(" + factory_args + ")",
+                         has_on_setattr,
+                     )
+                 )
+@@ -3035,21 +3041,32 @@
+ 
+     Args:
+         factory (typing.Callable):
+-            A callable that takes either none or exactly one mandatory
+-            positional argument depending on *takes_self*.
++            A callable whose positional arguments depend on *takes_self* and
++            *takes_field*.
+ 
+         takes_self (bool):
+             Pass the partially initialized instance that is being initialized
+             as a positional argument.
+ 
++        takes_field (bool):
++            Pass the final `Attribute` of the field being initialized as a
++            positional argument. If *takes_self* is also true, the instance is
++            passed first, followed by the field. (default: `False`)
++
+     .. versionadded:: 17.1.0  *takes_self*
+     """
+ 
+-    __slots__ = ("factory", "takes_self")
+-
+-    def __init__(self, factory, takes_self=False):
++    __slots__ = ("factory", "takes_self", "takes_field")
++
++    def __init__(self, factory, takes_self=False, *, takes_field=False):
+         self.factory = factory
+         self.takes_self = takes_self
++        self.takes_field = takes_field
++
++    def __repr__(self):
++        if self.takes_field:
++            return _factory_repr(self)
++        return _factory_repr_without_field(self)
+ 
+     def __getstate__(self):
+         """
+@@ -3061,6 +3078,8 @@
+         """
+         Play nice with pickle.
+         """
++        # Factories pickled before takes_field was added have two values.
++        self.takes_field = False
+         for name, value in zip(self.__slots__, state):
+             setattr(self, name, value)
+ 
+@@ -3081,7 +3100,11 @@
+     for name in Factory.__slots__
+ ]
+ 
+-Factory = _add_hash(_add_eq(_add_repr(Factory, attrs=_f), attrs=_f), attrs=_f)
++_factory_repr_method = Factory.__repr__
++_factory_repr_without_field = _add_repr(Factory, attrs=_f[:-1]).__repr__
++_factory_repr = _add_repr(Factory, attrs=_f).__repr__
++Factory.__repr__ = _factory_repr_method
++Factory = _add_hash(_add_eq(Factory, attrs=_f), attrs=_f)
+ 
+ 
+ class Converter:
+--- a/src/attr/__init__.pyi
++++ b/src/attr/__init__.pyi
+@@ -80,16 +80,32 @@
+ # Work around mypy issue #4554 in the common case by using an overload.
+ 
+ @overload
+-def Factory(factory: Callable[[], _T]) -> _T: ...
++def Factory(
++    factory: Callable[[], _T],
++    takes_self: Literal[False] = ...,
++    *,
++    takes_field: Literal[False] = ...,
++) -> _T: ...
+ @overload
+ def Factory(
+     factory: Callable[[Any], _T],
+     takes_self: Literal[True],
++    *,
++    takes_field: Literal[False] = ...,
+ ) -> _T: ...
+ @overload
+ def Factory(
+-    factory: Callable[[], _T],
+-    takes_self: Literal[False],
++    factory: Callable[[Attribute], _T],
++    takes_self: Literal[False] = ...,
++    *,
++    takes_field: Literal[True],
++) -> _T: ...
++@overload
++def Factory(
++    factory: Callable[[Any, Attribute], _T],
++    takes_self: Literal[True],
++    *,
++    takes_field: Literal[True],
+ ) -> _T: ...
+ 
+ In = TypeVar("In")

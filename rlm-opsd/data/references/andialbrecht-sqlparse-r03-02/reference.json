@@ -1,0 +1,221 @@
+{
+ "answer": "--- a/sqlparse/formatter.py\n+++ b/sqlparse/formatter.py\n@@ -7,6 +7,8 @@\n \n \"\"\"SQL formatter\"\"\"\n \n+import re\n+\n from sqlparse import filters\n from sqlparse.exceptions import SQLParseError\n \n@@ -27,6 +29,13 @@\n     if ofrmt not in [None, 'sql', 'python', 'php']:\n         raise SQLParseError('Unknown output format: '\n                             f'{ofrmt!r}')\n+\n+    if 'output_varname' in options:\n+        varname = options['output_varname']\n+        if (not isinstance(varname, str)\n+                or re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', varname) is None):\n+            raise SQLParseError('Invalid value for output_varname: '\n+                                f'{varname!r}')\n \n     strip_comments = options.get('strip_comments', False)\n     if strip_comments not in [True, False]:\n@@ -193,9 +202,11 @@\n     if options.get('output_format'):\n         frmt = options['output_format']\n         if frmt.lower() == 'php':\n-            fltr = filters.OutputPHPFilter()\n+            fltr = filters.OutputPHPFilter(\n+                varname=options.get('output_varname', 'sql'))\n         elif frmt.lower() == 'python':\n-            fltr = filters.OutputPythonFilter()\n+            fltr = filters.OutputPythonFilter(\n+                varname=options.get('output_varname', 'sql'))\n         else:\n             fltr = None\n         if fltr is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002307111331397956,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 9 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected after construction. It combines unconditional option validation with forwarding the custom name to both output filters, while preserving their existing default naming behavior.",
+   "inspect_locate": "The execution used nine targeted searches without printing the whole context. The change requires understanding option validation, postprocessor construction, and the existing output filters' naming and indentation behavior.",
+   "persistent_state": "The source-file collection was retained across turns, supporting consistent use of the option contract and existing filter interfaces while constructing the patch."
+  },
+  "notes": "This is a natural, precisely specified feature request with a clear production-only unified-diff deliverable. It requires repository-specific reasoning about existing filter capabilities rather than merely locating a named symbol. The question does not expose the implementation or prescribe solver operations, and the task is distinct from the accepted investigations. The reference trace shows artifact inspection rather than runtime testing; executable correctness is supplied by the task's verification premise."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must coordinate validation with filter construction, and its hunks can be checked against the retained source text before submission.",
+   "inspect_locate": "The public format call, option normalization, postprocessor construction, and output-filter naming state are defined in different files.",
+   "persistent_state": "The investigation must retain the naming contract, validation decisions, and exact source sections while tracing how the validated option reaches both output filters and their statement counters."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/__init__.py",
+    "symbol": "sqlparse/__init__.py::format",
+    "why": "Public entry point accepts formatting options and builds the final serialization pipeline."
+   },
+   {
+    "path": "sqlparse/formatter.py",
+    "symbol": "sqlparse/formatter.py::validate_options",
+    "why": "Provides the existing SQLParseError-based option-validation convention."
+   },
+   {
+    "path": "sqlparse/formatter.py",
+    "symbol": "sqlparse/formatter.py::build_filter_stack",
+    "why": "Currently constructs output filters without passing a custom assignment name."
+   },
+   {
+    "path": "sqlparse/filters/output.py",
+    "symbol": "sqlparse/filters/output.py::OutputFilter.process",
+    "why": "Already supports constructor-supplied names, PHP prefixes, and statement numbering."
+   },
+   {
+    "path": "sqlparse/filters/output.py",
+    "symbol": "sqlparse/filters/output.py::OutputPythonFilter._process",
+    "why": "Continuation indentation derives from the effective variable name."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_output_varname_acceptance.py\n@@ -0,0 +1,40 @@\n+import pytest\n+\n+import sqlparse\n+from sqlparse.exceptions import SQLParseError\n+\n+\n+def test_custom_assignment_names():\n+    source = 'select 1; select 2'\n+    assert sqlparse.format(\n+        source, output_format='python', output_varname='query'\n+    ) == \"query = 'select 1; '\\nquery2 = 'select 2'\"\n+    assert sqlparse.format(\n+        source, output_format='php', output_varname='query'\n+    ) == '$query = \"select 1; \";\\n$query2 = \"select 2\";'\n+\n+\n+def test_multiline_custom_assignment():\n+    assert sqlparse.format(\n+        'select * from foo;', output_format='python',\n+        output_varname='q_7', reindent=True\n+    ) == \"q_7 = ('select * '\\n       'from foo;')\"\n+\n+\n+@pytest.mark.parametrize('name', ['', '2q', 'q-x', '$q', 'q x', '\u00e9', None, 4, True])\n+@pytest.mark.parametrize('output_format', ['python', 'php', 'sql', None])\n+def test_reject_invalid_assignment_name(name, output_format):\n+    with pytest.raises(SQLParseError):\n+        sqlparse.format('select 1', output_format=output_format, output_varname=name)\n+\n+\n+@pytest.mark.parametrize('output_format', ['sql', None])\n+def test_no_assignment_in_sql_output(output_format):\n+    assert sqlparse.format(\n+        'select 1;', output_format=output_format, output_varname='query'\n+    ) == 'select 1;'\n+\n+\n+def test_default_assignment_name_is_unchanged():\n+    assert sqlparse.format('select 1', output_format='python') == \"sql = 'select 1'\"\n+    assert sqlparse.format('select 1', output_format='php') == '$sql = \"select 1\";'\n",
+  "include_failure_log": false,
+  "notes": "Explicit None is invalid, unlike omission. The required lexical form does not impose an additional reserved-word restriction. Existing unrelated multiline/multiple-statement xfails need not be repaired.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add an output_varname option to sqlparse.format for generated Python and PHP assignments. When omitted, keep the existing sql, sql2, and subsequent names. When supplied, it must be a string matching the ASCII form [A-Za-z_][A-Za-z0-9_]*; reject every other value with SQLParseError, even when output_format is 'sql' or omitted. For Python, use the supplied name directly; for PHP, add the existing dollar-sign prefix. Number later statements by appending 2, 3, and so on, and use the custom name when calculating continuation-line indentation. A valid output_varname must have no effect on ordinary SQL output. Deliver a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r03-02",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_output_varname_acceptance.py::test_custom_assignment_names",
+   "tests/test_output_varname_acceptance.py::test_multiline_custom_assignment",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-q-x]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 38,
+   "full_suite": {
+    "failed": 0,
+    "passed": 549
+   },
+   "patch_files": [
+    "sqlparse/formatter.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_output_varname_acceptance.py::test_custom_assignment_names",
+   "tests/test_output_varname_acceptance.py::test_multiline_custom_assignment",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[None-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[php-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[python-q-x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-$q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-2q]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-4]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-None]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-True]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-\\xe9]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-q x]",
+   "tests/test_output_varname_acceptance.py::test_reject_invalid_assignment_name[sql-q-x]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,129 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -8,10 +8,8 @@\n class TlzLoader:\n     \"\"\" Finds and loads ``tlz`` modules when added to sys.meta_path\"\"\"\n \n-    def __init__(self):\n-        self.always_from_toolz = {\n-            toolz.pipe,\n-        }\n+    def __init__(self, always_from_toolz=()):\n+        self.always_from_toolz = (toolz.pipe,) + tuple(always_from_toolz)\n \n     def _load_toolz(self, fullname):\n         rv = {}\n@@ -72,11 +70,9 @@\n \n         for k, v in fast_mod.__dict__.items():\n             tv = slow_mod.__dict__.get(k)\n-            try:\n-                hash(tv)\n-            except TypeError:\n-                tv = None\n-            if tv in self.always_from_toolz:\n+            if k in slow_mod.__dict__ and any(\n+                tv is obj for obj in self.always_from_toolz\n+            ):\n                 module.__dict__[k] = tv\n             elif (\n                 isinstance(v, types.ModuleType)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.8051192553810355,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The change coordinates constructor-time iterable materialization with identity-based selection in the export loop. The supplied verification covers unhashable configured objects, generator input, equal-but-distinct objects, the mandatory pipe override, fast-backend name eligibility, and replacement of existing target exports. The reference execution also records construction and inspection of the final diff, though it does not record repository execution."
+  },
+  "notes": "This is a natural, bounded feature request with a precise unified-diff deliverable. Naming the API and required semantics specifies the feature rather than leaking its implementation. Producing the patch requires understanding the repository's constructor and export-selection behavior, not merely locating a named symbol. The verified patch implements the requested policy while leaving metadata and child-module rewriting untouched."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must coordinate constructor policy storage with export-loop selection. Verification must distinguish object identity from equality, retain the mandatory pipe override, support an iterable consumed once, and avoid adding slow-only names."
+  },
+  "context": {
+   "files": [
+    "tlz/__init__.py",
+    "tlz/_build_tlz.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.__init__",
+    "why": "Defines the existing mandatory slow-backend policy."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "Uses hashability and set membership to select overrides before considering module-valued exports."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "The existing pipe identity assertion remains a compatibility requirement."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_override_policy.py\n@@ -0,0 +1,66 @@\n+import types\n+\n+import toolz\n+\n+from tlz._build_tlz import TlzLoader\n+\n+\n+def _backend(name, **exports):\n+    module = types.ModuleType(name)\n+    module.__package__ = None\n+    module.__dict__.update(exports)\n+    return module\n+\n+\n+def _mirror(monkeypatch, loader, fast, slow):\n+    monkeypatch.setattr(loader, '_load_toolz', lambda name: {'cytoolz': fast, 'toolz': slow})\n+    target = types.ModuleType('tlz.override_test')\n+    loader.exec_module(target)\n+    return target\n+\n+\n+def test_extra_overrides_are_identity_based_and_keep_pipe(monkeypatch):\n+    selected = []\n+    unrelated = []\n+    fast = _backend('cytoolz.override_test', chosen=object(), equal=object(), pipe=object())\n+    slow = _backend('toolz.override_test', chosen=selected, equal=unrelated, pipe=toolz.pipe)\n+    loader = TlzLoader(always_from_toolz=(value for value in [selected]))\n+    target = _mirror(monkeypatch, loader, fast, slow)\n+    assert target.chosen is selected\n+    assert target.equal is fast.equal\n+    assert target.pipe is toolz.pipe\n+    assert target.__name__ == 'tlz.override_test'\n+\n+\n+def test_equal_hashable_values_do_not_trigger_override(monkeypatch):\n+    class EqualToPipe:\n+        def __hash__(self):\n+            return hash(toolz.pipe)\n+\n+        def __eq__(self, other):\n+            return True\n+\n+    fast = _backend('cytoolz.override_test', impostor=object())\n+    slow = _backend('toolz.override_test', impostor=EqualToPipe())\n+    target = _mirror(monkeypatch, TlzLoader(), fast, slow)\n+    assert target.impostor is fast.impostor\n+\n+\n+def test_overrides_do_not_add_slow_only_names(monkeypatch):\n+    value = {}\n+    fast = _backend('cytoolz.override_test')\n+    slow = _backend('toolz.override_test', slow_only=value)\n+    target = _mirror(monkeypatch, TlzLoader(always_from_toolz=[value]), fast, slow)\n+    assert not hasattr(target, 'slow_only')\n+\n+\n+def test_configured_override_can_replace_an_existing_target_export(monkeypatch):\n+    value = []\n+    fast = _backend('cytoolz.override_test', chosen=object())\n+    slow = _backend('toolz.override_test', chosen=value)\n+    loader = TlzLoader(always_from_toolz=[value])\n+    monkeypatch.setattr(loader, '_load_toolz', lambda name: {'cytoolz': fast, 'toolz': slow})\n+    target = types.ModuleType('tlz.override_test')\n+    target.chosen = object()\n+    loader.exec_module(target)\n+    assert target.chosen is value\n",
+  "include_failure_log": false,
+  "notes": "Tests deliberately use equal unhashable objects and a hashable object equal to pipe. A correct implementation must use identity-based selection rather than merely replacing the set with equality-based list membership.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Allow callers to extend the slow-backend override policy with `TlzLoader(always_from_toolz=iterable)`. The argument is optional, may be a generator, and its values may be unhashable. Configured objects supplement the mandatory `toolz.pipe` override. Match slow-backend exports by object identity, never by equality; an equal but distinct object must not trigger an override. Continue considering only names exported by the selected fast backend, and allow a matching override to replace a pre-existing target export as the current pipe policy does. Keep no-argument construction compatible and leave metadata and child-module rewriting unchanged. Send a unified diff without changing tests.",
+  "rlm_behaviors": [
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_override_policy.py::test_configured_override_can_replace_an_existing_target_export",
+   "toolz/tests/test_tlz_override_policy.py::test_equal_hashable_values_do_not_trigger_override",
+   "toolz/tests/test_tlz_override_policy.py::test_extra_overrides_are_identity_based_and_keep_pipe",
+   "toolz/tests/test_tlz_override_policy.py::test_overrides_do_not_add_slow_only_names"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 196
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_override_policy.py::test_configured_override_can_replace_an_existing_target_export",
+   "toolz/tests/test_tlz_override_policy.py::test_equal_hashable_values_do_not_trigger_override",
+   "toolz/tests/test_tlz_override_policy.py::test_extra_overrides_are_identity_based_and_keep_pipe",
+   "toolz/tests/test_tlz_override_policy.py::test_overrides_do_not_add_slow_only_names"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,60 @@
+--- /dev/null
++++ b/tests/test_directive_quote_interrupt.py
+@@ -0,0 +1,57 @@
++from unittest import TestCase
++
++from mistune import create_markdown
++from mistune.directives import Admonition, FencedDirective
++
++
++class TestColonDirectiveQuoteInterruption(TestCase):
++    def make_markdown(self):
++        return create_markdown(
++            escape=False,
++            plugins=[FencedDirective([Admonition()], markers=":")],
++        )
++
++    def test_unquoted_directive_is_a_sibling(self):
++        md = self.make_markdown()
++        for fence in (":::", "::::"):
++            with self.subTest(fence=fence):
++                note = fence + "{note}\nbody\n" + fence + "\n"
++                source = "# before\n\n> quoted\n" + note + "after\n"
++                expected = (
++                    md("# before\n\n")
++                    + md("> quoted\n")
++                    + md(note)
++                    + md("after\n")
++                )
++                self.assertEqual(md(source), expected)
++
++    def test_explicitly_quoted_directive_is_nested(self):
++        md = self.make_markdown()
++        note = ":::{note}\nbody\n:::\n"
++        source = "> :::{note}\n> body\n> :::\n"
++        self.assertEqual(md(source), "<blockquote>\n" + md(note) + "</blockquote>\n")
++
++    def test_short_fences_remain_lazy_literal_text(self):
++        md = self.make_markdown()
++        for fence in (":", "::"):
++            with self.subTest(fence=fence):
++                source = "> quoted\n" + fence + "{note}\nbody\n" + fence + "\n"
++                quoted = "> quoted\n> " + fence + "{note}\n> body\n> " + fence + "\n"
++                html = md(source)
++                self.assertNotIn('class="admonition', html)
++                self.assertEqual(html, md(quoted))
++
++    def test_plain_lazy_continuation_is_preserved(self):
++        for md in (self.make_markdown(), create_markdown(escape=False, plugins=[])):
++            self.assertEqual(
++                md("> quoted\nordinary continuation\n"),
++                md("> quoted\n> ordinary continuation\n"),
++            )
++
++    def test_unregistered_colon_syntax_stays_literal(self):
++        md = create_markdown(escape=False, plugins=[])
++        source = "> quoted\n:::{note}\nbody\n:::\n"
++        quoted = "> quoted\n> :::{note}\n> body\n> :::\n"
++        html = md(source)
++        self.assertNotIn('class="admonition', html)
++        self.assertEqual(html, md(quoted))

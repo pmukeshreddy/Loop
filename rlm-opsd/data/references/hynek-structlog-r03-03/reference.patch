@@ -1,0 +1,135 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -734,10 +734,23 @@
+             want to set it to ``["venusian", "pyramid.config"]``. This argument
+             is called *additional_ignores* in other APIs throughout
+             *structlog*.
+-    """
+-
+-    def __init__(self, ignore_frame_names: list[str] | None = None):
++
++        stacklevel:
++            Skip this many additional frames outward from the first application
++            frame after ignoring structlog and *ignore_frame_names*. Ignored
++            prefixes are not checked again, and offsets beyond the available
++            stack stop at its outermost frame. Explicit logger names are
++            unaffected.
++    """
++
++    def __init__(
++        self,
++        ignore_frame_names: list[str] | None = None,
++        *,
++        stacklevel: int = 0,
++    ):
+         self._ignore = ignore_frame_names
++        self._stacklevel = stacklevel
+         logging.setLoggerClass(_FixedFindCallerLogger)
+ 
+     def __call__(self, *args: Any) -> logging.Logger:
+@@ -759,7 +772,9 @@
+ 
+         # We skip all frames that originate from within structlog or one of the
+         # configured names.
+-        _, name = _find_first_app_frame_and_name(self._ignore)
++        _, name = _find_first_app_frame_and_name(
++            self._ignore, stacklevel=self._stacklevel
++        )
+ 
+         return logging.getLogger(name)
+ 
+--- a/src/structlog/processors.py
++++ b/src/structlog/processors.py
+@@ -699,21 +699,35 @@
+             *additional_ignores*, **no filtering** is applied to subsequent
+             frames.
+ 
++        stacklevel:
++            Skip this many additional frames outward from the first application
++            frame after applying the ignores, before rendering the stack.
++            Ignored prefixes are not checked again, and offsets beyond the
++            available stack stop at its outermost frame.
++
+     .. versionadded:: 0.4.0
+     .. versionadded:: 22.1.0  *additional_ignores*
+     """
+ 
+-    __slots__ = ("_additional_ignores",)
+-
+-    def __init__(self, additional_ignores: list[str] | None = None) -> None:
++    __slots__ = ("_additional_ignores", "_stacklevel")
++
++    def __init__(
++        self,
++        additional_ignores: list[str] | None = None,
++        *,
++        stacklevel: int = 0,
++    ) -> None:
+         self._additional_ignores = additional_ignores
++        self._stacklevel = stacklevel
+ 
+     def __call__(
+         self, logger: WrappedLogger, name: str, event_dict: EventDict
+     ) -> EventDict:
+         if event_dict.pop("stack_info", None):
+             event_dict["stack"] = _format_stack(
+-                _find_first_app_frame_and_name(self._additional_ignores)[0]
++                _find_first_app_frame_and_name(
++                    self._additional_ignores, stacklevel=self._stacklevel
++                )[0]
+             )
+ 
+         return event_dict
+@@ -842,6 +856,13 @@
+         additional_ignores:
+             Additional names with which a stack frame's module name must not
+             start for it to be considered when determening the callsite.
++
++        stacklevel:
++            Skip this many additional frames outward from the first application
++            frame after applying the ignores. Ignored prefixes are not checked
++            again, and offsets beyond the available stack stop at its outermost
++            frame. Callsite information taken from a foreign `logging.LogRecord`
++            is unaffected.
+ 
+     .. note::
+ 
+@@ -890,12 +911,19 @@
+         event_dict_key: str
+         record_attribute: str
+ 
+-    __slots__ = ("_active_handlers", "_additional_ignores", "_record_mappings")
++    __slots__ = (
++        "_active_handlers",
++        "_additional_ignores",
++        "_record_mappings",
++        "_stacklevel",
++    )
+ 
+     def __init__(
+         self,
+         parameters: Collection[CallsiteParameter] = _all_parameters,
+         additional_ignores: list[str] | None = None,
++        *,
++        stacklevel: int = 0,
+     ) -> None:
+         if additional_ignores is None:
+             additional_ignores = []
+@@ -903,6 +931,7 @@
+         # processor is used in ProcessorFormatter, and additionally the logging
+         # module should not be logging using structlog.
+         self._additional_ignores = ["logging", *additional_ignores]
++        self._stacklevel = stacklevel
+         self._active_handlers: list[
+             tuple[CallsiteParameter, Callable[[str, FrameType], Any]]
+         ] = []
+@@ -938,7 +967,8 @@
+             return event_dict
+ 
+         frame, module = _find_first_app_frame_and_name(
+-            additional_ignores=self._additional_ignores
++            additional_ignores=self._additional_ignores,
++            stacklevel=self._stacklevel,
+         )
+         for parameter, handler in self._active_handlers:
+             event_dict[parameter.value] = handler(module, frame)

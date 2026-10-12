@@ -1,0 +1,190 @@
+{
+ "answer": [
+  "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested[dump_only]",
+  "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested[load_only]",
+  "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested[dump_only]",
+  "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested[load_only]",
+  "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested[dump_only]",
+  "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested[load_only]",
+  "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_load_only",
+  "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_dump_only",
+  "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_load_only",
+  "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_dump_only"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_schema.py::TestSchema::test_nested_load_only\",\n  \"tests/test_schema.py::TestSchema::test_nested_dump_only\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0013696702705596846,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 22,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "candidates",
+    "files",
+    "ids",
+    "lines",
+    "n",
+    "p",
+    "tr",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 22 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution assembled and checked a deduplicated set of exact pytest node IDs in code, distinguishing the affected load_only and dump_only parametrizations from unchanged selection behavior.",
+   "inspect_locate": "The reference execution used 22 context searches to identify affected tests across field-wrapper and deeply nested schema cases. Determining which direction-option parametrizations fail requires tracing the proposed change through those cases, rather than locating one named test.",
+   "recursive_decomposition": "Not established by the reference execution: there were no sub-calls. This behavior should not be credited for this task."
+  },
+  "notes": "The question is a natural, precisely scoped change-impact request with an executable, verified answer and a clear output format. It specifies the proposed change without revealing the affected tests. The existing accepted tasks touch related nested-option contracts but do not ask for this same constructor-direction impact analysis."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The findings from those paths must be combined into one deduplicated set of exact parametrized pytest node IDs.",
+   "inspect_locate": "The affected tests are scattered across schema, field, and option tests, and the changed constructor is reached through several field wrappers.",
+   "recursive_decomposition": "Direct Nested fields, List children, Tuple elements, and Dict values provide separate propagation paths. Each path needs its own analysis of root binding, nested construction, and direction-specific assertions."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Nested.schema",
+    "why": "The schema-class construction path forwards normalized root direction options; the schema-instance path does not use these arguments."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Nested._nested_normalized_option",
+    "why": "Direction paths are selected using the bound field's name and root."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestTupleNested",
+    "why": "Tuple elements independently inherit direction options through their bindings."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestListNested",
+    "why": "The parametrized tests distinguish selection propagation from direction propagation."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestDictNested",
+    "why": "Dict values provide a separate nested propagation path."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply the probe to production code and compare the complete existing pytest suite with the baseline. Include only newly failing node IDs.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -656,8 +656,8 @@\n                     many=bool(self.many),\n                     only=self.only,\n                     exclude=self.exclude,\n-                    load_only=self._nested_normalized_option(\"load_only\"),\n-                    dump_only=self._nested_normalized_option(\"dump_only\"),\n+                    load_only=(),\n+                    dump_only=(),\n                 )\n         return self._schema\n \n",
+  "question": "We are considering removing root-derived direction options when a Nested field constructs a schema from a schema class or registered name. That construction would pass empty tuples for both load_only and dump_only instead of deriving them from the enclosing schema. Existing-schema-instance handling, only/exclude propagation, and the child's own Meta options would remain unchanged. Which existing tests would newly fail? Return a JSON list of exact pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r03-00",
+ "truth": {
+  "answer": [
+   "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_dump_only",
+   "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_load_only",
+   "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_dump_only",
+   "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_load_only"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_dump_only",
+    "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_load_only",
+    "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_dump_only",
+    "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_load_only"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+    "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_dump_only",
+    "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_load_only",
+    "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_dump_only",
+    "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_load_only"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_fields.py::TestDictNested::test_dict_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_fields.py::TestListNested::test_list_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_fields.py::TestTupleNested::test_tuple_nested_only_exclude_dump_only_load_only_propagated_to_nested",
+   "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_dump_only",
+   "tests/test_schema.py::TestDeeplyNestedListLoadOnly::test_load_only",
+   "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_dump_only",
+   "tests/test_schema.py::TestDeeplyNestedLoadOnly::test_load_only"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

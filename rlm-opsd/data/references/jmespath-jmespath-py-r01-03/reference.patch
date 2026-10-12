@@ -1,0 +1,75 @@
+--- a/jmespath/visitor.py
++++ b/jmespath/visitor.py
+@@ -58,7 +58,8 @@
+ 
+ class Options(object):
+     """Options to control how a JMESPath function is evaluated."""
+-    def __init__(self, dict_cls=None, custom_functions=None):
++    def __init__(self, dict_cls=None, custom_functions=None,
++                 preserve_nulls=False):
+         #: The class to use when creating a dict.  The interpreter
+         #  may create dictionaries during the evaluation of a JMESPath
+         #  expression.  For example, a multi-select hash will
+@@ -69,6 +70,9 @@
+         #  have predictable key ordering.
+         self.dict_cls = dict_cls
+         self.custom_functions = custom_functions
++        #: Retain null results in list, object-value, and filter projections.
++        #  By default, projections omit null results.
++        self.preserve_nulls = preserve_nulls
+ 
+ 
+ class _Expression(object):
+@@ -179,7 +183,7 @@
+         for element in base:
+             if self._is_true(self.visit(comparator_node, element)):
+                 current = self.visit(node['children'][1], element)
+-                if current is not None:
++                if current is not None or self._options.preserve_nulls:
+                     collected.append(current)
+         return collected
+ 
+@@ -276,7 +280,7 @@
+         collected = []
+         for element in base:
+             current = self.visit(node['children'][1], element)
+-            if current is not None:
++            if current is not None or self._options.preserve_nulls:
+                 collected.append(current)
+         return collected
+ 
+@@ -289,7 +293,7 @@
+         collected = []
+         for element in base:
+             current = self.visit(node['children'][1], element)
+-            if current is not None:
++            if current is not None or self._options.preserve_nulls:
+                 collected.append(current)
+         return collected
+ 
+--- a/README.rst
++++ b/README.rst
+@@ -100,6 +100,23 @@
+     >>> parsed.search(mydata,
+     ...               jmespath.Options(dict_cls=collections.OrderedDict))
+ 
++
++You can also retain null results in list, object-value, and filter
++projections by setting ``preserve_nulls=True``.  By default, these
++projections omit null results.  This option applies to nested projections
++as well; filters still exclude elements whose condition is false, and
++projection bases of the wrong type still return null.  Multi-select
++expressions and ``map`` keep their existing null-handling behavior.
++
++.. code:: python
++
++    >>> options = jmespath.Options(preserve_nulls=True)
++    >>> data = {'items': [{'value': 1}, {}, {'value': None}]}
++    >>> jmespath.search('items[*].value', data, options=options)
++    [1, None, None]
++    >>> parsed = jmespath.compile('items[*].value')
++    >>> parsed.search(data, options=options)
++    [1, None, None]
+ 
+ Custom Functions
+ ~~~~~~~~~~~~~~~~

@@ -1,0 +1,146 @@
+{
+ "answer": "--- a/src/cachetools/_cached.py\n+++ b/src/cachetools/_cached.py\n@@ -5,6 +5,7 @@\n __all__ = ()\n \n import functools\n+import threading\n import warnings\n \n # At least for now, the implementation prefers clarity and performance\n@@ -15,19 +16,22 @@\n \n def _condition_info(func, cache, key, lock, cond, info):\n     hits = misses = 0\n-    pending = set()\n-\n-    def wrapper(*args, **kwargs):\n-        nonlocal hits, misses\n-        k = key(*args, **kwargs)\n-        with lock:\n+    pending = {}\n+\n+    def wrapper(*args, **kwargs):\n+        nonlocal hits, misses\n+        k = key(*args, **kwargs)\n+        with lock:\n+            ident = threading.get_ident()\n+            if pending.get(k) == ident:\n+                raise RuntimeError(\"recursive call with the same cache key\")\n             cond.wait_for(lambda: k not in pending)\n             try:\n                 result = cache[k]\n                 hits += 1\n                 return result\n             except KeyError:\n-                pending.add(k)\n+                pending[k] = ident\n                 misses += 1\n         try:\n             v = func(*args, **kwargs)\n@@ -39,7 +43,7 @@\n                 return v\n         finally:\n             with lock:\n-                pending.remove(k)\n+                del pending[k]\n                 cond.notify_all()\n \n     def cache_clear():\n@@ -145,17 +149,20 @@\n \n \n def _condition(func, cache, key, lock, cond):\n-    pending = set()\n-\n-    def wrapper(*args, **kwargs):\n-        k = key(*args, **kwargs)\n-        with lock:\n+    pending = {}\n+\n+    def wrapper(*args, **kwargs):\n+        k = key(*args, **kwargs)\n+        with lock:\n+            ident = threading.get_ident()\n+            if pending.get(k) == ident:\n+                raise RuntimeError(\"recursive call with the same cache key\")\n             cond.wait_for(lambda: k not in pending)\n             try:\n                 result = cache[k]\n                 return result\n             except KeyError:\n-                pending.add(k)\n+                pending[k] = ident\n         try:\n             v = func(*args, **kwargs)\n             with lock:\n@@ -166,7 +173,7 @@\n                 return v\n         finally:\n             with lock:\n-                pending.remove(k)\n+                del pending[k]\n                 cond.notify_all()\n \n     def cache_clear():\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 7118 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 7,118-character helper-module context supports a direct implementation. The reference execution used no sub-calls and produced a patch addressing both condition wrappers. The task requires reasoning about key ownership, recursive entry, statistics, exception cleanup, and cross-thread waiting rather than a simple lookup."
+  },
+  "notes": "This is a natural, bounded maintainer request with precise behavioral and output requirements. It identifies the affected feature and permitted file without prescribing the implementation or revealing the fix. The constraints form a coherent concurrency change, and the verified patch preserves the outer pending-key lifecycle while rejecting same-thread recursion. The task is substantively different from the cache_if parent and the listed accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the function-decorator helper module, under 16,000 characters. The task requires reasoning about the two condition wrappers' pending-key lifecycle, statistics, recursive entry, and cross-thread waiting, but does not require repository-wide discovery or delegated reviews."
+  },
+  "context": {
+   "files": [
+    "src/cachetools/_cached.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition",
+    "why": "The non-statistics wrapper waits for key absence before lookup and records only key presence, so recursive entry cannot distinguish its own computation from another thread's computation."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition_info",
+    "why": "The statistics-enabled wrapper has the same waiting behavior and must reject recursive entry before changing counters, while retaining outer-computation cleanup."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_wrapper",
+    "why": "Dispatch demonstrates that both condition-only and explicit lock-plus-condition construction reach the two affected factories and establishes the existing wrapper metadata."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::cached",
+    "why": "The public decorator forwards synchronization options and the optional statistics callback to the function-wrapper dispatcher."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cached_recursive_condition.py\n@@ -0,0 +1,154 @@\n+import threading\n+\n+import pytest\n+\n+from cachetools import cached\n+\n+\n+class CheckedCondition(threading.Condition):\n+    def __init__(self, lock):\n+        super().__init__(lock)\n+        self.forbidden_waiter = None\n+        self.waiting = threading.Event()\n+\n+    def wait(self, timeout=None):\n+        if self.forbidden_waiter == threading.get_ident():\n+            raise AssertionError(\"recursive computation attempted to wait on itself\")\n+        self.waiting.set()\n+        return super().wait(timeout)\n+\n+\n+def make_wrapper(info, separate, func, key=None):\n+    lock = threading.RLock()\n+    cond = CheckedCondition(lock)\n+    options = {\"condition\": cond, \"info\": info}\n+    if separate:\n+        options[\"lock\"] = lock\n+    if key is not None:\n+        options[\"key\"] = key\n+    return cached({}, **options)(func), cond\n+\n+\n+def assert_info(wrapper, info, hits, misses, size):\n+    if info:\n+        stats = wrapper.cache_info()\n+        assert tuple(stats) == (hits, misses, None, size)\n+    else:\n+        assert wrapper.cache_info is None\n+\n+\n+@pytest.mark.parametrize(\"info\", [False, True])\n+@pytest.mark.parametrize(\"separate\", [False, True])\n+def test_caught_recursion_uses_generated_key(info, separate):\n+    calls = []\n+\n+    def compute(n):\n+        calls.append(n)\n+        cond.forbidden_waiter = threading.get_ident()\n+        try:\n+            with pytest.raises(RuntimeError):\n+                wrapper(n + 1)\n+        finally:\n+            cond.forbidden_waiter = None\n+        assert_info(wrapper, info, 0, 1, 0)\n+        return 17\n+\n+    wrapper, cond = make_wrapper(info, separate, compute, key=lambda n: 0)\n+    assert wrapper(1) == 17\n+    assert_info(wrapper, info, 0, 1, 1)\n+    assert wrapper(99) == 17\n+    assert calls == [1]\n+    assert_info(wrapper, info, 1, 1, 1)\n+\n+\n+@pytest.mark.parametrize(\"info\", [False, True])\n+@pytest.mark.parametrize(\"separate\", [False, True])\n+def test_uncaught_recursion_releases_key_for_retry(info, separate):\n+    recurse = True\n+    calls = []\n+\n+    def compute(n):\n+        calls.append(n)\n+        if recurse:\n+            cond.forbidden_waiter = threading.get_ident()\n+            try:\n+                return wrapper(n)\n+            finally:\n+                cond.forbidden_waiter = None\n+        return 23\n+\n+    wrapper, cond = make_wrapper(info, separate, compute)\n+    with pytest.raises(RuntimeError):\n+        wrapper(5)\n+    assert not wrapper.cache\n+    assert_info(wrapper, info, 0, 1, 0)\n+    recurse = False\n+    assert wrapper(5) == 23\n+    assert wrapper(5) == 23\n+    assert calls == [5, 5]\n+    assert_info(wrapper, info, 1, 2, 1)\n+\n+\n+@pytest.mark.parametrize(\"info\", [False, True])\n+@pytest.mark.parametrize(\"separate\", [False, True])\n+def test_different_key_recursion(info, separate):\n+    calls = []\n+\n+    def compute(n):\n+        calls.append(n)\n+        return 0 if n == 0 else wrapper(n - 1) + 1\n+\n+    wrapper, cond = make_wrapper(info, separate, compute)\n+    assert wrapper(4) == 4\n+    assert calls == [4, 3, 2, 1, 0]\n+    assert_info(wrapper, info, 0, 5, 5)\n+    assert wrapper(3) == 3\n+    assert_info(wrapper, info, 1, 5, 5)\n+\n+\n+@pytest.mark.parametrize(\"info\", [False, True])\n+@pytest.mark.parametrize(\"separate\", [False, True])\n+def test_other_thread_waits_and_uses_cached_result(info, separate):\n+    started = threading.Event()\n+    release = threading.Event()\n+    calls = []\n+    results = []\n+    errors = []\n+    token = object()\n+\n+    def compute(n):\n+        calls.append(n)\n+        started.set()\n+        if not release.wait(5):\n+            raise AssertionError(\"test did not release computation\")\n+        return token\n+\n+    wrapper, cond = make_wrapper(info, separate, compute)\n+\n+    def call():\n+        try:\n+            results.append(wrapper(7))\n+        except BaseException as exc:\n+            errors.append(exc)\n+\n+    first = threading.Thread(target=call, daemon=True)\n+    second = threading.Thread(target=call, daemon=True)\n+    first.start()\n+    try:\n+        assert started.wait(5)\n+        second.start()\n+        assert cond.waiting.wait(5)\n+        with wrapper.cache_lock:\n+            assert calls == [7]\n+            assert results == []\n+            assert_info(wrapper, info, 0, 1, 0)\n+    finally:\n+        release.set()\n+        first.join(5)\n+        if second.ident is not None:\n+            second.join(5)\n+    assert not first.is_alive()\n+    assert not second.is_alive()\n+    assert errors == []\n+    assert results == [token, token]\n+    assert_info(wrapper, info, 1, 1, 1)\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task for a deadlock already present in the pinned source, so no artificial setup regression is introduced. The new acceptance file exercises all four combinations of statistics and synchronization construction. Its Condition subclass raises AssertionError if a recursive computation actually enters Condition.wait, making the baseline fail deterministically without hanging pytest; it does not supply the requested RuntimeError. Cross-thread waiting uses events and the shared lock to establish contention without sleeps, with bounded waits solely as failure safeguards. The expected production fix is distinct from cache-admission predicate support and requires no changes to public signatures.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Condition-based `cachetools.cached` wrappers currently block indefinitely when a computation calls the same wrapper recursively with the same generated cache key. Make that recursive request raise `RuntimeError` promptly instead. Apply this behavior both with and without `info=True`, and for both condition-only construction and an explicit lock paired with a condition using that lock.\n\nDetect recursion by the generated key, not by equality of the original arguments. A rejected recursive request must neither execute the wrapped function nor increment hits or misses. If the outer computation catches the error and returns a value, that value must still be cached normally, and its pending computation must remain protected until it finishes. If the error escapes the outer computation, release its pending key and notify waiters so subsequent calls can proceed. Recursion through different keys must continue to work. Calls from other threads for a pending key must still wait and, after successful insertion, use the cached result rather than recomputing it.\n\nKeep public signatures and wrapper metadata unchanged, preserve existing oversized-value handling, and leave `cachedmethod`, unlocked wrappers, and lock-only wrappers unchanged. Return a unified diff against production files only, with changes confined to the function-decorator condition handling in `src/cachetools/_cached.py`. Do not change tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused inspect_locate and concurrency-state reasoning rather than broad option propagation. combine_verify_finish should verify that same-thread recursion fails promptly while genuine contention still waits, and that catching the recursive error does not accidentally release the outer computation's pending key.",
+  "change_type": "failure_condition",
+  "description": "Repair same-thread recursive deadlock in condition-based cachetools.cached wrappers. When a computation recursively calls the same wrapper with the same generated key, raise RuntimeError instead of waiting for its own pending computation. Recursion with different keys must continue to work, and callers in other threads requesting the pending key must still wait and then use the cached result. Scope the change to src/cachetools/_cached.py::_condition and _condition_info, reached through _wrapper and src/cachetools/__init__.py::cached. Support condition-only and separate lock-plus-condition construction. A detected recursive request must not increment hits or misses; if the outer computation catches the RuntimeError and returns successfully, its result must still be cached normally. Deliver a production patch and deterministic tests for caught and uncaught recursive requests, different-key recursion, and ordinary cross-thread waiting.",
+  "expected_answer_change": "The verified fix should track the owning thread for each pending key and detect owner re-entry before waiting or changing statistics. Existing finally cleanup must remove ownership and notify waiters after either successful or failing outer computation. The answer changes from predicate propagation and insertion guards to ownership-aware pending coordination, with unlocked and lock-only wrappers left unchanged.",
+  "why_substantive": "The original task concerns post-computation admission decisions. This problem occurs before computation, inside cond.wait_for, because pending records key presence but not ownership. It requires distinguishing self-wait from legitimate cross-thread waiting. Unlike the existing exception-cleanup liveness task, the defect occurs without an initial exception and cannot be repaired merely by restoring pending removal or notification."
+ },
+ "task_id": "tkem-cachetools-r02-04-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[False-False]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[False-True]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[True-False]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[True-True]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[False-False]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[False-True]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[True-False]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 354
+   },
+   "patch_files": [
+    "src/cachetools/_cached.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[False-False]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[False-True]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[True-False]",
+   "tests/test_cached_recursive_condition.py::test_caught_recursion_uses_generated_key[True-True]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[False-False]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[False-True]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[True-False]",
+   "tests/test_cached_recursive_condition.py::test_uncaught_recursion_releases_key_for_retry[True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

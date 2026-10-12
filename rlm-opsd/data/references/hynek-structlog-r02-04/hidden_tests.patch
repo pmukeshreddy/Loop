@@ -1,0 +1,40 @@
+--- /dev/null
++++ b/tests/test_custom_native_thresholds.py
+@@ -0,0 +1,37 @@
++import logging
++import pickle
++
++import pytest
++
++from structlog import make_filtering_bound_logger
++from structlog.testing import CapturingLogger
++
++
++@pytest.mark.parametrize("threshold", [-5, 5, 15, 25, 35, 45, 55])
++def test_custom_threshold(threshold):
++    cls = make_filtering_bound_logger(threshold)
++    assert cls is make_filtering_bound_logger(threshold)
++    assert pickle.loads(pickle.dumps(cls)) is cls
++    backend = CapturingLogger()
++    logger = cls(backend, [], {})
++    assert logger.get_effective_level() == threshold
++    for name, level in [("debug", 10), ("info", 20), ("warning", 30), ("error", 40), ("critical", 50)]:
++        backend.calls.clear()
++        getattr(logger, name)("event")
++        assert logger.is_enabled_for(level) is (level >= threshold)
++        assert len(backend.calls) == int(level >= threshold)
++        backend.calls.clear()
++        logger.log(level, "event")
++        assert len(backend.calls) == int(level >= threshold)
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("threshold", [15, 25, 55])
++async def test_custom_async_threshold(threshold):
++    backend = CapturingLogger()
++    logger = make_filtering_bound_logger(threshold)(backend, [], {})
++    await logger.ainfo("event")
++    assert len(backend.calls) == int(20 >= threshold)
++    backend.calls.clear()
++    await logger.alog(logging.ERROR, "event")
++    assert len(backend.calls) == int(40 >= threshold)

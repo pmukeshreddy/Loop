@@ -1,0 +1,160 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -3133,7 +3133,9 @@\n                 value, field\n             )\n         else:\n-            self.__call__ = self.converter\n+            self.__call__ = lambda value, instance, field: self.converter(\n+                value, instance, field\n+            )\n \n         rt = ex.get_return_type()\n         if rt is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0005703527840635086,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "make",
+    "start",
+    "test"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 16 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 16 targeted code searches without printing the whole context. Locating Converter's invocation adapters and relating their annotation ownership to signature inference, generated initialization, setter conversion, and restoration was useful for identifying the narrowly scoped fix."
+  },
+  "notes": "This is a natural, repository-dependent compatibility fix with precise behavioral constraints and an explicit production-only unified-diff format. Naming the public Converter API identifies the affected feature without revealing the defective assignment or its replacement. The small verified patch is consistent with the broader requirements because it gives the remaining invocation path its own adapter while preserving argument forwarding and serialized state. The task is substantively different from the parent truth-value handling task and the listed accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The large _make.py module contains both Converter construction and generated initializer assembly. The solver must locate those paths, then connect them to signature extraction in _compat.py, runtime invocation in setters.py, and state restoration to distinguish annotation ownership from argument forwarding."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Converter.__init__",
+    "why": "The both-context-arguments branch assigns the supplied callable itself as the invocation adapter, making the subsequent return-annotation write target user-owned storage."
+   },
+   {
+    "path": "src/attr/_compat.py",
+    "symbol": "src/attr/_compat.py::_AnnotationExtractor",
+    "why": "Inference uses inspect.signature, so annotations may come from __signature__ without any writable __annotations__ on the callable."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Converter._fmt_converter_call",
+    "why": "Generated initialization formats calls to the original callable with context arguments, independently of the runtime invocation adapter."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Initializer globals hold converter.converter, and constructor input annotations come from the inferred first-parameter type."
+   },
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::convert",
+    "why": "Assignment conversion invokes the Converter with value, instance, and Attribute, exercising its invocation adapter."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Converter.__getstate__",
+    "why": "Serialized state contains only the supplied callable and the two context flags, excluding the invocation adapter."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Converter.__setstate__",
+    "why": "Restoration reconstructs inferred types and runtime invocation by calling __init__ again."
+   }
+  ],
+  "expected_answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -3370,9 +3370,11 @@\n             self.__call__ = lambda value, __, field: self.converter(\n                 value, field\n             )\n         else:\n-            self.__call__ = self.converter\n+            self.__call__ = lambda value, instance, field: self.converter(\n+                value, instance, field\n+            )\n \n         rt = ex.get_return_type()\n         if rt is not None:\n             self.__call__.__annotations__[\"return\"] = rt\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_converter_annotation_ownership.py\n@@ -0,0 +1,142 @@\n+# SPDX-License-Identifier: MIT\n+\n+import copy\n+import inspect\n+import pickle\n+\n+from types import MappingProxyType\n+\n+import attr\n+import pytest\n+\n+\n+class SignatureOnly:\n+    __slots__ = (\"__signature__\", \"calls\", \"takes_self\", \"takes_field\")\n+\n+    def __init__(self, takes_self, takes_field):\n+        self.takes_self = takes_self\n+        self.takes_field = takes_field\n+        self.calls = []\n+        names = [\"value\"]\n+        if takes_self:\n+            names.append(\"instance\")\n+        if takes_field:\n+            names.append(\"field\")\n+        self.__signature__ = inspect.Signature(\n+            [\n+                inspect.Parameter(\n+                    name,\n+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,\n+                    annotation=str if index == 0 else inspect.Parameter.empty,\n+                )\n+                for index, name in enumerate(names)\n+            ],\n+            return_annotation=int,\n+        )\n+\n+    def __call__(self, value, *context):\n+        self.calls.append((value, context))\n+        result = int(value)\n+        if self.takes_self:\n+            result += context[0].offset\n+        if self.takes_field:\n+            result += len(context[-1].name)\n+        return result\n+\n+\n+class ReadOnlyAnnotations(SignatureOnly):\n+    __slots__ = ()\n+\n+    @property\n+    def __annotations__(self):\n+        return MappingProxyType({\"value\": bytes, \"return\": bytes})\n+\n+\n+def exercise(wrapped):\n+    @attr.define\n+    class Model:\n+        offset: int = attr.field(init=False, default=3)\n+        value: int = attr.field(converter=wrapped)\n+\n+    field = attr.fields(Model).value\n+    obj = Model(\"10\")\n+    expected = 10 + (3 if wrapped.takes_self else 0)\n+    expected += 5 if wrapped.takes_field else 0\n+    assert obj.value == expected\n+    assert Model.__init__.__annotations__[\"value\"] is str\n+    assert wrapped.__call__.__annotations__[\"return\"] is int\n+\n+    context = ()\n+    if wrapped.takes_self:\n+        context += (obj,)\n+    if wrapped.takes_field:\n+        context += (field,)\n+    assert wrapped.converter.calls[-1][0] == \"10\"\n+    assert len(wrapped.converter.calls[-1][1]) == len(context)\n+    assert all(a is b for a, b in zip(wrapped.converter.calls[-1][1], context))\n+\n+    assert attr.setters.convert(obj, field, \"20\") == expected + 10\n+    assert obj.value == expected\n+    obj.value = \"30\"\n+    assert obj.value == expected + 20\n+    assert [v for v, _ in wrapped.converter.calls] == [\"10\", \"20\", \"30\"]\n+    for _, actual in wrapped.converter.calls:\n+        assert len(actual) == len(context)\n+        assert all(a is b for a, b in zip(actual, context))\n+\n+\n+@pytest.mark.parametrize(\"takes_self,takes_field\", [(False, False), (True, False), (False, True), (True, True)])\n+@pytest.mark.parametrize(\"callable_type\", [SignatureOnly, ReadOnlyAnnotations])\n+def test_callable_protocol(callable_type, takes_self, takes_field):\n+    callback = callable_type(takes_self, takes_field)\n+    before = dict(callback.__annotations__) if callable_type is ReadOnlyAnnotations else None\n+    wrapped = attr.Converter(callback, takes_self=takes_self, takes_field=takes_field)\n+    exercise(wrapped)\n+    if before is not None:\n+        assert dict(callback.__annotations__) == before\n+    else:\n+        assert not hasattr(callback, \"__annotations__\")\n+\n+\n+def test_function_annotation_ownership():\n+    def callback(value: bytes, instance, field) -> bytes:\n+        return int(value) + instance.offset + len(field.name)\n+\n+    callback.__signature__ = inspect.signature(callback).replace(\n+        parameters=[\n+            p.replace(annotation=str) if p.name == \"value\" else p\n+            for p in inspect.signature(callback).parameters.values()\n+        ],\n+        return_annotation=int,\n+    )\n+    annotations = callback.__annotations__\n+    before = dict(annotations)\n+    first = attr.Converter(callback, takes_self=True, takes_field=True)\n+    second = attr.Converter(callback, takes_self=True, takes_field=True)\n+    assert callback.__annotations__ is annotations\n+    assert annotations == before\n+    assert first.__call__ is not callback\n+    assert first.__call__ is not second.__call__\n+    assert first.__call__.__annotations__[\"return\"] is int\n+    assert second.__call__.__annotations__[\"return\"] is int\n+\n+\n+@pytest.mark.parametrize(\"takes_self,takes_field\", [(False, False), (True, False), (False, True), (True, True)])\n+@pytest.mark.parametrize(\"method\", [\"copy\", \"deepcopy\", \"pickle\"])\n+def test_serialization(method, takes_self, takes_field):\n+    callback = SignatureOnly(takes_self, takes_field)\n+    original = attr.Converter(callback, takes_self=takes_self, takes_field=takes_field)\n+    assert original.__getstate__() == {\n+        \"converter\": callback,\n+        \"takes_self\": takes_self,\n+        \"takes_field\": takes_field,\n+    }\n+    if method == \"pickle\":\n+        restored = pickle.loads(pickle.dumps(original, protocol=pickle.HIGHEST_PROTOCOL))\n+    else:\n+        restored = getattr(copy, method)(original)\n+    assert restored.takes_self is takes_self\n+    assert restored.takes_field is takes_field\n+    exercise(restored)\n+    assert not hasattr(callback, \"__annotations__\")\n+    assert not hasattr(restored.converter, \"__annotations__\")\n",
+  "include_failure_log": false,
+  "notes": "This variation addresses a defect already present in the pinned production code, so it uses a new hidden acceptance-test patch rather than injecting an additional regression. The tests cover all four context-flag combinations, missing and read-only annotation storage, signature annotations that differ from function annotation storage, per-instance adapter ownership, generated initialization, direct setter conversion, default mutable assignment, shallow/deep copying, and pickle restoration. The expected production change is distinct from the original task's callback-presence edits.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Fix attr.Converter's handling of callable annotations. Constructing a Converter must leave the supplied callable's __annotations__ unchanged and must not require that attribute to exist or be writable. This includes callable objects that expose their input and return annotations only through an inspectable __signature__, for every combination of takes_self and takes_field. Keep invocation annotations local to each Converter, retaining the inferred return annotation on its invocation adapter and the inferred first-parameter annotation in generated constructor signatures. Conversion must continue to receive the value, instance, and Attribute in the documented order, both during generated initialization and through attr.setters.convert or later mutable assignment. Preserve Converter's existing serialized state and its behavior after copying or pickle restoration. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises protocol-boundary inspection and branch-specific verification. The solver must distinguish generated initialization, which calls converter.converter using formatted arguments, from assignment, which invokes the Converter wrapper, and confirm that the repair preserves both paths rather than applying a broad truthiness replacement.",
+  "change_type": "failure_condition",
+  "description": "Prevent Converter construction from modifying annotations on user-supplied callables. In src/attr/_make.py::Converter.__init__, when takes_self=True and takes_field=True, self.__call__ is assigned directly to the supplied converter and its return annotation is subsequently written. Require an instance-local invocation wrapper so construction never changes the original callable's __annotations__ or requires that attribute to exist. Include a callable object whose inspectable __signature__ supplies a return annotation but which has no writable __annotations__, and verify that it works both through generated initialization and src/attr/setters.py::convert. Preserve argument ordering, inferred first-parameter and return types, and Converter serialization behavior. Deliver a production-only unified diff.",
+  "expected_answer_change": "The answer depends on src/attr/_compat.py::_AnnotationExtractor, Converter.__init__, Converter._fmt_converter_call, and Converter.__getstate__/__setstate__. The fix must separate runtime invocation from the user callable's annotation storage, retaining inferred annotations on a wrapper owned by the Converter. Verification should establish that the original annotations remain unchanged and that a callable without annotation storage works in the takes_self/takes_field combinations.",
+  "why_substantive": "This is an annotation ownership and callable-protocol failure, not a false-valued callback failure. A truthy callable can currently fail during Converter construction because the both-context-arguments branch uses the original object as the annotation target. The seed's presence-check edits do not address that branch."
+ },
+ "task_id": "python-attrs-attrs-r02-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_converter_annotation_ownership.py::test_callable_protocol[ReadOnlyAnnotations-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_callable_protocol[SignatureOnly-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_function_annotation_ownership",
+   "tests/test_converter_annotation_ownership.py::test_serialization[copy-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_serialization[deepcopy-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_serialization[pickle-True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1399
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_converter_annotation_ownership.py::test_callable_protocol[ReadOnlyAnnotations-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_callable_protocol[SignatureOnly-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_function_annotation_ownership",
+   "tests/test_converter_annotation_ownership.py::test_serialization[copy-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_serialization[deepcopy-True-True]",
+   "tests/test_converter_annotation_ownership.py::test_serialization[pickle-True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

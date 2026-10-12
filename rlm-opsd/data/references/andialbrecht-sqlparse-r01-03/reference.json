@@ -1,0 +1,161 @@
+{
+ "answer": "--- a/sqlparse/__init__.py\n+++ b/sqlparse/__init__.py\n@@ -12,38 +12,47 @@\n from typing import IO, Any\n \n from sqlparse import cli, engine, filters, formatter, sql, tokens\n+from sqlparse.lexer import Lexer\n \n __version__ = \"0.6.0\"\n __all__ = [\"cli\", \"engine\", \"filters\", \"formatter\", \"sql\", \"tokens\"]\n \n \n def parse(\n-    sql: str, encoding: str | None = None\n+    sql: str, encoding: str | None = None, *, lexer: Lexer | None = None\n ) -> tuple[sql.Statement, ...]:\n     \"\"\"Parse sql and return a list of statements.\n \n     :param sql: A string containing one or more SQL statements.\n     :param encoding: The encoding of the statement (optional).\n+    :param lexer: Lexer instance to use (optional). If None, use the default\n+        lexer without changing its configuration.\n     :returns: A tuple of :class:`~sqlparse.sql.Statement` instances.\n     \"\"\"\n-    return tuple(parsestream(sql, encoding))\n+    return tuple(parsestream(sql, encoding, lexer=lexer))\n \n \n def parsestream(\n-    stream: str | IO[str], encoding: str | None = None\n+    stream: str | IO[str], encoding: str | None = None, *,\n+    lexer: Lexer | None = None\n ) -> Generator[sql.Statement, None, None]:\n     \"\"\"Parses sql statements from file-like object.\n \n     :param stream: A file-like object.\n     :param encoding: The encoding of the stream contents (optional).\n+    :param lexer: Lexer instance to use (optional). If None, use the default\n+        lexer without changing its configuration.\n     :returns: A generator of :class:`~sqlparse.sql.Statement` instances.\n     \"\"\"\n     stack = engine.FilterStack()\n     stack.enable_grouping()\n-    return stack.run(stream, encoding)\n+    return stack.run(stream, encoding, lexer=lexer)\n \n \n-def format(sql: str, encoding: str | None = None, **options: Any) -> str:\n+def format(\n+    sql: str, encoding: str | None = None, *,\n+    lexer: Lexer | None = None, **options: Any\n+) -> str:\n     \"\"\"Format *sql* according to *options*.\n \n     Available options are documented in :ref:`formatting`.\n@@ -51,17 +60,20 @@\n     In addition to the formatting options this function accepts the\n     keyword \"encoding\" which determines the encoding of the statement.\n \n+    :param lexer: Lexer instance to use (optional). If None, use the default\n+        lexer without changing its configuration.\n     :returns: The formatted SQL statement as string.\n     \"\"\"\n     stack = engine.FilterStack()\n     options = formatter.validate_options(options)\n     stack = formatter.build_filter_stack(stack, options)\n     stack.postprocess.append(filters.SerializerUnicode())\n-    return \"\".join(stack.run(sql, encoding))\n+    return \"\".join(stack.run(sql, encoding, lexer=lexer))\n \n \n def split(\n-    sql: str, encoding: str | None = None, strip_semicolon: bool = False\n+    sql: str, encoding: str | None = None, strip_semicolon: bool = False, *,\n+    lexer: Lexer | None = None\n ) -> list[str]:\n     \"\"\"Split *sql* into single statements.\n \n@@ -69,7 +81,9 @@\n     :param encoding: The encoding of the statement (optional).\n     :param strip_semicolon: If True, remove trailing semicolons\n         (default: False).\n+    :param lexer: Lexer instance to use (optional). If None, use the default\n+        lexer without changing its configuration.\n     :returns: A list of strings.\n     \"\"\"\n     stack = engine.FilterStack(strip_semicolon=strip_semicolon)\n-    return [str(stmt).strip() for stmt in stack.run(sql, encoding)]\n+    return [str(stmt).strip() for stmt in stack.run(sql, encoding, lexer=lexer)]\n--- a/sqlparse/engine/filter_stack.py\n+++ b/sqlparse/engine/filter_stack.py\n@@ -7,7 +7,7 @@\n \n \"\"\"filter\"\"\"\n \n-from sqlparse import lexer\n+from sqlparse import lexer as lexer_module\n from sqlparse.engine import grouping\n from sqlparse.engine.statement_splitter import StatementSplitter\n from sqlparse.exceptions import SQLParseError\n@@ -26,9 +26,9 @@\n     def enable_grouping(self):\n         self._grouping = True\n \n-    def run(self, sql, encoding=None):\n+    def run(self, sql, encoding=None, *, lexer=None):\n         try:\n-            stream = lexer.tokenize(sql, encoding)\n+            stream = lexer_module.tokenize(sql, encoding, lexer=lexer)\n             # Process token stream\n             for filter_ in self.preprocess:\n                 stream = filter_.process(stream)\n--- a/sqlparse/lexer.py\n+++ b/sqlparse/lexer.py\n@@ -30,19 +30,9 @@\n     # - This class is prepared to be able to support additional SQL dialects\n     #   in the future by adding additional functions that take the place of\n     #   the function default_initialization().\n-    # - The lexer class uses an explicit singleton behavior with the\n-    #   instance-getter method get_default_instance(). This mechanism has\n-    #   the advantage that the call signature of the entry-points to the\n-    #   sqlparse library are not affected. Also, usage of sqlparse in third\n-    #   party code does not need to be adapted. On the other hand, the current\n-    #   implementation does not easily allow for multiple SQL dialects to be\n-    #   parsed in the same process.\n-    #   Such behavior can be supported in the future by passing a\n-    #   suitably initialized lexer object as an additional parameter to the\n-    #   entry-point functions (such as `parse`). Code will need to be written\n-    #   to pass down and utilize such an object. The current implementation\n-    #   is prepared to support this thread safe approach without the\n-    #   default_instance part needing to change interface.\n+    # - The default instance preserves the historical singleton behavior.\n+    #   Entry points can also use an explicitly supplied lexer instance,\n+    #   allowing multiple syntax configurations without changing the default.\n \n     @classmethod\n     def get_default_instance(cls):\n@@ -165,10 +155,15 @@\n                 yield tokens.Error, char\n \n \n-def tokenize(sql, encoding=None):\n+def tokenize(sql, encoding=None, *, lexer=None):\n     \"\"\"Tokenize sql.\n \n     Tokenize *sql* using the :class:`Lexer` and return a 2-tuple stream\n     of ``(token type, value)`` items.\n+\n+    :param lexer: Lexer instance to use (optional). If None, use the default\n+        lexer without changing its configuration.\n     \"\"\"\n-    return Lexer.get_default_instance().get_tokens(sql, encoding)\n+    if lexer is None:\n+        lexer = Lexer.get_default_instance()\n+    return lexer.get_tokens(sql, encoding)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002307111331397956,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "new",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['files', 'new', 't']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed and inspected a multi-file diff before finishing. The supplied verification tests exercise custom token classification, statement splitting, formatting options, default-lexer isolation, deferred stream consumption, encoding, and file-like input.",
+   "inspect_locate": "The change requires tracing five public entry points through FilterStack to tokenization. The reference execution used 12 context searches without printing the whole repository context, consistent with targeted inspection.",
+   "persistent_state": "The execution reused variables across turns, but persistent_state was not listed among the established behaviors. Variable reuse provides limited supporting evidence rather than a strong independent demonstration."
+  },
+  "notes": "This is a natural, repository-dependent API enhancement with precise compatibility and isolation requirements. Naming the intended public APIs specifies the requested feature rather than leaking a defective implementation or fix. The requirements form one coherent propagation task, the unified-diff output format is clear, and the investigation is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final multi-file diff must be checked for complete propagation, preservation of positional arguments, and absence of accidental singleton mutation.",
+   "inspect_locate": "Supporting an explicit lexer requires following all public entry points through FilterStack to tokenization, while distinguishing the module named lexer from a selected lexer instance.",
+   "persistent_state": "The implementation must retain a consistent signature and forwarding plan across five public entry points, then reuse the exact file text when assembling coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/__init__.py",
+    "symbol": "sqlparse/__init__.py::parsestream",
+    "why": "Creates the grouped pipeline used by parse and returns deferred execution."
+   },
+   {
+    "path": "sqlparse/__init__.py",
+    "symbol": "sqlparse/__init__.py::format",
+    "why": "Must distinguish the explicit lexer argument from formatting options."
+   },
+   {
+    "path": "sqlparse/__init__.py",
+    "symbol": "sqlparse/__init__.py::split",
+    "why": "Creates an ungrouped pipeline with optional semicolon stripping."
+   },
+   {
+    "path": "sqlparse/engine/filter_stack.py",
+    "symbol": "sqlparse/engine/filter_stack.py::FilterStack.run",
+    "why": "The shared tokenization boundary through which the selected instance must propagate."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::tokenize",
+    "why": "Currently always selects the default singleton."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_explicit_lexer.py\n@@ -0,0 +1,55 @@\n+from io import StringIO\n+\n+import pytest\n+\n+import sqlparse\n+from sqlparse import keywords, tokens as T\n+from sqlparse.lexer import Lexer, tokenize\n+\n+\n+def make_lexer():\n+    lex = Lexer()\n+    lex.clear()\n+    lex.set_SQL_REGEX([(r';', T.Whitespace)] + keywords.SQL_REGEX)\n+    lex.add_keywords({'SELECT': T.Name, 'BACON': T.Keyword})\n+    return lex\n+\n+\n+@pytest.mark.parametrize('entry', ['parse', 'parsestream', 'split', 'format', 'tokenize'])\n+def test_explicit_lexer(entry):\n+    lex = make_lexer()\n+    text = 'select 1; select 2;'\n+    if entry == 'tokenize':\n+        result = list(tokenize(text, lexer=lex))\n+        assert result[0] == (T.Name, 'select')\n+        assert [tt for tt, value in result if value == ';'] == [T.Whitespace] * 2\n+    elif entry == 'format':\n+        assert sqlparse.format(text, lexer=lex, keyword_case='upper') == text\n+    elif entry == 'split':\n+        assert sqlparse.split(text, lexer=lex) == [text]\n+        assert sqlparse.split(text, lexer=lex, strip_semicolon=True) == [text[:-1]]\n+    else:\n+        result = list(getattr(sqlparse, entry)(text, lexer=lex))\n+        assert len(result) == 1\n+        assert str(result[0]) == text\n+    assert len(sqlparse.parse(text)) == 2\n+    assert list(tokenize('select')) == [(T.Keyword.DML, 'select')]\n+    assert list(tokenize('select', lexer=None)) == [(T.Keyword.DML, 'select')]\n+\n+\n+def test_explicit_lexer_streams_and_bytes():\n+    lex = make_lexer()\n+    text = 'select 1; select 2;'\n+    pending = sqlparse.parsestream(StringIO(text), lexer=lex)\n+    assert len(sqlparse.parse(text, lexer=None)) == 2\n+    assert [str(stmt) for stmt in pending] == [text]\n+    assert sqlparse.split(text.encode('utf-8'), encoding='utf-8', lexer=lex) == [text]\n+    assert sqlparse.format(text.encode('utf-8'), encoding='utf-8', lexer=lex,\n+                           keyword_case='upper') == text\n+    assert [str(stmt) for stmt in sqlparse.parse(text.encode('utf-8'),\n+                                               encoding='utf-8', lexer=lex)] == [text]\n+    assert list(tokenize(StringIO('BACON'), lexer=lex)) == [(T.Keyword, 'BACON')]\n+    assert sqlparse.format('BACON', lexer=lex, keyword_case='lower') == 'bacon'\n+    other = Lexer()\n+    other.default_initialization()\n+    assert list(tokenize('BACON', lexer=other)) == [(T.Name, 'BACON')]\n",
+  "include_failure_log": false,
+  "notes": "The custom test lexer deliberately classifies semicolons as whitespace and SELECT as Name, making instance propagation observable without importing internal pipeline helpers.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add an optional keyword-only lexer argument to sqlparse.parse, sqlparse.parsestream, sqlparse.split, sqlparse.format, and sqlparse.lexer.tokenize. Passing a Lexer instance must make that entire call use the supplied instance's syntax configuration without replacing or reconfiguring the default singleton. Omitting the argument, or passing None, must preserve existing behavior. Keep existing positional arguments compatible, retain encoding and file-like input support, and allow ordinary formatting options and strip_semicolon to work with the selected lexer. A parsestream created with an explicit instance must keep using it when subsequently consumed, even if another call uses a different instance in the meantime. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_explicit_lexer.py::test_explicit_lexer[format]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[parse]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[parsestream]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[split]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[tokenize]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer_streams_and_bytes"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 514
+   },
+   "patch_files": [
+    "sqlparse/__init__.py",
+    "sqlparse/engine/filter_stack.py",
+    "sqlparse/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_explicit_lexer.py::test_explicit_lexer[format]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[parse]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[parsestream]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[split]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer[tokenize]",
+   "tests/test_explicit_lexer.py::test_explicit_lexer_streams_and_bytes"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,17 @@
+--- a/h11/_receivebuffer.py
++++ b/h11/_receivebuffer.py
+@@ -73,6 +73,14 @@
+         self._multiple_lines_search = 0
+ 
+         return out
++
++    def peek_at_most(self, count: int) -> bytes:
++        """
++        Return at most count buffered bytes without consuming them.
++        """
++        if count < 0:
++            raise ValueError("count must be nonnegative")
++        return bytes(self._data[:count])
+ 
+     def maybe_extract_at_most(self, count: int) -> Optional[bytearray]:
+         """

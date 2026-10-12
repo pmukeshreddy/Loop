@@ -1,0 +1,173 @@
+{
+ "answer": "--- a/sqlparse/keywords.py\n+++ b/sqlparse/keywords.py\n@@ -67,7 +67,9 @@\n         \"\"\"\n         opener_end, tag, ttype = self.openers[pos]\n         starts, ends = self._closers[tag]\n-        idx = bisect_left(starts, pos)\n+        # A closer must start after the entire opener, not at the\n+        # opener itself or at an overlapping delimiter within it.\n+        idx = bisect_left(starts, opener_end)\n         if idx == len(starts):\n             return None\n         return ends[idx], ttype\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.03209669623116943,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 349631 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 'index']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected after construction. Independent test verification establishes that the opener-end boundary repair resolves the reported regressions; the reference execution itself does not show repository test execution.",
+   "inspect_locate": "The reference execution made 10 targeted context searches without printing the whole repository context. Connecting public parsing and splitting failures to delimiter resolution requires reasoning across the failure output, lexer, quotation tests, and keyword utilities.",
+   "persistent_state": "The investigation reused the files and index variables across six turns, supporting continued navigation of the same repository evidence without hand-copying literals."
+  },
+  "notes": "This is a natural, repository-dependent debugging request with a precise production-only unified-diff deliverable. It identifies symptoms and preservation constraints without exposing the defective symbol or fix. The verified patch addresses the shared delimiter-resolution cause rather than separately treating the downstream failures."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled from exact production-file text and checked against the lexical and statement-splitting contracts before delivering the diff.",
+   "inspect_locate": "The failures surface through public parsing and splitting, but their cause is in delimiter resolution reached through the lexer. The relevant evidence is scattered among the failure log, quotation tests, the lexer, and keyword utilities.",
+   "persistent_state": "The investigation reuses the failing SQL examples and the relationship between delimiter offsets, consumed characters, and subsequent statement boundaries."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/keywords.py",
+    "symbol": "sqlparse/keywords.py::DelimitedSpans.resolve",
+    "why": "Selects a closing delimiter from indexed positions and determines the literal's extent."
+   },
+   {
+    "path": "sqlparse/lexer.py",
+    "symbol": "sqlparse/lexer.py::Lexer.get_tokens",
+    "why": "Consumes the resolved span before ordinary lexical rules can expose its contents."
+   },
+   {
+    "path": "tests/test_parse.py",
+    "symbol": "tests/test_parse.py::test_psql_quotation_marks",
+    "why": "Connects dollar-quoted tokenization to statement-boundary behavior."
+   },
+   {
+    "path": "tests/test_tokenize.py",
+    "symbol": "tests/test_tokenize.py::test_delimiters_in_strings_and_comments",
+    "why": "Covers active versus skipped delimiters and overlapping dollar delimiters."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only the closer-search lower bound. Verify with the full suite, including parameterized delimiter tests.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions involving PostgreSQL dollar-quoted SQL. In some cases a quoted body is no longer kept together, and semicolons in that body become visible to statement splitting. Find and repair the underlying regression. Return a unified diff against production files only; leave tests unchanged and preserve the handling of unclosed delimiters and delimiters inside ordinary strings or comments.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/sqlparse/keywords.py\n+++ b/sqlparse/keywords.py\n@@ -70,7 +70,7 @@\n         \"\"\"\n         opener_end, tag, ttype = self.openers[pos]\n         starts, ends = self._closers[tag]\n-        idx = bisect_left(starts, opener_end)\n+        idx = bisect_left(starts, pos)\n         if idx == len(starts):\n             return None\n         return ends[idx], ttype\n"
+ },
+ "suggestion": null,
+ "task_id": "andialbrecht-sqlparse-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_parse.py::test_dbldollar_as_literal[$$foo$$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$A$ foo $B$-False]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$_$ foo $token$bar$token$ baz$_$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$_$foo$_$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$token$ foo $token$-True]",
+   "tests/test_parse.py::test_psql_quotation_marks",
+   "tests/test_regressions.py::test_issue83",
+   "tests/test_split.py::test_split_create_function[function_psql.sql]",
+   "tests/test_split.py::test_split_create_function[function_psql2.sql]",
+   "tests/test_split.py::test_split_create_function[function_psql3.sql]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[-- $$\\nDO $$ BEGIN NULL; END $$-expected6]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$$-expected8]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$a$$-expected9]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$$' FROM t, $$x$$-expected5]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$t$' FROM t, $t$x$t$-expected7]"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 15,
+   "full_suite": {
+    "failed": 0,
+    "passed": 508
+   },
+   "patch_files": [
+    "sqlparse/keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_parse.py::test_dbldollar_as_literal[$$foo$$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$A$ foo $B$-False]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$_$ foo $token$bar$token$ baz$_$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$_$foo$_$-True]",
+   "tests/test_parse.py::test_dbldollar_as_literal[$token$ foo $token$-True]",
+   "tests/test_parse.py::test_psql_quotation_marks",
+   "tests/test_regressions.py::test_issue83",
+   "tests/test_split.py::test_split_create_function[function_psql.sql]",
+   "tests/test_split.py::test_split_create_function[function_psql2.sql]",
+   "tests/test_split.py::test_split_create_function[function_psql3.sql]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[-- $$\\nDO $$ BEGIN NULL; END $$-expected6]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$$-expected8]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT $$$a$$-expected9]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$$' FROM t, $$x$$-expected5]",
+   "tests/test_tokenize.py::test_delimiters_in_strings_and_comments[SELECT '$t$' FROM t, $t$x$t$-expected7]"
+  ],
+  "ground_truth_symbols": [
+   "sqlparse/keywords.py::DelimitedSpans.resolve"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 493,
+  "stability_runs": 3
+ }
+}

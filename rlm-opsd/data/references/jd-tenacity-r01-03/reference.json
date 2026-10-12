@@ -1,0 +1,241 @@
+{
+ "answer": [
+  "tests/test_asyncio.py::TestAsyncio::test_statistics_visible_through_outer_decorator",
+  "tests/test_asyncio.py::TestContextManager::test_reraise_try_again_with_cause",
+  "tests/test_asyncio.py::TestDecoratorWrapper::test_retry_function_attributes",
+  "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever",
+  "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_with_cause_reraise",
+  "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_from_cause_reraise",
+  "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever_reraise",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_attempt_number",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_no_type",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_delay",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_match",
+  "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_function_attributes",
+  "tests/test_tenacity.py::TestStatisticsKeys::test_statistics_visible_through_outer_decorator",
+  "tests/test_tenacity.py::TestStatistics::test_stats",
+  "tests/test_tenacity.py::TestStatistics::test_stats_failing",
+  "tests/test_tenacity.py::TestStatistics::test_retry_object_statistics_during_execution"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_tenacity.py::TestDecorator::test_statistics\",\n  \"tests/test_tenacity.py::TestDecorator::test_retry_with\",\n  \"tests/test_asyncio.py::TestAsyncRetrying::test_statistics\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0023951882696277315,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": false,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "candidates",
+    "files",
+    "l",
+    "n",
+    "p",
+    "records",
+    "result",
+    "selected",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 16673,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 16673 chars"
+   },
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: False"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "A selected-context sub-call examined a bounded portion of the test evidence, and its stored results contributed to the final answer.",
+   "combine_verify_finish": "The final list was computed from collected results rather than hand-copied. Independent executable verification confirmed the affected test set, although the reference execution did not itself run repository tests or inspect the final constructed value.",
+   "inspect_locate": "The reference execution performed 18 targeted searches without printing the whole context. Locating statistics assertions across synchronous and asynchronous tests was useful for distinguishing affected tests from tests that use unchanged retry-state counters.",
+   "recursive_decomposition": "The execution shows one delegated sub-call, but does not establish deeper recursive decomposition."
+  },
+  "notes": "This is a natural, repository-dependent change-impact request with a precisely scoped mutation and an explicit output format. It requires distinguishing controller statistics from retry-state and stop-policy inputs across distributed tests. The question does not reveal the failing tests or prescribe solver operations, and it is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The two supplied main test modules exceed a single bounded read. Determining failures requires understanding assertions and execution bodies, including tests that inspect statistics during a call, not simply listing occurrences of attempt_number.",
+   "combine_verify_finish": "The final answer is an exact node-ID set assembled from independent findings; inherited or repeated references must not produce duplicate IDs, and unaffected tests must be excluded.",
+   "inspect_locate": "Statistics consumers are distributed among decorator tests, explicit-retry tests, direct statistics tests, and asynchronous tests rather than grouped under one test class.",
+   "recursive_decomposition": "Impact can be investigated independently for synchronous statistics consumers, asynchronous consumers, and tests that compare statistics with another object rather than a literal attempt count, then reconciled through the shared initialization path."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying.begin",
+    "why": "This is the sole proposed change and initializes the shared controller statistics."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._post_stop_check_actions",
+    "why": "Continuing retries increment the statistics counter independently of the call-state attempt number."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestStatistics",
+    "why": "Tests distinguish literal count assertions, synchronized counters, and observations made during execution."
+   },
+   {
+    "path": "tests/test_asyncio.py",
+    "symbol": "tests/test_asyncio.py::TestDecoratorWrapper",
+    "why": "Async wrappers use the same initialization but have separate statistics assertions."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the existing suite with only the probe applied. Equalities between two synchronized statistics dictionaries may remain valid even though both counters change; call-state and Future attempt assertions are unaffected.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/tenacity/__init__.py\n+++ b/tenacity/__init__.py\n@@ -453,7 +453,7 @@\n     def begin(self) -> None:\n         self.statistics.clear()\n         self.statistics[\"start_time\"] = time.monotonic()\n-        self.statistics[\"attempt_number\"] = 1\n+        self.statistics[\"attempt_number\"] = 0\n         self.statistics[\"idle_for\"] = 0\n         self.statistics[\"delay_since_first_attempt\"] = 0\n \n",
+  "question": "We are reviewing a change to make the controller's `statistics[\"attempt_number\"]` counter zero-based. Specifically, BaseRetrying.begin() would initialize that statistics entry to 0 instead of 1. Subsequent increments, RetryCallState.attempt_number, Future.attempt_number, stop-policy inputs, and actual retry execution would remain unchanged. Which existing pytest tests would newly fail under precisely this change? Return a JSON list of complete pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jd-tenacity-r01-03",
+ "truth": {
+  "answer": [
+   "tests/test_asyncio.py::TestAsyncio::test_statistics_visible_through_outer_decorator",
+   "tests/test_asyncio.py::TestContextManager::test_reraise_try_again_with_cause",
+   "tests/test_asyncio.py::TestDecoratorWrapper::test_retry_function_attributes",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_function_attributes",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_delay",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_match",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_attempt_number",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_no_type",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever_reraise",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_from_cause_reraise",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_with_cause_reraise",
+   "tests/test_tenacity.py::TestStatistics::test_retry_object_statistics_during_execution",
+   "tests/test_tenacity.py::TestStatistics::test_stats",
+   "tests/test_tenacity.py::TestStatistics::test_stats_failing",
+   "tests/test_tenacity.py::TestStatisticsKeys::test_statistics_visible_through_outer_decorator"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_asyncio.py::TestAsyncio::test_statistics_visible_through_outer_decorator",
+    "tests/test_asyncio.py::TestContextManager::test_reraise_try_again_with_cause",
+    "tests/test_asyncio.py::TestDecoratorWrapper::test_retry_function_attributes",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_function_attributes",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_delay",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_match",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_attempt_number",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_no_type",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever_reraise",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_from_cause_reraise",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_with_cause_reraise",
+    "tests/test_tenacity.py::TestStatistics::test_retry_object_statistics_during_execution",
+    "tests/test_tenacity.py::TestStatistics::test_stats",
+    "tests/test_tenacity.py::TestStatistics::test_stats_failing",
+    "tests/test_tenacity.py::TestStatisticsKeys::test_statistics_visible_through_outer_decorator"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_asyncio.py::TestAsyncio::test_statistics_visible_through_outer_decorator",
+    "tests/test_asyncio.py::TestContextManager::test_reraise_try_again_with_cause",
+    "tests/test_asyncio.py::TestDecoratorWrapper::test_retry_function_attributes",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_function_attributes",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_delay",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_match",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_attempt_number",
+    "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_no_type",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever_reraise",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_from_cause_reraise",
+    "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_with_cause_reraise",
+    "tests/test_tenacity.py::TestStatistics::test_retry_object_statistics_during_execution",
+    "tests/test_tenacity.py::TestStatistics::test_stats",
+    "tests/test_tenacity.py::TestStatistics::test_stats_failing",
+    "tests/test_tenacity.py::TestStatisticsKeys::test_statistics_visible_through_outer_decorator"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_asyncio.py::TestAsyncio::test_statistics_visible_through_outer_decorator",
+   "tests/test_asyncio.py::TestContextManager::test_reraise_try_again_with_cause",
+   "tests/test_asyncio.py::TestDecoratorWrapper::test_retry_function_attributes",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_function_attributes",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_delay",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_if_not_exception_message_match",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_attempt_number",
+   "tests/test_tenacity.py::TestDecoratorWrapper::test_retry_until_exception_of_type_no_type",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_forever_reraise",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_from_cause_reraise",
+   "tests/test_tenacity.py::TestRetryConditions::test_retry_try_again_with_cause_reraise",
+   "tests/test_tenacity.py::TestStatistics::test_retry_object_statistics_during_execution",
+   "tests/test_tenacity.py::TestStatistics::test_stats",
+   "tests/test_tenacity.py::TestStatistics::test_stats_failing",
+   "tests/test_tenacity.py::TestStatisticsKeys::test_statistics_visible_through_outer_decorator"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

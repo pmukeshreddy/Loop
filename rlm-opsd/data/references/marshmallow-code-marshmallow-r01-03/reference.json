@@ -1,0 +1,182 @@
+{
+ "answer": [
+  "Boolean",
+  "Function",
+  "Method",
+  "Raw",
+  "TimeDelta"
+ ],
+ "answer_format": "ordered_list",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "[\"Boolean\", \"Function\", \"IP\", \"IPInterface\", \"IPv4\", \"IPv4Interface\", \"IPv6\", \"IPv6Interface\", \"Method\", \"Raw\", \"TimeDelta\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0021927175876869133,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 15,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "classes",
+    "files",
+    "m",
+    "method",
+    "n",
+    "src",
+    "tree"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 23103,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 3,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "3 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 23103 chars"
+   },
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 15 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Three bounded sub-calls supported inspection across field families. The eligibility and conversion rules differ across those families, making decomposition useful, although the execution metadata does not show sub-call results directly feeding the final value.",
+   "combine_verify_finish": "The final answer required combining compatibility findings, excluding ineligible classes, deduplicating aliases by canonical class name, and sorting the result. The reference computed and checked its final variable, and the independent executable oracle verified the answer.",
+   "inspect_locate": "The reference execution used 15 targeted searches to identify exported classes, constructor eligibility, aliases, and deserialize behavior without printing the whole repository context."
+  },
+  "notes": "The question is a precise, repository-dependent compatibility audit with a clear output format. It does not disclose matching classes or prescribe solver operations. Determining the complete set requires evaluating constructor eligibility and public deserialization behavior across multiple classes, rather than a single symbol lookup. It is distinct from the existing accepted tasks."
+ },
+ "spec": {
+  "answer_format": "ordered_list",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "chunked_subcalls": "The eligible classes span numeric, temporal, textual, address, mapping, raw, and computed fields in a large module. Each family requires semantic judgment about its public deserialize path, not merely a search for boolean checks.",
+   "combine_verify_finish": "The answer must aggregate results across field families, remove aliases, exclude ineligible classes, and sort the final canonical class names.",
+   "inspect_locate": "The exported field classes, aliases, abstract bases, constructors, inherited conversion methods, and utility dependencies must be located before deciding which classes are eligible."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::__all__",
+    "why": "Defines the public export boundary and includes aliases that must be deduplicated."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field.deserialize",
+    "why": "The public pipeline includes missing/null checks, concrete conversion, and validation."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Number._validated",
+    "why": "Numeric conversion explicitly rejects boolean inputs despite their numeric compatibility in Python."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::TimeDelta._deserialize",
+    "why": "Uses a different conversion path from Number subclasses and must be assessed independently."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Method._deserialize",
+    "why": "A no-argument computed field can have different direct-deserialization behavior from its behavior as a bound schema field."
+   }
+  ],
+  "expected_answer": [
+   "Boolean",
+   "Function",
+   "Method",
+   "Raw",
+   "TimeDelta"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "An independent verifier can enumerate exported classes, deduplicate class identities, filter by defining module and abstractness, attempt no-argument construction, and invoke deserialize on fresh instances for each boolean. Any exception excludes that class.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "For a boolean-input compatibility audit, which concrete public field classes exported by `marshmallow.fields` accept both Python `True` and Python `False` through public `deserialize()` without raising any exception when constructed with no arguments? Consider only classes defined in that module that can actually be instantiated with no arguments; exclude `Field` itself and abstract classes. Use a fresh, unbound instance for each input and do not supply an attr, data mapping, or other arguments. Count aliases only once, using the class's actual `__name__`. Return the matching class names as an alphabetically sorted JSON list.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "setting": "contract_consistency_audit",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r01-03",
+ "truth": {
+  "answer": [
+   "Boolean",
+   "Function",
+   "Method",
+   "Raw",
+   "TimeDelta"
+  ],
+  "kind": "oracle",
+  "normalized": [
+   "Boolean",
+   "Function",
+   "Method",
+   "Raw",
+   "TimeDelta"
+  ],
+  "output_tail": "{\"answer\": [\"Boolean\", \"Function\", \"Method\", \"Raw\", \"TimeDelta\"]}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "Boolean",
+    "Function",
+    "Method",
+    "Raw",
+    "TimeDelta"
+   ],
+   "predicted": [
+    "Boolean",
+    "Function",
+    "Method",
+    "Raw",
+    "TimeDelta"
+   ]
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

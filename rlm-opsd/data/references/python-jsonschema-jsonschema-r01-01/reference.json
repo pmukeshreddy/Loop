@@ -1,0 +1,298 @@
+{
+ "answer": [
+  "jsonschema/_utils.py::equal"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"jsonschema/_utils.py::unbool\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0007938379125873321,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 14,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "logs",
+    "p",
+    "u"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1259703 chars; 14 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 14 targeted context searches without printing the whole repository. It connected failures across validation keywords, container comparisons, and uniqueness handling to the shared comparison implementation, distinguishing the defective function from unchanged callers."
+  },
+  "notes": "This is a natural regression-localization request with a precise symbol-list output format. The question describes symptoms without naming the defective function or revealing the fix. The verified defect changes boolean-aware equality to ordinary Python equality, supporting the identified function as the common cause. The investigation requires repository-specific reasoning and does not duplicate the existing TypeChecker task."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "Failures in multiple validation keywords and utility tests lead through separate handlers and both uniqueness algorithms to a shared comparison implementation. The relevant evidence is scattered across a large repository."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::equal",
+    "why": "The setup changes the scalar comparison reached directly and recursively through container comparisons."
+   },
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::uniq",
+    "why": "Both the sorted and pairwise uniqueness paths use equal, but top-level boolean sentinel conversion makes their symptoms differ from direct comparisons."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::const",
+    "why": "Const validation delegates to the shared equality implementation."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::enum",
+    "why": "Enum validation provides a second independent route to the comparison regression."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::uniqueItems",
+    "why": "Uniqueness validation exposes the regression through nested values."
+   }
+  ],
+  "expected_answer": [
+   "jsonschema/_utils.py::equal"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The ground-truth changed symbol is equal; the recursive comparison helpers and keyword handlers are unchanged.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output contains regressions involving boolean-versus-number comparisons, including comparisons inside containers. Identify the function or functions containing the regression responsible for these failures, not their unchanged callers. Return a JSON list of `path::Qualname` entries.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/jsonschema/_utils.py\n+++ b/jsonschema/_utils.py\n@@ -147,8 +147,8 @@\n         return _sequence_equal(one, two)\n     if isinstance(one, Mapping) and isinstance(two, Mapping):\n         return _mapping_equal(one, two)\n-    return unbool(one) == unbool(two)\n+    return one == two\n \n \n def unbool(element, true=object(), false=object()):\n     \"\"\"\n"
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r01-01",
+ "truth": {
+  "answer": [
+   "jsonschema/_utils.py::equal"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "jsonschema/_utils.py::equal"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "jsonschema/_utils.py::equal"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_0_does_not_match_other_zero_like_types_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_a_false_does_not_match_a_0___a_0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_a_false_does_not_match_a_0___a_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_a_true_does_not_match_a_1___a_1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_a_true_does_not_match_a_1___a_1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_const_const_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_0_does_not_match_false___false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_0_does_not_match_false_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_1_does_not_match_true___true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_enum_enum_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft201909::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_0_does_not_match_other_zero_like_types_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_a_false_does_not_match_a_0___a_0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_a_false_does_not_match_a_0___a_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_a_true_does_not_match_a_1___a_1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_a_true_does_not_match_a_1___a_1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_const_const_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_0_does_not_match_false___false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_0_does_not_match_false_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_1_does_not_match_true___true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_enum_enum_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft3::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_0_does_not_match_false___false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_0_does_not_match_false_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_1_does_not_match_true___true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_enum_enum_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft4::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_0_does_not_match_other_zero_like_types_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_a_false_does_not_match_a_0___a_0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_a_false_does_not_match_a_0___a_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_a_true_does_not_match_a_1___a_1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_a_true_does_not_match_a_1___a_1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_const_const_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_0_does_not_match_false___false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_0_does_not_match_false_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_1_does_not_match_true___true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_enum_enum_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft6::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_0_does_not_match_other_zero_like_types_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_a_false_does_not_match_a_0___a_0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_a_false_does_not_match_a_0___a_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_a_true_does_not_match_a_1___a_1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_a_true_does_not_match_a_1___a_1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_const_const_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_0_does_not_match_false___false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_0_does_not_match_false_false_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_1_does_not_match_true___true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_1_does_not_match_true_true_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_false_does_not_match_0___0_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_false_does_not_match_0___0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_false_does_not_match_0_float_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_false_does_not_match_0_integer_zero_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_true_does_not_match_1___1_0_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_true_does_not_match_1___1_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_true_does_not_match_1_float_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_enum_enum_with_true_does_not_match_1_integer_one_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation__0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation__1_and_true_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation__a_false_and_a_0_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation__a_true_and_a_1_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation_nested_0_and_false_are_unique",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft7::test_uniqueItems_uniqueItems_validation_nested_1_and_true_are_unique",
+   "jsonschema/tests/test_validators.py::TestDraft201909Validator::test_check_redefined_sequence",
+   "jsonschema/tests/test_validators.py::TestDraft202012Validator::test_check_redefined_sequence",
+   "jsonschema/tests/test_validators.py::TestDraft3Validator::test_check_redefined_sequence",
+   "jsonschema/tests/test_validators.py::TestDraft4Validator::test_check_redefined_sequence",
+   "jsonschema/tests/test_validators.py::TestDraft6Validator::test_check_redefined_sequence",
+   "jsonschema/tests/test_validators.py::TestDraft7Validator::test_check_redefined_sequence"
+  ],
+  "ground_truth_symbols": [
+   "jsonschema/_utils.py::equal"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 7130,
+  "stability_runs": 3
+ }
+}

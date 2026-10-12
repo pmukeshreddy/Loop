@@ -1,0 +1,164 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2020,6 +2020,15 @@\n     filtered_attrs = []\n     attr_dict = {}\n     for a in attrs:\n+        # Validate hooks even for fields that are not initialized.\n+        if (\n+            frozen\n+            and a.on_setattr is not None\n+            and a.on_setattr is not setters.NO_OP\n+        ):\n+            msg = \"Frozen classes can't use on_setattr.\"\n+            raise ValueError(msg)\n+\n         if not a.init and a.default is NOTHING:\n             continue\n \n@@ -2027,10 +2036,6 @@\n         attr_dict[a.name] = a\n \n         if a.on_setattr is not None:\n-            if frozen is True and a.on_setattr is not setters.NO_OP:\n-                msg = \"Frozen classes can't use on_setattr.\"\n-                raise ValueError(msg)\n-\n             needs_cached_setattr = True\n         elif has_cls_on_setattr and a.on_setattr is not setters.NO_OP:\n             needs_cached_setattr = True\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "make",
+    "newblock",
+    "newmake",
+    "oldblock",
+    "patch"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 134545 chars; 18 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The solver constructed and inspected the final production diff before returning it. The patch moves frozen-hook validation ahead of initialization filtering while retaining that filtering, coherently addressing the requested rejection and preservation cases. The execution summary supports source-level reconciliation, although it records no repository test execution.",
+   "inspect_locate": "The reference execution used 18 targeted searches without printing the whole context. Locating frozen-status handling, initializer filtering, and hook validation was useful for distinguishing fields omitted from initialization from fields exempt from decoration-time validation."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise output format. It specifies the behavioral contract without revealing the internal defective symbol or prescribing a fix. The initialization-preservation requirements directly constrain the change rather than adding unrelated checks. It is substantively distinct from its parent and the listed accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve initialization filtering while enforcing the compatibility rule across explicit and inherited frozen status, both storage layouts, and both generated initializer forms. Checking the assembled hunks against the exact source and reconciling these cases is useful before delivering the patch.",
+   "inspect_locate": "The supplied production files exceed the direct-solve size limit. The relevant evidence is confined to a few scattered definitions: modern decorator policy, inherited frozen-status detection, initializer generation, and assignment-hook installation. The solver must locate those definitions and distinguish decoration-time compatibility checks from initialization filtering."
+  },
+  "context": {
+   "files": [
+    "src/attr/_make.py",
+    "src/attr/_next_gen.py",
+    "src/attr/__init__.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_make_init_script",
+    "why": "The current loop skips init=False fields with a NOTHING default before checking their explicit hooks against frozen status."
+   },
+   {
+    "path": "src/attr/_next_gen.py",
+    "symbol": "src/attr/_next_gen.py::define",
+    "why": "Its wrapper disables the default class hook for frozen inheritance while leaving explicit field hooks to production validation."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::attrs",
+    "why": "Computes effective frozen status and selects generation of __init__ or __attrs_init__."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.add_setattr",
+    "why": "Installs explicit field hooks for mutable classes even when the field is omitted from initialization."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_frozen_omitted_field_hooks.py\n@@ -0,0 +1,103 @@\n+# SPDX-License-Identifier: MIT\n+\n+import inspect\n+\n+import pytest\n+\n+import attr\n+\n+\n+def _base(slots, inherited):\n+    if inherited:\n+        @attr.define(slots=slots, frozen=True)\n+        class Base:\n+            pass\n+    else:\n+        Base = object\n+    return Base\n+\n+\n+@pytest.mark.parametrize(\"slots\", [True, False])\n+@pytest.mark.parametrize(\"inherited\", [True, False])\n+@pytest.mark.parametrize(\"generated_init\", [True, False])\n+@pytest.mark.parametrize(\"default_kind\", [\"missing\", \"value\", \"factory\"])\n+def test_frozen_rejects_field_hook(slots, inherited, generated_init, default_kind):\n+    events = []\n+\n+    def hook(inst, attribute, value):\n+        events.append((inst, attribute.name, value))\n+        return value\n+\n+    kwargs = {\"init\": False, \"on_setattr\": hook}\n+    if default_kind == \"value\":\n+        kwargs[\"default\"] = 1\n+    elif default_kind == \"factory\":\n+        kwargs[\"factory\"] = lambda: 1\n+    base = _base(slots, inherited)\n+\n+    with pytest.raises(ValueError, match=\"^Frozen classes can't use on_setattr[.]$\"):\n+        @attr.define(slots=slots, frozen=not inherited, init=generated_init)\n+        class C(base):\n+            delayed: int = attr.field(**kwargs)\n+\n+    assert events == []\n+\n+\n+@pytest.mark.parametrize(\"slots\", [True, False])\n+@pytest.mark.parametrize(\"inherited\", [True, False])\n+@pytest.mark.parametrize(\"generated_init\", [True, False])\n+def test_frozen_no_op_preserves_initialization(slots, inherited, generated_init):\n+    def forbidden(*args):\n+        raise AssertionError(\"An omitted field callback ran during initialization\")\n+\n+    base = _base(slots, inherited)\n+\n+    @attr.define(slots=slots, frozen=not inherited, init=generated_init)\n+    class C(base):\n+        marker: int = 7\n+        delayed: int = attr.field(\n+            init=False,\n+            on_setattr=attr.setters.NO_OP,\n+            converter=forbidden,\n+            validator=forbidden,\n+        )\n+        defaulted: int = attr.field(init=False, default=11, on_setattr=attr.setters.NO_OP)\n+        made: list = attr.field(init=False, factory=list, on_setattr=attr.setters.NO_OP)\n+\n+    c = C()\n+    if not generated_init:\n+        c.__attrs_init__()\n+    assert c.marker == 7\n+    assert not hasattr(c, \"delayed\")\n+    assert c.defaulted == 11\n+    assert c.made == []\n+    initializer = C.__init__ if generated_init else C.__attrs_init__\n+    assert \"delayed\" not in inspect.signature(initializer).parameters\n+    with pytest.raises(attr.exceptions.FrozenInstanceError):\n+        c.delayed = 5\n+\n+\n+@pytest.mark.parametrize(\"slots\", [True, False])\n+@pytest.mark.parametrize(\"generated_init\", [True, False])\n+def test_mutable_omitted_field_hook(slots, generated_init):\n+    calls = []\n+\n+    def hook(inst, attribute, value):\n+        calls.append((inst, attribute.name, value))\n+        return value + 1\n+\n+    @attr.define(slots=slots, init=generated_init)\n+    class C:\n+        marker: int = 7\n+        delayed: int = attr.field(init=False, on_setattr=hook)\n+\n+    c = C()\n+    if not generated_init:\n+        c.__attrs_init__()\n+    assert c.marker == 7\n+    assert not hasattr(c, \"delayed\")\n+    assert calls == []\n+    c.delayed = 4\n+    assert c.delayed == 5\n+    assert calls == [(c, \"delayed\", 4)]\n+    assert attr.fields(C).delayed.init is False\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against an existing validation hole, so no synthetic setup regression is introduced. The new acceptance file contains 36 parametrized cases. The eight missing-default rejection cases should fail on the supplied snapshot; the remaining cases protect existing rejection, NO_OP legality, initialization filtering, and mutable assignment behavior. A targeted solution can validate frozen field-hook compatibility before initialization filtering without changing the shared default hook pipeline. The answer is a production patch, not the original task's test-ID set.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Close a decoration-time validation gap in attrs' frozen-field contract. With attr.define, a field declared as init=False with neither a default nor a factory currently allows an explicit callable on_setattr hook even when the resulting class is frozen. Frozen classes must reject explicit field hooks other than setters.NO_OP with ValueError(\"Frozen classes can't use on_setattr.\"), regardless of whether the field participates in generated initialization. Apply the same rule when frozen status comes from a base class, for both slots=True and slots=False, and when define(init=False) generates __attrs_init__ instead of __init__.\n\nFields using setters.NO_OP must remain legal. Fields with init=False and no default or factory must remain uninitialized and absent from the generated initializer's parameters; their converters and validators must not run during initialization. Preserve initialization of defaulted and factory-backed fields, and preserve callable field hooks on mutable classes, including later assignment to an initially unset field. Return a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "A focused direct read of _make_init_script is useful for locating the defect, followed by inspection of define.wrap and attrs.wrap to verify inherited frozen status. Small acceptance-test matrices exercise combine_verify_finish without requiring repository-wide test classification.",
+  "change_type": "failure_condition",
+  "description": "Repair the frozen-class assignment-hook check in src/attr/_make.py::_make_init_script. A field declared with init=False, no default or factory, and an explicit callable on_setattr currently escapes rejection because the field is skipped before its hook is checked. Require frozen classes to reject every explicit field hook other than setters.NO_OP, including fields omitted from generated initialization. Add acceptance tests using src/attr/_next_gen.py::define for both slots=True and slots=False, including inherited frozen status. Verify that an otherwise identical field with setters.NO_OP remains legal and that mutable classes can still use the callable hook.",
+  "expected_answer_change": "The fix must check field-level hook compatibility before skipping init=False fields whose default is NOTHING. It must preserve the existing initialization filtering and distinguish explicit callable hooks from the permitted setters.NO_OP sentinel. Inherited frozen classes must obey the same contract.",
+  "why_substantive": "This investigates a decoration-time validation hole rather than loss of conversion during later assignment. The shared default pipeline remains unchanged. The evidence path centers on the ordering of filtering and frozen-hook checks, and the deliverable is a targeted repair with new acceptance tests rather than the original two failing test IDs."
+ },
+ "task_id": "python-attrs-attrs-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-False-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-False-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-True-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-True-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-False-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-False-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-True-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1414
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-False-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-False-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-True-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-False-True-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-False-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-False-True]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-True-False]",
+   "tests/test_frozen_omitted_field_hooks.py::test_frozen_rejects_field_hook[missing-True-True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

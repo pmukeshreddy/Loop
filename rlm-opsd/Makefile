@@ -1,4 +1,4 @@
-.PHONY: test test-m1 test-m2 test-m3 test-m4 test-m5 teacher-gate teacher-gate-check prompts-prepare prompts-check tasks tasks-prepare tasks-verify check-deps setup-server
+.PHONY: test test-m1 test-m2 test-m3 test-m4 test-m5 teacher-gate teacher-gate-check prompts-prepare prompts-check tasks tasks-prepare tasks-generate tasks-verify tasks-status check-deps setup-server
 
 PYTHON ?= .venv/bin/python
 
@@ -11,7 +11,7 @@ test-m1:
 	$(PYTHON) -m pytest tests/test_harness.py tests/test_verifiers_env.py tests/test_setup_manifest.py -q
 
 test-m2:
-	$(PYTHON) -m pytest tests/test_tasks.py tests/test_task_pipeline.py tests/test_heldout_tasks.py tests/test_task_cli.py -q
+	$(PYTHON) -m pytest tests/test_task_generation.py tests/test_task_release.py tests/test_heldout_tasks.py -q
 
 test-m3:
 	$(PYTHON) -m pytest tests/test_prompts.py tests/test_verifiers_env.py -q
@@ -74,14 +74,23 @@ prompts-check:
 TASK_CONFIG ?= configs/tasks.yaml
 TASK_OUTPUT ?= data
 
+# Pin sources, record baselines, split repositories and index held-out data.
 tasks-prepare:
 	$(PYTHON) -m rlm_opsd.tasks prepare --config $(TASK_CONFIG)
 
-tasks: tasks-prepare
+# Resumable model-driven generation (OpenAI via step1.auth); safe to rerun.
+tasks-generate: tasks-prepare
+	$(PYTHON) -m rlm_opsd.tasks generate --config $(TASK_CONFIG)
+
+tasks: tasks-generate
 	$(PYTHON) -m rlm_opsd.tasks build --config $(TASK_CONFIG) --output $(TASK_OUTPUT)
 
+# Re-run executable verification of a released pool; no model requests.
 tasks-verify:
 	$(PYTHON) -m rlm_opsd.tasks verify --config $(TASK_CONFIG) --manifest $(TASK_OUTPUT)/manifest.jsonl
+
+tasks-status:
+	$(PYTHON) -m rlm_opsd.tasks status --config $(TASK_CONFIG)
 
 # This must also pass before the full M0 installation can be called complete.
 check-deps:

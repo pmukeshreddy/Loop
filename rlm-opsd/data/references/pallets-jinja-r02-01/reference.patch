@@ -1,0 +1,31 @@
+--- a/src/jinja2/visitor.py
++++ b/src/jinja2/visitor.py
+@@ -20,7 +20,10 @@
+ 
+     Per default the visitor functions for the nodes are ``'visit_'`` +
+     class name of the node.  So a `TryFinally` node visit function would
+-    be `visit_TryFinally`.  This behavior can be changed by overriding
++    be `visit_TryFinally`.  Handlers are looked up along the node type's
++    method resolution order, from the concrete class through `Node`, so
++    a handler for a base class can handle a whole family of nodes.
++    This behavior can be changed by overriding
+     the `get_visitor` function.  If no visitor function exists for a node
+     (return value `None`) the `generic_visit` visitor is used instead.
+     """
+@@ -30,7 +33,15 @@
+         exists for this node.  In that case the generic visit function is
+         used instead.
+         """
+-        return getattr(self, f"visit_{type(node).__name__}", None)
++        for cls in type(node).__mro__:
++            if cls is object:
++                break
++            visitor = getattr(self, f"visit_{cls.__name__}", None)
++            if visitor is not None:
++                return visitor
++            if cls is Node:
++                break
++        return None
+ 
+     def visit(self, node: Node, *args: t.Any, **kwargs: t.Any) -> t.Any:
+         """Visit a node."""

@@ -1,0 +1,165 @@
+{
+ "answer": [
+  "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move",
+  "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+  "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_existing",
+  "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move",
+  "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+  "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_existing"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_moved_to\",\n  \"mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_moved_to_nested\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0005483269995843477,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 24,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p",
+    "selected",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 4690,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1077824 chars; 24 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution assembled and checked the final test-ID set programmatically from inspected evidence. The independently verified impact set confirms six affected tests spanning both API generations.",
+   "inspect_locate": "The reference execution used three targeted searches to locate migration behavior and affected assertions across both configuration API test modules. Identifying newly failing tests required distinguishing key-consumption assertions from tests concerned only with warnings, removed-option errors, or destination assignment."
+  },
+  "notes": "This is a natural, repository-dependent change-impact request with a precise proposed semantic change and an explicit JSON node-ID output format. Naming the behavior being changed does not reveal the affected tests. The task requires evaluating assertions and subsequent validation rather than merely locating Deprecated. It does not duplicate the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a set of newly failing node IDs assembled from multiple test classes, requiring deduplication and a check that each predicted failure actually depends on consuming the old key.",
+   "inspect_locate": "Affected tests must be distinguished from the many deprecated-option tests that only assert warnings, removal errors, or target assignment; the relevant assertions occur in both configuration API generations."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::Deprecated.pre_validation",
+    "why": "Migration currently consumes the source key after locating a valid destination."
+   },
+   {
+    "path": "mkdocs/config/base.py",
+    "symbol": "mkdocs/config/base.py::Config._validate",
+    "why": "The later validation phase reads the retained or absent source key and writes its validated value back into the configuration."
+   },
+   {
+    "path": "mkdocs/tests/config/config_options_legacy_tests.py",
+    "symbol": "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest",
+    "why": "Migration tests assert complete configurations, including the old field's value after validation."
+   },
+   {
+    "path": "mkdocs/tests/config/config_options_tests.py",
+    "symbol": null,
+    "why": "The modern option tests provide additional coverage of migration and wrapped option validation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe intentionally leaves destination-overwrite behavior unchanged. Newly failing tests must be computed by comparing the probed suite with the baseline.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": "--- a/mkdocs/config/config_options.py\n+++ b/mkdocs/config/config_options.py\n@@ -429,7 +429,7 @@\n                         # We can't move it for the user\n                         return\n \n-                target[target_key] = config.pop(key_name)\n+                target[target_key] = config[key_name]\n \n     def validate(self, value):\n         return self.option.validate(value)\n",
+  "question": "For Deprecated options with moved_to set, we are proposing to copy the supplied value to the destination while leaving the original key and value in the configuration. Destination assignment, warning generation, removed-option errors, and subsequent validation would otherwise stay exactly as they are. Which existing tests would newly fail if migration stopped consuming the original key? Reply with a JSON list of pytest node IDs, excluding any failures that already occur without this change.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mkdocs-mkdocs-r01-03",
+ "truth": {
+  "answer": [
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move",
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_existing",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_existing"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move",
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_existing",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_existing"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move",
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+    "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_existing",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+    "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_existing"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move",
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+   "mkdocs/tests/config/config_options_legacy_tests.py::DeprecatedTest::test_deprecated_option_move_existing",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_complex",
+   "mkdocs/tests/config/config_options_tests.py::DeprecatedTest::test_deprecated_option_move_existing"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 720,
+  "stability_runs": 3
+ }
+}

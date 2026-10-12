@@ -1,0 +1,13 @@
+--- a/mkdocs/config/defaults.py
++++ b/mkdocs/config/defaults.py
+@@ -17,6 +17,10 @@
+     }
+ 
+     def run_validation(self, value: object) -> int:
++        # Only the standard severity levels are valid numeric inputs, not the
++        # special value added by _AbsoluteLinksValidation.
++        if type(value) is int and value in _LogLevel.levels.values():
++            return value
+         if not isinstance(value, str):
+             raise base.ValidationError(f"Expected a string, but a {type(value)} was given.")
+         try:

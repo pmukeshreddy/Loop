@@ -1,0 +1,50 @@
+--- /dev/null
++++ b/jsonschema/tests/test_error_tree_contexts.py
+@@ -0,0 +1,47 @@
++from jsonschema.exceptions import ErrorTree, ValidationError
++
++
++def test_contexts_use_absolute_paths_without_mutating_errors():
++    leaf = ValidationError("leaf", validator="type", path=[0])
++    branch = ValidationError(
++        "branch", validator="oneOf", path=["n"], context=[leaf],
++    )
++    sibling = ValidationError("sibling", validator="minLength", path=["s"])
++    outer = ValidationError(
++        "outer", validator="anyOf", path=["box"], context=[branch, sibling],
++    )
++    before = [list(e.path) for e in (outer, branch, sibling, leaf)]
++    default = ErrorTree([outer])
++    assert default.total_errors == 1
++    assert "n" not in default["box"]
++    tree = ErrorTree([outer], include_context=True)
++    assert tree["box"].errors["anyOf"] is outer
++    assert tree["box"]["n"].errors["oneOf"] is branch
++    assert tree["box"]["n"][0].errors["type"] is leaf
++    assert tree["box"]["s"].errors["minLength"] is sibling
++    assert tree.total_errors == 4
++    assert [list(e.path) for e in (outer, branch, sibling, leaf)] == before
++    assert leaf.parent is branch
++    assert branch.parent is outer
++
++
++def test_context_traversal_preserves_last_error_wins():
++    first = ValidationError("first", validator="type", path=["p"])
++    second = ValidationError("second", validator="type", path=["p"])
++    outer = ValidationError("outer", validator="anyOf", context=[first, second])
++    later = ValidationError("later", validator="type", path=["p"])
++    tree = ErrorTree([outer, later], include_context=True)
++    assert tree["p"].errors["type"] is later
++    assert tree.total_errors == 2
++    tree = ErrorTree([outer], include_context=True)
++    assert tree["p"].errors["type"] is second
++    assert tree.total_errors == 2
++
++
++def test_explicit_false_keeps_contexts_out_of_the_tree():
++    child = ValidationError("child", validator="type", path=["p"])
++    outer = ValidationError("outer", validator="anyOf", context=[child])
++    tree = ErrorTree([outer], include_context=False)
++    assert tree.errors == {"anyOf": outer}
++    assert "p" not in tree
++    assert tree.total_errors == 1

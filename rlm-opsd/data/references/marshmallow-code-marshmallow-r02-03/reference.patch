@@ -1,0 +1,28 @@
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -1192,9 +1192,14 @@
+             pass_original = validator_kwargs.get("pass_original", False)
+ 
+             if many and not pass_collection:
+-                for idx, (item, orig) in enumerate(
++                # Only pair with the input when the validator requests it.
++                # Collection preprocessors may change the number of output items.
++                items = (
+                     zip(data, original_data, strict=True)
+-                ):
++                    if pass_original
++                    else ((item, None) for item in data)
++                )
++                for idx, (item, orig) in enumerate(items):
+                     self._run_validator(
+                         validator,
+                         item,
+@@ -1203,7 +1208,7 @@
+                         many=many,
+                         partial=partial,
+                         unknown=unknown,
+-                        index=idx,
++                        index=idx if self.opts.index_errors else None,
+                         pass_original=pass_original,
+                     )
+             else:

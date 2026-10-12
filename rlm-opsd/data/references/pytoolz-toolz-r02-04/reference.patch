@@ -1,0 +1,25 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -87,6 +87,22 @@
+                 submodule = import_module(module_name)
+                 module.__dict__[k] = submodule
+ 
++        for k, v in slow_mod.__dict__.items():
++            if (
++                k.startswith('_')
++                or k in fast_mod.__dict__
++                or k in module.__dict__
++            ):
++                continue
++            if (
++                isinstance(v, types.ModuleType)
++                and v.__package__ == slow_mod.__name__
++            ):
++                package, dot, submodules = v.__name__.partition('.')
++                module_name = ''.join(['tlz', dot, submodules])
++                v = import_module(module_name)
++            module.__dict__[k] = v
++
+ 
+ tlz_loader = TlzLoader()
+ sys.meta_path.append(tlz_loader)

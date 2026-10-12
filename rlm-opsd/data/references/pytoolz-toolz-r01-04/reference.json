@@ -1,0 +1,137 @@
+{
+ "answer": {
+  "child_curry": "slow_child_curry",
+  "child_name": "tlz.audit.child",
+  "curry": "fast_curry",
+  "doc": "local doc",
+  "file": "slow.py",
+  "name": "tlz.audit",
+  "package": "tlz.audit",
+  "pipe": "toolz.pipe"
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"name\": \"tlz.audit\",\n  \"package\": \"tlz.audit\",\n  \"doc\": \"local doc\",\n  \"file\": \"local.py\",\n  \"curry\": \"fast_curry\",\n  \"pipe\": \"fast_pipe\",\n  \"child_name\": \"tlz.audit.child\",\n  \"child_curry\": \"slow_child_curry\"\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 0,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 3532 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 3,532-character context was sufficient for a direct computation without searches or sub-calls. Determining the namespace requires combining backend precedence, the special handling of toolz.pipe, metadata preservation and rewriting, and the child's slow-backend fallback."
+  },
+  "notes": "This is a concrete loader-fixture expectation request with explicit initial conditions and a precise JSON schema. The verified result depends on repository-specific policies rather than general Python knowledge, and the question does not disclose the result or prescribe solver operations. Although existing tasks concern the same loader, this mixed-backend namespace calculation is distinct from their regression repair and API-extension requests."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The focused loader contains all the policies needed to determine this fixture's result. The task requires simulating namespace precedence, the pipe exception, metadata rewriting, and a child import with different backend availability."
+  },
+  "context": {
+   "files": [
+    "tlz/__init__.py",
+    "tlz/_build_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader._load_toolz",
+    "why": "Backend availability is resolved separately for the audit package and its child."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "Determines namespace precedence, metadata sources, the pipe override, and recursive child replacement."
+   }
+  ],
+  "expected_answer": {
+   "child_curry": "slow_child_curry",
+   "child_name": "tlz.audit.child",
+   "curry": "fast_curry",
+   "doc": "local doc",
+   "file": "slow.py",
+   "name": "tlz.audit",
+   "package": "tlz.audit",
+   "pipe": "toolz.pipe"
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The independent verifier should construct synthetic ModuleType backends and intercept the loader's backend imports. Register the target as sys.modules['tlz.audit'] and ensure tlz.audit.child is absent. Backend imports must return the specified synthetic modules, with cytoolz.audit.child raising ImportError; mirrored child imports should proceed through the installed loader. Restore import hooks and module-cache entries afterward.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "We need the expected namespace summary for a mixed-backend loader fixture. A fresh target package named `tlz.audit` starts with docstring `local doc` and file `local.py`. The importable packages `cytoolz.audit` and `toolz.audit` have their own names as `__package__`, empty package paths, docstrings `fast doc` and `slow doc`, and files `fast.py` and `slow.py`. Their `curry` exports are distinct objects labelled `fast_curry` and `slow_curry`; their `pipe` exports are respectively a distinct object labelled `fast_pipe` and the real `toolz.pipe`. Both export `child` modules owned by their respective audit packages. Importing `cytoolz.audit.child` raises `ImportError`, while `toolz.audit.child` is importable, has `__package__ = 'toolz.audit'`, and exports `curry` labelled `slow_child_curry`. All labelled objects are distinct hashable non-modules. No mirrored child is cached initially, and child imports use the installed `TlzLoader`. After executing the default loader on the target, what are its `__name__`, `__package__`, `__doc__`, `__file__`, `curry`, `pipe`, `child.__name__`, and `child.curry`? Return a JSON object with keys `name`, `package`, `doc`, `file`, `curry`, `pipe`, `child_name`, and `child_curry`. Use the labels above for object-valued results and `toolz.pipe` for the real pipe function.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r01-04",
+ "truth": {
+  "answer": {
+   "child_curry": "slow_child_curry",
+   "child_name": "tlz.audit.child",
+   "curry": "fast_curry",
+   "doc": "local doc",
+   "file": "slow.py",
+   "name": "tlz.audit",
+   "package": "tlz.audit",
+   "pipe": "toolz.pipe"
+  },
+  "kind": "oracle",
+  "normalized": "{\"child_curry\": \"slow_child_curry\", \"child_name\": \"tlz.audit.child\", \"curry\": \"fast_curry\", \"doc\": \"local doc\", \"file\": \"slow.py\", \"name\": \"tlz.audit\", \"package\": \"tlz.audit\", \"pipe\": \"toolz.pipe\"}",
+  "output_tail": "{\"answer\": {\"name\": \"tlz.audit\", \"package\": \"tlz.audit\", \"doc\": \"local doc\", \"file\": \"slow.py\", \"curry\": \"fast_curry\", \"pipe\": \"toolz.pipe\", \"child_name\": \"tlz.audit.child\", \"child_curry\": \"slow_child_curry\"}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"child_curry\": \"slow_child_curry\", \"child_name\": \"tlz.audit.child\", \"curry\": \"fast_curry\", \"doc\": \"local doc\", \"file\": \"slow.py\", \"name\": \"tlz.audit\", \"package\": \"tlz.audit\", \"pipe\": \"toolz.pipe\"}",
+   "predicted": "{\"child_curry\": \"slow_child_curry\", \"child_name\": \"tlz.audit.child\", \"curry\": \"fast_curry\", \"doc\": \"local doc\", \"file\": \"slow.py\", \"name\": \"tlz.audit\", \"package\": \"tlz.audit\", \"pipe\": \"toolz.pipe\"}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

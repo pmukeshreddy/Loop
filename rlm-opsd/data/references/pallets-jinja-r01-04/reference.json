@@ -1,0 +1,137 @@
+{
+ "answer": "--- a/src/jinja2/compiler.py\n+++ b/src/jinja2/compiler.py\n@@ -1141,18 +1141,16 @@\n             )\n             self.writeline(f\"if {frame.symbols.ref(alias)} is missing:\")\n             self.indent()\n-            # The position will contain the template name, and will be formatted\n-            # into a string that will be compiled into an f-string. Curly braces\n-            # in the name must be replaced with escapes so that they will not be\n-            # executed as part of the f-string.\n+            # Keep the position as literal text, not part of a generated f-string.\n             position = self.position(node)\n             message = (\n-                \"the template {included_template.__name__!r}\"\n                 f\" (imported on {position})\"\n                 f\" does not export the requested name {name!r}\"\n             )\n             self.writeline(\n-                f\"{frame.symbols.ref(alias)} = undefined(f{message!r}, name={name!r})\"\n+                f\"{frame.symbols.ref(alias)} = undefined(\"\n+                f\"'the template ' + repr(included_template.__name__) + {message!r},\"\n+                f\" name={name!r})\"\n             )\n             self.outdent()\n             if frame.toplevel:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "compiler",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 966088 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch separates literal diagnostic text from runtime interpolation, preserving the imported template's name and undefined-value construction. Executable verification confirms the curly-brace regression is fixed, and the reference execution inspected the constructed diff before finishing.",
+   "inspect_locate": "The rendering symptom requires locating the compiler boundary where loader-controlled template-name text becomes part of generated Python. The reference execution used targeted searches rather than printing the whole repository context."
+  },
+  "notes": "This is a natural, repository-dependent security-boundary repair with a precise output format. The question describes the observable failure and required contract without naming the defective symbol or prescribing the fix. It is distinct from the previously accepted globals and template-filtering tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The fix must preserve the intended runtime interpolation while making diagnostic template-name text inert; the exact escaping and unified-diff context need verification.",
+   "inspect_locate": "The exception surfaces during rendering, but the relevant boundary is the compiler's construction of a diagnostic string from a loader-controlled template name."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/compiler.py",
+    "symbol": "src/jinja2/compiler.py::CodeGenerator.position",
+    "why": "Introduces the importing template's name into diagnostic position text."
+   },
+   {
+    "path": "src/jinja2/compiler.py",
+    "symbol": "src/jinja2/compiler.py::CodeGenerator.visit_FromImport",
+    "why": "Embeds position text into Python source that is subsequently compiled as an f-string."
+   },
+   {
+    "path": "tests/test_compile.py",
+    "symbol": "tests/test_compile.py::test_undefined_import_curly_name",
+    "why": "Checks that a brace-containing importer name produces UndefinedError rather than being interpreted as Python interpolation."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.compile",
+    "why": "Compiles the generated source, explaining why escaping must survive the code-generation boundary."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The existing brace-escaping comments are retained unchanged by the setup patch. The defect is on the missing-export path, not ordinary successful imports.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "The attached pytest output shows that a missing named import can raise an unrelated Python exception when the importing template's name contains curly braces. Repair the generated diagnostic so arbitrary template-name text remains inert, while preserving the usual undefined-value behavior and the imported template's name in the message. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "security_boundary_audit",
+  "setup_patch": "--- a/src/jinja2/compiler.py\n+++ b/src/jinja2/compiler.py\n@@ -1120,7 +1120,7 @@\n             # into a string that will be compiled into an f-string. Curly braces\n             # in the name must be replaced with escapes so that they will not be\n             # executed as part of the f-string.\n-            position = self.position(node).replace(\"{\", \"{{\").replace(\"}\", \"}}\")\n+            position = self.position(node)\n             message = (\n                 \"the template {included_template.__name__!r}\"\n                 f\" (imported on {position})\"\n"
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r01-04",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_compile.py::test_undefined_import_curly_name"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 909
+   },
+   "patch_files": [
+    "src/jinja2/compiler.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_compile.py::test_undefined_import_curly_name"
+  ],
+  "ground_truth_symbols": [
+   "src/jinja2/compiler.py::CodeGenerator.visit_FromImport"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 908,
+  "stability_runs": 3
+ }
+}

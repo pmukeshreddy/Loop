@@ -1,0 +1,197 @@
+--- /dev/null
++++ b/tests/test_func_tlru_cache.py
+@@ -0,0 +1,194 @@
++import threading
++
++import pytest
++
++from cachetools import TLRUCache, func, keys
++
++
++class Clock:
++    def __init__(self):
++        self.now = 10
++
++    def __call__(self):
++        return self.now
++
++
++def test_export_and_defaults():
++    assert "tlru_cache" in func.__all__
++    @func.tlru_cache(lambda key, value, now: now + 60)
++    def identity(value):
++        return value
++
++    assert isinstance(identity.cache, TLRUCache)
++    assert identity.cache_info() == (0, 0, 128, 0)
++    assert identity.cache_parameters() == {"maxsize": 128, "typed": False}
++    assert identity(1) == 1
++    assert identity(1) == 1
++    assert identity.cache_info() == (1, 1, 128, 1)
++    assert identity.__wrapped__(2) == 2
++
++
++@pytest.mark.parametrize("maxsize", [2, None])
++def test_value_dependent_deadlines(maxsize):
++    clock = Clock()
++    observed = []
++    calls = {}
++
++    def ttu(key, value, now):
++        observed.append((key, value, now))
++        return now + value[1]
++
++    @func.tlru_cache(ttu, maxsize=maxsize, timer=clock)
++    def compute(name, *, lifetime):
++        calls[name] = calls.get(name, 0) + 1
++        return (calls[name], lifetime)
++
++    short_key = keys.hashkey("short", lifetime=2)
++    long_key = keys.hashkey("long", lifetime=7)
++    assert compute("short", lifetime=2) == (1, 2)
++    assert compute("long", lifetime=7) == (1, 7)
++    assert observed == [(short_key, (1, 2), 10), (long_key, (1, 7), 10)]
++    clock.now = 12
++    assert compute("long", lifetime=7) == (1, 7)
++    assert compute("short", lifetime=2) == (2, 2)
++    assert observed[-1] == (short_key, (2, 2), 12)
++    clock.now = 14
++    assert set(compute.cache.expire()) == {(short_key, (2, 2))}
++    assert compute.cache_info() == (1, 3, maxsize, 1)
++    clock.now = 17
++    assert compute.cache_info().currsize == 0
++    assert compute("long", lifetime=7) == (2, 7)
++
++
++@pytest.mark.parametrize("maxsize", [2, None])
++@pytest.mark.parametrize("delta", [0, -1])
++def test_nonfuture_deadlines_are_not_retained(maxsize, delta):
++    clock = Clock()
++    calls = []
++    deadlines = []
++
++    def ttu(key, value, now):
++        deadlines.append((key, value, now))
++        return now + delta
++
++    @func.tlru_cache(ttu, maxsize=maxsize, timer=clock)
++    def compute(x):
++        calls.append(x)
++        return len(calls)
++
++    assert compute(1) == 1
++    assert compute(1) == 2
++    assert deadlines == [(keys.hashkey(1), 1, 10), (keys.hashkey(1), 2, 10)]
++    assert keys.hashkey(1) not in compute.cache
++    assert compute.cache_info() == (0, 2, maxsize, 0)
++
++
++def test_unbounded_capacity_still_expires_and_clears():
++    clock = Clock()
++    @func.tlru_cache(lambda key, value, now: now + 5, maxsize=None, timer=clock)
++    def compute(x):
++        return x
++
++    for x in range(200):
++        assert compute(x) == x
++    assert compute.cache_info() == (0, 200, None, 200)
++    assert compute.cache_parameters() == {"maxsize": None, "typed": False}
++    assert compute(0) == 0
++    clock.now = 15
++    assert compute.cache_info().currsize == 0
++    assert compute(0) == 0
++    assert compute.cache_info() == (1, 201, None, 1)
++    compute.cache_clear()
++    assert compute.cache_info() == (0, 0, None, 0)
++
++
++@pytest.mark.parametrize("typed", [False, True])
++def test_typed_key_selection_and_callback_keys(typed):
++    clock = Clock()
++    observed = []
++
++    def ttu(key, value, now):
++        observed.append(key)
++        return now + 10
++
++    @func.tlru_cache(ttu, timer=clock, typed=typed)
++    def compute(x, *, y):
++        return type(x).__name__
++
++    keyfunc = keys.typedkey if typed else keys.hashkey
++    assert compute(1, y=2) == "int"
++    expected_second = "float" if typed else "int"
++    assert compute(1.0, y=2.0) == expected_second
++    expected_keys = [keyfunc(1, y=2)]
++    if typed:
++        expected_keys.append(keyfunc(1.0, y=2.0))
++    assert observed == expected_keys
++    assert compute.cache_parameters() == {"maxsize": 128, "typed": typed}
++    assert compute.cache_info() == (0 if typed else 1, 2 if typed else 1, 128, 2 if typed else 1)
++
++
++def test_bounded_lru_eviction():
++    clock = Clock()
++    @func.tlru_cache(lambda key, value, now: now + 100, maxsize=2, timer=clock)
++    def compute(x):
++        return x
++
++    compute("a")
++    compute("b")
++    compute("a")
++    compute("c")
++    assert keys.hashkey("b") not in compute.cache
++    assert set(compute.cache) == {keys.hashkey("a"), keys.hashkey("c")}
++    assert compute.cache_info() == (1, 3, 2, 2)
++
++
++def test_same_key_stampede_prevention(monkeypatch):
++    clock = Clock()
++    started = threading.Event()
++    release = threading.Event()
++    waiting = threading.Event()
++    calls = []
++    results = []
++    errors = []
++
++    @func.tlru_cache(lambda key, value, now: now + 100, timer=clock)
++    def compute(x):
++        calls.append(x)
++        started.set()
++        assert release.wait(5)
++        return x * 2
++
++    condition = compute.cache_condition
++    assert condition is not None
++    wait = condition.wait
++
++    def observed_wait(timeout=None):
++        waiting.set()
++        return wait(timeout)
++
++    monkeypatch.setattr(condition, "wait", observed_wait)
++
++    def invoke():
++        try:
++            results.append(compute(3))
++        except BaseException as error:
++            errors.append(error)
++
++    first = threading.Thread(target=invoke, daemon=True)
++    second = threading.Thread(target=invoke, daemon=True)
++    first.start()
++    try:
++        assert started.wait(5)
++        second.start()
++        assert waiting.wait(5)
++    finally:
++        release.set()
++        first.join(5)
++        if second.ident is not None:
++            second.join(5)
++    assert not first.is_alive()
++    assert not second.is_alive()
++    assert not errors
++    assert results == [6, 6]
++    assert calls == [3]
++    assert compute.cache_info() == (1, 1, 128, 1)

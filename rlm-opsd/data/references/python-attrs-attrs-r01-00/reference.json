@@ -1,0 +1,153 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2098,6 +2098,11 @@\n     Unless *attr_name* has an on_setattr hook, use normal assignment after\n     conversion. Otherwise relegate to _setattr_with_converter.\n     \"\"\"\n+    if has_on_setattr:\n+        return _setattr_with_converter(\n+            attr_name, value_var, has_on_setattr, converter\n+        )\n+\n     return f\"self.{attr_name} = {converter._fmt_converter_call(attr_name, value_var)}\"\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009033861964437544,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "index",
+    "logs",
+    "m",
+    "make",
+    "p",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 865632 chars; 15 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "8 turns; variables reused across turns: ['index', 'logs', 'm', 'make', 'p', 's']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference assembled an applicable unified diff from the source and checked the resulting artifact. Independent executable verification established that the patch repairs the three reported failing tests.",
+   "inspect_locate": "The reference execution used 15 searches across the repository context to connect construction failures with generated initialization, decorator defaults, and the separate assignment-hook pipeline. The question does not identify the defective helper or prescribe a repair.",
+   "persistent_state": "Variables were reused across turns, but the supplied evidence does not establish that persistent state was essential to the investigation. This behavior is appropriately absent from the established-behaviors list."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise output format. The initialization-versus-assignment distinction and field-level overrides constrain the repair rather than adding unrelated requirements. The verified patch restores the hook-aware initialization path without modifying tests. No duplicate or parent variation is supplied."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled from the exact source text and checked against the surrounding generator code before delivering an applicable diff.",
+   "inspect_locate": "The construction failures must be connected to decorator defaults, generated initialization, and the separate runtime assignment-hook pipeline.",
+   "persistent_state": "The investigation reuses the affected field configurations and the initialization-versus-assignment call paths while locating the source-generation defect."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_next_gen.py",
+    "symbol": "src/attr/_next_gen.py::define",
+    "why": "Mutable modern classes receive the convert-and-validate assignment pipeline by default."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Initialization selects a converter-aware assignment formatter using effective field and class hook settings."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_assign_with_converter",
+    "why": "This formatter must bypass assignment hooks when initialization has already performed conversion."
+   },
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::convert",
+    "why": "Ordinary assignment through an installed hook performs conversion again."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup removes only the hook-bypassing branch for mutable initialization. Idempotent converters can mask the regression; non-idempotent converters and validators expose it.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions in construction of classes with converters and assignment hooks. Construction and later assignment no longer agree about how often conversion occurs. Find and repair the underlying regression while preserving the documented distinction between initialization and subsequent assignment, including field-level hook overrides. Return a unified diff against the repository files without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2150,9 +2150,6 @@\n     conversion. Otherwise relegate to _setattr_with_converter.\n     \"\"\"\n-    if has_on_setattr:\n-        return _setattr_with_converter(attr_name, value_var, True, converter)\n-\n     return f\"self.{attr_name} = {converter._fmt_converter_call(attr_name, value_var)}\"\n \n \n def _determine_setters(\n"
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_make.py::TestConverter::test_converter_wrapped_takes_field",
+   "tests/test_make.py::TestConverter::test_converter_wrapped_takes_self",
+   "tests/test_setattr.py::TestSetAttr::test_pipe"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1378
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_make.py::TestConverter::test_converter_wrapped_takes_field",
+   "tests/test_make.py::TestConverter::test_converter_wrapped_takes_self",
+   "tests/test_setattr.py::TestSetAttr::test_pipe"
+  ],
+  "ground_truth_symbols": [
+   "src/attr/_make.py::_assign_with_converter"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1375,
+  "stability_runs": 3
+ }
+}

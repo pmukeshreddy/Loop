@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/jsonschema/_keywords.py\n+++ b/jsonschema/_keywords.py\n@@ -95,10 +95,18 @@\n     min_contains = schema.get(\"minContains\", 1)\n     max_contains = schema.get(\"maxContains\", len(instance))\n \n-    contains_validator = validator.evolve(schema=contains)\n+    if validator._ref_resolver is not None:\n+        contains_validator = validator.evolve(schema=contains)\n \n     for each in instance:\n-        if contains_validator.is_valid(each):\n+        if validator._ref_resolver is None:\n+            matches_contains = next(\n+                validator.descend(each, contains), None,\n+            ) is None\n+        else:\n+            matches_contains = contains_validator.is_valid(each)\n+\n+        if matches_contains:\n             matches += 1\n             if matches > max_contains:\n                 yield ValidationError(\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0004700869660887264,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 27,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "kw",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 27 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines scope-correct modern validation with a separate, preserved legacy path, leaving the existing counting and error branches intact. The execution constructed and inspected the final patch programmatically; behavioral verification is supplied separately by the task's verification evidence.",
+   "inspect_locate": "The reference execution used 27 targeted context searches without printing the whole repository. Locating the applicable contains implementation and connecting it to modern subresource entry and legacy resolver scope handling were necessary to determine the repair."
+  },
+  "notes": "This is a concrete maintainer-facing repair with precise examples, compatibility constraints, and a clear production-only unified-diff format. It identifies the affected public keyword but does not disclose the internal defective operation or prescribe the fix. The resource-scope investigation is repository-dependent and differs substantively from the parent task's propagation of a resolver after reference lookup. No accepted task duplicates this contains-specific repair."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must correct resource selection while retaining the zero-match, minimum-match, and maximum-match branches. Its exact hunks must be checked against the source, and the modern and legacy paths must remain distinct where their scope-management behavior differs.",
+   "inspect_locate": "The repository-sized context contains several contains implementations and two reference-resolution systems. The repair requires connecting Draft 2020-12 keyword registration with the generated validator's schema replacement, subresource entry, and legacy scope handling."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::contains",
+    "why": "The current matching predicate evolves a validator once without entering the modern subschema resource scope; the surrounding branches implement match-count bounds."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create.Validator.evolve",
+    "why": "Schema replacement preserves the existing modern resolver rather than automatically entering the replacement schema's relative identifier."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create.Validator.descend",
+    "why": "Modern descent enters a subresource before dispatching its keywords, while legacy descent has different scope-management behavior."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create.Validator.__attrs_post_init__",
+    "why": "Legacy validator construction pushes a schema identifier onto the supplied resolver, making repeated construction observably different from the existing once-per-contains evolution."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::Draft202012Validator",
+    "why": "Registers the modern contains implementation for Draft 2020-12."
+   }
+  ],
+  "expected_answer": "--- a/jsonschema/_keywords.py\n+++ b/jsonschema/_keywords.py\n@@ -94,10 +94,14 @@\n     min_contains = schema.get(\"minContains\", 1)\n     max_contains = schema.get(\"maxContains\", len(instance))\n \n-    contains_validator = validator.evolve(schema=contains)\n+    if validator._ref_resolver is None:\n+        def is_valid(element):\n+            return next(validator.descend(element, contains), None) is None\n+    else:\n+        is_valid = validator.evolve(schema=contains).is_valid\n \n     for each in instance:\n-        if contains_validator.is_valid(each):\n+        if is_valid(each):\n             matches += 1\n             if matches > max_contains:\n                 yield ValidationError(\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_contains_resource_scope.py\n@@ -0,0 +1,89 @@\n+import warnings\n+\n+import pytest\n+from referencing import Registry\n+from referencing.jsonschema import DRAFT202012\n+\n+import jsonschema\n+\n+\n+ROOT = \"https://example.test/root.json\"\n+CONTAINS = {\"$id\": \"child/\", \"$ref\": \"value.json\"}\n+RESOURCES = {\n+    \"https://example.test/value.json\": {\"type\": \"integer\"},\n+    \"https://example.test/child/value.json\": {\"type\": \"string\"},\n+}\n+\n+\n+@pytest.mark.parametrize(\n+    \"instance, bounds, keyword\",\n+    [\n+        ([\"ok\"], {}, None),\n+        ([1], {}, \"contains\"),\n+        ([], {}, \"contains\"),\n+        ([1], {\"minContains\": 0}, None),\n+        ([], {\"minContains\": 0}, None),\n+        ([\"a\", 1], {\"minContains\": 2}, \"minContains\"),\n+        ([\"a\", \"b\", 1], {\"minContains\": 2}, None),\n+        ([\"a\", \"b\", 1], {\"maxContains\": 1}, \"maxContains\"),\n+        ([\"a\", 1, 2], {\"maxContains\": 1}, None),\n+        ([\"a\"], {\"minContains\": 0, \"maxContains\": 0}, \"maxContains\"),\n+        ([1], {\"minContains\": 0, \"maxContains\": 0}, None),\n+    ],\n+)\n+def test_contains_resource_scope_and_bounds(instance, bounds, keyword):\n+    registry = Registry().with_resources(\n+        (uri, DRAFT202012.create_resource(contents))\n+        for uri, contents in RESOURCES.items()\n+    )\n+    schema = {\"$id\": ROOT, \"contains\": CONTAINS, **bounds}\n+    validator = jsonschema.Draft202012Validator(schema, registry=registry)\n+    errors = list(validator.iter_errors(instance))\n+    assert validator.is_valid(instance) is (keyword is None)\n+    if keyword is None:\n+        assert errors == []\n+    else:\n+        assert len(errors) == 1\n+        assert errors[0].validator == keyword\n+        expected_value = CONTAINS if keyword == \"contains\" else bounds[keyword]\n+        assert errors[0].validator_value == expected_value\n+\n+\n+@pytest.mark.parametrize(\n+    \"instance, bounds, valid\",\n+    [\n+        ([\"ok\"], {}, True),\n+        ([1], {}, False),\n+        ([\"a\", \"b\"], {\"minContains\": 2}, True),\n+        ([\"a\", \"b\"], {\"maxContains\": 1}, False),\n+        ([1], {\"minContains\": 0}, True),\n+    ],\n+)\n+def test_contains_preserves_legacy_scope(instance, bounds, valid):\n+    schema = {\"$id\": ROOT, \"contains\": CONTAINS, **bounds}\n+    store = dict(RESOURCES)\n+    def no_remote(uri):\n+        raise AssertionError(f\"Unexpected remote retrieval: {uri}\")\n+\n+    with warnings.catch_warnings():\n+        warnings.simplefilter(\"ignore\", DeprecationWarning)\n+        resolver = jsonschema.RefResolver.from_schema(\n+            schema, store=store, handlers={\"https\": no_remote},\n+        )\n+    validator = jsonschema.Draft202012Validator(schema, resolver=resolver)\n+    assert validator.is_valid(instance) is valid\n+\n+\n+@pytest.mark.parametrize(\n+    \"contains, instance, bounds, valid\",\n+    [\n+        (True, [1, \"ok\"], {\"minContains\": 2}, True),\n+        (True, [1, \"ok\"], {\"maxContains\": 1}, False),\n+        (False, [1], {}, False),\n+        (False, [1], {\"minContains\": 0}, True),\n+        ({\"$id\": \"child/\", \"$ref\": \"value.json\"}, 42, {}, True),\n+    ],\n+)\n+def test_contains_boolean_and_nonarray_behavior(contains, instance, bounds, valid):\n+    schema = {\"$id\": ROOT, \"contains\": contains, **bounds}\n+    assert jsonschema.Draft202012Validator(schema).is_valid(instance) is valid\n",
+  "include_failure_log": false,
+  "notes": "This variation targets a defect already present in the supplied repaired snapshot: _validate_reference already carries resolved.resolver, but contains does not enter its own modern resource scope before lookup. It is therefore materialized as an existing-behavior repair with new hidden acceptance tests, not by reusing the seed setup patch or introducing an unrelated synthetic defect. The new tests exercise competing existing resources, zero matches, lower and upper bounds, error validator metadata, boolean schemas, non-arrays, and legacy repeated-element scope behavior. No failure log is needed because the question supplies the complete observable reproduction. The expected repair changes contains, unlike the original verified answer.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Correct Draft 2020-12 `contains` validation when its subschema declares a relative `$id`. For a root schema with `$id` `https://example.test/root.json` and `contains: {\"$id\": \"child/\", \"$ref\": \"value.json\"}`, a registry contains an integer schema at `https://example.test/value.json` and a string schema at `https://example.test/child/value.json`. Currently the wrong resource determines which elements match: `[\"ok\"]` must be valid and `[1]` must be invalid.\n\nMake relative references in the `contains` subschema respect that subschema's resource scope. Preserve existing `minContains` and `maxContains` counting and error metadata, including zero matches and `minContains: 0`, as well as boolean subschemas and the handling of non-array instances. Keep explicitly supplied legacy `RefResolver` behavior unchanged, including repeated element checks when the subschema has a relative identifier.\n\nReturn a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused caller inspection and branch verification rather than tracing a failed remote lookup across the repository. Comparing `contains` with `descend` exposes the distinction between replacing a schema and entering a subresource; checking the counting branches ensures that fixing resolution does not alter keyword semantics.",
+  "change_type": "failure_condition",
+  "description": "Starting from the repaired checkout, fix Draft 2020-12 `contains` validation when the `contains` subschema introduces its own relative `$id`. Use a root schema with `$id` `https://example.test/root.json` and `contains: {\"$id\": \"child/\", \"$ref\": \"value.json\"}`. Register an integer schema at `https://example.test/value.json` and a string schema at `https://example.test/child/value.json`. The instance `[\"ok\"]` must satisfy `contains`, while `[1]` must not. Repair production code only, preserving `minContains`, `maxContains`, and legacy resolver behavior. Investigate `jsonschema/_keywords.py::contains` and the generated `Validator.evolve` and `Validator.descend` methods in `jsonschema/validators.py::create`.",
+  "expected_answer_change": "The repair must make the `contains` predicate check enter the subschema's resource scope, for example by using resolver-aware descent to determine whether each element is valid. The answer changes `contains` rather than `_validate_reference`, and verification must cover zero matches, lower and upper match-count bounds, and the competing registered resources.",
+  "why_substantive": "The incorrect base is established before reference lookup, because `contains` constructs its checking validator with `evolve(schema=contains)` rather than entering the subschema through resolver-aware descent. Passing the resolver returned by lookup, as in the seed repair, cannot correct a lookup that already selected the wrong registered resource. Both resources exist here, so the failure is incorrect validation rather than an unresolvable-reference exception."
+ },
+ "task_id": "python-jsonschema-jsonschema-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance0-bounds0-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance1-bounds1-contains]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance10-bounds10-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance6-bounds6-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance7-bounds7-maxContains]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance8-bounds8-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance9-bounds9-maxContains]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7309
+   },
+   "patch_files": [
+    "jsonschema/_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance0-bounds0-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance1-bounds1-contains]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance10-bounds10-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance6-bounds6-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance7-bounds7-maxContains]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance8-bounds8-None]",
+   "jsonschema/tests/test_contains_resource_scope.py::test_contains_resource_scope_and_bounds[instance9-bounds9-maxContains]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

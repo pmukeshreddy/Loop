@@ -1,0 +1,37 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -1,6 +1,11 @@
+ import sys
+ import types
+-import toolz
++try:
++    import toolz
++except ModuleNotFoundError as exc:
++    if exc.name != 'toolz':
++        raise
++    toolz = None
+ from importlib import import_module
+ from importlib.machinery import ModuleSpec
+ 
+@@ -9,9 +14,7 @@
+     """ Finds and loads ``tlz`` modules when added to sys.meta_path"""
+ 
+     def __init__(self):
+-        self.always_from_toolz = {
+-            toolz.pipe,
+-        }
++        self.always_from_toolz = {toolz.pipe} if toolz is not None else set()
+ 
+     def _load_toolz(self, fullname):
+         rv = {}
+@@ -56,7 +59,9 @@
+         toolz_mods = self._load_toolz(module.__name__)
+         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']
+         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']
+-        module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))
++        namespace = fast_mod.__dict__.copy()
++        namespace.update(module.__dict__)
++        module.__dict__.update(namespace)
+         package = fast_mod.__package__
+         if package is not None:
+             package, dot, submodules = package.partition('.')

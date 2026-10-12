@@ -1,0 +1,103 @@
+--- /dev/null
++++ b/tests/test_tlru_restore.py
+@@ -0,0 +1,100 @@
++import pickle
++import unittest
++
++from cachetools import Cache, TLRUCache
++
++from .test_tlru import Timer
++
++
++def deadline(_key, value, _time):
++    return value[0]
++
++
++def weight(value):
++    return value[1]
++
++
++class TLRURestoreTest(unittest.TestCase):
++    def roundtrip(self, cache, protocol):
++        return pickle.loads(pickle.dumps(cache, protocol=protocol))
++
++    def test_cleanup_deadlines_weights_and_recency(self):
++        for protocol in range(2, pickle.HIGHEST_PROTOCOL + 1):
++            with self.subTest(protocol=protocol):
++                cache = TLRUCache(20, deadline, timer=Timer(), getsizeof=weight)
++                cache["early"] = (3, 4)
++                cache["a"] = (11, 2)
++                cache["b"] = (7, 3)
++                cache["c"] = (13, 5)
++                cache["gone"] = (17, 1)
++                cache["a"] = (19, 2)
++                cache["a"] = (15, 2)
++                del cache["gone"]
++                cache["b"]
++                cache["a"]
++                for _ in range(3):
++                    cache.timer.tick()
++                restored = self.roundtrip(cache, protocol)
++
++                # Bypass timed accessors so lazy expiration cannot hide failure.
++                self.assertEqual(Cache.__len__(restored), 3)
++                self.assertEqual(Cache.currsize.fget(restored), 10)
++                self.assertFalse(Cache.__contains__(restored, "early"))
++                self.assertFalse(Cache.__contains__(restored, "gone"))
++                heap = restored._TLRUCache__order
++                self.assertEqual(len(heap), 3)
++                self.assertTrue(all(not item.removed for item in heap))
++                self.assertEqual(
++                    {item.key: item.expires for item in heap},
++                    {"a": 15, "b": 7, "c": 13},
++                )
++                self.assertEqual(Cache.__getitem__(restored, "a"), (15, 2))
++
++                # Deadline order differs from LRU order: c must be evicted.
++                restored["d"] = (20, 12)
++                self.assertFalse(Cache.__contains__(restored, "c"))
++                self.assertTrue(Cache.__contains__(restored, "b"))
++                self.assertTrue(Cache.__contains__(restored, "a"))
++                self.assertEqual(Cache.currsize.fget(restored), 17)
++                for _ in range(4):
++                    restored.timer.tick()
++                self.assertEqual(restored.expire(), [("b", (7, 3))])
++                self.assertEqual(Cache.currsize.fget(restored), 14)
++                self.assertEqual(restored.expire(15), [("a", (15, 2))])
++                self.assertEqual(Cache.currsize.fget(restored), 12)
++                self.assertEqual(restored.expire(20), [("d", (20, 12))])
++                self.assertEqual(Cache.__len__(restored), 0)
++                self.assertEqual(Cache.currsize.fget(restored), 0)
++
++    def test_restored_timer_not_serialized_frozen_time(self):
++        cache = TLRUCache(10, deadline, timer=Timer(), getsizeof=weight)
++        cache["expired"] = (2, 4)
++        cache["live"] = (9, 2)
++        with cache.timer as frozen:
++            self.assertEqual(frozen, 0)
++            cache.timer.tick()
++            cache.timer.tick()
++            restored = self.roundtrip(cache, pickle.HIGHEST_PROTOCOL)
++        self.assertEqual(Cache.__len__(restored), 1)
++        self.assertEqual(Cache.currsize.fget(restored), 2)
++        self.assertFalse(Cache.__contains__(restored, "expired"))
++        self.assertEqual(restored.timer(), 2)
++        self.assertEqual(Cache.__getitem__(restored, "live"), (9, 2))
++        self.assertEqual(Cache.__len__(cache), 2)
++        self.assertEqual(restored.expire(9), [("live", (9, 2))])
++
++    def test_empty_and_all_expired(self):
++        for populated in (False, True):
++            with self.subTest(populated=populated):
++                cache = TLRUCache(10, deadline, timer=Timer(), getsizeof=weight)
++                if populated:
++                    cache["x"] = (1, 3)
++                    cache.timer.tick()
++                restored = self.roundtrip(cache, pickle.HIGHEST_PROTOCOL)
++                self.assertEqual(Cache.__len__(restored), 0)
++                self.assertEqual(Cache.currsize.fget(restored), 0)
++                self.assertEqual(restored._TLRUCache__order, [])
++                restored["new"] = (10, 2)
++                self.assertEqual(restored["new"], (10, 2))
++                self.assertEqual(restored.currsize, 2)
++                self.assertEqual(restored.popitem(), ("new", (10, 2)))

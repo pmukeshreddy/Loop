@@ -1,0 +1,91 @@
+--- /dev/null
++++ b/tests/test_nested_instance_dotted_only.py
+@@ -0,0 +1,88 @@
++import pytest
++
++from marshmallow import Schema, fields
++
++
++class ProfileSchema(Schema):
++    name = fields.String()
++    age = fields.Integer()
++
++
++class ChildSchema(Schema):
++    profile = fields.Nested(ProfileSchema)
++    tag = fields.String()
++    id = fields.Integer()
++
++
++PAYLOAD = {
++    "profile": {"name": "Ada", "age": 37},
++    "tag": "kept",
++    "id": 9,
++}
++
++
++def dump_child(field, payload=PAYLOAD):
++    return field.serialize("child", {"child": payload})
++
++
++@pytest.mark.parametrize("warm", [False, True])
++def test_dotted_only_matches_class_without_mutating_source(warm):
++    source = ChildSchema()
++    if warm:
++        assert source.dump(PAYLOAD) == PAYLOAD
++    profile = source.fields["profile"]
++    expected = {"profile": {"name": "Ada"}}
++    assert dump_child(fields.Nested(ChildSchema, only=("profile.name",))) == expected
++    selected = fields.Nested(source, only=("profile.name",))
++    assert dump_child(selected) == expected
++    assert source.only is None
++    assert source.exclude == set()
++    assert profile.only is None
++    assert profile.exclude == ()
++    assert set(source.fields) == {"profile", "tag", "id"}
++    assert source.dump(PAYLOAD) == PAYLOAD
++    assert dump_child(selected) == expected
++
++
++@pytest.mark.parametrize("warm", [False, True])
++def test_dotted_only_intersects_existing_nested_selection(warm):
++    source = ChildSchema(only=("profile.name", "tag"))
++    original = {"profile": {"name": "Ada"}, "tag": "kept"}
++    if warm:
++        assert source.dump(PAYLOAD) == original
++    selected = fields.Nested(
++        source, only=("profile.name", "profile.age", "id")
++    )
++    assert dump_child(selected) == {"profile": {"name": "Ada"}}
++    assert set(source.only) == {"profile", "tag"}
++    assert set(source.fields["profile"].only) == {"name"}
++    assert source.dump(PAYLOAD) == original
++    disjoint = fields.Nested(source, only=("profile.age",))
++    assert dump_child(disjoint) == {"profile": {}}
++    assert dump_child(selected) == {"profile": {"name": "Ada"}}
++    assert source.dump(PAYLOAD) == original
++
++
++@pytest.mark.parametrize("warm", [False, True])
++def test_two_wrappers_keep_independent_nested_selections(warm):
++    source = ChildSchema()
++    if warm:
++        source.dump(PAYLOAD)
++    name = fields.Nested(source, only=("profile.name",))
++    age = fields.Nested(source, only=("profile.age",))
++    assert dump_child(name) == {"profile": {"name": "Ada"}}
++    assert dump_child(age) == {"profile": {"age": 37}}
++    assert dump_child(name) == {"profile": {"name": "Ada"}}
++    assert source.dump(PAYLOAD) == PAYLOAD
++
++
++def test_dotted_only_respects_instance_top_level_options_and_many():
++    source = ChildSchema(many=True, only=("profile", "tag"), exclude=("tag",))
++    original = [{"profile": {"name": "Ada", "age": 37}}]
++    assert source.dump([PAYLOAD]) == original
++    selected = fields.Nested(source, only=("profile.name", "tag", "id"))
++    assert dump_child(selected, [PAYLOAD]) == [{"profile": {"name": "Ada"}}]
++    assert source.many is True
++    assert set(source.only) == {"profile", "tag"}
++    assert source.exclude == {"tag"}
++    assert source.dump([PAYLOAD]) == original

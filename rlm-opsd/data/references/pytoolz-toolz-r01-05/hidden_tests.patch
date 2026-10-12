@@ -1,0 +1,63 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_spec_metadata.py
+@@ -0,0 +1,60 @@
++import types
++
++import pytest
++
++from tlz._build_tlz import TlzLoader
++
++
++@pytest.mark.parametrize(
++    'fast_available,slow_available,fast_package,slow_package,expected_package',
++    [
++        (True, True, True, False, True),
++        (True, True, False, True, False),
++        (False, True, False, True, True),
++        (True, False, True, False, True),
++        (False, True, False, False, False),
++    ],
++)
++def test_find_spec_uses_selected_backend_package_status(
++    monkeypatch, fast_available, slow_available, fast_package, slow_package, expected_package
++):
++    fast = types.ModuleType('cytoolz.spec_test')
++    slow = types.ModuleType('toolz.spec_test')
++    if fast_package:
++        fast.__path__ = ['fast-path']
++    if slow_package:
++        slow.__path__ = ['slow-path']
++    modules = {}
++    if fast_available:
++        modules[fast.__name__] = fast
++    if slow_available:
++        modules[slow.__name__] = slow
++    attempted = []
++
++    def resolve(name):
++        attempted.append(name)
++        if name not in modules:
++            raise ImportError(name)
++        return modules[name]
++
++    monkeypatch.setattr('tlz._build_tlz.import_module', resolve)
++    loader = TlzLoader()
++    spec = loader.find_spec('tlz.spec_test', None)
++    assert spec.name == 'tlz.spec_test'
++    assert spec.loader is loader
++    assert (spec.submodule_search_locations is not None) is expected_package
++
++
++def test_find_spec_returns_none_for_unavailable_or_unowned_names(monkeypatch):
++    calls = []
++
++    def missing(name):
++        calls.append(name)
++        raise ImportError(name)
++
++    monkeypatch.setattr('tlz._build_tlz.import_module', missing)
++    loader = TlzLoader()
++    assert loader.find_spec('tlz.no_such_backend', None) is None
++    calls.clear()
++    assert loader.find_spec('tlzextra.spec_test', None) is None
++    assert calls == []

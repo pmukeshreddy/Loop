@@ -1,0 +1,112 @@
+--- /dev/null
++++ b/tests/test_mixed_retry_composition.py
+@@ -0,0 +1,109 @@
++import asyncio
++import inspect
++
++import pytest
++
++from tenacity import RetryCallState, Retrying, retry_if_exception_cause_type
++from tenacity.retry import retry_all as SAll
++from tenacity.retry import retry_any as SAny
++from tenacity.asyncio.retry import retry_if_exception as AsyncException
++
++
++def policies():
++    trace = []
++    state = RetryCallState(Retrying(), fn=None, args=(), kwargs={})
++    error = RuntimeError("outer")
++    error.__cause__ = ValueError("cause")
++    state.set_exception((type(error), error, None))
++
++    class Cause(retry_if_exception_cause_type):
++        def __init__(self, label, exception_type):
++            super().__init__(exception_type)
++            self.label = label
++
++        def __call__(self, retry_state):
++            trace.append(self.label)
++            return super().__call__(retry_state)
++
++    def async_policy(label, value):
++        async def predicate(exception):
++            await asyncio.sleep(0)
++            trace.append(label)
++            return value
++        return AsyncException(predicate)
++
++    def plain(label, value):
++        def predicate(retry_state):
++            trace.append(label)
++            return value
++        return predicate
++
++    operands = {
++        "t": Cause("t", ValueError),
++        "f": Cause("f", KeyError),
++        "a": async_policy("a", False),
++        "b": async_policy("b", True),
++        "p": plain("p", False),
++        "q": plain("q", True),
++        "SAll": SAll,
++        "SAny": SAny,
++    }
++    return operands, state, trace
++
++
++@pytest.mark.parametrize(
++    "expression, expected, calls",
++    [
++        ("t & a", False, "t a"),
++        ("a & t", False, "a"),
++        ("f | b", True, "f b"),
++        ("b | f", True, "b"),
++        ("f & b", False, "f"),
++        ("b & f", False, "b f"),
++        ("t | a", True, "t"),
++        ("a | t", True, "a t"),
++        ("(t & b) | a", True, "t b"),
++        ("(f | a) & b", False, "f a"),
++        ("a | (t & b)", True, "a t b"),
++        ("b & (f | a)", False, "b f a"),
++        ("p | b", True, "p b"),
++        ("b & q", True, "b q"),
++        ("q & a", False, "q a"),
++        ("a | p", False, "a p"),
++        ("SAll(t, a) | f", False, "t a f"),
++        ("SAny(f, a) & t", False, "f a"),
++        ("SAll(t, b) & q", True, "t b q"),
++        ("p | SAny(f, b)", True, "p f b"),
++        ("SAny(f, SAll(t, a)) | b", True, "f t a b"),
++        ("(SAny(f, a) | f) & b", False, "f a f"),
++        ("t & SAny(f, a)", False, "t f a"),
++        ("SAll(t, a) | SAny(f, b)", True, "t a f b"),
++    ],
++)
++def test_mixed_expression(expression, expected, calls):
++    operands, state, trace = policies()
++    policy = eval(expression, {"__builtins__": {}}, operands)
++
++    async def run():
++        result = policy(state)
++        assert inspect.isawaitable(result)
++        assert await result is expected
++
++    asyncio.run(run())
++    assert trace == calls.split()
++
++
++@pytest.mark.parametrize(
++    "expression, expected, calls",
++    [
++        ("t & q", True, "t q"),
++        ("f | p", False, "f p"),
++        ("SAny(f, p) & t", False, "f p"),
++        ("t | SAll(f, q)", True, "t"),
++    ],
++)
++def test_synchronous_expression_remains_synchronous(expression, expected, calls):
++    operands, state, trace = policies()
++    policy = eval(expression, {"__builtins__": {}}, operands)
++    assert policy(state) is expected
++    assert trace == calls.split()

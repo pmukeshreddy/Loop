@@ -1,0 +1,151 @@
+{
+ "answer": "--- a/src/dotenv/cli.py\n+++ b/src/dotenv/cli.py\n@@ -113,18 +113,28 @@\n @click.pass_context\n @click.argument(\"key\", required=True)\n @click.argument(\"value\", required=True)\n-def set_value(ctx: click.Context, key: Any, value: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def set_value(\n+    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool\n+) -> None:\n     \"\"\"\n     Store the given key/value.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n \n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n     export = ctx.obj[\"EXPORT\"]\n-    success, key, value = set_key(file, key, value, quote, export)\n+    success, key, value = set_key(\n+        file, key, value, quote, export, follow_symlinks=follow_symlinks\n+    )\n     if success:\n         click.echo(f\"{key}={value}\")\n     else:\n@@ -150,16 +160,22 @@\n @cli.command()\n @click.pass_context\n @click.argument(\"key\", required=True)\n-def unset(ctx: click.Context, key: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:\n     \"\"\"\n     Removes the given key.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n-    success, key = unset_key(file, key, quote)\n+    success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)\n     if success:\n         click.echo(f\"Successfully removed {key}\")\n     else:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "cli",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 171130 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['cli', 'files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected after construction, combining the changes for both commands. The supplied executable verification covers existing-link behavior for both commands and dangling-link behavior for set.",
+   "inspect_locate": "The execution used 12 context searches to locate the CLI mutation wrappers and connect them to the existing library symlink policy. Correct forwarding requires repository-specific knowledge of the API signatures and preservation of quote/export arguments.",
+   "persistent_state": "The reference execution reused the cli and files variables across turns while coordinating both commands' option declarations, callback signatures, forwarding calls, and help text."
+  },
+  "notes": "This is a natural, bounded CLI enhancement with explicit defaults, compatibility constraints, and a precise production-only diff format. Naming the requested options and commands specifies the feature rather than leaking a defective symbol or fix. The task requires repository-dependent integration and is distinct from the previously accepted interpolation-option enhancement."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable combines coordinated edits to both command registrations and both library calls, requiring verification that defaults remain unchanged and every hunk matches the source.",
+   "inspect_locate": "The CLI mutation wrappers must be connected to the existing library follow_symlinks policy, including its different handling of existing and dangling links.",
+   "persistent_state": "The two command signatures, option declarations, forwarding calls, and help text must use the same policy throughout the change."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::set_value",
+    "why": "The set command currently forwards quote and export arguments but does not expose follow_symlinks."
+   },
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::unset",
+    "why": "The unset command has an independent registration, wrapper, and help text requiring the same option."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::rewrite",
+    "why": "Existing transactional rewriting implements both link replacement and explicit target resolution."
+   },
+   {
+    "path": "tests/test_main.py",
+    "symbol": "tests/test_main.py::test_set_key_follow_symlinks",
+    "why": "The library's established opt-in behavior is already covered independently of the CLI."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cli_follow_symlinks_option.py\n@@ -0,0 +1,47 @@\n+import os\n+import sys\n+\n+import pytest\n+from click.testing import CliRunner\n+\n+from dotenv.cli import cli\n+\n+\n+@pytest.mark.skipif(sys.platform == \"win32\", reason=\"requires Unix symlinks\")\n+@pytest.mark.parametrize(\"command\", [\"set\", \"unset\"])\n+@pytest.mark.parametrize(\n+    \"flag,follow\",\n+    [([], False), ([\"--follow-symlinks\"], True), ([\"--no-follow-symlinks\"], False)],\n+)\n+def test_mutation_symlink_policy(tmp_path, command, flag, follow):\n+    target = tmp_path / \"target.env\"\n+    target.write_text(\"a=old\\nb=keep\\n\")\n+    link = tmp_path / \".env\"\n+    link.symlink_to(target)\n+    tail = [\"a\", \"new\"] if command == \"set\" else [\"a\"]\n+    result = CliRunner().invoke(\n+        cli, [\"--file\", str(link), command, *flag, *tail]\n+    )\n+    assert result.exit_code == 0, result.output\n+    expected = \"a='new'\\nb=keep\\n\" if command == \"set\" else \"b=keep\\n\"\n+    assert link.is_symlink() is follow\n+    if follow:\n+        assert target.read_text() == expected\n+    else:\n+        assert target.read_text() == \"a=old\\nb=keep\\n\"\n+        assert link.read_text() == expected\n+\n+\n+@pytest.mark.skipif(sys.platform == \"win32\", reason=\"requires Unix symlinks\")\n+@pytest.mark.parametrize(\"flag,follow\", [([], False), ([\"--follow-symlinks\"], True)])\n+def test_set_dangling_symlink_policy(tmp_path, flag, follow):\n+    target = tmp_path / \"missing.env\"\n+    link = tmp_path / \".env\"\n+    link.symlink_to(target)\n+    result = CliRunner().invoke(\n+        cli, [\"--file\", str(link), \"set\", *flag, \"a\", \"new\"]\n+    )\n+    assert result.exit_code == 0, result.output\n+    assert link.is_symlink() is follow\n+    assert target.exists() is follow\n+    assert (target if follow else link).read_text() == \"a='new'\\n\"\n",
+  "include_failure_log": false,
+  "notes": "Symlink acceptance tests are skipped on Windows. Existing library APIs already implement the requested filesystem behavior; the change should expose their policy without altering it.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Expose the library's symlink policy on the CLI mutation commands. Add command-specific `--follow-symlinks/--no-follow-symlinks` options to `dotenv set` and `dotenv unset`, defaulting to not following symlinks. Pass the selected policy to the existing library APIs without changing quote/export behavior, output, or exit statuses. Following an existing link must edit its target while preserving the link; the default must retain the current link-replacement behavior. For `set` on a dangling link, following must create the target and preserve the link, while not following must replace the link with the new dotenv file. Update the command help so it no longer implies that following links is impossible. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "theskumar-python-dotenv-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag1-True-set]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag1-True-unset]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag2-False-set]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag2-False-unset]",
+   "tests/test_cli_follow_symlinks_option.py::test_set_dangling_symlink_policy[flag1-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 265
+   },
+   "patch_files": [
+    "src/dotenv/cli.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag1-True-set]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag1-True-unset]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag2-False-set]",
+   "tests/test_cli_follow_symlinks_option.py::test_mutation_symlink_policy[flag2-False-unset]",
+   "tests/test_cli_follow_symlinks_option.py::test_set_dangling_symlink_policy[flag1-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

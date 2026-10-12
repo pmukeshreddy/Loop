@@ -1,0 +1,97 @@
+--- /dev/null
++++ b/tests/test_orderedset_fail_fast.py
+@@ -0,0 +1,94 @@
++import pytest
++
++from marshmallow.orderedset import OrderedSet
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++@pytest.mark.parametrize("action", ["add", "discard", "readd", "pop_last", "pop_first"])
++def test_membership_changes_invalidate_started_traversal(reverse, action):
++    members = OrderedSet([1, 2, 3])
++    iterator = reversed(members) if reverse else iter(members)
++    assert next(iterator) == (3 if reverse else 1)
++    if action == "add":
++        members.add(4)
++    elif action == "discard":
++        members.discard(2)
++    elif action == "readd":
++        members.discard(2)
++        members.add(2)
++    elif action == "pop_last":
++        members.pop(last=True)
++    else:
++        members.pop(last=False)
++    with pytest.raises(RuntimeError):
++        next(iterator)
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++@pytest.mark.parametrize("action", ["add", "discard", "readd", "pop"])
++def test_mutation_after_final_yield_is_detected(reverse, action):
++    members = OrderedSet([1])
++    iterator = reversed(members) if reverse else iter(members)
++    assert next(iterator) == 1
++    if action == "add":
++        members.add(2)
++    elif action == "discard":
++        members.discard(1)
++    elif action == "readd":
++        members.discard(1)
++        members.add(1)
++    else:
++        members.pop(last=not reverse)
++    with pytest.raises(RuntimeError):
++        next(iterator)
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++def test_baseline_and_order_are_taken_on_first_advancement(reverse):
++    members = OrderedSet([1, 2, 3])
++    iterator = reversed(members) if reverse else iter(members)
++    members.discard(1)
++    members.add(4)
++    expected = [4, 3, 2] if reverse else [2, 3, 4]
++    assert list(iterator) == expected
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++def test_noop_mutations_allow_remaining_traversal(reverse):
++    members = OrderedSet([1, 2, 3])
++    iterator = reversed(members) if reverse else iter(members)
++    expected = [3, 2, 1] if reverse else [1, 2, 3]
++    assert next(iterator) == expected[0]
++    members.add(2)
++    members.discard(99)
++    assert list(iterator) == expected[1:]
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++def test_noop_mutations_before_exhaustion_do_not_raise(reverse):
++    members = OrderedSet([1])
++    iterator = reversed(members) if reverse else iter(members)
++    assert next(iterator) == 1
++    members.add(1)
++    members.discard(99)
++    with pytest.raises(StopIteration):
++        next(iterator)
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++def test_empty_at_creation_can_gain_members_before_advancement(reverse):
++    members = OrderedSet()
++    iterator = reversed(members) if reverse else iter(members)
++    members.add(1)
++    assert list(iterator) == [1]
++
++
++@pytest.mark.parametrize("reverse", [False, True])
++def test_exhausted_iterator_stays_exhausted_after_mutation(reverse):
++    members = OrderedSet([1])
++    iterator = reversed(members) if reverse else iter(members)
++    assert list(iterator) == [1]
++    members.discard(1)
++    members.add(2)
++    with pytest.raises(StopIteration):
++        next(iterator)

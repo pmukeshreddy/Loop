@@ -1,0 +1,73 @@
+--- /dev/null
++++ b/tests/test_convenience_plugin_collections.py
+@@ -0,0 +1,70 @@
++from unittest import TestCase
++from unittest.mock import patch
++
++import mistune
++
++
++class TestConveniencePluginCollections(TestCase):
++    def test_named_plugins_match_factory(self):
++        text = "~~removed~~ **kept**"
++        for renderer in ("html", "ast"):
++            expected = mistune.create_markdown(
++                renderer=renderer, plugins=["strikethrough"]
++            )(text)
++            for plugins in (["strikethrough"], ("strikethrough",)):
++                with self.subTest(renderer=renderer, plugins=plugins):
++                    self.assertEqual(
++                        mistune.markdown(text, renderer=renderer, plugins=plugins),
++                        expected,
++                    )
++
++    def test_order_reuse_and_caller_list_mutation(self):
++        installed = []
++
++        def first(md):
++            installed.append(("first", md))
++            md.after_render_hooks.append(lambda md, result, state: result + "A")
++
++        def second(md):
++            installed.append(("second", md))
++            md.after_render_hooks.append(lambda md, result, state: result + "B")
++
++        renderer = mistune.HTMLRenderer()
++        plugins = [first, second]
++        expected = "<p>x</p>\nAB"
++        self.assertEqual(mistune.markdown("x", renderer=renderer, plugins=plugins), expected)
++        self.assertEqual([name for name, md in installed], ["first", "second"])
++        original = installed[0][1]
++        self.assertIs(installed[1][1], original)
++        self.assertEqual(
++            mistune.markdown("x", renderer=renderer, plugins=(first, second)), expected
++        )
++        self.assertEqual(len(installed), 2)
++
++        plugins.reverse()
++        self.assertEqual(
++            mistune.markdown("x", renderer=renderer, plugins=plugins), "<p>x</p>\nBA"
++        )
++        self.assertEqual([name for name, md in installed], ["first", "second", "second", "first"])
++        self.assertIsNot(installed[2][1], original)
++        self.assertIs(installed[2][1], installed[3][1])
++        self.assertEqual(
++            mistune.markdown("x", renderer=renderer, plugins=(second, first)), "<p>x</p>\nBA"
++        )
++        self.assertEqual(len(installed), 4)
++        plugins.reverse()
++        self.assertEqual(mistune.markdown("x", renderer=renderer, plugins=plugins), expected)
++        self.assertEqual(len(installed), 4)
++
++    def test_none_and_empty_have_distinct_reusable_parsers(self):
++        renderer = mistune.HTMLRenderer()
++        with patch.object(mistune, "create_markdown", wraps=mistune.create_markdown) as factory:
++            self.assertEqual(mistune.markdown("x", renderer=renderer, plugins=None), "<p>x</p>\n")
++            self.assertEqual(factory.call_count, 1)
++            for plugins in ([], (), [], ()):
++                self.assertEqual(
++                    mistune.markdown("x", renderer=renderer, plugins=plugins), "<p>x</p>\n"
++                )
++                self.assertEqual(factory.call_count, 2)
++            self.assertEqual(mistune.markdown("y", renderer=renderer, plugins=None), "<p>y</p>\n")
++            self.assertEqual(factory.call_count, 2)

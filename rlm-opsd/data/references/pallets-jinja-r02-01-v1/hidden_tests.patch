@@ -1,0 +1,81 @@
+--- /dev/null
++++ b/tests/test_optimizer_volatile_context.py
+@@ -0,0 +1,78 @@
++import pytest
++
++from jinja2 import Environment
++from jinja2 import nodes
++from jinja2.optimizer import Optimizer
++
++
++def make_expression(environment):
++    expression = nodes.Add(
++        nodes.Mul(nodes.Const(2), nodes.Const(3)), nodes.Const(4)
++    )
++    expression.set_environment(environment)
++    return expression
++
++
++def test_volatile_preserves_nested_expressions():
++    environment = Environment()
++    eval_ctx = nodes.EvalContext(environment)
++    eval_ctx.volatile = True
++    expression = make_expression(environment)
++
++    result = Optimizer(environment).visit(expression, eval_ctx)
++
++    assert result is expression
++    assert isinstance(result, nodes.Add)
++    assert isinstance(result.left, nodes.Mul)
++    assert result.left.left.value == 2
++    assert result.left.right.value == 3
++    assert result.right.value == 4
++
++
++@pytest.mark.parametrize("mode", ["omitted", "none", "stable"])
++def test_folding_without_volatile_context(mode):
++    environment = Environment()
++    expression = make_expression(environment)
++    optimizer = Optimizer(environment)
++    if mode == "omitted":
++        result = optimizer.visit(expression)
++    elif mode == "none":
++        result = optimizer.visit(expression, None)
++    else:
++        eval_ctx = nodes.EvalContext(environment)
++        assert eval_ctx.volatile is False
++        result = optimizer.visit(expression, eval_ctx)
++
++    assert isinstance(result, nodes.Const)
++    assert result.value == 10
++
++
++def test_volatile_traversal_still_applies_custom_replacements(monkeypatch):
++    environment = Environment()
++    eval_ctx = nodes.EvalContext(environment)
++    eval_ctx.volatile = True
++    seen = []
++
++    class ReplacingOptimizer(Optimizer):
++        def visit_Name(self, node, *args, **kwargs):
++            seen.append((node.name, args, kwargs))
++            return nodes.Const(5, environment=environment)
++
++    def forbidden_as_const(self, *args, **kwargs):
++        raise AssertionError("constant evaluation attempted in volatile context")
++
++    for cls in (nodes.Add, nodes.Mul, nodes.Const):
++        monkeypatch.setattr(cls, "as_const", forbidden_as_const)
++
++    expression = nodes.Add(nodes.Name("x", "load"), make_expression(environment))
++    root = nodes.Output([expression], environment=environment)
++    root.set_environment(environment)
++    result = ReplacingOptimizer(environment).visit(root, eval_ctx, marker="sentinel")
++
++    assert result is root
++    assert seen == [("x", (eval_ctx,), {"marker": "sentinel"})]
++    assert result.nodes[0] is expression
++    assert isinstance(expression.left, nodes.Const)
++    assert expression.left.value == 5
++    assert isinstance(expression.right, nodes.Add)
++    assert isinstance(expression.right.left, nodes.Mul)

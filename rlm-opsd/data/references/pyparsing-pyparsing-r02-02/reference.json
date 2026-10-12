@@ -1,0 +1,138 @@
+{
+ "answer": [
+  "pyparsing/helpers.py::_NestedExpr.__init__"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"pyparsing/core.py::NestedExpr.__init__\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 13,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "helpers",
+    "index",
+    "lines",
+    "node",
+    "s",
+    "tree"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1214928 chars; 13 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 targeted context searches without printing the whole repository context. Locating the responsible method required following the public helper into its implementation and distinguishing constructor argument normalization from parsing behavior."
+  },
+  "notes": "This is a natural regression-localization request with a precise symbol-list output format. The question describes the observed failure without naming the defective method or prescribing the fix. Identifying why explicit None is treated like an omitted argument requires repository-specific reasoning, and the verified constructor symbol matches the responsible change. No accepted task duplicates this investigation."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "The public nested-expression helper and its compatibility alias lead to a separate implementation class. The solver must distinguish argument normalization during construction from delimiter processing during parsing."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/helpers.py",
+    "symbol": "pyparsing/helpers.py::_NestedExpr.__init__",
+    "why": "Construction distinguishes omitted ignore expressions from an explicit None and chooses the default quoted-string expression."
+   },
+   {
+    "path": "pyparsing/helpers.py",
+    "symbol": "pyparsing/helpers.py::_NestedExpr.parseImpl",
+    "why": "The parsing loop treats None as disabling the initial ignored-text trial."
+   },
+   {
+    "path": "pyparsing/helpers.py",
+    "symbol": "pyparsing/helpers.py::nested_expr",
+    "why": "The public helper forwards the supplied ignore policy to the implementation class."
+   }
+  ],
+  "expected_answer": [
+   "pyparsing/helpers.py::_NestedExpr.__init__"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "Only the constructor is changed by the setup patch. The sentinel remains unchanged, so ordinary calls with the omitted argument should retain their existing behavior.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in nested-expression grammars that explicitly pass `ignore_expr=None`: opting out of quoted-text handling no longer has the documented effect. Identify the production method containing the responsible change, rather than the public forwarding helper or a failing test. Return a JSON list of `path::Qualname` entries.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/pyparsing/helpers.py\n+++ b/pyparsing/helpers.py\n@@ -604,7 +604,7 @@\n             ignoreExpr = (\n                 ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr\n             )\n-        if ignoreExpr is _NO_IGNORE_EXPR_GIVEN:\n+        if ignoreExpr is _NO_IGNORE_EXPR_GIVEN or ignoreExpr is None:\n             ignoreExpr = quoted_string()\n \n         if opener == closer:\n"
+ },
+ "suggestion": null,
+ "task_id": "pyparsing-pyparsing-r02-02",
+ "truth": {
+  "answer": [
+   "pyparsing/helpers.py::_NestedExpr.__init__"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "pyparsing/helpers.py::_NestedExpr.__init__"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "pyparsing/helpers.py::_NestedExpr.__init__"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "tests/test_unit.py::Test02_WithoutPackrat::testNestedExpressions2",
+   "tests/test_unit.py::Test04_WithPackrat::testNestedExpressions2",
+   "tests/test_unit.py::Test06_WithBoundedPackrat::testNestedExpressions2",
+   "tests/test_unit.py::Test08_WithUnboundedPackrat::testNestedExpressions2",
+   "tests/test_unit.py::Test09_WithLeftRecursionParsing::testNestedExpressions2",
+   "tests/test_unit.py::Test10_WithLeftRecursionParsingBoundedMemo::testNestedExpressions2"
+  ],
+  "ground_truth_symbols": [
+   "pyparsing/helpers.py::_NestedExpr.__init__"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 2040,
+  "stability_runs": 3
+ }
+}

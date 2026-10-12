@@ -1,0 +1,12 @@
+--- a/h11/_receivebuffer.py
++++ b/h11/_receivebuffer.py
+@@ -93,7 +93,8 @@
+         partial_idx = self._data.find(b"\r\n", search_start_index)
+ 
+         if partial_idx == -1:
+-            self._next_line_search = len(self._data)
++            # Recheck the last byte in case a CRLF is split across appends.
++            self._next_line_search = max(0, len(self._data) - 1)
+             return None
+ 
+         # + 2 is to compensate len(b"\r\n")

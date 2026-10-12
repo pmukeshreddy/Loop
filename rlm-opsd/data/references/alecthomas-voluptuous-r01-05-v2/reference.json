@@ -1,0 +1,173 @@
+{
+ "answer": "--- a/voluptuous/humanize.py\n+++ b/voluptuous/humanize.py\n@@ -40,7 +40,11 @@\n             )\n         )\n     else:\n-        offending_item_summary = repr(_nested_getitem(data, validation_error.path))\n+        offending_value = _nested_getitem(data, validation_error.path)\n+        try:\n+            offending_item_summary = repr(offending_value)\n+        except Exception:\n+            offending_item_summary = '<unrepresentable %s>' % type(offending_value).__name__\n         if len(offending_item_summary) > max_sub_error_length:\n             offending_item_summary = (\n                 offending_item_summary[: max_sub_error_length - 3] + '...'\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6570 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The scoped context is only 6,570 characters, and the reference execution used no sub-calls. Direct inspection supports reasoning about the repr exception boundary, existing truncation logic, recursive aggregation, and the validation wrapper."
+  },
+  "notes": "This is a clear, natural implementation request with a precise production-only unified-diff format. The verified patch catches Exception only around repr, constructs the fallback without stringifying the value or exception, and retains existing truncation and diagnostic behavior. Although it shares the humanize_error entry point with the parent task, representation-failure handling is a substantively different change from tiny-budget handling, not a cosmetic variation or duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The two scoped files total less than 16,000 characters and contain the representation, truncation, recursive aggregation, diagnostic formatting, and humanized-error wrapper logic. A direct read is sufficient to reason about the exception boundary and its effects on both aggregate rendering and the wrapper."
+  },
+  "context": {
+   "files": [
+    "voluptuous/humanize.py",
+    "voluptuous/error.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/humanize.py",
+    "symbol": "voluptuous/humanize.py::humanize_error",
+    "why": "The offending value is currently passed directly to repr without exception containment. The resulting summary then enters the existing truncation logic, and recursive aggregate rendering calls the same function for each child."
+   },
+   {
+    "path": "voluptuous/humanize.py",
+    "symbol": "voluptuous/humanize.py::validate_with_humanized_errors",
+    "why": "The wrapper constructs Error from humanize_error's result; an exception during representation currently escapes before that Error can be raised."
+   },
+   {
+    "path": "voluptuous/error.py",
+    "symbol": "voluptuous/error.py::Invalid.__str__",
+    "why": "This supplies the diagnostic, error type, and path formatting that the implementation must preserve."
+   },
+   {
+    "path": "voluptuous/error.py",
+    "symbol": "voluptuous/error.py::MultipleInvalid",
+    "why": "Nested aggregates are constructible, and their child errors must remain independently renderable even when one offending value cannot be represented."
+   }
+  ],
+  "expected_answer": "--- a/voluptuous/humanize.py\n+++ b/voluptuous/humanize.py\n@@ -39,10 +39,14 @@\n                 humanize_error(data, sub_error, max_sub_error_length)\n                 for sub_error in validation_error.errors\n             )\n         )\n     else:\n-        offending_item_summary = repr(_nested_getitem(data, validation_error.path))\n+        offending_item = _nested_getitem(data, validation_error.path)\n+        try:\n+            offending_item_summary = repr(offending_item)\n+        except Exception:\n+            offending_item_summary = '<unrepresentable %s>' % type(offending_item).__name__\n         if len(offending_item_summary) > max_sub_error_length:\n             offending_item_summary = (\n                 offending_item_summary[: max_sub_error_length - 3] + '...'\n             )\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_humanize_repr_failure.py\n@@ -0,0 +1,99 @@\n+import pytest\n+\n+from voluptuous import Invalid, MultipleInvalid, Schema\n+from voluptuous.error import Error\n+from voluptuous.humanize import humanize_error, validate_with_humanized_errors\n+\n+\n+class BrokenRepr:\n+    def __repr__(self):\n+        raise RuntimeError('repr failed')\n+\n+    def __str__(self):\n+        raise AssertionError('value must not be stringified')\n+\n+\n+class UnprintableFailure(RuntimeError):\n+    def __init__(self):\n+        super().__init__('repr failed')\n+        self.str_calls = 0\n+\n+    def __str__(self):\n+        self.str_calls += 1\n+        raise AssertionError('exception must not be stringified')\n+\n+\n+class PoisonedRepr:\n+    def __init__(self):\n+        self.failure = UnprintableFailure()\n+        self.str_calls = 0\n+\n+    def __repr__(self):\n+        raise self.failure\n+\n+    def __str__(self):\n+        self.str_calls += 1\n+        raise AssertionError('value must not be stringified')\n+\n+\n+@pytest.mark.parametrize('value_type', [BrokenRepr, PoisonedRepr])\n+def test_fallback_preserves_diagnostic(value_type):\n+    value = value_type()\n+    error = Invalid('invalid field', ['payload', 0], error_type='item')\n+    result = humanize_error({'payload': [value]}, error)\n+    assert result == (\n+        \"invalid field for item @ data['payload'][0]. Got \"\n+        '<unrepresentable %s>' % value_type.__name__\n+    )\n+    if isinstance(value, PoisonedRepr):\n+        assert value.str_calls == 0\n+        assert value.failure.str_calls == 0\n+\n+\n+@pytest.mark.parametrize('budget', [3, 4, 10, 28, 29, 30, 31, 100])\n+@pytest.mark.parametrize('value_type', [BrokenRepr, PoisonedRepr])\n+def test_fallback_budget(value_type, budget):\n+    summary = '<unrepresentable %s>' % value_type.__name__\n+    if len(summary) > budget:\n+        summary = summary[:budget - 3] + '...'\n+    assert humanize_error(value_type(), Invalid('bad'), budget) == 'bad. Got ' + summary\n+\n+\n+def test_nested_mixed_aggregate():\n+    data = {'bad': PoisonedRepr(), 'ok': 7, 'text': 'fine'}\n+    error = MultipleInvalid([\n+        Invalid('zeta', ['text']),\n+        MultipleInvalid([\n+            Invalid('beta', ['ok']),\n+            Invalid('alpha', ['bad'], error_type='field'),\n+        ]),\n+    ])\n+    assert humanize_error(data, error) == (\n+        \"alpha for field @ data['bad']. Got <unrepresentable PoisonedRepr>\\n\"\n+        \"beta @ data['ok']. Got 7\\n\"\n+        \"zeta @ data['text']. Got 'fine'\"\n+    )\n+\n+\n+@pytest.mark.parametrize('budget', [10, 500])\n+def test_validate_wrapper_contains_original_diagnostic(budget):\n+    summary = '<unrepresentable PoisonedRepr>'\n+    if len(summary) > budget:\n+        summary = summary[:budget - 3] + '...'\n+    with pytest.raises(Error) as caught:\n+        validate_with_humanized_errors(PoisonedRepr(), Schema(int), budget)\n+    assert type(caught.value) is Error\n+    assert str(caught.value) == 'expected int. Got ' + summary\n+\n+\n+@pytest.mark.parametrize('exception_type', [KeyboardInterrupt, SystemExit, GeneratorExit])\n+def test_base_exception_propagates(exception_type):\n+    failure = exception_type()\n+\n+    class InterruptedRepr:\n+        def __repr__(self):\n+            raise failure\n+\n+    with pytest.raises(exception_type) as caught:\n+        humanize_error(InterruptedRepr(), Invalid('bad'))\n+    assert caught.value is failure\n",
+  "include_failure_log": false,
+  "notes": "This variation uses new hidden acceptance tests against the supplied baseline, whose unguarded repr already exhibits the requested failure condition; no synthetic setup defect is needed. The tests cover RuntimeError, an exception with a failing __str__, absence of value/exception stringification, fallback truncation and fit boundaries, nested mixed aggregates, Schema(int) wrapper behavior, and propagation of non-Exception BaseException subclasses. Existing tests cover normal rendering and successful wrapper validation. The expected production patch is distinct from the original tiny-budget repair and makes no changes to tiny or negative budget semantics.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Humanized validation diagnostics should still be usable when an offending object has a broken repr implementation. Extend `humanize_error` so that an Exception raised while obtaining the offending value's repr produces the summary `<unrepresentable TYPE>`, with TYPE taken from `type(value).__name__`. Neither the value nor the caught exception may be passed to str while constructing this fallback. BaseException subclasses outside Exception, including KeyboardInterrupt, must continue to propagate.\n\nFor integer `max_sub_error_length` budgets of at least three, treat the fallback exactly like an ordinary repr: leave it intact when it fits, otherwise keep the budget-minus-three prefix followed by `...`. Only the offending-value summary is budgeted. Preserve existing diagnostic and path formatting, recursive MultipleInvalid rendering and sorting, and ordinary representable-value behavior. `validate_with_humanized_errors` must consequently raise its usual Error with the humanized validation diagnostic when such an object is rejected by `Schema(int)`, rather than leaking its representation exception; successful validation must remain unchanged. Budgets below three are outside this request's scope.\n\nDeliver a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct solving but exercises failure-containment reasoning and caller-level verification. Reading validate_with_humanized_errors and Schema.__call__ establishes how a representation failure currently escapes the intended Error wrapper, while focused tests verify both aggregation and exception propagation.",
+  "change_type": "failure_condition",
+  "description": "Make voluptuous/humanize.py::humanize_error resilient when the offending value's __repr__ raises an Exception. Substitute the deterministic summary <unrepresentable TYPE>, where TYPE is type(value).__name__, without calling str on either the value or the caught exception. Apply the existing summary truncation convention to that fallback for budgets of at least three. Do not catch BaseException subclasses such as KeyboardInterrupt. Preserve diagnostic and path formatting, recursive MultipleInvalid rendering, and sorting. Return a unified diff with acceptance tests using a value whose __repr__ raises RuntimeError, an exception whose __str__ also raises, a mixed MultipleInvalid containing both representable and unrepresentable values, and validate_with_humanized_errors with Schema(int). Tiny and negative budgets are outside this variation's scope.",
+  "expected_answer_change": "The answer should introduce guarded offending-value representation in voluptuous/humanize.py::humanize_error or a dedicated helper. It must preserve voluptuous/error.py::Invalid.__str__ and MultipleInvalid behavior, and ensure validate_with_humanized_errors still raises Error containing the humanized validation diagnostic rather than leaking RuntimeError. The seed's tiny-budget patch alone cannot satisfy this contract.",
+  "why_substantive": "The failure is now diagnostic construction masking the original validation failure, not a slicing error. The repair needs an exception boundary around value representation and must demonstrate that one bad representation does not prevent other aggregate errors from rendering."
+ },
+ "task_id": "alecthomas-voluptuous-r01-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-100]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-28]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-29]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-30]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-31]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-3]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-4]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-100]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-28]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-29]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-30]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-31]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-3]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-4]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_preserves_diagnostic[BrokenRepr]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_preserves_diagnostic[PoisonedRepr]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_nested_mixed_aggregate",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_validate_wrapper_contains_original_diagnostic[10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_validate_wrapper_contains_original_diagnostic[500]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 21,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/humanize.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-100]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-28]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-29]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-30]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-31]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-3]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[BrokenRepr-4]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-100]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-28]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-29]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-30]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-31]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-3]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_budget[PoisonedRepr-4]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_preserves_diagnostic[BrokenRepr]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_fallback_preserves_diagnostic[PoisonedRepr]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_nested_mixed_aggregate",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_validate_wrapper_contains_original_diagnostic[10]",
+   "voluptuous/tests/test_humanize_repr_failure.py::test_validate_wrapper_contains_original_diagnostic[500]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

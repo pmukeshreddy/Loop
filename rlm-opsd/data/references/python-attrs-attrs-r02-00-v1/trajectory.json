@@ -1,0 +1,75 @@
+{
+  "task_id": "python-attrs-attrs-r02-00-v1",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 1645,
+    "context_lengths": [
+      1645
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context), [len(x) for x in context])\nprint(context[0])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context), [len(x) for x in context])\nprint(context[0])"
+      ],
+      "stdout_raw_chars": 1670,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 1 [1645]\n# File: src/attr/setters.py\n# SPDX-License-Identifier: MIT\n\n\"\"\"\nCommonly used hooks for on_setattr.\n\"\"\"\n\nfrom . import _config\nfrom .exceptions import FrozenAttributeError\n\n\ndef pipe(*setters):\n    \"\"\"\n    Run all *setters* and return the return value of the last one.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n\n    def wrapped_pipe(instance, attrib, new_value):\n        rv = new_value\n\n        for setter in setters:\n            rv = setter(instance, attrib, rv)\n\n        return rv\n\n    return wrapped_pipe\n\n\ndef frozen(_, __, ___):\n    \"\"\"\n    Prevent an attribute to be modified.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n    raise FrozenAttributeError\n\n\ndef validate(instance, attrib, new_value):\n    \"\"\"\n    Run *attrib*'s validator on *new_value* if it has one.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n    if _config._run_validators is False:\n        return new_value\n\n    v = attrib.validator\n    if not v:\n        return new_value\n\n    v(instance, attrib, new_value)\n\n    return new_value\n\n\ndef convert(instance, attrib, new_value):\n    \"\"\"\n    Run *attrib*'s converter -- if it has one -- on *new_value* and return the\n    result.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n    c = attrib.converter\n    if c:\n        # This can be removed once we drop 3.8 and use attrs.Converter instead.\n        from ._make import Converter\n\n        if not isinstance(c, Converter):\n            return c(new_value)\n\n        return c(new_value, instance, attrib)\n\n    return new_value\n\n\n# Sentinel for disabling class-wide *on_setattr* hooks for certain attributes.\n# Sphinx's autodata stopped working, so the docstring is inlined in the API\n# docs.\nNO_OP = object()\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\npath = context[0].splitlines()[0][len(\"# File: \"):]\nold = context[0].split(\"\\n\", 1)[1]\nbefore = '''    Run all *setters* and return the return value of the last one.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n\n    def wrapped_pipe(instance, attrib, new_value):\n'''\nafter = '''    Run all *setters* and return the return value of the last one.\n\n    Lists and tuples of setters are expanded in left-to-right order, including\n    nested containers. Empty containers are ignored. The expanded sequence is\n    captured when the pipeline is created, so later changes to input lists do\n    not affect it. With no setters, the supplied value is returned unchanged.\n\n    Cyclic containers raise `ValueError`; non-callable leaves (including\n    `NO_OP`) raise `TypeError`. Hooks are not called during construction.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n    hooks = []\n    active = {id(setters)}\n    stack = [(iter(setters), id(setters))]\n\n    # Track only the current ancestry: shared acyclic containers must be\n    # expanded at every occurrence. An explicit stack avoids recursion limits.\n    while stack:\n        iterator, container_id = stack[-1]\n        try:\n            setter = next(iterator)\n        except StopIteration:\n            stack.pop()\n            active.remove(container_id)\n            continue\n\n        if isinstance(setter, (list, tuple)):\n            container_id = id(setter)\n            if container_id in active:\n                raise ValueError(\"Cyclic setter container.\")\n            active.add(container_id)\n            stack.append((iter(setter), container_id))\n        elif callable(setter):\n            hooks.append(setter)\n        else:\n            raise TypeError(\"Setters must be callable.\")\n\n    setters = tuple(hooks)\n\n    def wrapped_pipe(instance, attrib, new_value):\n'''\nassert old.count(before) == 1\nnew = old.replace(before, after)\nast.parse(new)\nassert new != old\nassert new[new.index('\\ndef frozen'): ] == old[old.index('\\ndef frozen'):]\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\" + path, tofile=\"b/\" + path))\nprint(patch)\n``` scratch?\n\n```repl\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\npath = context[0].splitlines()[0][len(\"# File: \"):]\nold = context[0].split(\"\\n\", 1)[1]\nbefore = '''    Run all *setters* and return the return value of the last one.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n\n    def wrapped_pipe(instance, attrib, new_value):\n'''\nafter = '''    Run all *setters* and return the return value of the last one.\n\n    Lists and tuples of setters are expanded in left-to-right order, including\n    nested containers. Empty containers are ignored. The expanded sequence is\n    captured when the pipeline is created, so later changes to input lists do\n    not affect it. With no setters, the supplied value is returned unchanged.\n\n    Cyclic containers raise `ValueError`; non-callable leaves (including\n    `NO_OP`) raise `TypeError`. Hooks are not called during construction.\n\n    .. versionadded:: 20.1.0\n    \"\"\"\n    hooks = []\n    active = {id(setters)}\n    stack = [(iter(setters), id(setters))]\n\n    # Track only the current ancestry: shared acyclic containers must be\n    # expanded at every occurrence. An explicit stack avoids recursion limits.\n    while stack:\n        iterator, container_id = stack[-1]\n        try:\n            setter = next(iterator)\n        except StopIteration:\n            stack.pop()\n            active.remove(container_id)\n            continue\n\n        if isinstance(setter, (list, tuple)):\n            container_id = id(setter)\n            if container_id in active:\n                raise ValueError(\"Cyclic setter container.\")\n            active.add(container_id)\n            stack.append((iter(setter), container_id))\n        elif callable(setter):\n            hooks.append(setter)\n        else:\n            raise TypeError(\"Setters must be callable.\")\n\n    setters = tuple(hooks)\n\n    def wrapped_pipe(instance, attrib, new_value):\n'''\nassert old.count(before) == 1\nnew = old.replace(before, after)\nast.parse(new)\nassert new != old\nassert new[new.index('\\ndef frozen'): ] == old[old.index('\\ndef frozen'):]\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True), fromfile=\"a/\" + path, tofile=\"b/\" + path))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 1667,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/attr/setters.py\n+++ b/src/attr/setters.py\n@@ -12,8 +12,43 @@\n     \"\"\"\n     Run all *setters* and return the return value of the last one.\n \n+    Lists and tuples of setters are expanded in left-to-right order, including\n+    nested containers. Empty containers are ignored. The expanded sequence is\n+    captured when the pipeline is created, so later changes to input lists do\n+    not affect it. With no setters, the supplied value is returned unchanged.\n+\n+    Cyclic containers raise `ValueError`; non-callable leaves (including\n+    `NO_OP`) raise `TypeError`. Hooks are not called during construction.\n+\n     .. versionadded:: 20.1.0\n     \"\"\"\n+    hooks = []\n+    active = {id(setters)}\n+    stack = [(iter(setters), id(setters))]\n+\n+    # Track only the current ancestry: shared acyclic containers must be\n+    # expanded at every occurrence. An explicit stack avoids recursion limits.\n+    while stack:\n+        iterator, container_id = stack[-1]\n+        try:\n+            setter = next(iterator)\n+        except StopIteration:\n+            stack.pop()\n+            active.remove(container_id)\n+            continue\n+\n+        if isinstance(setter, (list, tuple)):\n+            container_id = id(setter)\n+            if container_id in active:\n+                raise ValueError(\"Cyclic setter container.\")\n+            active.add(container_id)\n+            stack.append((iter(setter), container_id))\n+        elif callable(setter):\n+            hooks.append(setter)\n+        else:\n+            raise TypeError(\"Setters must be callable.\")\n+\n+    setters = tuple(hooks)\n \n     def wrapped_pipe(instance, attrib, new_value):\n         rv = new_value\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/attr/setters.py\n+++ b/src/attr/setters.py\n@@ -12,8 +12,43 @@\n     \"\"\"\n     Run all *setters* and return the return value of the last one.\n \n+    Lists and tuples of setters are expanded in left-to-right order, including\n+    nested containers. Empty containers are ignored. The expanded sequence is\n+    captured when the pipeline is created, so later changes to input lists do\n+    not affect it. With no setters, the supplied value is returned unchanged.\n+\n+    Cyclic containers raise `ValueError`; non-callable leaves (including\n+    `NO_OP`) raise `TypeError`. Hooks are not called during construction.\n+\n     .. versionadded:: 20.1.0\n     \"\"\"\n+    hooks = []\n+    active = {id(setters)}\n+    stack = [(iter(setters), id(setters))]\n+\n+    # Track only the current ancestry: shared acyclic containers must be\n+    # expanded at every occurrence. An explicit stack avoids recursion limits.\n+    while stack:\n+        iterator, container_id = stack[-1]\n+        try:\n+            setter = next(iterator)\n+        except StopIteration:\n+            stack.pop()\n+            active.remove(container_id)\n+            continue\n+\n+        if isinstance(setter, (list, tuple)):\n+            container_id = id(setter)\n+            if container_id in active:\n+                raise ValueError(\"Cyclic setter container.\")\n+            active.add(container_id)\n+            stack.append((iter(setter), container_id))\n+        elif callable(setter):\n+            hooks.append(setter)\n+        else:\n+            raise TypeError(\"Setters must be callable.\")\n+\n+    setters = tuple(hooks)\n \n     def wrapped_pipe(instance, attrib, new_value):\n         rv = new_value\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 88.1188219579999
+  }
+}

@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -495,6 +495,23 @@\n         if not a.alias:\n             _OBJ_SETATTR.__get__(a)(\"alias\", _default_init_alias_for(a.name))\n             _OBJ_SETATTR.__get__(a)(\"alias_is_default\", True)\n+\n+    # Validate the final constructor aliases, including inherited and\n+    # transformer-added fields. Positional and keyword-only fields share the\n+    # same namespace, while fields excluded from init do not participate.\n+    aliases = {}\n+    for a in attrs:\n+        if a.init is False:\n+            continue\n+\n+        if a.alias in aliases:\n+            msg = (\n+                f\"Duplicate constructor alias {a.alias!r} for attributes \"\n+                f\"{aliases[a.alias]!r} and {a.name!r}.\"\n+            )\n+            raise ValueError(msg)\n+\n+        aliases[a.alias] = a.name\n \n     # Create AttrsClass *after* applying the field_transformer since it may\n     # add or remove attributes!\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.000500797566494788,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "make"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used nine targeted code searches without printing the whole context. Locating the correct validation point required connecting inherited-field collection, transformer execution, final alias resolution, and init-field participation."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise error and patch requirements. It specifies the intended contract without revealing the defective symbol or exact fix. The verified patch validates final aliases after transformation and resolution, excludes non-init fields, and preserves alias provenance. The task is substantively distinct from the parent provenance regression and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The large class-generation module contains several distinct stages that handle field metadata. The solver must connect inherited-field collection, transformer execution, final alias resolution, and initializer parameter selection to find a validation point that sees the complete final field set without rejecting collisions the transformer removes."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_transform_attrs",
+    "why": "Collects inherited and local fields, invokes the transformer, and resolves aliases for newly added fields before constructing the final field tuple."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Attribute.evolve",
+    "why": "The supplied snapshot already preserves explicit aliases while updating automatically derived aliases on renames; the new validation must respect those resulting values."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_make_init_script",
+    "why": "Some init=False fields remain in the initializer's working field list because they need default initialization, so that list alone does not identify constructor parameters."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Uses aliases for both positional and keyword-only parameters, while init=False fields contribute assignments rather than parameters."
+   },
+   {
+    "path": "tests/test_hooks.py",
+    "symbol": "tests/test_hooks.py::TestTransformHook",
+    "why": "Existing tests establish transformer support for field addition, removal, renaming, explicit aliases, and post-transformer alias resolution."
+   }
+  ],
+  "expected_answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -505,7 +505,19 @@\n             _OBJ_SETATTR.__get__(a)(\"alias\", _default_init_alias_for(a.name))\n             _OBJ_SETATTR.__get__(a)(\"alias_is_default\", True)\n \n+    aliases = {}\n+    for a in attrs:\n+        if a.init is False:\n+            continue\n+        if a.alias in aliases:\n+            msg = (\n+                f\"Duplicate constructor alias {a.alias!r} for fields \"\n+                f\"{aliases[a.alias]!r} and {a.name!r}.\"\n+            )\n+            raise ValueError(msg)\n+        aliases[a.alias] = a.name\n+\n     # Create AttrsClass *after* applying the field_transformer since it may\n     # add or remove attributes!\n     attr_names = [a.name for a in attrs]\n     AttrsClass = _make_attr_tuple_class(cls.__name__, attr_names)\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_constructor_alias_collisions.py\n@@ -0,0 +1,124 @@\n+# SPDX-License-Identifier: MIT\n+\n+import pytest\n+\n+import attr\n+\n+\n+def added(name, alias=None):\n+    return attr.Attribute(\n+        name=name,\n+        default=attr.NOTHING,\n+        validator=None,\n+        repr=True,\n+        cmp=None,\n+        hash=None,\n+        init=True,\n+        inherited=False,\n+        alias=alias,\n+    )\n+\n+\n+class TestTransformHook:\n+    @pytest.mark.parametrize(\"slots\", [False, True])\n+    @pytest.mark.parametrize(\"kw_only\", [False, True])\n+    def test_renamed_inherited_collision(self, slots, kw_only):\n+        @attr.s(slots=slots)\n+        class Base:\n+            _token = attr.ib(alias=\"token\")\n+\n+        def hook(cls, fields):\n+            return [\n+                fields[0].evolve(name=\"retained\"),\n+                fields[1].evolve(name=\"_token\", kw_only=kw_only),\n+            ]\n+\n+        with pytest.raises(ValueError) as exc:\n+            @attr.s(slots=slots, field_transformer=hook)\n+            class Child(Base):\n+                other = attr.ib()\n+\n+        for name in (\"token\", \"retained\", \"_token\"):\n+            assert name in str(exc.value)\n+\n+    @pytest.mark.parametrize(\"alias\", [None, \"token\"])\n+    def test_added_collision(self, alias):\n+        def hook(cls, fields):\n+            return [*fields, added(\"_added\" if alias else \"_token\", alias)]\n+\n+        with pytest.raises(ValueError) as exc:\n+            @attr.s(field_transformer=hook)\n+            class C:\n+                stored = attr.ib(alias=\"token\")\n+\n+        for name in (\"token\", \"stored\", \"_added\" if alias else \"_token\"):\n+            assert name in str(exc.value)\n+\n+    def test_modified_alias_collision(self):\n+        def hook(cls, fields):\n+            return [fields[0], fields[1].evolve(alias=\"token\", kw_only=True)]\n+\n+        with pytest.raises(ValueError) as exc:\n+            @attr.s(field_transformer=hook)\n+            class C:\n+                _token = attr.ib()\n+                other = attr.ib()\n+\n+        for name in (\"token\", \"_token\", \"other\"):\n+            assert name in str(exc.value)\n+\n+    @pytest.mark.parametrize(\"excluded\", [0, 1])\n+    @pytest.mark.parametrize(\"default\", [attr.NOTHING, 7, attr.Factory(lambda: 7)])\n+    def test_non_init_fields_do_not_collide(self, excluded, default):\n+        def hook(cls, fields):\n+            return [\n+                a.evolve(init=False, default=default) if i == excluded else a\n+                for i, a in enumerate(fields)\n+            ]\n+\n+        @attr.s(field_transformer=hook)\n+        class C:\n+            first = attr.ib(alias=\"token\")\n+            second = attr.ib(alias=\"token\", kw_only=True)\n+\n+        c = C(token=3)\n+        names = (\"first\", \"second\")\n+        assert getattr(c, names[1 - excluded]) == 3\n+        if default is attr.NOTHING:\n+            assert not hasattr(c, names[excluded])\n+        else:\n+            assert getattr(c, names[excluded]) == 7\n+\n+    def test_removed_collision_is_ignored(self):\n+        def hook(cls, fields):\n+            return fields[:1]\n+\n+        @attr.s(field_transformer=hook)\n+        class C:\n+            first = attr.ib(alias=\"token\")\n+            second = attr.ib(alias=\"token\")\n+\n+        assert C(token=3).first == 3\n+        assert [a.name for a in attr.fields(C)] == [\"first\"]\n+\n+    def test_collision_resolved_by_transformer(self):\n+        def hook(cls, fields):\n+            return [fields[0], fields[1].evolve(alias=\"other\")]\n+\n+        @attr.s(field_transformer=hook)\n+        class C:\n+            first = attr.ib(alias=\"token\")\n+            second = attr.ib(alias=\"token\")\n+\n+        c = C(token=3, other=4)\n+        assert (c.first, c.second) == (3, 4)\n+\n+    def test_no_transformer_collision(self):\n+        with pytest.raises(ValueError) as exc:\n+            @attr.s\n+            class C:\n+                first = attr.ib(alias=\"token\")\n+                second = attr.ib(alias=\"token\")\n+\n+        for name in (\"token\", \"first\", \"second\"):\n+            assert name in str(exc.value)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the supplied snapshot, which already contains the accepted alias-provenance repair but lacks collision validation. No setup defect is needed; the new hidden tests supply executable failure conditions. Acceptance coverage is placed in a new test file with a TestTransformHook class, rather than modifying tests/test_hooks.py, to comply with the new-file requirement for hidden tests. Collision cases currently raise SyntaxError and must instead raise ValueError. Existing successful transformer behavior and non-init default initialization must remain intact. Error-message punctuation and quoting are intentionally not prescribed.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add a clear validation error for duplicate constructor aliases during attrs class decoration. Alias provenance already works in this snapshot; preserve that behavior. After a field transformer has finished and all default aliases have been resolved, two final init=True fields must not share a constructor alias. Raise ValueError whose message includes the shared alias and both final storage names, instead of letting generated initializer compilation raise SyntaxError. Apply the same validation when no transformer is supplied. Inherited fields and transformer-added fields participate, including aliases derived by stripping leading underscores. Positional and keyword-only fields share one alias namespace. Fields with init=False do not participate, whether or not they have defaults or factories. A collision removed or resolved by the transformer must not be rejected. Return a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across transformation and initializer generation, plus persistent_state to distinguish storage names, aliases, and constructor participation. Focused inspection of these paths is more useful than investigating provenance copying alone.",
+  "change_type": "failure_condition",
+  "description": "With the accepted alias-provenance repair already applied, add early detection of duplicate constructor aliases in src/attr/_make.py::_transform_attrs. A field transformer can preserve an explicit alias while renaming another field to a name whose default alias collides with it; it can also add a colliding field. Reject collisions between final init=True fields with a ValueError naming the alias and both storage names, rather than allowing generated-source compilation to fail with SyntaxError. Fields with init=False must not participate, and positional versus keyword-only placement must not exempt a collision. Return a production patch and acceptance tests in tests/test_hooks.py::TestTransformHook.",
+  "expected_answer_change": "The answer requires a final-alias uniqueness check in _transform_attrs, coordinated with how _make_init_script and _attrs_to_init_script select constructor parameters. Coverage must include inherited fields, transformer-added fields, private-name stripping, mixed keyword-only placement, and excluded init=False fields.",
+  "why_substantive": "This investigates collisions across the final field set, not whether Attribute.evolve preserves an individual field's alias. The repair belongs after transformer execution and final alias resolution, and must account for fields added, removed, or modified by the hook. The original one-line provenance repair cannot satisfy this contract."
+ },
+ "task_id": "python-attrs-attrs-r02-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_added_collision[None]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_added_collision[token]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_modified_alias_collision",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_no_transformer_collision",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[False-False]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[False-True]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[True-False]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1394
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_added_collision[None]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_added_collision[token]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_modified_alias_collision",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_no_transformer_collision",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[False-False]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[False-True]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[True-False]",
+   "tests/test_constructor_alias_collisions.py::TestTransformHook::test_renamed_inherited_collision[True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

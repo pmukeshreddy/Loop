@@ -1,0 +1,178 @@
+{
+ "answer": [
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[None-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow1-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow2-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow3-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow4-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow5-None]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow6-misses6]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow7-misses7]",
+  "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e[allow8-None]",
+  "tests/test_stdlib.py::TestProcessorFormatter::test_clears_args"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_stdlib.py::TestProcessorFormatter::test_foreign\",\n  \"tests/test_stdlib.py::TestProcessorFormatter::test_pass_foreign_args[True]\",\n  \"tests/test_stdlib.py::TestProcessorFormatter::test_pass_foreign_args[False]\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0007535250667478736,
+  "facts": {
+   "code_blocks": 9,
+   "context_searches": 25,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "classes",
+    "extra_check",
+    "files",
+    "lines",
+    "m",
+    "src",
+    "test",
+    "tree"
+   ],
+   "subcall_errors": 1,
+   "subcall_max_prompt_chars": 35234,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 4,
+   "subcall_sites": 4,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 4,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 13,
+   "turns": 10,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "chunked_subcalls",
+  "results": {
+   "chunked_subcalls": {
+    "established": false,
+    "evidence": "13 sub-calls (1 failed); 4 call sites on selected context, 0 on the whole context; max prompt 35234 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 25 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": true,
+    "evidence": "13 sub-calls (1 failed); results stored at 4 sites; sub-call results reach the final answer: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "The execution made 13 sub-calls over selected context rather than the whole repository, supporting localized analysis.",
+   "combine_verify_finish": "The execution computed and inspected the final set of complete pytest node IDs, combining affected test definitions with their parameterized instances.",
+   "inspect_locate": "The reference execution used 25 context searches to locate constructor defaults, formatter behavior, indirect logging configuration, and relevant tests without printing the whole context.",
+   "recursive_decomposition": "Sub-call results were stored and contributed to the final answer, although the summary does not establish recursive nesting."
+  },
+  "notes": "This is a natural, repository-dependent change-impact request with a precise output format. Specifying the proposed default change is necessary task input, not an answer leak. Identifying newly failing tests requires distinguishing default-dependent construction from explicit argument values and tracing the effect on assertions. The task is distinct from the accepted ExtraAdder feature request."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The stdlib test module contains many integration scenarios and parameterized cases. Deciding which assertions depend on foreign-message interpolation requires understanding substantial test bodies rather than merely matching constructor calls.",
+   "combine_verify_finish": "The deliverable is an exact set of pytest node IDs, including parameterized instances, which must be deduplicated and checked against actual test definitions.",
+   "inspect_locate": "ProcessorFormatter construction is indirect in several tests, including logging configuration dictionaries and a shared configure_logging helper.",
+   "recursive_decomposition": "The impact separates naturally into direct formatter construction, shared logging configuration, and ExtraAdder's parameterized end-to-end tests; these findings must then be reconciled."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.__init__",
+    "why": "The proposed change alters only the constructor default."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "The foreign-record branch selects between fully interpolated messages and raw message conversion."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::configure_logging",
+    "why": "Constructs formatters indirectly for numerous integration tests without specifying use_get_message."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestExtraAdder",
+    "why": "Parameterized end-to-end assertions compare rendered foreign events against expected event dictionaries."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter",
+    "why": "Contains foreign and structured message cases, explicit flag coverage, and output assertions requiring semantic classification."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Compute newly failing node IDs within tests/test_stdlib.py. Parameter IDs must come from pytest collection, not guessed representations of allow collections.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -1124,7 +1124,7 @@\n         keep_stack_info: bool = False,\n         logger: logging.Logger | None = None,\n         pass_foreign_args: bool = False,\n-        use_get_message: bool = True,\n+        use_get_message: bool = False,\n         *args: Any,\n         **kwargs: Any,\n     ) -> None:\n",
+  "question": "We are considering changing only the default value of `ProcessorFormatter`'s `use_get_message` argument from `True` to `False`. Foreign records would therefore use `str(record.msg)` unless a caller explicitly requests `getMessage()`; explicit argument values, argument clearing, and all processor chains would remain unchanged. Which existing tests in `tests/test_stdlib.py` would newly fail? Return a JSON list of complete pytest node IDs, including parameter suffixes.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e",
+   "tests/test_stdlib.py::TestProcessorFormatter::test_clears_args"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e",
+    "tests/test_stdlib.py::TestProcessorFormatter::test_clears_args"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e",
+    "tests/test_stdlib.py::TestProcessorFormatter::test_clears_args"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_stdlib.py::TestExtraAdder::test_add_extra_e2e",
+   "tests/test_stdlib.py::TestProcessorFormatter::test_clears_args"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

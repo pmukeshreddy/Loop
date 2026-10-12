@@ -1,0 +1,150 @@
+{
+ "answer": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -1192,9 +1192,14 @@\n             pass_original = validator_kwargs.get(\"pass_original\", False)\n \n             if many and not pass_collection:\n-                for idx, (item, orig) in enumerate(\n+                # Only pair with the input when the validator requests it.\n+                # Collection preprocessors may change the number of output items.\n+                items = (\n                     zip(data, original_data, strict=True)\n-                ):\n+                    if pass_original\n+                    else ((item, None) for item in data)\n+                )\n+                for idx, (item, orig) in enumerate(items):\n                     self._run_validator(\n                         validator,\n                         item,\n@@ -1203,7 +1208,7 @@\n                         many=many,\n                         partial=partial,\n                         unknown=unknown,\n-                        index=idx,\n+                        index=idx if self.opts.index_errors else None,\n                         pass_original=pass_original,\n                     )\n             else:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001743216707985053,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "schema"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 16 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['files', 'm', 'schema']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines output-cardinality-based iteration for validators that do not request original input with strict positional pairing for those that do. The supplied tests exercise filtering and expansion through both public APIs, output-order invocation, collection validators, indexed errors, and preservation of the strict length-mismatch failure.",
+   "inspect_locate": "The investigation used 16 searches across the repository context to connect collection preprocessing, deserialization, validator metadata, and item-validator dispatch. The requested behavior is not explained by the public load entry point alone.",
+   "persistent_state": "The reference execution reused files, m, and schema across turns, although the supplied evidence does not establish that persistent state was essential to solving the task."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. It specifies observable contracts without identifying the defective internal dispatcher or prescribing solver operations. It is distinct from the accepted tasks. The supplied tests do not explicitly cover index_errors=False or skip_on_field_errors, but that coverage limitation does not make the task ambiguous or invalidate its stated behaviors."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch must combine cardinality-independent validation for one metadata mode with unchanged strict original pairing for the other, checking that validator arguments and index handling are preserved in both branches.",
+   "inspect_locate": "The behavior crosses collection preprocessing, deserialization, validator metadata, and validator dispatch; the public load method alone does not explain the failure.",
+   "persistent_state": "The solver needs to retain the two pass_original modes, the effective processed collection, and index-error handling while constructing the revised dispatch branch."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._do_load",
+    "why": "Passes deserialized processed data and untouched original input separately into schema validation."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_schema_validators",
+    "why": "Currently performs strict pairing even when the validator does not request original input."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._run_validator",
+    "why": "Controls whether original input is actually passed and stores indexed validation errors."
+   },
+   {
+    "path": "src/marshmallow/decorators.py",
+    "symbol": "src/marshmallow/decorators.py::validates_schema",
+    "why": "Defines pass_original, pass_collection, and skip_on_field_errors metadata."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_schema_validator_processed_cardinality.py\n@@ -0,0 +1,59 @@\n+import pytest\n+\n+from marshmallow import Schema, ValidationError, fields, pre_load, validates_schema\n+\n+\n+@pytest.mark.parametrize(\"expand\", [False, True])\n+@pytest.mark.parametrize(\"api\", [\"load\", \"validate\"])\n+def test_item_validation_uses_processed_cardinality(expand, api):\n+    seen = []\n+    collections = []\n+\n+    class Record(Schema):\n+        n = fields.Int()\n+\n+        @pre_load(pass_collection=True)\n+        def reshape(self, data, **kwargs):\n+            return data + data[:1] if expand else data[1:]\n+\n+        @validates_schema(pass_collection=True)\n+        def check_collection(self, data, **kwargs):\n+            collections.append([item[\"n\"] for item in data])\n+\n+        @validates_schema\n+        def check_item(self, data, **kwargs):\n+            seen.append(data[\"n\"])\n+            if data[\"n\"] == 2:\n+                raise ValidationError(\"Rejected\", field_name=\"n\")\n+\n+    raw = [{\"n\": \"1\"}, {\"n\": \"2\"}]\n+    expected = [1, 2, 1] if expand else [2]\n+    error_index = 1 if expand else 0\n+    messages = {error_index: {\"n\": [\"Rejected\"]}}\n+    schema = Record()\n+    if api == \"load\":\n+        with pytest.raises(ValidationError) as exc:\n+            schema.load(raw, many=True)\n+        assert exc.value.messages == messages\n+        assert exc.value.valid_data == [{\"n\": n} for n in expected]\n+        assert exc.value.data is raw\n+    else:\n+        assert schema.validate(raw, many=True) == messages\n+    assert seen == expected\n+    assert collections == [expected]\n+\n+\n+def test_original_pairing_still_requires_matching_lengths():\n+    class Record(Schema):\n+        n = fields.Int()\n+\n+        @pre_load(pass_collection=True)\n+        def filter_records(self, data, **kwargs):\n+            return data[1:]\n+\n+        @validates_schema(pass_original=True)\n+        def check_original(self, data, original, **kwargs):\n+            pass\n+\n+    with pytest.raises(ValueError):\n+        Record().load([{\"n\": \"1\"}, {\"n\": \"2\"}], many=True)\n",
+  "include_failure_log": false,
+  "notes": "Current code fails the four non-original cardinality cases with strict-zip ValueError. The strict-original test protects the explicitly retained behavior. Existing tests should continue to cover ordinary pairing and index_errors.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Allow a `pre_load(pass_collection=True)` hook to filter or expand a `many=True` input collection when item-level `validates_schema` methods do not request original input. Those validators must run exactly once for each deserialized output item, in output order, and validation errors must use that item's output index subject to the existing `Meta.index_errors` setting. This must work through both `load` and `validate`, without requiring the processed collection to have the original input's length. Keep collection-level validators and `skip_on_field_errors` behavior unchanged. Item-level validators declared with `pass_original=True` must retain the existing strict positional pairing and length-mismatch behavior. Send a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[load-False]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[load-True]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[validate-False]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[validate-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1193
+   },
+   "patch_files": [
+    "src/marshmallow/schema.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[load-False]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[load-True]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[validate-False]",
+   "tests/test_schema_validator_processed_cardinality.py::test_item_validation_uses_processed_cardinality[validate-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

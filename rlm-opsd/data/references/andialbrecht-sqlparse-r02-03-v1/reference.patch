@@ -1,0 +1,73 @@
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -559,7 +559,14 @@
+     M_OPEN = T.Keyword, 'WHERE'
+     M_CLOSE = T.Keyword, (
+         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',
+-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')
++        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')
++
++
++class Qualify(TokenList):
++    """A QUALIFY clause."""
++    M_OPEN = T.Keyword, 'QUALIFY'
++    M_CLOSE = T.Keyword, (
++        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')
+ 
+ 
+ class Over(TokenList):
+--- a/sqlparse/engine/grouping.py
++++ b/sqlparse/engine/grouping.py
+@@ -346,21 +346,35 @@
+         tidx, token = tlist.token_next_by(t=T.Comment, idx=tidx)
+ 
+ 
+-@recurse(sql.Where)
+-def group_where(tlist):
+-    tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN)
+-    while token:
+-        eidx, end = tlist.token_next_by(m=sql.Where.M_CLOSE, idx=tidx)
++def _group_clause(tlist, cls):
++    """Group WHERE/QUALIFY using whitespace-insensitive keyword boundaries."""
++    def is_boundary(token):
++        # Normalize only for this comparison: token values and the global
++        # Token.match/normalized semantics must remain unchanged.
++        return (token.ttype == cls.M_CLOSE[0]
++                and ' '.join(token.normalized.split()) in cls.M_CLOSE[1])
++
++    tidx, token = tlist.token_next_by(m=cls.M_OPEN)
++    while token:
++        eidx, end = tlist._token_matching(is_boundary, start=tidx + 1)
+ 
+         if end is None:
+             end = tlist._groupable_tokens[-1]
+         else:
+             end = tlist.tokens[eidx - 1]
+-        # TODO: convert this to eidx instead of end token.
+-        # i think above values are len(tlist) and eidx-1
+         eidx = tlist.token_index(end)
+-        tlist.group_tokens(sql.Where, tidx, eidx)
+-        tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)
++        tlist.group_tokens(cls, tidx, eidx)
++        tidx, token = tlist.token_next_by(m=cls.M_OPEN, idx=tidx)
++
++
++@recurse(sql.Where)
++def group_where(tlist):
++    _group_clause(tlist, sql.Where)
++
++
++@recurse(sql.Qualify)
++def group_qualify(tlist):
++    _group_clause(tlist, sql.Qualify)
+ 
+ 
+ @recurse()
+@@ -454,6 +468,7 @@
+         group_over,
+         group_functions,
+         group_where,
++        group_qualify,
+         group_period,
+         group_arrays,
+         group_identifier,

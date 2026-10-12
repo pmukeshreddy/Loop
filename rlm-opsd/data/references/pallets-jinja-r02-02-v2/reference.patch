@@ -1,0 +1,17 @@
+--- a/src/jinja2/bccache.py
++++ b/src/jinja2/bccache.py
+@@ -69,8 +69,13 @@
+         if magic != bc_magic:
+             self.reset()
+             return
++        # A truncated checksum record is a cache miss.
++        try:
++            checksum = pickle.load(f)
++        except (EOFError, pickle.UnpicklingError):
++            self.reset()
++            return
+         # the source code of the file changed, we need to reload
+-        checksum = pickle.load(f)
+         if self.checksum != checksum:
+             self.reset()
+             return

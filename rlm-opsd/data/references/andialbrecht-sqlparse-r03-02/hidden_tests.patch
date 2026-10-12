@@ -1,0 +1,43 @@
+--- /dev/null
++++ b/tests/test_output_varname_acceptance.py
+@@ -0,0 +1,40 @@
++import pytest
++
++import sqlparse
++from sqlparse.exceptions import SQLParseError
++
++
++def test_custom_assignment_names():
++    source = 'select 1; select 2'
++    assert sqlparse.format(
++        source, output_format='python', output_varname='query'
++    ) == "query = 'select 1; '\nquery2 = 'select 2'"
++    assert sqlparse.format(
++        source, output_format='php', output_varname='query'
++    ) == '$query = "select 1; ";\n$query2 = "select 2";'
++
++
++def test_multiline_custom_assignment():
++    assert sqlparse.format(
++        'select * from foo;', output_format='python',
++        output_varname='q_7', reindent=True
++    ) == "q_7 = ('select * '\n       'from foo;')"
++
++
++@pytest.mark.parametrize('name', ['', '2q', 'q-x', '$q', 'q x', 'é', None, 4, True])
++@pytest.mark.parametrize('output_format', ['python', 'php', 'sql', None])
++def test_reject_invalid_assignment_name(name, output_format):
++    with pytest.raises(SQLParseError):
++        sqlparse.format('select 1', output_format=output_format, output_varname=name)
++
++
++@pytest.mark.parametrize('output_format', ['sql', None])
++def test_no_assignment_in_sql_output(output_format):
++    assert sqlparse.format(
++        'select 1;', output_format=output_format, output_varname='query'
++    ) == 'select 1;'
++
++
++def test_default_assignment_name_is_unchanged():
++    assert sqlparse.format('select 1', output_format='python') == "sql = 'select 1'"
++    assert sqlparse.format('select 1', output_format='php') == '$sql = "select 1";'

@@ -1,0 +1,184 @@
+{
+ "answer": "--- a/src/cachetools/func.py\n+++ b/src/cachetools/func.py\n@@ -1,18 +1,27 @@\n \"\"\"`functools.lru_cache` compatible memoizing function decorators.\"\"\"\n \n-__all__ = (\"fifo_cache\", \"lfu_cache\", \"lru_cache\", \"rr_cache\", \"ttl_cache\")\n+__all__ = (\"fifo_cache\", \"lfu_cache\", \"lru_cache\", \"rr_cache\", \"tlru_cache\", \"ttl_cache\")\n \n import math\n import random\n import time\n from threading import Condition\n \n-from . import FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, cached, keys\n+from . import FIFOCache, LFUCache, LRUCache, RRCache, TLRUCache, TTLCache, cached, keys\n \n \n class _UnboundTTLCache(TTLCache):\n     def __init__(self, ttl, timer):\n         TTLCache.__init__(self, math.inf, ttl, timer)\n+\n+    @property\n+    def maxsize(self):  # type: ignore\n+        return None\n+\n+\n+class _UnboundTLRUCache(TLRUCache):\n+    def __init__(self, ttu, timer):\n+        TLRUCache.__init__(self, math.inf, ttu, timer)\n \n     @property\n     def maxsize(self):  # type: ignore\n@@ -88,6 +97,26 @@\n         return _cache(RRCache(maxsize, choice), maxsize, typed)\n \n \n+def tlru_cache(ttu, maxsize=128, timer=time.monotonic, typed=False):\n+    \"\"\"Decorator to wrap a function with a memoizing callable that saves\n+    up to `maxsize` results based on a Time aware Least Recently Used\n+    (TLRU) algorithm.\n+\n+    The required `ttu(key, value, now)` callback receives the generated\n+    cache key, the computed result, and the timer value at insertion,\n+    and returns an absolute expiration deadline.  Results with deadlines\n+    at or before `now` are returned but not cached.  Cache hits do not\n+    call `ttu` again.\n+\n+    If `maxsize` is None, the cache is unbounded but results still expire.\n+\n+    \"\"\"\n+    if maxsize is None:\n+        return _cache(_UnboundTLRUCache(ttu, timer), None, typed)\n+    else:\n+        return _cache(TLRUCache(maxsize, ttu, timer), maxsize, typed)\n+\n+\n def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False):\n     \"\"\"Decorator to wrap a function with a memoizing callable that saves\n     up to `maxsize` results based on a Least Recently Used (LRU)\n--- a/src/cachetools/func.pyi\n+++ b/src/cachetools/func.pyi\n@@ -3,7 +3,7 @@\n \n from . import _CacheInfo\n \n-__all__: Final = (\"fifo_cache\", \"lfu_cache\", \"lru_cache\", \"rr_cache\", \"ttl_cache\")\n+__all__: Final = (\"fifo_cache\", \"lfu_cache\", \"lru_cache\", \"rr_cache\", \"tlru_cache\", \"ttl_cache\")\n \n _P = ParamSpec(\"_P\")\n _T = TypeVar(\"_T\")\n@@ -55,6 +55,12 @@\n     choice: Callable[[Sequence[_T]], _T] = ...,\n     typed: bool = False,\n ) -> _cachetools_cache_wrapper[_P, _R]: ...\n+def tlru_cache(\n+    ttu: Callable[[Any, Any, _T], _T],\n+    maxsize: int | None = 128,\n+    timer: Callable[[], _T] = ...,\n+    typed: bool = False,\n+) -> Callable[[Callable[_P, _R]], _cachetools_cache_wrapper[_P, _R]]: ...\n @overload\n def ttl_cache(\n     maxsize: int | None = 128,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 20,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "edits",
+    "files",
+    "new",
+    "old",
+    "patch",
+    "s",
+    "tlru"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 14086,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 20 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines runtime export and import changes, bounded and expiration-preserving unbounded construction, helper reuse, and the typing declaration. It was assembled programmatically and inspected before completion. The execution summary does not show repository test execution, so it supports integration and final inspection rather than independent runtime verification.",
+   "inspect_locate": "The reference execution used 20 targeted context searches without printing the whole repository context. The change requires locating the convenience-decorator helper, existing unbounded TTL construction, TLRU behavior, and public typing exports."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise observable requirements and a clear production-only unified-diff format. Specifying reuse of the existing policy and wrapper machinery constrains the implementation without prescribing solver operations. The task is substantively different from its parent and the accepted tasks, including the weighted TTL decorator request."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must combine the public export, bounded and unbounded construction paths, and reuse of the existing decorator helper. Checking those paths together is necessary to ensure that expiration, typed keys, synchronization, and reported capacity remain consistent.",
+   "inspect_locate": "The new convenience decorator depends on behavior spread across func.py, the public cached decorator, its condition/statistics wrapper, key generation, and TLRUCache. The solver must identify how expiration-aware storage and unbounded capacity interact with the existing wrapper metadata."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_cache",
+    "why": "Provides key selection, a condition-based statistics wrapper, and cache_parameters metadata for convenience decorators."
+   },
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_UnboundTTLCache",
+    "why": "Shows the existing pattern for retaining timed-cache behavior while reporting an unbounded public capacity."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.__setitem__",
+    "why": "Calls ttu with the key, value, and current timer value, and declines to retain results with nonfuture deadlines."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.expire",
+    "why": "Maintains deadline-ordered expiration independently of LRU ordering, including replacement bookkeeping."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::cached",
+    "why": "Statistics for Cache instances use the cache's public maxsize and expiration-aware currsize properties."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition_info",
+    "why": "Supplies the miss accounting, pending-key coordination, and cache-hit behavior inherited through func._cache."
+   },
+   {
+    "path": "src/cachetools/keys.py",
+    "symbol": "src/cachetools/keys.py::typedkey",
+    "why": "Defines the typed cache keys that must be passed unchanged to the expiration callback."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_func_tlru_cache.py\n@@ -0,0 +1,194 @@\n+import threading\n+\n+import pytest\n+\n+from cachetools import TLRUCache, func, keys\n+\n+\n+class Clock:\n+    def __init__(self):\n+        self.now = 10\n+\n+    def __call__(self):\n+        return self.now\n+\n+\n+def test_export_and_defaults():\n+    assert \"tlru_cache\" in func.__all__\n+    @func.tlru_cache(lambda key, value, now: now + 60)\n+    def identity(value):\n+        return value\n+\n+    assert isinstance(identity.cache, TLRUCache)\n+    assert identity.cache_info() == (0, 0, 128, 0)\n+    assert identity.cache_parameters() == {\"maxsize\": 128, \"typed\": False}\n+    assert identity(1) == 1\n+    assert identity(1) == 1\n+    assert identity.cache_info() == (1, 1, 128, 1)\n+    assert identity.__wrapped__(2) == 2\n+\n+\n+@pytest.mark.parametrize(\"maxsize\", [2, None])\n+def test_value_dependent_deadlines(maxsize):\n+    clock = Clock()\n+    observed = []\n+    calls = {}\n+\n+    def ttu(key, value, now):\n+        observed.append((key, value, now))\n+        return now + value[1]\n+\n+    @func.tlru_cache(ttu, maxsize=maxsize, timer=clock)\n+    def compute(name, *, lifetime):\n+        calls[name] = calls.get(name, 0) + 1\n+        return (calls[name], lifetime)\n+\n+    short_key = keys.hashkey(\"short\", lifetime=2)\n+    long_key = keys.hashkey(\"long\", lifetime=7)\n+    assert compute(\"short\", lifetime=2) == (1, 2)\n+    assert compute(\"long\", lifetime=7) == (1, 7)\n+    assert observed == [(short_key, (1, 2), 10), (long_key, (1, 7), 10)]\n+    clock.now = 12\n+    assert compute(\"long\", lifetime=7) == (1, 7)\n+    assert compute(\"short\", lifetime=2) == (2, 2)\n+    assert observed[-1] == (short_key, (2, 2), 12)\n+    clock.now = 14\n+    assert set(compute.cache.expire()) == {(short_key, (2, 2))}\n+    assert compute.cache_info() == (1, 3, maxsize, 1)\n+    clock.now = 17\n+    assert compute.cache_info().currsize == 0\n+    assert compute(\"long\", lifetime=7) == (2, 7)\n+\n+\n+@pytest.mark.parametrize(\"maxsize\", [2, None])\n+@pytest.mark.parametrize(\"delta\", [0, -1])\n+def test_nonfuture_deadlines_are_not_retained(maxsize, delta):\n+    clock = Clock()\n+    calls = []\n+    deadlines = []\n+\n+    def ttu(key, value, now):\n+        deadlines.append((key, value, now))\n+        return now + delta\n+\n+    @func.tlru_cache(ttu, maxsize=maxsize, timer=clock)\n+    def compute(x):\n+        calls.append(x)\n+        return len(calls)\n+\n+    assert compute(1) == 1\n+    assert compute(1) == 2\n+    assert deadlines == [(keys.hashkey(1), 1, 10), (keys.hashkey(1), 2, 10)]\n+    assert keys.hashkey(1) not in compute.cache\n+    assert compute.cache_info() == (0, 2, maxsize, 0)\n+\n+\n+def test_unbounded_capacity_still_expires_and_clears():\n+    clock = Clock()\n+    @func.tlru_cache(lambda key, value, now: now + 5, maxsize=None, timer=clock)\n+    def compute(x):\n+        return x\n+\n+    for x in range(200):\n+        assert compute(x) == x\n+    assert compute.cache_info() == (0, 200, None, 200)\n+    assert compute.cache_parameters() == {\"maxsize\": None, \"typed\": False}\n+    assert compute(0) == 0\n+    clock.now = 15\n+    assert compute.cache_info().currsize == 0\n+    assert compute(0) == 0\n+    assert compute.cache_info() == (1, 201, None, 1)\n+    compute.cache_clear()\n+    assert compute.cache_info() == (0, 0, None, 0)\n+\n+\n+@pytest.mark.parametrize(\"typed\", [False, True])\n+def test_typed_key_selection_and_callback_keys(typed):\n+    clock = Clock()\n+    observed = []\n+\n+    def ttu(key, value, now):\n+        observed.append(key)\n+        return now + 10\n+\n+    @func.tlru_cache(ttu, timer=clock, typed=typed)\n+    def compute(x, *, y):\n+        return type(x).__name__\n+\n+    keyfunc = keys.typedkey if typed else keys.hashkey\n+    assert compute(1, y=2) == \"int\"\n+    expected_second = \"float\" if typed else \"int\"\n+    assert compute(1.0, y=2.0) == expected_second\n+    expected_keys = [keyfunc(1, y=2)]\n+    if typed:\n+        expected_keys.append(keyfunc(1.0, y=2.0))\n+    assert observed == expected_keys\n+    assert compute.cache_parameters() == {\"maxsize\": 128, \"typed\": typed}\n+    assert compute.cache_info() == (0 if typed else 1, 2 if typed else 1, 128, 2 if typed else 1)\n+\n+\n+def test_bounded_lru_eviction():\n+    clock = Clock()\n+    @func.tlru_cache(lambda key, value, now: now + 100, maxsize=2, timer=clock)\n+    def compute(x):\n+        return x\n+\n+    compute(\"a\")\n+    compute(\"b\")\n+    compute(\"a\")\n+    compute(\"c\")\n+    assert keys.hashkey(\"b\") not in compute.cache\n+    assert set(compute.cache) == {keys.hashkey(\"a\"), keys.hashkey(\"c\")}\n+    assert compute.cache_info() == (1, 3, 2, 2)\n+\n+\n+def test_same_key_stampede_prevention(monkeypatch):\n+    clock = Clock()\n+    started = threading.Event()\n+    release = threading.Event()\n+    waiting = threading.Event()\n+    calls = []\n+    results = []\n+    errors = []\n+\n+    @func.tlru_cache(lambda key, value, now: now + 100, timer=clock)\n+    def compute(x):\n+        calls.append(x)\n+        started.set()\n+        assert release.wait(5)\n+        return x * 2\n+\n+    condition = compute.cache_condition\n+    assert condition is not None\n+    wait = condition.wait\n+\n+    def observed_wait(timeout=None):\n+        waiting.set()\n+        return wait(timeout)\n+\n+    monkeypatch.setattr(condition, \"wait\", observed_wait)\n+\n+    def invoke():\n+        try:\n+            results.append(compute(3))\n+        except BaseException as error:\n+            errors.append(error)\n+\n+    first = threading.Thread(target=invoke, daemon=True)\n+    second = threading.Thread(target=invoke, daemon=True)\n+    first.start()\n+    try:\n+        assert started.wait(5)\n+        second.start()\n+        assert waiting.wait(5)\n+    finally:\n+        release.set()\n+        first.join(5)\n+        if second.ident is not None:\n+            second.join(5)\n+    assert not first.is_alive()\n+    assert not second.is_alive()\n+    assert not errors\n+    assert results == [6, 6]\n+    assert calls == [3]\n+    assert compute.cache_info() == (1, 1, 128, 1)\n",
+  "include_failure_log": false,
+  "notes": "This is a new implementation task, not an admission-predicate variation. No setup or probe patch is needed. The acceptance file tests the export and defaults, bounded and unbounded value-dependent expiration, exact-deadline misses, nonfuture deadlines, typed positional and keyword keys, LRU eviction, clearing/statistics, and same-key concurrency. Time-sensitive expiration tests use a deterministic clock. The concurrency test observes entry into Condition.wait rather than relying on sleeps and uses bounded waits with daemon threads.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add `cachetools.func.tlru_cache(ttu, maxsize=128, timer=time.monotonic, typed=False)` as a public, exported convenience decorator for functions whose results have different expiration deadlines. The required `ttu(key, value, now)` callback must receive the generated cache key, the computed result, and the timer value at insertion; its return value is an absolute expiration deadline. Use the existing `TLRUCache` policy and `func._cache` wrapper machinery so bounded caches retain TLRU eviction, typed-key selection, condition-based stampede prevention, statistics, and the usual wrapper attributes.\n\nWith `maxsize=None`, capacity must be unbounded without disabling expiration, and both `cache_info().maxsize` and `cache_parameters()['maxsize']` must report `None`. Results whose deadlines are at or before `now` must still be returned to the caller but not retained; repeated calls for those results count as misses. Valid entries must be recomputed once their deadlines are reached, and cache hits must not call `ttu` again. Preserve the existing convenience decorators unchanged. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across the convenience-decorator and cache-policy layers, followed by combine_verify_finish using deterministic timer tests. The execution-wrapper review becomes narrower because func._cache already supplies synchronization and statistics; focused review of TLRU expiration and unbounded metadata is more useful than reviewing fourteen factories.",
+  "change_type": "dependency",
+  "description": "Instead of adding an admission predicate to cached and cachedmethod, add a value-dependent expiration decorator, cachetools.func.tlru_cache(ttu, maxsize=128, timer=time.monotonic, typed=False). Implement it in src/cachetools/func.py using TLRUCache from src/cachetools/__init__.py and the existing func._cache helper. The required ttu callback receives (key, value, now) and determines the absolute expiration deadline. Support bounded caches and maxsize=None; the latter must retain expiration while exposing maxsize=None through cache_info() and cache_parameters(). Preserve typed-key selection, condition-based stampede prevention, and statistics. Deliver a patch with acceptance tests covering value-dependent deadlines, deadlines at or before now, unbounded operation, and recomputation after expiration.",
+  "expected_answer_change": "The implementation should add the decorator and export it from func.py, route construction through TLRUCache, and provide an unbounded TLRU adapter analogous to _UnboundTTLCache. Verification depends on TLRUCache calling ttu with the generated cache key and computed value, rejecting already-expired results without retaining them, and maintaining its expiration heap. No cache_if parameter or method-wrapper changes are required.",
+  "why_substantive": "This changes the feature from a Boolean insertion gate across function and method wrappers to a new public decorator backed by a different cache implementation. Investigation follows func._cache, func._UnboundTTLCache, TLRUCache.__setitem__, and TLRUCache.expire rather than modifying all execution factories. It is also distinct from the existing weighted ttl_cache task: this feature supplies per-result expiration deadlines, not size accounting."
+ },
+ "task_id": "tkem-cachetools-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_func_tlru_cache.py::test_bounded_lru_eviction",
+   "tests/test_func_tlru_cache.py::test_export_and_defaults",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[-1-2]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[-1-None]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[0-2]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[0-None]",
+   "tests/test_func_tlru_cache.py::test_same_key_stampede_prevention",
+   "tests/test_func_tlru_cache.py::test_typed_key_selection_and_callback_keys[False]",
+   "tests/test_func_tlru_cache.py::test_typed_key_selection_and_callback_keys[True]",
+   "tests/test_func_tlru_cache.py::test_unbounded_capacity_still_expires_and_clears",
+   "tests/test_func_tlru_cache.py::test_value_dependent_deadlines[2]",
+   "tests/test_func_tlru_cache.py::test_value_dependent_deadlines[None]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 12,
+   "full_suite": {
+    "failed": 0,
+    "passed": 350
+   },
+   "patch_files": [
+    "src/cachetools/func.py",
+    "src/cachetools/func.pyi"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_func_tlru_cache.py::test_bounded_lru_eviction",
+   "tests/test_func_tlru_cache.py::test_export_and_defaults",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[-1-2]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[-1-None]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[0-2]",
+   "tests/test_func_tlru_cache.py::test_nonfuture_deadlines_are_not_retained[0-None]",
+   "tests/test_func_tlru_cache.py::test_same_key_stampede_prevention",
+   "tests/test_func_tlru_cache.py::test_typed_key_selection_and_callback_keys[False]",
+   "tests/test_func_tlru_cache.py::test_typed_key_selection_and_callback_keys[True]",
+   "tests/test_func_tlru_cache.py::test_unbounded_capacity_still_expires_and_clears",
+   "tests/test_func_tlru_cache.py::test_value_dependent_deadlines[2]",
+   "tests/test_func_tlru_cache.py::test_value_dependent_deadlines[None]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

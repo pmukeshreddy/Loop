@@ -1,0 +1,45 @@
+--- /dev/null
++++ b/tests/test_evolve_comparison_options.py
+@@ -0,0 +1,42 @@
++import attr
++
++
++def test_comparison_keys_flow_to_generated_methods():
++    def transform(cls, attrs):
++        return [a.evolve(eq=abs, order=lambda v: -abs(v)) for a in attrs]
++
++    @attr.s(order=True, unsafe_hash=True, field_transformer=transform)
++    class C:
++        x = attr.ib()
++
++    f = attr.fields(C).x
++    assert f.eq is True
++    assert f.eq_key is abs
++    assert f.order is True
++    assert callable(f.order_key)
++    assert C(-3) == C(3)
++    assert hash(C(-3)) == hash(C(3))
++    assert C(4) < C(3)
++
++
++def test_boolean_changes_clear_only_the_changed_key():
++    @attr.s
++    class C:
++        x = attr.ib(eq=abs, order=abs)
++
++    f = attr.fields(C).x
++    for flag in (True, False):
++        e = f.evolve(eq=flag)
++        assert e.eq is flag
++        assert e.eq_key is None
++        assert e.order is True
++        assert e.order_key is abs
++        o = f.evolve(order=flag)
++        assert o.order is flag
++        assert o.order_key is None
++        assert o.eq is True
++        assert o.eq_key is abs
++    e = f.evolve(name="y")
++    assert e.eq_key is abs
++    assert e.order_key is abs
++    assert f.eq_key is abs

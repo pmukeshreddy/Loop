@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/src/mistune/plugins/footnotes.py\n+++ b/src/mistune/plugins/footnotes.py\n@@ -159,7 +159,8 @@\n         parse_ref_footnote,\n         before=\"ref_link\",\n     )\n-    md.after_render_hooks.append(md_footnotes_hook)\n+    if md_footnotes_hook not in md.after_render_hooks:\n+        md.after_render_hooks.append(md_footnotes_hook)\n \n     if md.renderer and md.renderer.NAME == \"html\":\n         md.renderer.register(\"footnote_ref\", render_footnote_ref)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 14142 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference solved the task within the 14,142-character, two-file context without sub-calls. The change requires distinguishing already-idempotent parser registration from repeated after-render hook installation and preserving the hook's position rather than deduplicating unrelated hooks."
+  },
+  "notes": "A focused, natural maintenance request with a precise patch format and meaningful HTML, AST, ordering, and per-document-state constraints. Naming the hook identifies the ordering contract rather than supplying the fix. The variation is substantive: it concerns post-render hook multiplicity and footer generation, not duplicate nested-parser rules. The supplied verification tests exercise repeated installation, prior rendering, unrelated duplicate hooks, and fresh output across documents."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the footnotes plugin and parser infrastructure, under 16,000 characters. Reading these directly is sufficient to distinguish idempotent grammar registration from repeated post-render processing and reason about hook ordering, HTML/AST concatenation, and per-document state."
+  },
+  "context": {
+   "files": [
+    "src/mistune/plugins/footnotes.py",
+    "src/mistune/core.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/plugins/footnotes.py",
+    "symbol": "src/mistune/plugins/footnotes.py::footnotes",
+    "why": "Registers the grammar and renderer methods but unconditionally appends the post-render hook on every installation."
+   },
+   {
+    "path": "src/mistune/plugins/footnotes.py",
+    "symbol": "src/mistune/plugins/footnotes.py::md_footnotes_hook",
+    "why": "Builds a footer from the current document's references and concatenates it with either HTML text or an AST token list."
+   },
+   {
+    "path": "src/mistune/plugins/footnotes.py",
+    "symbol": "src/mistune/plugins/footnotes.py::parse_inline_footnote",
+    "why": "Maintains document-local reference discovery and numbering, including repeated references to the same definition."
+   },
+   {
+    "path": "src/mistune/core.py",
+    "symbol": "src/mistune/core.py::Parser.register",
+    "why": "Already avoids inserting an existing grammar rule again and clears compiled scanners when registering, distinguishing grammar registration from hook installation."
+   },
+   {
+    "path": "src/mistune/core.py",
+    "symbol": "src/mistune/core.py::BlockState.__init__",
+    "why": "Creates fresh environments for root document states while allowing the footer's child state to share its document environment."
+   }
+  ],
+  "expected_answer": "--- a/src/mistune/plugins/footnotes.py\n+++ b/src/mistune/plugins/footnotes.py\n@@ -174,7 +174,8 @@\n         parse_ref_footnote,\n         before=\"ref_link\",\n     )\n-    md.after_render_hooks.append(md_footnotes_hook)\n+    if md_footnotes_hook not in md.after_render_hooks:\n+        md.after_render_hooks.append(md_footnotes_hook)\n \n     if md.renderer and md.renderer.NAME == \"html\":\n         md.renderer.register(\"footnote_ref\", render_footnote_ref)\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_footnotes_reinstallation.py\n@@ -0,0 +1,78 @@\n+import pytest\n+\n+from mistune import create_markdown\n+from mistune.plugins.footnotes import footnotes\n+\n+\n+def _footer_count(result):\n+    if isinstance(result, str):\n+        return result.count('<section class=\"footnotes\">')\n+    return sum(token[\"type\"] == \"footnotes\" for token in result)\n+\n+\n+def _walk(tokens):\n+    for token in tokens:\n+        yield token\n+        yield from _walk(token.get(\"children\", []))\n+\n+\n+def _assert_notes(result, items, references):\n+    assert _footer_count(result) == bool(items)\n+    if isinstance(result, str):\n+        assert result.count('<li id=\"fn-') == items\n+        assert result.count('class=\"footnote-ref\"') == references\n+    else:\n+        tokens = list(_walk(result))\n+        assert sum(t[\"type\"] == \"footnote_item\" for t in tokens) == items\n+        assert sum(t[\"type\"] == \"footnote_ref\" for t in tokens) == references\n+        footers = [t for t in result if t[\"type\"] == \"footnotes\"]\n+        if items:\n+            assert [t[\"attrs\"][\"index\"] for t in footers[0][\"children\"]] == list(range(1, items + 1))\n+\n+\n+@pytest.mark.parametrize(\"renderer\", [\"html\", \"ast\"])\n+@pytest.mark.parametrize(\"warmup\", [\"none\", \"plain\", \"footnotes\"])\n+def test_reinstall_footnotes_keeps_output_and_hook_order(renderer, warmup):\n+    md = create_markdown(renderer=renderer, plugins=[])\n+    events = []\n+\n+    def before(md, result, state):\n+        events.append((\"before\", _footer_count(result)))\n+        return result\n+\n+    def after(md, result, state):\n+        events.append((\"after\", _footer_count(result)))\n+        return result\n+\n+    md.after_render_hooks.append(before)\n+    if warmup == \"plain\":\n+        md(\"warmup without notes\")\n+    md.use(footnotes)\n+    md.after_render_hooks.extend([after, after])\n+    original_hooks = tuple(md.after_render_hooks)\n+    original_inline_rules = tuple(md.inline.rules)\n+    original_block_rules = tuple(md.block.rules)\n+    if warmup == \"footnotes\":\n+        _assert_notes(md(\"Warm[^w].\\n\\n[^w]: warm note\\n\"), 1, 1)\n+\n+    documents = [\n+        (\"One[^a], two[^b], again[^a].\\n\\n[^b]: beta\\n\\n[^a]: alpha\\n\\n[^unused]: hidden\\n\", 2, 3),\n+        (\"New[^a].\\n\\n[^a]: changed *content*\\n\", 1, 1),\n+        (\"No reference.\\n\\n[^unused]: not rendered\\n\", 0, 0),\n+    ]\n+    for source, items, references in documents:\n+        md.use(footnotes)\n+        md.use(footnotes)\n+        assert tuple(md.after_render_hooks) == original_hooks\n+        assert tuple(md.inline.rules) == original_inline_rules\n+        assert tuple(md.block.rules) == original_block_rules\n+        events.clear()\n+        result = md(source)\n+        expected = create_markdown(renderer=renderer, plugins=[footnotes])(source)\n+        assert result == expected\n+        _assert_notes(result, items, references)\n+        assert events == [\n+            (\"before\", 0),\n+            (\"after\", int(bool(items))),\n+            (\"after\", int(bool(items))),\n+        ]\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against an existing failure in the pinned source, so verification uses a new hidden-test patch rather than introducing an additional production regression. The six parametrized cases cover HTML and AST, fresh instances, installation after a plain render, and reinstallation after a footnote render. Successive documents check changed definitions, fresh numbering, repeated references, and unused definitions. Intentionally installing the unrelated trailing hook twice ensures the repair does not globally deduplicate hooks. The expected repair differs from the original task's table/math container-rule changes.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Reinstalling the `footnotes` plugin with `Markdown.use(footnotes)` currently produces extra footnote sections. Support repeated installation on the same Markdown instance for both HTML and AST rendering, whether installation is repeated before its first render or after earlier documents have been rendered. Each document must retain the output of a single installation: one footer containing each referenced definition once, with existing reference numbering and unused-definition behavior unchanged. Keep an already-installed `md_footnotes_hook` in its original position relative to unrelated `after_render_hooks`; those other hooks must continue running with their existing multiplicity and order. Preserve first-install behavior and calculate footnote output afresh for every document rather than caching a previous footer. Deliver a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains persistent-state reasoning across repeated installation, but shifts verification from rule ordering and regex compilation to hook ordering, per-document environments, and HTML/AST output composition. Focused inspection of the footnotes lifecycle is more useful than tracing all four container helpers.",
+  "change_type": "failure_condition",
+  "description": "Make repeated installation of the footnotes plugin through Markdown.use render referenced footnotes exactly once, for both HTML and AST output, including installation after an earlier render. In src/mistune/plugins/footnotes.py, investigate footnotes and md_footnotes_hook together with Parser.register in src/mistune/core.py. Preserve the position of an already-installed md_footnotes_hook relative to unrelated after_render_hooks, retain first-install behavior, and do not suppress other hooks or cache document-specific footnote output. Return a unified diff against production files without changing tests.",
+  "expected_answer_change": "The repair belongs in footnote hook installation, not the table/math container helpers or Parser.insert_rule. It must ensure a single installation of md_footnotes_hook without relocating an existing hook, while leaving fresh per-document reference discovery and footer rendering intact.",
+  "why_substantive": "The failure is duplicated post-render work rather than duplicated container grammar entries. Parser.register already avoids duplicating the footnote rule names, but footnotes unconditionally appends md_footnotes_hook. The investigation must distinguish scanner registration from hook registration and verify both string concatenation and AST list concatenation."
+ },
+ "task_id": "lepture-mistune-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[footnotes-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[footnotes-html]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[none-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[none-html]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[plain-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[plain-html]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1161
+   },
+   "patch_files": [
+    "src/mistune/plugins/footnotes.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[footnotes-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[footnotes-html]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[none-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[none-html]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[plain-ast]",
+   "tests/test_footnotes_reinstallation.py::test_reinstall_footnotes_keeps_output_and_hook_order[plain-html]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

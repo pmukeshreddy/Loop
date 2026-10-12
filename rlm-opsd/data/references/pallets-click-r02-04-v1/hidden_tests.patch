@@ -1,0 +1,107 @@
+--- /dev/null
++++ b/tests/test_help_record_dispatch.py
+@@ -0,0 +1,104 @@
++import pytest
++
++import click
++
++
++@pytest.mark.parametrize("mode", ["full", "arguments", "options"])
++@pytest.mark.parametrize("show_default", [False, True])
++def test_help_record_dispatch(mode, show_default):
++    events = []
++
++    def default():
++        raise AssertionError("Help must not evaluate callable defaults")
++
++    class RecordingOption(click.Option):
++        def get_help_record(self, ctx):
++            events.append(self.name)
++            if self.name == "omit_option":
++                return None
++            return super().get_help_record(ctx)
++
++    class RecordingArgument(click.Argument):
++        def get_help_record(self, ctx):
++            events.append(self.name)
++            if self.name == "omit_arg":
++                return None
++            return self.human_readable_name, f"argument-{self.name}"
++
++    params = [
++        RecordingOption(
++            ["--zulu"], help="option-zulu", default=default, show_default=show_default
++        ),
++        RecordingArgument(["zebra"]),
++        RecordingOption(["--hidden"], hidden=True),
++        RecordingArgument(["omit_arg"]),
++        RecordingOption(["--omit-option"]),
++        RecordingArgument(["alpha"]),
++        RecordingOption(["--alpha-option"], help="option-alpha"),
++    ]
++    cmd = click.Command("demo", params=params)
++    ctx = click.Context(cmd, info_name="demo", terminal_width=80)
++    expected_args = ["zebra", "omit_arg", "alpha"]
++    expected_opts = ["zulu", "hidden", "omit_option", "alpha_option"]
++    expected = {
++        "full": expected_args + expected_opts,
++        "arguments": expected_args,
++        "options": expected_opts,
++    }[mode]
++
++    for render in range(2):
++        if mode == "full":
++            output = cmd.get_help(ctx)
++        else:
++            formatter = ctx.make_formatter()
++            getattr(cmd, f"format_{mode}")(ctx, formatter)
++            output = formatter.getvalue()
++
++        assert events == expected * (render + 1)
++        if mode != "options":
++            assert output.count("Positional arguments:") == 1
++            assert output.count("argument-zebra") == 1
++            assert output.count("argument-alpha") == 1
++            assert output.index("argument-zebra") < output.index("argument-alpha")
++        else:
++            assert "Positional arguments:" not in output
++        if mode != "arguments":
++            assert output.count("Options:") == 1
++            assert output.count("option-zulu") == 1
++            assert output.count("option-alpha") == 1
++            assert output.index("option-zulu") < output.index("option-alpha")
++            assert "--help" in output
++            if show_default:
++                assert "default: (dynamic)" in output
++        else:
++            assert "Options:" not in output
++        if mode == "full":
++            assert output.index("Positional arguments:") < output.index("Options:")
++        for absent in ("--hidden", "--omit-option", "argument-omit_arg"):
++            assert absent not in output
++
++
++@pytest.mark.parametrize("mode", ["arguments", "options"])
++def test_no_records_leave_section_empty(mode):
++    events = []
++
++    class EmptyOption(click.Option):
++        def get_help_record(self, ctx):
++            events.append("option")
++            return None
++
++    class EmptyArgument(click.Argument):
++        def get_help_record(self, ctx):
++            events.append("argument")
++            return None
++
++    cmd = click.Command(
++        "demo",
++        params=[EmptyOption(["--value"]), EmptyArgument(["item"])],
++        add_help_option=False,
++    )
++    ctx = click.Context(cmd, info_name="demo")
++    formatter = ctx.make_formatter()
++    getattr(cmd, f"format_{mode}")(ctx, formatter)
++    assert events == ["argument" if mode == "arguments" else "option"]
++    assert formatter.getvalue() == ""

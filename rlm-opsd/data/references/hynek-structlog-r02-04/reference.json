@@ -1,0 +1,161 @@
+{
+ "answer": "--- a/src/structlog/_native.py\n+++ b/src/structlog/_native.py\n@@ -110,10 +110,9 @@\n     Args:\n         min_level:\n             The log level as an integer. You can use the constants from\n-            `logging` like ``logging.INFO`` or pass the values directly. See\n-            `this table from the logging docs\n-            <https://docs.python.org/3/library/logging.html#levels>`_ for\n-            possible values.\n+            `logging` like ``logging.INFO`` or pass any integer directly,\n+            including negative values. Standard log levels are enabled when\n+            they are greater than or equal to this value.\n \n             If you pass a string, it must be one of: ``critical``, ``error``,\n             ``warning``, ``info``, ``debug``, ``notset`` (upper/lower case\n@@ -129,7 +128,21 @@\n     if isinstance(min_level, str):\n         min_level = NAME_TO_LEVEL[min_level.lower()]\n \n-    return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    try:\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    except KeyError:\n+        if not isinstance(min_level, int):\n+            raise\n+\n+    # Serialize creation so concurrent calls also return the same class.\n+    with _FILTERING_LOGGER_LOCK:\n+        if min_level not in LEVEL_TO_FILTERING_LOGGER:\n+            cls = _make_filtering_bound_logger(min_level)\n+            # Pickle resolves classes by their module-global name.\n+            globals()[cls.__name__] = cls\n+            LEVEL_TO_FILTERING_LOGGER[min_level] = cls\n+\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n \n \n def _maybe_interpolate(event: str, args: tuple[Any, ...]) -> str:\n@@ -261,14 +274,23 @@\n     meths[\"is_enabled_for\"] = lambda self, level: level >= min_level\n     meths[\"get_effective_level\"] = lambda self: min_level\n \n+    if min_level == NOTSET:\n+        name = \"Notset\"\n+    elif min_level in LEVEL_TO_NAME:\n+        name = LEVEL_TO_NAME[min_level].capitalize()\n+    elif min_level < 0:\n+        name = f\"Minus{-min_level}\"\n+    else:\n+        name = str(min_level)\n+\n     return type(\n-        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n+        f\"BoundLoggerFilteringAt{name}\",\n         (BoundLoggerBase,),\n         meths,\n     )\n \n \n-# Pre-create all possible filters to make them pickleable.\n+# Pre-create the standard filters to keep their names and identities.\n BoundLoggerFilteringAtNotset = _make_filtering_bound_logger(NOTSET)\n BoundLoggerFilteringAtDebug = _make_filtering_bound_logger(DEBUG)\n BoundLoggerFilteringAtInfo = _make_filtering_bound_logger(INFO)\n@@ -284,3 +306,6 @@\n     DEBUG: BoundLoggerFilteringAtDebug,\n     NOTSET: BoundLoggerFilteringAtNotset,\n }\n+\n+# Protect creation and publication of filters for nonstandard levels.\n+_FILTERING_LOGGER_LOCK = threading.Lock()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001036805167029029,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "native"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 11316,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 6 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['files', 'native']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch combines arbitrary-threshold class generation, cached class identity, module-global publication for pickle, and preservation of standard classes. The final diff was computed and inspected before submission.",
+   "inspect_locate": "The execution used six targeted searches without printing the whole context. The task requires reconciling the factory, generated class builder, level registry, numeric dispatch, and serialization behavior rather than merely locating a named function.",
+   "persistent_state": "The execution reused the files and native variables across turns, although the evidence supports this as a supporting workflow behavior rather than a central task requirement."
+  },
+  "notes": "This is a natural, repository-dependent feature request with explicit compatibility constraints and a precise unified-diff deliverable. Naming the public factory identifies the extension point without revealing the implementation. The supplied tests exercise custom thresholds, repeated-call identity, pickle identity, introspection, and synchronous and asynchronous logging. The task is distinct from the existing accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch must reconcile factory lookup, generated names, repeated-call identity, and serialization without disturbing the existing pre-created classes.",
+   "inspect_locate": "The public factory, generated class builder, pre-created class registry, numeric dispatch, and pickle tests jointly define the extension constraints.",
+   "persistent_state": "Implementing arbitrary thresholds requires retaining the existing class-generation and registration rules while assembling a coherent cache and pickle-compatible registration change."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_native.py",
+    "symbol": "src/structlog/_native.py::make_filtering_bound_logger",
+    "why": "Currently performs a registry lookup that rejects nonstandard integer thresholds."
+   },
+   {
+    "path": "src/structlog/_native.py",
+    "symbol": "src/structlog/_native.py::_make_filtering_bound_logger",
+    "why": "Already generates threshold-sensitive methods and introspection, but its fallback class name is not unique across arbitrary thresholds."
+   },
+   {
+    "path": "src/structlog/_native.py",
+    "symbol": "src/structlog/_native.py::LEVEL_TO_FILTERING_LOGGER",
+    "why": "Preserves the existing standard-level classes and provides the current identity-stable factory behavior."
+   },
+   {
+    "path": "tests/test_native.py",
+    "symbol": "tests/test_native.py::TestNativeFilteringLogger.test_pickle",
+    "why": "Establishes serialization as an existing class-level contract."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_custom_native_thresholds.py\n@@ -0,0 +1,37 @@\n+import logging\n+import pickle\n+\n+import pytest\n+\n+from structlog import make_filtering_bound_logger\n+from structlog.testing import CapturingLogger\n+\n+\n+@pytest.mark.parametrize(\"threshold\", [-5, 5, 15, 25, 35, 45, 55])\n+def test_custom_threshold(threshold):\n+    cls = make_filtering_bound_logger(threshold)\n+    assert cls is make_filtering_bound_logger(threshold)\n+    assert pickle.loads(pickle.dumps(cls)) is cls\n+    backend = CapturingLogger()\n+    logger = cls(backend, [], {})\n+    assert logger.get_effective_level() == threshold\n+    for name, level in [(\"debug\", 10), (\"info\", 20), (\"warning\", 30), (\"error\", 40), (\"critical\", 50)]:\n+        backend.calls.clear()\n+        getattr(logger, name)(\"event\")\n+        assert logger.is_enabled_for(level) is (level >= threshold)\n+        assert len(backend.calls) == int(level >= threshold)\n+        backend.calls.clear()\n+        logger.log(level, \"event\")\n+        assert len(backend.calls) == int(level >= threshold)\n+\n+\n+@pytest.mark.asyncio\n+@pytest.mark.parametrize(\"threshold\", [15, 25, 55])\n+async def test_custom_async_threshold(threshold):\n+    backend = CapturingLogger()\n+    logger = make_filtering_bound_logger(threshold)(backend, [], {})\n+    await logger.ainfo(\"event\")\n+    assert len(backend.calls) == int(20 >= threshold)\n+    backend.calls.clear()\n+    await logger.alog(logging.ERROR, \"event\")\n+    assert len(backend.calls) == int(40 >= threshold)\n",
+  "include_failure_log": false,
+  "notes": "The question does not require support for custom numeric event levels. It requires arbitrary minimum thresholds while preserving existing numeric dispatch semantics.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Extend `make_filtering_bound_logger` to accept any integer minimum level, including negative integers and values between or above the standard levels. Named methods and their async variants must retain the existing threshold rule: a standard logging level is enabled exactly when it is greater than or equal to the requested minimum. Introspection must report the requested minimum. Numeric `log` and `alog` calls at the existing supported standard levels must obey the same rule. Repeated factory calls with the same integer must return the identical class, and that class must survive a pickle round trip by identity. Keep the existing pre-created classes, string-level handling, aliases, and unsupported numeric dispatch behavior unchanged. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[15]",
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[25]",
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[55]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[-5]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[15]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[25]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[35]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[45]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[55]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[5]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 0,
+    "passed": 894
+   },
+   "patch_files": [
+    "src/structlog/_native.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[15]",
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[25]",
+   "tests/test_custom_native_thresholds.py::test_custom_async_threshold[55]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[-5]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[15]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[25]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[35]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[45]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[55]",
+   "tests/test_custom_native_thresholds.py::test_custom_threshold[5]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

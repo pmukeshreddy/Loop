@@ -1,0 +1,15 @@
+--- a/lark/lexer.py
++++ b/lark/lexer.py
+@@ -693,8 +693,10 @@
+             # In the contextual lexer, UnexpectedCharacters can mean that the terminal is defined, but not in the current context.
+             # This tests the input against the global context, to provide a nicer error.
+             try:
+-                last_token = lexer_state.last_token  # Save last_token. Calling root_lexer.next_token will change this to the wrong token
+-                token = self.root_lexer.next_token(lexer_state, parser_state)
++                last_token = lexer_state.last_token
++                # Classify on a copy so even ignored input consumed by the root
++                # lexer cannot advance the live state past the contextual error.
++                token = self.root_lexer.next_token(copy(lexer_state), parser_state)
+                 raise UnexpectedToken(token, e.allowed, state=parser_state, token_history=[last_token], terminals_by_name=self.root_lexer.terminals_by_name)
+             except UnexpectedCharacters:
+                 raise e  # Raise the original UnexpectedCharacters. The root lexer raises it with the wrong expected set.

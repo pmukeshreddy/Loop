@@ -1,0 +1,168 @@
+{
+ "answer": [
+  "tests/test_compliance.py::test_expression[given311-map(&c, people)-expected311-functions.json]",
+  "tests/test_compliance.py::test_expression[given313-map(&foo.bar, array)-expected313-functions.json]",
+  "tests/test_compliance.py::test_expression[given314-map(&foo1.bar, array)-expected314-functions.json]",
+  "tests/test_compliance.py::test_expression[given315-map(&foo.bar.baz, array)-expected315-functions.json]",
+  "tests/test_compliance.py::test_error_expression[given36-sort_by(people, &extra)-invalid-type-functions.json]",
+  "tests/test_compliance.py::test_error_expression[given41-max_by(people, &extra)-invalid-type-functions.json]",
+  "tests/test_compliance.py::test_error_expression[given43-min_by(people, &extra)-invalid-type-functions.json]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\"tests/test_compliance.py::TestCompliance::test_compliance\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 25,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "c",
+    "cases",
+    "d",
+    "files",
+    "g",
+    "headers",
+    "i",
+    "p",
+    "selected"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 25 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference execution computed and inspected the final deduplicated collection of test IDs, and executable verification confirmed the seven affected cases.",
+   "inspect_locate": "The reference execution used 25 targeted context searches to connect the expression-reference function behavior with cases in the data-driven compliance suite, without printing the whole context.",
+   "recursive_decomposition": "Not established: the reference execution made no sub-calls. This task supports evidence location and result aggregation, but should not be credited as demonstrated recursive-decomposition practice."
+  },
+  "notes": "The question is a natural change-impact request with a precise policy and output format. It requires repository-specific reasoning about null results, key validation, empty-array behavior, and parametrized test IDs rather than a single lookup. It does not reveal the affected tests or prescribe solver operations. The existing regression-repair tasks have different deliverables and do not establish duplication of this policy-impact investigation."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is the exact union of newly failing pytest node IDs, requiring deduplication and verification against the separate function-level findings.",
+   "inspect_locate": "Relevant cases must be located across higher-order function implementations, expression-reference evaluation, and the data-driven compliance suite.",
+   "recursive_decomposition": "The proposed policy affects four functions with different existing null contracts. Its consequences must be investigated separately for map, sort_by, min_by, and max_by, then reconciled."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_map",
+    "why": "The current implementation preserves every expression-reference result, including null."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_sort_by",
+    "why": "The first remaining element establishes the required key family, so null removal can affect both errors and results."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_min_by",
+    "why": "Null keys currently reach the shared key validator rather than being discarded."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_max_by",
+    "why": "Selection and empty-input behavior form a separate impact branch."
+   },
+   {
+    "path": "tests/test_compliance.py",
+    "symbol": "tests/test_compliance.py::_compliance_tests",
+    "why": "The exact answer must include parametrized result and error cases, not merely test-function names."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply the probe only when computing ground truth. Run the same collected suite before and after the probe so parametrized node IDs are compared consistently.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -303,9 +303,11 @@\n     @signature({'types': ['expref']}, {'types': ['array']})\n     def _func_map(self, expref, arg):\n         result = []\n         for element in arg:\n-            result.append(expref.visit(expref.expression, element))\n+            current = expref.visit(expref.expression, element)\n+            if current is not None:\n+                result.append(current)\n         return result\n \n     @signature({\"types\": ['array-number', 'array-string']})\n     def _func_max(self, arg):\n@@ -372,7 +374,9 @@\n     @signature({'types': ['array']}, {'types': ['expref']})\n     def _func_sort_by(self, array, expref):\n+        array = [element for element in array\n+                 if expref.visit(expref.expression, element) is not None]\n         if not array:\n             return array\n         # sort_by allows for the expref to be either a number of\n         # a string, so we have some special logic to handle this.\n         # We evaluate the first array element and verify that it's\n@@ -392,9 +396,11 @@\n     @signature({'types': ['array']}, {'types': ['expref']})\n     def _func_min_by(self, array, expref):\n+        array = [element for element in array\n+                 if expref.visit(expref.expression, element) is not None]\n         keyfunc = self._create_key_func(expref,\n                                         ['number', 'string'],\n                                         'min_by')\n         if array:\n             return min(array, key=keyfunc)\n         else:\n             return None\n@@ -402,9 +408,11 @@\n     @signature({'types': ['array']}, {'types': ['expref']})\n     def _func_max_by(self, array, expref):\n+        array = [element for element in array\n+                 if expref.visit(expref.expression, element) is not None]\n         keyfunc = self._create_key_func(expref,\n                                         ['number', 'string'],\n                                         'max_by')\n         if array:\n             return max(array, key=keyfunc)\n         else:\n             return None\n",
+  "question": "We are reviewing a null-elision policy for the expression-reference array functions. Under the proposed change, `map` would omit results that are null. Before doing their existing ordering or selection work, `sort_by`, `min_by`, and `max_by` would discard input elements whose expression-reference key evaluates to null. Their existing behavior for the remaining elements would stay unchanged, including key-type validation; an array with no remaining elements would use each function's existing empty-array behavior. Which existing tests would newly fail? Return a JSON list of pytest node IDs, with duplicates removed.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r02-00",
+ "truth": {
+  "answer": [
+   "tests/test_compliance.py::test_error_expression",
+   "tests/test_compliance.py::test_expression"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_compliance.py::test_error_expression",
+    "tests/test_compliance.py::test_expression"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_compliance.py::test_error_expression",
+    "tests/test_compliance.py::test_expression"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_compliance.py::test_error_expression",
+   "tests/test_compliance.py::test_expression"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

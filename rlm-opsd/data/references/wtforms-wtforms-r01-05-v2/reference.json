@@ -1,0 +1,147 @@
+{
+ "answer": "--- a/src/wtforms/csrf/session.py\n+++ b/src/wtforms/csrf/session.py\n@@ -72,6 +72,15 @@\n             raise ValidationError(field.gettext(\"CSRF failed.\"))\n \n         if self.time_limit:\n+            if len(expires) != 14 or any(c < \"0\" or c > \"9\" for c in expires):\n+                raise ValidationError(field.gettext(\"CSRF token invalid expiration.\"))\n+            try:\n+                datetime.strptime(expires, self.TIME_FORMAT)\n+            except ValueError:\n+                raise ValidationError(\n+                    field.gettext(\"CSRF token invalid expiration.\")\n+                ) from None\n+\n             now_formatted = self.now().strftime(self.TIME_FORMAT)\n             if now_formatted > expires:\n                 raise ValidationError(field.gettext(\"CSRF token expired.\"))\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6258 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution completed without sub-calls using a focused 6,258-character context containing two CSRF modules. The patch requires local reasoning about authentication order, expiration parsing, the falsey time-limit switch, and the existing boundary comparison."
+  },
+  "notes": "This is a natural, repository-dependent hardening request with a precise unified-diff output format. It specifies observable requirements without prescribing an implementation or solver workflow. The verified patch checks authenticated expiration prefixes before the existing expiry comparison while preserving digest-error precedence and disabled-expiration behavior. The task is substantively different from its parent: it implements malformed-prefix rejection rather than reporting existing boundary behavior, and it does not duplicate the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the two small CSRF modules. Understanding token authentication, the time-limit switch, timestamp serialization, and error precedence is sufficient to implement the change; repository-wide searches or delegated analysis would add little."
+  },
+  "context": {
+   "files": [
+    "src/wtforms/csrf/core.py",
+    "src/wtforms/csrf/session.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.validate_csrf_token",
+    "why": "The current implementation authenticates the prefix but then compares it lexicographically without checking timestamp syntax or calendar validity. Its existing branch order establishes the precedence that must be preserved."
+   },
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.TIME_FORMAT",
+    "why": "Defines the year-month-day-hour-minute-second representation required for enabled expiration."
+   },
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.time_limit",
+    "why": "An absent setting defaults to thirty minutes, while the existing truthiness checks disable expiration for None and zero timedelta."
+   },
+   {
+    "path": "src/wtforms/csrf/core.py",
+    "symbol": "src/wtforms/csrf/core.py::CSRFTokenField.pre_validate",
+    "why": "Delegates field validation to the CSRF implementation, whose errors use the field's gettext method."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_session_csrf_expiration_format.py\n@@ -0,0 +1,100 @@\n+import hmac\n+from datetime import datetime, timedelta\n+from hashlib import sha1\n+from types import SimpleNamespace\n+\n+import pytest\n+\n+from wtforms.csrf.session import SessionCSRF\n+from wtforms.validators import ValidationError\n+\n+\n+NOW = datetime(2030, 1, 2, 3, 4, 5)\n+\n+\n+class FixedClockCSRF(SessionCSRF):\n+    def now(self):\n+        return NOW\n+\n+\n+def make_impl(**settings):\n+    meta = SimpleNamespace(\n+        csrf_secret=b\"secret\",\n+        csrf_context={\"csrf\": \"fixed-session\"},\n+        csrf_field_name=\"csrf_token\",\n+        **settings,\n+    )\n+    impl = FixedClockCSRF()\n+    impl.setup_form(SimpleNamespace(meta=meta))\n+    impl.generate_csrf_token(None)\n+    return impl\n+\n+\n+def signed_token(expires):\n+    digest = hmac.new(\n+        b\"secret\", (\"fixed-session\" + expires).encode(\"utf8\"), sha1\n+    ).hexdigest()\n+    return f\"{expires}##{digest}\"\n+\n+\n+def validate(impl, token):\n+    field = SimpleNamespace(data=token, gettext=lambda message: message)\n+    impl.validate_csrf_token(None, field)\n+\n+\n+@pytest.mark.parametrize(\n+    \"expires\",\n+    [\n+        \"99999999999999\",\n+        \"z\",\n+        \"20300230030405\",\n+        \"\",\n+        \"2030010203045\",\n+        \"203001020304050\",\n+        \"\uff12\uff10\uff13\uff10\uff10\uff11\uff10\uff12\uff10\uff13\uff10\uff14\uff10\uff15\",\n+        \"20300102030405 \",\n+    ],\n+)\n+def test_malformed_authenticated_expiration(expires):\n+    with pytest.raises(ValidationError, match=r\"^CSRF token invalid expiration\\.$\"):\n+        validate(make_impl(), signed_token(expires))\n+\n+\n+@pytest.mark.parametrize(\"expires\", [\"20300102030405\", \"20300102030406\", \"20300228030405\"])\n+def test_valid_expiration_at_or_after_now(expires):\n+    validate(make_impl(), signed_token(expires))\n+\n+\n+def test_valid_but_expired():\n+    with pytest.raises(ValidationError, match=r\"^CSRF token expired\\.$\"):\n+        validate(make_impl(), signed_token(\"20300102030404\"))\n+\n+\n+@pytest.mark.parametrize(\"token\", [None, \"\", \"z\", \"20300102030405\"])\n+def test_missing_token_precedes_expiration_checks(token):\n+    with pytest.raises(ValidationError, match=r\"^CSRF token missing\\.$\"):\n+        validate(make_impl(), token)\n+\n+\n+@pytest.mark.parametrize(\"expires\", [\"z\", \"20300230030405\", \"20300102030404\", \"\"])\n+def test_digest_error_precedes_expiration_checks(expires):\n+    token = signed_token(expires)\n+    prefix, digest = token.split(\"##\", 1)\n+    wrong = (\"0\" if digest[0] != \"0\" else \"1\") + digest[1:]\n+    with pytest.raises(ValidationError, match=r\"^CSRF failed\\.$\"):\n+        validate(make_impl(), f\"{prefix}##{wrong}\")\n+\n+\n+@pytest.mark.parametrize(\"limit\", [None, timedelta(0)])\n+@pytest.mark.parametrize(\"expires\", [\"99999999999999\", \"z\", \"20300230030405\", \"\", \"20300101000000\"])\n+def test_disabled_expiration_accepts_authenticated_prefix(limit, expires):\n+    validate(make_impl(csrf_time_limit=limit), signed_token(expires))\n+\n+\n+def test_generation_stays_compatible():\n+    impl = make_impl()\n+    assert impl.generate_csrf_token(None).split(\"##\", 1)[0] == \"20300102033405\"\n+    validate(impl, impl.generate_csrf_token(None))\n+    disabled = make_impl(csrf_time_limit=None)\n+    assert disabled.generate_csrf_token(None).startswith(\"##\")\n+    validate(disabled, disabled.generate_csrf_token(None))\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against an existing validation gap, not an injected regression, so there is no setup patch. The new acceptance file fixes the clock at 2030-01-02 03:04:05 and signs prefixes using the specified secret and session value. Several malformed authenticated prefixes currently succeed; the empty prefix currently reports expiration rather than invalid expiration. Tests also constrain authentication precedence, inclusive boundary behavior, unchanged generation, and both supported falsey time-limit cases. The required deliverable is a production patch, rather than the original task's behavioral JSON object.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Harden SessionCSRF against authenticated tokens with malformed expiration prefixes. When expiration is enabled, the prefix before `##` must contain exactly 14 ASCII digits and represent a valid calendar datetime in `SessionCSRF.TIME_FORMAT`. After successful authentication, reject any prefix that fails these requirements\u2014including an empty prefix\u2014with `ValidationError` carrying the message `CSRF token invalid expiration.` through the field's gettext method. Correctly signed prefixes such as `99999999999999`, `z`, and `20300230030405` must no longer pass validation.\n\nPreserve the existing error precedence: absent tokens or tokens without `##` produce `CSRF token missing.`, and an incorrect digest produces `CSRF failed.` even when the expiration prefix is malformed. Valid timestamps earlier than the current time must still produce `CSRF token expired.`, while equality at the expiration boundary remains valid. Keep token generation unchanged, and preserve validation behavior when expiration is disabled by a falsey time limit, including None or a zero timedelta.\n\nSubmit a unified diff against the production repository files, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from direct behavioral calculation to targeted repair and acceptance-test design. A focused read of SessionCSRF.validate_csrf_token and TIME_FORMAT is sufficient, followed by probes covering ASCII formatting, calendar validity, authentication precedence, and the disabled-expiration branch.",
+  "change_type": "failure_condition",
+  "description": "Repair acceptance of authenticated but malformed expiry strings in src/wtforms/csrf/session.py::SessionCSRF.validate_csrf_token. Construct correctly signed tokens using b\"secret\" and {\"csrf\": \"fixed-session\"}, but replace the expiration prefix with \"99999999999999\", \"z\", or \"20300230030405\". At a controlled validation time of 2030-01-02 03:04:05 with the default time limit, establish the current outcomes, then submit a unified diff and acceptance tests requiring an expiry to be exactly 14 ASCII digits representing a valid datetime in SessionCSRF.TIME_FORMAT. Return \"CSRF token invalid expiration.\" for authenticated malformed prefixes when expiration is enabled. Preserve missing-token and HMAC-error precedence, retain inclusive expiration-boundary behavior, and leave expiration-disabled validation unchanged. Include a malformed-prefix token with an incorrect digest to verify that it still produces \"CSRF failed.\".",
+  "expected_answer_change": "Currently all three correctly signed malformed prefixes pass at the specified time because they sort after the current formatted timestamp. The repaired implementation must reject them with the new invalid-expiration message only after authentication and only when expiration is enabled. The fix must distinguish malformed timestamps from valid but expired timestamps without changing the existing strict boundary comparison.",
+  "why_substantive": "This introduces a different defect: authenticated expiry prefixes are compared lexicographically without checking their syntax or calendar validity. It changes the deliverable from reporting existing boundary behavior to implementing input validation, and requires new adversarial tests rather than repeating the original token cases."
+ },
+ "task_id": "wtforms-wtforms-r01-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[20300102030405 ]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[203001020304050]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[2030010203045]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[20300230030405]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[99999999999999]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[\\uff12\\uff10\\uff13\\uff10\\uff10\\uff11\\uff10\\uff12\\uff10\\uff13\\uff10\\uff14\\uff10\\uff15]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[z]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 8,
+    "passed": 377
+   },
+   "patch_files": [
+    "src/wtforms/csrf/session.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[20300102030405 ]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[203001020304050]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[2030010203045]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[20300230030405]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[99999999999999]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[\\uff12\\uff10\\uff13\\uff10\\uff10\\uff11\\uff10\\uff12\\uff10\\uff13\\uff10\\uff14\\uff10\\uff15]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[]",
+   "tests/test_session_csrf_expiration_format.py::test_malformed_authenticated_expiration[z]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

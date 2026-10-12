@@ -1,0 +1,18 @@
+--- a/jsonschema/exceptions.py
++++ b/jsonschema/exceptions.py
+@@ -389,8 +389,13 @@
+         """
+         The total number of errors in the entire tree, including children.
+         """
+-        child_errors = sum(len(tree) for _, tree in self._contents.items())
+-        return len(self.errors) + child_errors
++        total = 0
++        pending = [self]
++        while pending:
++            tree = pending.pop()
++            total += len(tree.errors)
++            pending.extend(tree._contents.values())
++        return total
+ 
+ 
+ def by_relevance(weak=WEAK_MATCHES, strong=STRONG_MATCHES):

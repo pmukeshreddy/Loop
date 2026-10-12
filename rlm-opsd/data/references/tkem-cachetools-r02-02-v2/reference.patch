@@ -1,0 +1,16 @@
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -117,6 +117,13 @@
+     # KeyError on cache miss.  This is not the case if __missing__ is
+     # implemented for a Cache subclass, so we have to roll our own,
+     # somewhat less elegant versions.
++
++    def peek(self, key, default=None):
++        """Return a visible value without affecting eviction priority."""
++        if key in self:
++            return self.__data[key]
++        else:
++            return default
+ 
+     def get(self, key, default=None):
+         if key in self:

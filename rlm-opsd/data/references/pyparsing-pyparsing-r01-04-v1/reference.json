@@ -1,0 +1,231 @@
+{
+ "answer": {
+  "exit_zero": [
+   {
+    "exit_status": 0,
+    "files": {
+     "changed.py": "expr.parse_string(text)\n",
+     "unchanged.py": "expr.parse_string(text)\n"
+    },
+    "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+   },
+   {
+    "exit_status": 0,
+    "files": {
+     "changed.py": "expr.parse_string(text)\n",
+     "unchanged.py": "expr.parse_string(text)\n"
+    },
+    "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+   }
+  ],
+  "normal": [
+   {
+    "exit_status": 1,
+    "files": {
+     "changed.py": "expr.parse_string(text)\n",
+     "unchanged.py": "expr.parse_string(text)\n"
+    },
+    "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+   },
+   {
+    "exit_status": 0,
+    "files": {
+     "changed.py": "expr.parse_string(text)\n",
+     "unchanged.py": "expr.parse_string(text)\n"
+    },
+    "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+   }
+  ]
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"normal\": [\n    {\n      \"stdout\": \"Converted changed.py\\nUnchanged unchanged.py\\nNo files matched 'missing*.py'\\n\",\n      \"exit_status\": 1,\n      \"files\": {\n        \"changed.py\": \"expr.parse_string(text)\\n\",\n        \"unchanged.py\": \"expr.parse_string(text)\\n\"\n      }\n    },\n    {\n      \"stdout\": \"Unchanged changed.py\\nUnchanged unchanged.py\\nNo files matched 'missing*.py'\\n\",\n      \"exit_status\": 0,\n      \"files\": {\n        \"changed.py\": \"expr.parse_string(text)\\n\",\n        \"unchanged.py\": \"expr.parse_string(text)\\n\"\n      }\n    }\n  ],\n  \"exit_zero\": [\n    {\n      \"stdout\": \"Converted changed.py\\nUnchanged unchanged.py\\nNo files matched 'missing*.py'\\n\",\n      \"exit_status\": 0,\n      \"files\": {\n        \"changed.py\": \"expr.parse_string(text)\\n\",\n        \"unchanged.py\": \"expr.parse_string(text)\\n\"\n      }\n    },\n    {\n      \"stdout\": \"Unchanged changed.py\\nUnchanged unchanged.py\\nNo files matched 'missing*.py'\\n\",\n      \"exit_status\": 0,\n      \"files\": {\n        \"changed.py\": \"expr.parse_string(text)\\n\",\n        \"unchanged.py\": \"expr.parse_string(text)\\n\"\n      }\n    }\n  ]\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 4,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6441 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used a single 6,441-character file with no sub-calls. The task requires combining argument handling, glob expansion, verbosity-dependent output, in-place conversion, and exit-status selection while tracking state across repeated invocations."
+  },
+  "notes": "This is a precise, repository-dependent CLI audit with explicit initial conditions and an exact output schema. The executable verification establishes the requested results. It does not disclose the output or prescribe solver operations. Although it uses the same converter as the parent task, it investigates materially different behavior: CLI output, file mutation, repeat-run idempotence, unmatched patterns, and exit-status overrides rather than quoted-name conversion and warnings."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The single converter file is under 16,000 characters and contains all relevant evidence: argument parsing, filename-pattern expansion, conversion, conditional output, in-place updates, and exit-status selection. Reading it directly and tracking file contents across consecutive invocations suffices; broader investigation or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "pyparsing/tools/cvt_pyparsing_pep8_names.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": "pyparsing/tools/cvt_pyparsing_pep8_names.py::pep8_converter",
+    "why": "The method-name alternatives convert parseString to parse_string while leaving the already migrated input unchanged."
+   },
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": "pyparsing/tools/cvt_pyparsing_pep8_names.py::show_diffs",
+    "why": "The CLI calls this function only when args.verbose is true; the separately registered -vv option sets verbose2 and does not enable this call."
+   },
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": null,
+    "why": "The __main__ loop expands each pattern, writes converted contents before subsequent invocations, reports unchanged files under verbose2, and selects the final exit status using exit_zero_even_if_changed."
+   }
+  ],
+  "expected_answer": {
+   "exit_zero": [
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+    },
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+    }
+   ],
+   "normal": [
+    {
+     "exit_status": 1,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+    },
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+    }
+   ]
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Verify independently with subprocesses using sys.executable and the absolute path to the pinned script, with cwd set to a temporary directory and the repository root on PYTHONPATH so imports use this snapshot. Pass arguments as a list, including the literal missing*.py argument. Create the two UTF-8 inputs, capture stdout and returncode, and read both files after each invocation. Restore the original inputs before the exit_zero pair only. No source patch is needed because this variation audits existing CLI behavior rather than introducing a defect or planned implementation change.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "I need to audit the command-line converter's output and exit status when an in-place migration is repeated. Use pyparsing/tools/cvt_pyparsing_pep8_names.py from this snapshot, with the repository's pyparsing package available.\n\nStart in a temporary working directory containing only two files: changed.py contains exactly \"expr.parseString(text)\\n\", and unchanged.py contains exactly \"expr.parse_string(text)\\n\". Invoke the script with arguments `--update -vv changed.py unchanged.py 'missing*.py'`, then invoke it again with the same arguments without restoring the files. The quotes indicate that missing*.py is passed as a literal pattern; no matching file exists.\n\nFor a second, independent pair of invocations, restore both files to their original contents and add `--exit-zero-even-if-changed` to those arguments. Again, run twice without restoring files between the two invocations.\n\nWhat are the exact stdout, process exit status, and contents of both files immediately after each invocation? Omit stderr. Return a JSON object with keys \"normal\" and \"exit_zero\", each containing a two-element list in invocation order. Each element must have keys \"stdout\", \"exit_status\", and \"files\"; \"files\" must map \"changed.py\" and \"unchanged.py\" to their exact contents, including trailing newlines.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "api_migration_audit",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from a focused expression read to tracing command-line control flow and filesystem state across repeated executions. A small subprocess probe is useful for verifying stdout, persisted contents, and exit statuses together; broad repository exploration or recursive investigation is unnecessary.",
+  "change_type": "constraint",
+  "description": "Audit the command-line behavior of pyparsing/tools/cvt_pyparsing_pep8_names.py rather than calling pep8_converter directly. In a temporary working directory, create changed.py containing 'expr.parseString(text)\\n' and unchanged.py containing 'expr.parse_string(text)\\n'. Run the script with '--update -vv changed.py unchanged.py missing*.py', then run it again with the same arguments. Repeat both runs from freshly restored input files with '--exit-zero-even-if-changed' added. Request the exact stdout, exit status, and final contents of both files for each run; stderr need not be reported.",
+  "expected_answer_change": "The first run prints 'Converted changed.py' and 'No required changes in unchanged.py', writes the converted source, and exits with status 1 unless the exit-zero flag is present. The second run reports both files as requiring no changes and exits with status 0. An unmatched glob contributes no output. Despite its help text, -vv alone does not invoke show_diffs, because that call is guarded by args.verbose rather than args.verbose2.",
+  "why_substantive": "This investigates the __main__ file-processing loop, persistence across invocations, unmatched glob handling, and the interaction between verbose2, verbose, update, and exit-status control. It is not another calculation of quoted-name conversion or migration warnings."
+ },
+ "task_id": "pyparsing-pyparsing-r01-04-v1",
+ "truth": {
+  "answer": {
+   "exit_zero": [
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+    },
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+    }
+   ],
+   "normal": [
+    {
+     "exit_status": 1,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "Converted changed.py\nNo required changes in unchanged.py\n"
+    },
+    {
+     "exit_status": 0,
+     "files": {
+      "changed.py": "expr.parse_string(text)\n",
+      "unchanged.py": "expr.parse_string(text)\n"
+     },
+     "stdout": "No required changes in changed.py\nNo required changes in unchanged.py\n"
+    }
+   ]
+  },
+  "kind": "oracle",
+  "normalized": "{\"exit_zero\": [{\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}], \"normal\": [{\"exit_status\": 1, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}]}",
+  "output_tail": "{\"answer\": {\"normal\": [{\"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\\n\", \"exit_status\": 1, \"files\": {\"changed.py\": \"expr.parse_string(text)\\n\", \"unchanged.py\": \"expr.parse_string(text)\\n\"}}, {\"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\\n\", \"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\\n\", \"unchanged.py\": \"expr.parse_string(text)\\n\"}}], \"exit_zero\": [{\"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\\n\", \"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\\n\", \"unchanged.py\": \"expr.parse_string(text)\\n\"}}, {\"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\\n\", \"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\\n\", \"unchanged.py\": \"expr.parse_string(text)\\n\"}}]}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"exit_zero\": [{\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}], \"normal\": [{\"exit_status\": 1, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}]}",
+   "predicted": "{\"exit_zero\": [{\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}], \"normal\": [{\"exit_status\": 1, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"Converted changed.py\\nNo required changes in unchanged.py\"}, {\"exit_status\": 0, \"files\": {\"changed.py\": \"expr.parse_string(text)\", \"unchanged.py\": \"expr.parse_string(text)\"}, \"stdout\": \"No required changes in changed.py\\nNo required changes in unchanged.py\"}]}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 2046,
+  "stability_runs": 3
+ }
+}

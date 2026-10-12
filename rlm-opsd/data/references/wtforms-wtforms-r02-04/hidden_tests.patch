@@ -1,0 +1,41 @@
+--- /dev/null
++++ b/tests/test_explicit_checked_rendering.py
+@@ -0,0 +1,38 @@
++import pytest
++
++from wtforms.fields import BooleanField
++from wtforms.fields import RadioField
++from wtforms.form import Form
++
++
++@pytest.mark.parametrize("field_type", [BooleanField, RadioField])
++def test_checked_precedence(field_type):
++    kwargs = {"choices": [("a", "A"), ("b", "B")]} if field_type is RadioField else {}
++    class F(Form):
++        item = field_type(render_kw={"checked": False}, **kwargs)
++
++    form = F(item="a" if field_type is RadioField else True)
++    node = next(iter(form.item)) if field_type is RadioField else form.item
++    assert ' checked' not in str(node())
++    assert ' checked' not in str(node(checked=False))
++    assert ' checked' in str(node(checked=True))
++    assert form.item.data == ("a" if field_type is RadioField else True)
++    if field_type is RadioField:
++        assert node.checked is True
++
++    other = F(item="b" if field_type is RadioField else False)
++    node = next(iter(other.item)) if field_type is RadioField else other.item
++    assert ' checked' not in str(node())
++    assert ' checked' in str(node(checked=True))
++    assert other.item.data == ("b" if field_type is RadioField else False)
++
++
++@pytest.mark.parametrize("field_type", [BooleanField, RadioField])
++def test_checked_default(field_type):
++    kwargs = {"choices": [("a", "A"), ("b", "B")]} if field_type is RadioField else {}
++    class F(Form):
++        item = field_type(**kwargs)
++    form = F(item="a" if field_type is RadioField else True)
++    node = next(iter(form.item)) if field_type is RadioField else form.item
++    assert ' checked' in str(node())
++    assert ' checked' not in str(node(checked=False))

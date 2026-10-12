@@ -1,0 +1,158 @@
+{
+ "answer": {
+  "expires_a": "20300102033405",
+  "expires_b": "",
+  "outcomes": {
+   "a_after_boundary": "CSRF token expired.",
+   "a_at_boundary": null,
+   "a_disabled_later": null,
+   "b_disabled_later": null,
+   "b_with_default_limit": "CSRF token expired.",
+   "empty_token": "CSRF token missing.",
+   "tampered_expired_a": "CSRF failed."
+  }
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"expires_a\": \"20300102033405\",\n  \"expires_b\": \"\",\n  \"outcomes\": {\n    \"a_at_boundary\": null,\n    \"a_after_boundary\": \"CSRF token expired.\",\n    \"b_disabled_later\": null,\n    \"b_with_default_limit\": \"CSRF token missing.\",\n    \"a_disabled_later\": null,\n    \"tampered_expired_a\": \"CSRF failed.\",\n    \"empty_token\": \"CSRF token missing.\"\n  }\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6258 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference solved the task from the two scoped CSRF modules without sub-calls. The cases require reasoning about default versus disabled expiration, token serialization, boundary comparison, and validation-error precedence, so direct inspection of the small context was appropriate."
+  },
+  "notes": "This is a coherent maintainer-facing behavioral check rather than a collection of unrelated questions. The inputs and output schema are precise, the outcomes depend on repository implementation details, and the question does not disclose the answers or prescribe solver operations. Executable verification establishes the requested results."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The two CSRF modules are approximately 6,200 characters. Token serialization, default lifetime, expiry comparison, and validation error ordering can all be understood directly without repository-wide investigation."
+  },
+  "context": {
+   "files": [
+    "src/wtforms/csrf/core.py",
+    "src/wtforms/csrf/session.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.generate_csrf_token",
+    "why": "Serializes either a formatted expiration or an empty prefix and authenticates the session value plus that prefix."
+   },
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.time_limit",
+    "why": "An absent setting means thirty minutes; explicit None disables expiration."
+   },
+   {
+    "path": "src/wtforms/csrf/session.py",
+    "symbol": "src/wtforms/csrf/session.py::SessionCSRF.validate_csrf_token",
+    "why": "Checks missing input before HMAC failure, then expiration, using a strict greater-than comparison."
+   },
+   {
+    "path": "src/wtforms/csrf/core.py",
+    "symbol": "src/wtforms/csrf/core.py::CSRFTokenField.process",
+    "why": "Generation occurs before the field's validation phase, satisfying the session-state assumption."
+   }
+  ],
+  "expected_answer": {
+   "expires_a": "20300102033405",
+   "expires_b": "",
+   "outcomes": {
+    "a_after_boundary": "CSRF token expired.",
+    "a_at_boundary": null,
+    "a_disabled_later": null,
+    "b_disabled_later": null,
+    "b_with_default_limit": "CSRF token expired.",
+    "empty_token": "CSRF token missing.",
+    "tampered_expired_a": "CSRF failed."
+   }
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The verifier should control SessionCSRF.now with a subclass, preserve the same session and secret across cases, and catch ValidationError. No real clock, random session initialization, or digest-value prediction is required.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Clarify `SessionCSRF` behavior at expiry boundaries and when expiration is disabled. Use the same secret `b\"secret\"` and session mapping `{\"csrf\": \"fixed-session\"}` throughout, with untranslated error messages. At a controlled issue time of 2030-01-02 03:04:05, generate token A using Meta with no `csrf_time_limit` attribute, and token B using Meta with `csrf_time_limit=None`. Report each token's serialized expiry prefix before `##`. Also report the validation outcome for these seven cases: A under the default time limit at 03:34:05 that day (`a_at_boundary`); A under the default limit at 03:34:06 (`a_after_boundary`); B with expiration disabled on 2031-01-02 (`b_disabled_later`); B under the default limit at the issue time (`b_with_default_limit`); A with expiration disabled on 2031-01-02 (`a_disabled_later`); A with its first digest character changed to a different hexadecimal character, under the default limit at 03:34:06 (`tampered_expired_a`); and an empty submitted token under the default limit (`empty_token`). Assume each implementation has completed setup and token generation before validation. Return a JSON object with `expires_a`, `expires_b`, and `outcomes`; map each case name in `outcomes` to null for success or the exact validation error message.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r01-05",
+ "truth": {
+  "answer": {
+   "expires_a": "20300102033405",
+   "expires_b": "",
+   "outcomes": {
+    "a_after_boundary": "CSRF token expired.",
+    "a_at_boundary": null,
+    "a_disabled_later": null,
+    "b_disabled_later": null,
+    "b_with_default_limit": "CSRF token expired.",
+    "empty_token": "CSRF token missing.",
+    "tampered_expired_a": "CSRF failed."
+   }
+  },
+  "kind": "oracle",
+  "normalized": "{\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_after_boundary\": \"CSRF token expired.\", \"a_at_boundary\": null, \"a_disabled_later\": null, \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"empty_token\": \"CSRF token missing.\", \"tampered_expired_a\": \"CSRF failed.\"}}",
+  "output_tail": "{\"answer\": {\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_at_boundary\": null, \"a_after_boundary\": \"CSRF token expired.\", \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"a_disabled_later\": null, \"tampered_expired_a\": \"CSRF failed.\", \"empty_token\": \"CSRF token missing.\"}}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_after_boundary\": \"CSRF token expired.\", \"a_at_boundary\": null, \"a_disabled_later\": null, \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"empty_token\": \"CSRF token missing.\", \"tampered_expired_a\": \"CSRF failed.\"}}",
+   "predicted": "{\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_after_boundary\": \"CSRF token expired.\", \"a_at_boundary\": null, \"a_disabled_later\": null, \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"empty_token\": \"CSRF token missing.\", \"tampered_expired_a\": \"CSRF failed.\"}}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

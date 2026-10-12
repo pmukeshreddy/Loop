@@ -1,0 +1,99 @@
+--- /dev/null
++++ b/voluptuous/tests/test_direct_required.py
+@@ -0,0 +1,96 @@
++import pytest
++
++from voluptuous import (
++    All,
++    AllInvalid,
++    Any,
++    AnyInvalid,
++    Coerce,
++    MultipleInvalid,
++    Schema,
++)
++
++
++@pytest.mark.parametrize(
++    "validator",
++    [
++        Any({"a": int}, {"b": str}, required=True),
++        Any(
++            {"a": Any(float, int)}, {"b": int}, {"c": {"aa": int}}, required=True
++        ),
++        All({"a": int}, required=True),
++    ],
++)
++def test_direct_required_missing(validator):
++    with pytest.raises(MultipleInvalid) as caught:
++        validator({})
++    assert str(caught.value) == "required key not provided @ data['a']"
++    assert caught.value.path == ["a"]
++
++
++def test_direct_required_nested_dictionary():
++    validator = Any({"a": int}, {"c": {"aa": int}}, required=True)
++    with pytest.raises(MultipleInvalid) as caught:
++        validator({"c": {}})
++    assert caught.value.path == ["c", "aa"]
++    assert str(caught.value) == "required key not provided @ data['c']['aa']"
++
++
++@pytest.mark.parametrize("combinator", [Any, All])
++@pytest.mark.parametrize("options", [{}, {"required": False}])
++def test_direct_optional_dictionary(combinator, options):
++    assert combinator({"a": int}, **options)({}) == {}
++
++
++@pytest.mark.parametrize("required", [False, True])
++def test_direct_success_and_transformations(required):
++    alternative = Any({"a": Coerce(int)}, {"b": str}, required=required)
++    assert alternative({"a": "12"}) == {"a": 12}
++    assert alternative({"b": "text"}) == {"b": "text"}
++    pipeline = All(
++        {"a": Coerce(int)}, lambda value: value["a"] + 1, required=required
++    )
++    assert pipeline({"a": "12"}) == 13
++
++
++@pytest.mark.parametrize("combinator,error_type", [(Any, AnyInvalid), (All, AllInvalid)])
++def test_direct_required_custom_message(combinator, error_type):
++    validator = combinator({"a": int}, required=True, msg="supply a")
++    with pytest.raises(error_type) as caught:
++        validator({})
++    assert str(caught.value) == "supply a"
++    assert caught.value.path == []
++
++
++def test_direct_any_leaves_unused_child_uncompiled():
++    validator = Any({"a": int}, object(), required=True)
++    assert validator({"a": 1}) == {"a": 1}
++
++
++def test_direct_all_stops_before_compiling_later_child():
++    validator = All({"a": int}, object(), required=True)
++    with pytest.raises(MultipleInvalid) as caught:
++        validator({})
++    assert caught.value.path == ["a"]
++
++
++def test_direct_call_does_not_compile_the_combinator():
++    class DirectAny(Any):
++        def __voluptuous_compile__(self, schema):
++            raise AssertionError("standalone combinator entered enclosing-schema hook")
++
++    validator = DirectAny({"a": int}, required=True)
++    assert validator({"a": 1}) == {"a": 1}
++    with pytest.raises(MultipleInvalid):
++        validator({})
++
++
++def test_direct_call_preserves_existing_schema_binding():
++    validator = Any({"a": int}, {"b": str}, required=True)
++    wrapped = Schema(validator)
++    assert validator({"b": "ok"}) == {"b": "ok"}
++    assert wrapped({"a": 1}) == {"a": 1}
++    with pytest.raises(MultipleInvalid):
++        validator({})
++    with pytest.raises(MultipleInvalid):
++        wrapped({})

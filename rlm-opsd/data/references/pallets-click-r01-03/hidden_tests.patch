@@ -1,0 +1,79 @@
+--- /dev/null
++++ b/tests/test_help_cache_refresh.py
+@@ -0,0 +1,79 @@
++import click
++
++
++def test_help_cache_tracks_context_spellings():
++    command = click.Command("tool")
++    first_ctx = click.Context(command, help_option_names=["-h", "--help"])
++    first = command.get_help_option(first_ctx)
++    assert first is not None
++    assert first.opts == ["-h", "--help"]
++    assert command.get_help_option(first_ctx) is first
++
++    second_ctx = click.Context(
++        command, help_option_names=["--assist", "-a", "--assist"]
++    )
++    second = command.get_help_option(second_ctx)
++    assert second is not None
++    assert second is not first
++    assert second.opts == ["--assist", "-a"]
++    assert first.opts == ["-h", "--help"]
++    equivalent_ctx = click.Context(
++        command, help_option_names=["--assist", "-a"], terminal_width=100
++    )
++    assert command.get_help_option(equivalent_ctx) is second
++    assert command.get_params(equivalent_ctx)[-1] is second
++
++
++def test_help_cache_tracks_order():
++    command = click.Command("tool")
++    first_ctx = click.Context(command, help_option_names=["-h", "--help"])
++    first = command.get_help_option(first_ctx)
++    second_ctx = click.Context(command, help_option_names=["--help", "-h"])
++    second = command.get_help_option(second_ctx)
++    assert first is not None and second is not None
++    assert second is not first
++    assert first.opts == ["-h", "--help"]
++    assert second.opts == ["--help", "-h"]
++
++
++def test_help_cache_tracks_user_option_conflicts():
++    command = click.Command(
++        "tool", params=[click.Option(["--enabled/--disabled"])]
++    )
++    ctx = click.Context(
++        command,
++        help_option_names=["--enabled", "--disabled", "--assist", "--more"],
++    )
++    first = command.get_help_option(ctx)
++    assert first is not None
++    assert first.opts == ["--assist", "--more"]
++    command.params.append(click.Option(["--assist"]))
++    second = command.get_help_option(ctx)
++    assert second is not None
++    assert second is not first
++    assert second.opts == ["--more"]
++    assert first.opts == ["--assist", "--more"]
++    assert command.get_help_option(ctx) is second
++    command.add_help_option = False
++    assert command.get_help_option(ctx) is None
++    command.add_help_option = True
++    assert command.get_help_option(ctx) is second
++    empty_ctx = click.Context(command, help_option_names=[])
++    assert command.get_help_option(empty_ctx) is None
++
++
++def test_refreshed_help_spelling_is_registered(runner):
++    command = click.Command("tool", help="Tool help.")
++    old_ctx = click.Context(command, help_option_names=["--help"])
++    old_option = command.get_help_option(old_ctx)
++    result = runner.invoke(
++        command, ["--assist"], help_option_names=["--assist"]
++    )
++    assert result.exit_code == 0
++    assert "Tool help." in result.output
++    assert "--assist" in result.output
++    assert old_option is not None
++    assert old_option.opts == ["--help"]

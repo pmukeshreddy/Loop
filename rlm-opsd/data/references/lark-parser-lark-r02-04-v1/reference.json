@@ -1,0 +1,188 @@
+{
+ "answer": "--- a/lark/lexer.py\n+++ b/lark/lexer.py\n@@ -243,7 +243,7 @@\n         return self._future_update(*args, **kwargs)\n \n     def _future_update(self, type: Optional[str] = None, value: Optional[Any] = None) -> 'Token':\n-        return Token.new_borrow_pos(\n+        return self.__class__.new_borrow_pos(\n             type if type is not None else self.type,\n             value if value is not None else self.value,\n             self\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001894003962256289,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 14,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "pos",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 791973 chars; 14 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff changes only concrete-class dispatch, leaving replacement selection, coordinate forwarding, deprecated-keyword handling, and transport hooks intact. The reference inspected the constructed final value, although its execution summary records no repository test runs.",
+   "inspect_locate": "The reference execution used targeted searches without printing the whole context. The relevant investigation connects the public update compatibility wrapper, its replacement helper, and the classmethod that borrows position fields; locating the API alone does not establish all required invariants."
+  },
+  "notes": "This is a natural, precisely scoped API change with a clear unified-diff deliverable. Naming the public API and specifying compatibility requirements does not disclose the internal fix. The small patch requires repository-specific reasoning about constructor dispatch and existing behavior. It is substantively distinct from the accepted pickle/deepcopy task, addressing update semantics rather than transport."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve concrete-class construction without disturbing None-as-no-replacement semantics, falsey replacement values, six-field coordinate propagation, or deprecated-keyword handling. Checking those invariants against the exact patch context prevents an overly broad change to the constructor or transport hooks.",
+   "inspect_locate": "The supplied repository context includes scanner, configuration, and exception code, but the relevant evidence is the short chain connecting Token.update's compatibility wrapper, its replacement helper, the position-borrowing constructor, and subclass construction. Locating and reading that chain is sufficient; delegation is unnecessary."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Token.update",
+    "why": "Normalizes the deprecated type_ keyword, emits its warning, rejects conflicting keywords, and dispatches to the replacement helper."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Token._future_update",
+    "why": "Preserves None-as-no-replacement semantics but currently binds position-borrowing construction to the base Token class."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Token.new_borrow_pos",
+    "why": "Constructs its bound class and forwards all six source-position fields without substituting defaults."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Token._future_new",
+    "why": "Supports inherited subclass construction and stores the replacement value and supplied coordinates exactly."
+   }
+  ],
+  "expected_answer": "--- a/lark/lexer.py\n+++ b/lark/lexer.py\n@@ -239,7 +239,7 @@\n         return self._future_update(*args, **kwargs)\n \n     def _future_update(self, type: Optional[str] = None, value: Optional[Any] = None) -> 'Token':\n-        return Token.new_borrow_pos(\n+        return self.__class__.new_borrow_pos(\n             type if type is not None else self.type,\n             value if value is not None else self.value,\n             self\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_token_update_subclasses.py\n@@ -0,0 +1,87 @@\n+import warnings\n+\n+import pytest\n+\n+from lark import Token\n+\n+\n+class DerivedToken(Token):\n+    __slots__ = ()\n+\n+\n+class LeafToken(DerivedToken):\n+    __slots__ = ()\n+\n+\n+POSITION_FIELDS = (\n+    \"start_pos\", \"line\", \"column\", \"end_line\", \"end_column\", \"end_pos\"\n+)\n+POSITIONS = [\n+    (7, 2, 3, 4, 5, 12),\n+    (None,) * 6,\n+    (0, None, 0, None, 0, None),\n+] + [\n+    tuple(None if i == missing else value for i, value in enumerate((7, 2, 3, 4, 5, 12)))\n+    for missing in range(6)\n+]\n+\n+\n+@pytest.mark.parametrize(\"token_class\", [Token, DerivedToken, LeafToken])\n+@pytest.mark.parametrize(\"positions\", POSITIONS)\n+def test_update_retains_concrete_class_and_positions(token_class, positions):\n+    source = token_class(\"OLD\", \"original\", *positions)\n+    cases = [\n+        ((), {}, \"OLD\", \"original\"),\n+        ((\"NEW\",), {}, \"NEW\", \"original\"),\n+        ((), {\"type\": \"NEW\"}, \"NEW\", \"original\"),\n+        ((), {\"value\": \"replacement\"}, \"OLD\", \"replacement\"),\n+        ((\"NEW\", \"replacement\"), {}, \"NEW\", \"replacement\"),\n+        ((), {\"type\": \"NEW\", \"value\": \"replacement\"}, \"NEW\", \"replacement\"),\n+        ((), {\"type\": None, \"value\": None}, \"OLD\", \"original\"),\n+        ((None, \"\"), {}, \"OLD\", \"\"),\n+        ((), {\"type\": \"\", \"value\": \"\"}, \"\", \"\"),\n+        ((), {\"value\": 0}, \"OLD\", 0),\n+        ((), {\"value\": False}, \"OLD\", False),\n+    ]\n+    for args, kwargs, expected_type, expected_value in cases:\n+        result = source.update(*args, **kwargs)\n+        assert result is not source\n+        assert type(result) is token_class\n+        assert result.type == expected_type\n+        assert result.value == expected_value\n+        assert type(result.value) is type(expected_value)\n+        assert str(result) == str(expected_value)\n+        assert tuple(getattr(result, field) for field in POSITION_FIELDS) == positions\n+        assert source.type == \"OLD\"\n+        assert source.value == \"original\"\n+        assert str(source) == \"original\"\n+        assert tuple(getattr(source, field) for field in POSITION_FIELDS) == positions\n+\n+\n+@pytest.mark.parametrize(\"token_class\", [Token, DerivedToken, LeafToken])\n+@pytest.mark.parametrize(\"replacement\", [\"NEW\", \"\", None])\n+def test_update_deprecated_keyword(token_class, replacement):\n+    source = token_class(\"OLD\", \"original\", *POSITIONS[2])\n+    with pytest.warns(DeprecationWarning, match=\"`type_` is deprecated use `type` instead\") as caught:\n+        result = source.update(type_=replacement, value=\"\")\n+    assert len(caught) == 1\n+    assert type(result) is token_class\n+    assert result is not source\n+    assert result.type == (\"OLD\" if replacement is None else replacement)\n+    assert result.value == \"\"\n+    assert str(result) == \"\"\n+    assert tuple(getattr(result, field) for field in POSITION_FIELDS) == POSITIONS[2]\n+\n+\n+@pytest.mark.parametrize(\"token_class\", [Token, DerivedToken, LeafToken])\n+@pytest.mark.parametrize(\"replacement\", [\"NEW\", None])\n+def test_update_conflicting_type_keywords(token_class, replacement):\n+    source = token_class(\"OLD\", \"original\")\n+    with warnings.catch_warnings(record=True) as caught:\n+        warnings.simplefilter(\"always\")\n+        with pytest.raises(TypeError) as error:\n+            source.update(type=replacement, type_=\"OTHER\")\n+    assert str(error.value) == \"Error: using both 'type' and the deprecated 'type_' as arguments.\"\n+    assert len(caught) == 1\n+    assert caught[0].category is DeprecationWarning\n+    assert str(caught[0].message) == \"`type_` is deprecated use `type` instead\"\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against an existing subtype-loss defect, so no setup patch is needed. The new acceptance file exercises base tokens, direct subclasses, and inherited subclasses through the public update API. Subclass cases fail on the supplied snapshot. The expected production change is confined to update construction and differs from the original transport-hook repair. No transport changes are required.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Calling `update()` on a `Token` subclass currently loses the subclass. Extend this API so an ordinary subclass that inherits the constructor and adds no state receives a distinct instance of its own concrete class. The original token must remain unchanged, and the result must retain its `start_pos`, `line`, `column`, `end_line`, `end_column`, and `end_pos` exactly, including `None` and zero values.\n\nKeep the existing replacement contract: positional and keyword arguments can replace the token type and value independently or together; omitted arguments and explicit `None` leave the corresponding field unchanged. A no-argument update must still produce a distinct token. Empty strings must be accepted as replacements, and values such as `0` and `False` must not be treated as omitted. Preserve the deprecated `type_` keyword's existing warning and the existing warning-plus-`TypeError` behavior when both `type` and `type_` are supplied, even if one is `None`.\n\nDeliver a unified diff against production files only. Leave tests and the pickle and deepcopy hooks unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused inspect_locate followed by combine_verify_finish across Token.update, Token._future_update, and Token.new_borrow_pos. A direct read of this small call chain is appropriate, with targeted checks for subclass construction and deprecated keyword behavior rather than repository-wide transport investigation.",
+  "change_type": "constraint",
+  "description": "Make Token.update() subtype-preserving for ordinary subclasses that inherit the constructor without adding state. In lark/lexer.py, require Token._future_update to return a distinct instance of the receiver's concrete class while preserving all six coordinates, including None. Exercise both type and value replacement, no-argument updates, empty-string replacement, and the deprecated type_ keyword with its existing warning and conflicting-keyword error behavior. Deliver a production-only unified diff; leave the pickle and deepcopy hooks unchanged.",
+  "expected_answer_change": "The repair belongs in Token._future_update and must invoke new_borrow_pos through the receiver's concrete class rather than the base Token class. Verification depends on update's None-as-no-replacement semantics, preservation of falsey replacement values, and the compatibility logic in Token.update; extending reconstruction tuples does not solve this problem.",
+  "why_substantive": "The defect is in the token replacement API, not either transport hook. Token.new_borrow_pos already preserves every coordinate and constructs its bound class, but Token._future_update explicitly invokes it on Token, discarding the receiver's subclass. The investigation must distinguish that class-binding defect from constructor compatibility and keyword normalization."
+ },
+ "task_id": "lark-parser-lark-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[NEW-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[NEW-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[None-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[None-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions0-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions0-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions1-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions1-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions2-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions2-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions3-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions3-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions4-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions4-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions5-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions5-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions6-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions6-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions7-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions7-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions8-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions8-LeafToken]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 24,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[NEW-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[NEW-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[None-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_deprecated_keyword[None-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions0-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions0-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions1-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions1-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions2-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions2-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions3-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions3-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions4-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions4-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions5-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions5-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions6-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions6-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions7-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions7-LeafToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions8-DerivedToken]",
+   "tests/test_token_update_subclasses.py::test_update_retains_concrete_class_and_positions[positions8-LeafToken]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

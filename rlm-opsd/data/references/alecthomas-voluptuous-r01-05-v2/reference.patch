@@ -1,0 +1,15 @@
+--- a/voluptuous/humanize.py
++++ b/voluptuous/humanize.py
+@@ -40,7 +40,11 @@
+             )
+         )
+     else:
+-        offending_item_summary = repr(_nested_getitem(data, validation_error.path))
++        offending_value = _nested_getitem(data, validation_error.path)
++        try:
++            offending_item_summary = repr(offending_value)
++        except Exception:
++            offending_item_summary = '<unrepresentable %s>' % type(offending_value).__name__
+         if len(offending_item_summary) > max_sub_error_length:
+             offending_item_summary = (
+                 offending_item_summary[: max_sub_error_length - 3] + '...'

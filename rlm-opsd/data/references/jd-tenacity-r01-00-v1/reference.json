@@ -1,0 +1,155 @@
+{
+ "answer": "--- a/tenacity/asyncio/__init__.py\n+++ b/tenacity/asyncio/__init__.py\n@@ -217,7 +217,9 @@\n         )\n         async def async_wrapped(*args: t.Any, **kwargs: t.Any) -> t.Any:\n             if not self.enabled:\n-                return await fn(*args, **kwargs)  # type: ignore[misc]\n+                if _utils.is_coroutine_callable(fn):\n+                    return await fn(*args, **kwargs)  # type: ignore[misc]\n+                return fn(*args, **kwargs)\n             # Always create a copy to prevent overwriting the local contexts when\n             # calling the same wrapped functions multiple times in the same stack\n             copy = self.copy()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0025731368780696133,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "a",
+    "b",
+    "index",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used nine targeted code searches without printing the whole context. The investigation connects async-controller selection for a synchronous target, disabled direct-call behavior, decorator wrapping, and enabled propagation through retry_with. These connections are relevant to locating the inconsistent execution branch."
+  },
+  "notes": "This is a natural, concrete regression-fix request with a precise patch format and meaningful behavioral constraints. It describes the observable failure without revealing the defective internal symbol or prescribing a fix. The verified patch distinguishes synchronous from native asynchronous targets in the disabled wrapper path while leaving enabled execution unchanged. The task is substantively different from the parent wait-policy regression and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The synchronous target enters an asynchronous controller because of the sleep callable, not because of its own declaration. Identifying the inconsistent behavior requires connecting decorator dispatch, enabled propagation through controller copying and retry_with, and the separate direct-call and wrapper execution branches. These are a small, scattered portion of the repository; extensive delegation is unnecessary."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::retry",
+    "why": "An asynchronous sleep callable selects AsyncRetrying even for a synchronous target."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying.copy",
+    "why": "Copies retain the controller class and propagate an explicit enabled=False override."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying.wraps",
+    "why": "The retry_with closure constructs a copied controller and wraps the original target again."
+   },
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.__call__",
+    "why": "Direct disabled invocation already distinguishes synchronous targets from coroutine callables before executing them."
+   },
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.wraps",
+    "why": "The disabled asynchronous wrapper currently awaits every target's return value unconditionally."
+   },
+   {
+    "path": "tenacity/_utils.py",
+    "symbol": "tenacity/_utils.py::is_coroutine_callable",
+    "why": "This snapshot's callable classification supplies the synchronous-versus-asynchronous distinction used by direct invocation."
+   }
+  ],
+  "expected_answer": "--- a/tenacity/asyncio/__init__.py\n+++ b/tenacity/asyncio/__init__.py\n@@ -239,7 +239,9 @@\n         )\n         async def async_wrapped(*args: t.Any, **kwargs: t.Any) -> t.Any:\n             if not self.enabled:\n-                return await fn(*args, **kwargs)  # type: ignore[misc]\n+                if _utils.is_coroutine_callable(fn):\n+                    return await fn(*args, **kwargs)  # type: ignore[misc]\n+                return fn(*args, **kwargs)\n             # Always create a copy to prevent overwriting the local contexts when\n             # calling the same wrapped functions multiple times in the same stack\n             copy = self.copy()\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_disabled_async_sleep_wrapper.py\n@@ -0,0 +1,89 @@\n+import asyncio\n+\n+import pytest\n+\n+from tenacity import AsyncRetrying, TryAgain, retry\n+\n+\n+def _options(events):\n+    def forbidden(*args, **kwargs):\n+        events.append(\"policy\")\n+        raise AssertionError(\"disabled retry invoked a policy or callback\")\n+\n+    async def sleep(seconds):\n+        events.append(\"sleep\")\n+        raise AssertionError(\"disabled retry invoked sleep\")\n+\n+    return {\n+        \"sleep\": sleep,\n+        \"stop\": forbidden,\n+        \"wait\": forbidden,\n+        \"retry\": forbidden,\n+        \"before\": forbidden,\n+        \"after\": forbidden,\n+        \"before_sleep\": forbidden,\n+        \"retry_error_callback\": forbidden,\n+    }\n+\n+\n+def _call(target, route, options):\n+    if route == \"direct\":\n+        controller = AsyncRetrying(enabled=False, **options)\n+        return controller(target, 7, label=\"x\")\n+    if route == \"decorator\":\n+        wrapped = retry(enabled=False, **options)(target)\n+    else:\n+        original = retry(**options)(target)\n+        wrapped = original.retry_with(enabled=False)\n+    return wrapped(7, label=\"x\")\n+\n+\n+@pytest.mark.parametrize(\"route\", [\"direct\", \"decorator\", \"retry_with\"])\n+@pytest.mark.parametrize(\"native_async\", [False, True])\n+@pytest.mark.parametrize(\"result\", [None, 0, \"ok\"])\n+def test_disabled_returns_result_once(route, native_async, result):\n+    events = []\n+    calls = []\n+\n+    def sync_target(number, *, label):\n+        calls.append((number, label))\n+        return result\n+\n+    async def async_target(number, *, label):\n+        return sync_target(number, label=label)\n+\n+    target = async_target if native_async else sync_target\n+\n+    async def invoke():\n+        return await _call(target, route, _options(events))\n+\n+    assert asyncio.run(invoke()) is result\n+    assert calls == [(7, \"x\")]\n+    assert events == []\n+\n+\n+@pytest.mark.parametrize(\"route\", [\"direct\", \"decorator\", \"retry_with\"])\n+@pytest.mark.parametrize(\"native_async\", [False, True])\n+@pytest.mark.parametrize(\"error_type\", [ValueError, TryAgain])\n+def test_disabled_preserves_exception_once(route, native_async, error_type):\n+    events = []\n+    calls = []\n+    error = error_type(\"original\")\n+\n+    def sync_target(number, *, label):\n+        calls.append((number, label))\n+        raise error\n+\n+    async def async_target(number, *, label):\n+        return sync_target(number, label=label)\n+\n+    target = async_target if native_async else sync_target\n+\n+    async def invoke():\n+        return await _call(target, route, _options(events))\n+\n+    with pytest.raises(error_type) as caught:\n+        asyncio.run(invoke())\n+    assert caught.value is error\n+    assert calls == [(7, \"x\")]\n+    assert events == []\n",
+  "include_failure_log": false,
+  "notes": "Use the supplied repository state, without applying the original task's wait-normalization regression. This variation addresses an existing wrapper defect through new hidden tests, so no setup patch is needed. The supplied explicit no-wait normalization already passes the original falsy-callable test. Run the new test file together with the existing suite. The new tests use asyncio.run and require no asynchronous pytest plugin; six synchronous-result decorator cases are expected to fail before the repair. Exception cases include TryAgain to verify that disabled execution does not treat it as a retry request.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "A synchronous function wrapped with retry(sleep=an_async_sleep, enabled=False) currently raises TypeError when its decorated call is awaited, even though direct disabled AsyncRetrying invocation returns its ordinary result. Make the decorator support this combination: awaiting the decorated call must execute the target exactly once, forward its positional and keyword arguments unchanged, and return its result or propagate the very same exception instance. Retry policies, callbacks, and sleep must not run while disabled. The same contract must hold for a wrapper obtained from retry_with(enabled=False), including when the original wrapper was enabled. Preserve disabled support for native asynchronous targets and leave enabled retry behavior unchanged. Deliver a unified diff against non-test repository files; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises branch-sensitive inspection across decorator dispatch, controller copying, and asynchronous execution. Comparing direct invocation with decorated invocation is useful for locating the inconsistent disabled branch; wait-policy tests are no longer the primary evidence.",
+  "change_type": "constraint",
+  "description": "With the accepted wait-normalization repair in place, investigate a synchronous function decorated with retry(sleep=an_async_sleep, enabled=False). Calling and awaiting the decorated function must return its ordinary result, execute it exactly once, and propagate its original exception without invoking retry policies or sleep. Require the same behavior for retry_with(enabled=False), while preserving support for native asynchronous targets. Return a unified diff against non-test files. Trace tenacity/__init__.py::retry and BaseRetrying.copy into tenacity/asyncio/__init__.py::AsyncRetrying.wraps and AsyncRetrying.__call__.",
+  "expected_answer_change": "The repair must change AsyncRetrying.wraps so disabled synchronous targets use the same sync-versus-async execution semantics as AsyncRetrying.__call__. Verification must cover ordinary synchronous return values, original exceptions, native coroutine targets, and disabled controllers produced through retry_with, with no policy or sleep calls.",
+  "why_substantive": "An asynchronous sleep selects AsyncRetrying even when the target is synchronous. The disabled decorator branch unconditionally awaits that synchronous target, whereas direct disabled invocation already distinguishes synchronous and asynchronous targets. This is a wrapper execution defect, not constructor normalization, and the accepted _is_no_wait patch cannot fix it."
+ },
+ "task_id": "jd-tenacity-r01-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[0-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[0-False-retry_with]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[None-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[None-False-retry_with]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[ok-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[ok-False-retry_with]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 214
+   },
+   "patch_files": [
+    "tenacity/asyncio/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[0-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[0-False-retry_with]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[None-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[None-False-retry_with]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[ok-False-decorator]",
+   "tests/test_disabled_async_sleep_wrapper.py::test_disabled_returns_result_once[ok-False-retry_with]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

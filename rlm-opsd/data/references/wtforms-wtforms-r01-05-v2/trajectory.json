@@ -1,0 +1,90 @@
+{
+  "task_id": "wtforms-wtforms-r01-05-v2",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 6258,
+    "context_lengths": [
+      3130,
+      3128
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context),[len(x) for x in context])\nfor x in context:\n print(x[:180])\nprint(context[0][1400:1900])\nprint(context[-1][-600:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context),[len(x) for x in context])\nfor x in context:\n print(x[:180])\nprint(context[0][1400:1900])\nprint(context[-1][-600:])"
+      ],
+      "stdout_raw_chars": 1494,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 2 [3130, 3128]\n# File: src/wtforms/csrf/core.py\nfrom wtforms.fields import HiddenField\nfrom wtforms.validators import ValidationError\n\n__all__ = (\"CSRFTokenField\", \"CSRF\")\n\n\nclass CSRFTokenField(\n# File: src/wtforms/csrf/session.py\n\"\"\"\nA provided CSRF implementation which puts CSRF data in a session.\n\nThis can be used fairly comfortably with many `request.session` type\nobje\n   \"\"\"\n        Receive the form we're attached to and set up fields.\n\n        The default implementation creates a single field of\n        type :attr:`field_class` with name taken from the\n        ``csrf_field_name`` of the class meta.\n\n        :param form:\n            The form instance we're attaching to.\n        :return:\n            A sequence of `(field_name, unbound_field)` 2-tuples which\n            are unbound fields to be added to the form.\n        \"\"\"\n        meta = form.meta\n        fie\n           now_formatted = self.now().strftime(self.TIME_FORMAT)\n            if now_formatted > expires:\n                raise ValidationError(field.gettext(\"CSRF token expired.\"))\n\n    def now(self):\n        \"\"\"\n        Get the current time. Used for test mocking/overriding mainly.\n        \"\"\"\n        return datetime.now()\n\n    @property\n    def time_limit(self):\n        return getattr(self.form_meta, \"csrf_time_limit\", timedelta(minutes=30))\n\n    @property\n    def session(self):\n        return getattr(\n            self.form_meta.csrf_context, \"session\", self.form_meta.csrf_context\n        )\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(context[1])\nprint(context[0])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(context[1])\nprint(context[0])"
+      ],
+      "stdout_raw_chars": 6260,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "# File: src/wtforms/csrf/session.py\n\"\"\"\nA provided CSRF implementation which puts CSRF data in a session.\n\nThis can be used fairly comfortably with many `request.session` type\nobjects, including the Werkzeug/Flask session store, Django sessions, and\npotentially other similar objects which use a dict-like API for storing\nsession keys.\n\nThe basic concept is a randomly generated value is stored in the user's\nsession, and an hmac-sha1 of it (along with an optional expiration time,\nfor extra security) is used as the value of the csrf_token. If this token\nvalidates with the hmac of the random value + expiration time, and the\nexpiration time is not passed, the CSRF validation will pass.\n\"\"\"\n\nimport hmac\nimport os\nfrom datetime import datetime\nfrom datetime import timedelta\nfrom hashlib import sha1\n\nfrom ..validators import ValidationError\nfrom .core import CSRF\n\n__all__ = (\"SessionCSRF\",)\n\n\nclass SessionCSRF(CSRF):\n    TIME_FORMAT = \"%Y%m%d%H%M%S\"\n\n    def setup_form(self, form):\n        self.form_meta = form.meta\n        return super().setup_form(form)\n\n    def generate_csrf_token(self, csrf_token_field):\n        meta = self.form_meta\n        if meta.csrf_secret is None:\n            raise Exception(\n                \"must set `csrf_secret` on class Meta for SessionCSRF to work\"\n            )\n        if meta.csrf_context is None:\n            raise TypeError(\"Must provide a session-like object as csrf context\")\n\n        session = self.session\n\n        if \"csrf\" not in session:\n            session[\"csrf\"] = sha1(os.urandom(64)).hexdigest()\n\n        if self.time_limit:\n            expires = (self.now() + self.time_limit).strftime(self.TIME_FORMAT)\n            csrf_build = \"{}{}\".format(session[\"csrf\"], expires)\n        else:\n            expires = \"\"\n            csrf_build = session[\"csrf\"]\n\n        hmac_csrf = hmac.new(\n            meta.csrf_secret, csrf_build.encode(\"utf8\"), digestmod=sha1\n        )\n        return f\"{expires}##{hmac_csrf.hexdigest()}\"\n\n    def validate_csrf_token(self, form, field):\n        meta = self.form_meta\n        if not field.data or \"##\" not in field.data:\n            raise ValidationError(field.gettext(\"CSRF token missing.\"))\n\n        expires, hmac_csrf = field.data.split(\"##\", 1)\n\n        check_val = (self.session[\"csrf\"] + expires).encode(\"utf8\")\n\n        hmac_compare = hmac.new(meta.csrf_secret, check_val, digestmod=sha1)\n        if hmac_compare.hexdigest() != hmac_csrf:\n            raise ValidationError(field.gettext(\"CSRF failed.\"))\n\n        if self.time_limit:\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n            if now_formatted > expires:\n                raise ValidationError(field.gettext(\"CSRF token expired.\"))\n\n    def now(self):\n        \"\"\"\n        Get the current time. Used for test mocking/overriding mainly.\n        \"\"\"\n        return datetime.now()\n\n    @property\n    def time_limit(self):\n        return getattr(self.form_meta, \"csrf_time_limit\", timedelta(minutes=30))\n\n    @property\n    def session(self):\n        return getattr(\n            self.form_meta.csrf_context, \"session\", self.form_meta.csrf_context\n        )\n\n# File: src/wtforms/csrf/core.py\nfrom wtforms.fields import HiddenField\nfrom wtforms.validators import ValidationError\n\n__all__ = (\"CSRFTokenField\", \"CSRF\")\n\n\nclass CSRFTokenField(HiddenField):\n    \"\"\"\n    A subclass of HiddenField designed for sending the CSRF token that is used\n    for most CSRF protection schemes.\n\n    Notably different from a normal field, this field always renders the\n    current token regardless of the submitted value, and also will not be\n    populated over to object data via populate_obj\n    \"\"\"\n\n    current_token = None\n\n    def __init__(self, *args, **kw):\n        self.csrf_impl = kw.pop(\"csrf_impl\")\n        super().__init__(*args, **kw)\n\n    def _value(self):\n        \"\"\"\n        We want to always return the current token on render, regardless of\n        whether a good or bad token was passed.\n        \"\"\"\n        return self.current_token\n\n    def populate_obj(self, *args):\n        \"\"\"\n        Don't populate objects with the CSRF token\n        \"\"\"\n        pass\n\n    def pre_validate(self, form):\n        \"\"\"\n        Handle validation of this token field.\n        \"\"\"\n        self.csrf_impl.validate_csrf_token(form, self)\n\n    def process(self, *args, **kwargs):\n        super().process(*args, **kwargs)\n        self.current_token = self.csrf_impl.generate_csrf_token(self)\n\n\nclass CSRF:\n    field_class = CSRFTokenField\n\n    def setup_form(self, form):\n        \"\"\"\n        Receive the form we're attached to and set up fields.\n\n        The default implementation creates a single field of\n        type :attr:`field_class` with name taken from the\n        ``csrf_field_name`` of the class meta.\n\n        :param form:\n            The form instance we're attaching to.\n        :return:\n            A sequence of `(field_name, unbound_field)` 2-tuples which\n            are unbound fields to be added to the form.\n        \"\"\"\n        meta = form.meta\n        field_name = meta.csrf_field_name\n        unbound_field = self.field_class(label=\"CSRF Token\", csrf_impl=self)\n        return [(field_name, unbound_field)]\n\n    def generate_csrf_token(self, csrf_token_field):\n        \"\"\"\n        Implementations must override this to provide a method with which one\n        can get a CSRF token for this form.\n\n        A CSRF token is usually a string that is generated deterministically\n        based on some sort of user data, though it can be anything which you\n        can validate on a subsequent request.\n\n        :param csrf_token_field:\n            The field which is being used for CSRF.\n        :return:\n            A generated CSRF string.\n        \"\"\"\n        raise NotImplementedError()\n\n    def validate_csrf_token(self, form, field):\n        \"\"\"\n        Override this method to provide custom CSRF validation logic.\n\n        The default CSRF validation logic simply checks if the recently\n        generated token equals the one we received as formdata.\n\n        :param form: The form which has this CSRF token.\n        :param field: The CSRF token field.\n        \"\"\"\n        if field.current_token != field.data:\n            raise ValidationError(field.gettext(\"Invalid CSRF Token.\"))\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib\nfiles = {s.split(\"\\n\",1)[0][8:]:s.split(\"\\n\",1)[1] for s in context}\npath = \"src/wtforms/csrf/session.py\"\nold = files[path]\ntarget = \"\"\"        if self.time_limit:\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n\"\"\"\nreplacement = \"\"\"        if self.time_limit:\n            if len(expires) != 14 or any(c < \"0\" or c > \"9\" for c in expires):\n                raise ValidationError(field.gettext(\"CSRF token invalid expiration.\"))\n            try:\n                datetime.strptime(expires, self.TIME_FORMAT)\n            except ValueError:\n                raise ValidationError(\n                    field.gettext(\"CSRF token invalid expiration.\")\n                ) from None\n\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n\"\"\"\nassert old.count(target) == 1\nnew = old.replace(target,replacement)\nassert new != old\nassert new[:new.index(\"    def validate_csrf_token\")] == old[:old.index(\"    def validate_csrf_token\")]\nassert new.index('if hmac_compare.hexdigest() != hmac_csrf:') < new.index('if len(expires)')\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile=\"a/\"+path,tofile=\"b/\"+path))\nprint(patch)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib\nfiles = {s.split(\"\\n\",1)[0][8:]:s.split(\"\\n\",1)[1] for s in context}\npath = \"src/wtforms/csrf/session.py\"\nold = files[path]\ntarget = \"\"\"        if self.time_limit:\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n\"\"\"\nreplacement = \"\"\"        if self.time_limit:\n            if len(expires) != 14 or any(c < \"0\" or c > \"9\" for c in expires):\n                raise ValidationError(field.gettext(\"CSRF token invalid expiration.\"))\n            try:\n                datetime.strptime(expires, self.TIME_FORMAT)\n            except ValueError:\n                raise ValidationError(\n                    field.gettext(\"CSRF token invalid expiration.\")\n                ) from None\n\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n\"\"\"\nassert old.count(target) == 1\nnew = old.replace(target,replacement)\nassert new != old\nassert new[:new.index(\"    def validate_csrf_token\")] == old[:old.index(\"    def validate_csrf_token\")]\nassert new.index('if hmac_compare.hexdigest() != hmac_csrf:') < new.index('if len(expires)')\npatch = \"\".join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile=\"a/\"+path,tofile=\"b/\"+path))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 790,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/wtforms/csrf/session.py\n+++ b/src/wtforms/csrf/session.py\n@@ -72,6 +72,15 @@\n             raise ValidationError(field.gettext(\"CSRF failed.\"))\n \n         if self.time_limit:\n+            if len(expires) != 14 or any(c < \"0\" or c > \"9\" for c in expires):\n+                raise ValidationError(field.gettext(\"CSRF token invalid expiration.\"))\n+            try:\n+                datetime.strptime(expires, self.TIME_FORMAT)\n+            except ValueError:\n+                raise ValidationError(\n+                    field.gettext(\"CSRF token invalid expiration.\")\n+                ) from None\n+\n             now_formatted = self.now().strftime(self.TIME_FORMAT)\n             if now_formatted > expires:\n                 raise ValidationError(field.gettext(\"CSRF token expired.\"))\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/wtforms/csrf/session.py\n+++ b/src/wtforms/csrf/session.py\n@@ -72,6 +72,15 @@\n             raise ValidationError(field.gettext(\"CSRF failed.\"))\n \n         if self.time_limit:\n+            if len(expires) != 14 or any(c < \"0\" or c > \"9\" for c in expires):\n+                raise ValidationError(field.gettext(\"CSRF token invalid expiration.\"))\n+            try:\n+                datetime.strptime(expires, self.TIME_FORMAT)\n+            except ValueError:\n+                raise ValidationError(\n+                    field.gettext(\"CSRF token invalid expiration.\")\n+                ) from None\n+\n             now_formatted = self.now().strftime(self.TIME_FORMAT)\n             if now_formatted > expires:\n                 raise ValidationError(field.gettext(\"CSRF token expired.\"))\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 58.43688237499737
+  }
+}

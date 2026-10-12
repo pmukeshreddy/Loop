@@ -1,0 +1,156 @@
+--- a/jsonschema/_utils.py
++++ b/jsonschema/_utils.py
+@@ -197,17 +197,27 @@
+ 
+     ref = schema.get("$ref")
+     if ref is not None:
+-        resolved = validator._resolver.lookup(ref)
+-        evaluated_indexes.extend(
+-            find_evaluated_item_indexes_by_schema(
+-                validator.evolve(
+-                    schema=resolved.contents,
+-                    _resolver=resolved.resolver,
++        if validator._ref_resolver is not None:
++            with validator._ref_resolver.resolving(ref) as resolved:
++                evaluated_indexes.extend(
++                    find_evaluated_item_indexes_by_schema(
++                        validator.evolve(schema=resolved),
++                        instance,
++                        resolved,
++                    ),
++                )
++        else:
++            resolved = validator._resolver.lookup(ref)
++            evaluated_indexes.extend(
++                find_evaluated_item_indexes_by_schema(
++                    validator.evolve(
++                        schema=resolved.contents,
++                        _resolver=resolved.resolver,
++                    ),
++                    instance,
++                    resolved.contents,
+                 ),
+-                instance,
+-                resolved.contents,
+-            ),
+-        )
++            )
+ 
+     dynamicRef = schema.get("$dynamicRef")
+     if dynamicRef is not None:
+@@ -272,17 +282,27 @@
+ 
+     ref = schema.get("$ref")
+     if ref is not None:
+-        resolved = validator._resolver.lookup(ref)
+-        evaluated_keys.extend(
+-            find_evaluated_property_keys_by_schema(
+-                validator.evolve(
+-                    schema=resolved.contents,
+-                    _resolver=resolved.resolver,
++        if validator._ref_resolver is not None:
++            with validator._ref_resolver.resolving(ref) as resolved:
++                evaluated_keys.extend(
++                    find_evaluated_property_keys_by_schema(
++                        validator.evolve(schema=resolved),
++                        instance,
++                        resolved,
++                    ),
++                )
++        else:
++            resolved = validator._resolver.lookup(ref)
++            evaluated_keys.extend(
++                find_evaluated_property_keys_by_schema(
++                    validator.evolve(
++                        schema=resolved.contents,
++                        _resolver=resolved.resolver,
++                    ),
++                    instance,
++                    resolved.contents,
+                 ),
+-                instance,
+-                resolved.contents,
+-            ),
+-        )
++            )
+ 
+     dynamicRef = schema.get("$dynamicRef")
+     if dynamicRef is not None:
+--- a/jsonschema/_legacy_keywords.py
++++ b/jsonschema/_legacy_keywords.py
+@@ -252,17 +252,27 @@
+ 
+     ref = schema.get("$ref")
+     if ref is not None:
+-        resolved = validator._resolver.lookup(ref)
+-        evaluated_indexes.extend(
+-            find_evaluated_item_indexes_by_schema(
+-                validator.evolve(
+-                    schema=resolved.contents,
+-                    _resolver=resolved.resolver,
++        if validator._ref_resolver is not None:
++            with validator._ref_resolver.resolving(ref) as resolved:
++                evaluated_indexes.extend(
++                    find_evaluated_item_indexes_by_schema(
++                        validator.evolve(schema=resolved),
++                        instance,
++                        resolved,
++                    ),
++                )
++        else:
++            resolved = validator._resolver.lookup(ref)
++            evaluated_indexes.extend(
++                find_evaluated_item_indexes_by_schema(
++                    validator.evolve(
++                        schema=resolved.contents,
++                        _resolver=resolved.resolver,
++                    ),
++                    instance,
++                    resolved.contents,
+                 ),
+-                instance,
+-                resolved.contents,
+-            ),
+-        )
++            )
+ 
+     if "$recursiveRef" in schema:
+         resolved = lookup_recursive_ref(validator._resolver)
+@@ -339,17 +349,27 @@
+ 
+     ref = schema.get("$ref")
+     if ref is not None:
+-        resolved = validator._resolver.lookup(ref)
+-        evaluated_keys.extend(
+-            find_evaluated_property_keys_by_schema(
+-                validator.evolve(
+-                    schema=resolved.contents,
+-                    _resolver=resolved.resolver,
++        if validator._ref_resolver is not None:
++            with validator._ref_resolver.resolving(ref) as resolved:
++                evaluated_keys.extend(
++                    find_evaluated_property_keys_by_schema(
++                        validator.evolve(schema=resolved),
++                        instance,
++                        resolved,
++                    ),
++                )
++        else:
++            resolved = validator._resolver.lookup(ref)
++            evaluated_keys.extend(
++                find_evaluated_property_keys_by_schema(
++                    validator.evolve(
++                        schema=resolved.contents,
++                        _resolver=resolved.resolver,
++                    ),
++                    instance,
++                    resolved.contents,
+                 ),
+-                instance,
+-                resolved.contents,
+-            ),
+-        )
++            )
+ 
+     if "$recursiveRef" in schema:
+         resolved = lookup_recursive_ref(validator._resolver)

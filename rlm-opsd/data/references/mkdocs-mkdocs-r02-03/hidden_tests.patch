@@ -1,0 +1,59 @@
+--- /dev/null
++++ b/mkdocs/tests/test_yaml_inherit_cycles.py
+@@ -0,0 +1,56 @@
++import os
++import re
++
++import pytest
++
++from mkdocs.exceptions import ConfigurationError
++from mkdocs.utils.yaml import get_yaml_loader, yaml_load
++
++
++def load(path, loader=None):
++    with path.open("rb") as fd:
++        return yaml_load(fd, loader)
++
++
++@pytest.mark.parametrize("two_files", [False, True])
++def test_inherit_cycle_has_ordered_paths(tmp_path, two_files):
++    a = tmp_path / "a.yml"
++    b = tmp_path / "b.yml"
++    a.write_text("INHERIT: b.yml\n" if two_files else "INHERIT: a.yml\n")
++    if two_files:
++        b.write_text("INHERIT: a.yml\n")
++    chain = [a, b, a] if two_files else [a, a]
++    with pytest.raises(ConfigurationError) as exc:
++        load(a)
++    message = str(exc.value)
++    assert "INHERIT" in message
++    assert re.search(".*?".join(re.escape(os.path.realpath(p)) for p in chain), message, re.S)
++
++
++def test_symlink_alias_detected_as_same_inherit_file(tmp_path):
++    a = tmp_path / "a.yml"
++    b = tmp_path / "b.yml"
++    alias = tmp_path / "alias.yml"
++    a.write_text("INHERIT: b.yml\n")
++    b.write_text("INHERIT: alias.yml\n")
++    try:
++        alias.symlink_to(a)
++    except (OSError, NotImplementedError):
++        pytest.skip("symlinks unavailable")
++    with pytest.raises(ConfigurationError) as exc:
++        load(a)
++    message = str(exc.value)
++    assert "INHERIT" in message
++    assert re.search(".*?".join(re.escape(os.path.realpath(p)) for p in [a, b, a]), message, re.S)
++
++
++def test_acyclic_inheritance_and_repeated_loads(tmp_path):
++    parent = tmp_path / "parent.yml"
++    child = tmp_path / "child.yml"
++    parent.write_text("nested:\n  parent: 1\n  override: old\n")
++    child.write_text("INHERIT: parent.yml\nnested:\n  child: 2\n  override: new\n")
++    loader = get_yaml_loader()
++    expected = {"nested": {"parent": 1, "child": 2, "override": "new"}}
++    assert load(child, loader) == expected
++    assert load(child, loader) == expected
++    assert yaml_load("INHERIT: parent.yml\nvalue: 3\n", loader) == {"INHERIT": "parent.yml", "value": 3}

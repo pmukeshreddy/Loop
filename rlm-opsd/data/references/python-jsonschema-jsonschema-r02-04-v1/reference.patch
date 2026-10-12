@@ -1,0 +1,23 @@
+--- a/jsonschema/_keywords.py
++++ b/jsonschema/_keywords.py
+@@ -95,10 +95,18 @@
+     min_contains = schema.get("minContains", 1)
+     max_contains = schema.get("maxContains", len(instance))
+ 
+-    contains_validator = validator.evolve(schema=contains)
++    if validator._ref_resolver is not None:
++        contains_validator = validator.evolve(schema=contains)
+ 
+     for each in instance:
+-        if contains_validator.is_valid(each):
++        if validator._ref_resolver is None:
++            matches_contains = next(
++                validator.descend(each, contains), None,
++            ) is None
++        else:
++            matches_contains = contains_validator.is_valid(each)
++
++        if matches_contains:
+             matches += 1
+             if matches > max_contains:
+                 yield ValidationError(

@@ -1,0 +1,154 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -2057,11 +2057,19 @@\n                 contexts.append(sub_ctx)\n                 args, sub_ctx.args = sub_ctx.args, []\n \n-            rv = []\n-            for sub_ctx in contexts:\n-                with sub_ctx:\n-                    rv.append(sub_ctx.command.invoke(sub_ctx))\n-            return _process_result(rv)\n+            # Keep every child's resources alive until result processing is\n+            # finished, without keeping the child as the current context.\n+            # ExitStack unwinds children in reverse order and forwards any\n+            # exception (including suppression) through their resource stacks.\n+            with ExitStack() as stack:\n+                for sub_ctx in contexts:\n+                    stack.push(sub_ctx._close_with_exception_info)\n+\n+                rv = []\n+                for sub_ctx in contexts:\n+                    with sub_ctx.scope(cleanup=False):\n+                        rv.append(sub_ctx.command.invoke(sub_ctx))\n+                return _process_result(rv)\n \n     def resolve_command(\n         self, ctx: Context, args: list[str]\n--- a/docs/commands.md\n+++ b/docs/commands.md\n@@ -278,13 +278,16 @@\n After that point we can register as many subcommands as we want and each\n subcommand can return a processor function to modify the stream of lines.\n \n-One important thing of note is that Click shuts down the context after\n-each callback has been run.  This means that for instance file types\n-cannot be accessed in the `processor` functions as the files will already\n-be closed there.  This limitation is unlikely to change because it would\n-make resource handling much more complicated.  For such it's recommended\n-to not use the file type and manually open the file through\n-{func}`open_file`.\n+For chained groups, Click keeps the subcommand contexts' resources open\n+until all subcommands and the group's result callback have finished. This\n+allows files opened by file types, and resources registered with\n+{meth}`Context.with_resource`, to be used by the `processor` functions.\n+This also applies when no result callback is registered.\n+\n+After result processing, subcommand resources are closed in reverse\n+invocation order, before the group's resources. Within each context,\n+resources and callbacks registered with {meth}`Context.call_on_close` are\n+released in reverse registration order.\n \n For a more complex example that also improves upon handling of the pipelines,\n see the [imagepipe example](https://github.com/pallets/click/tree/main/examples/imagepipe)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008617736702307203,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 23,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "doc",
+    "files",
+    "m",
+    "start"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 23 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch integrates command ordering, result processing, current-context restoration, reverse teardown, and exception forwarding. The execution constructed and inspected the final diff, and the supplied verification exercises return, raise, and no-result-callback cases.",
+   "inspect_locate": "The reference execution used 23 targeted searches without printing the whole context. The change requires connecting chained invocation with context scopes and resource teardown to extend resource lifetime without leaving child contexts current."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise unified-diff output requirement. Its detailed lifecycle constraints specify observable behavior rather than prescribing a fix or solver workflow. It is substantively distinct from the accepted context-teardown regression task: this change extends chained child resource lifetimes through result processing, rather than repairing exception handling in ordinary context exit."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must satisfy several interacting invariants: ordered command results, the group being current during result processing, reverse child teardown before group teardown, exception forwarding, and restoration of the caller's context. Its unified-diff hunks also need checking against the exact source.",
+   "inspect_locate": "The relevant control flow is a small fraction of core.py: chained invocation, callback invocation, context entry and exit, temporary scopes, and resource registration must be connected to distinguish resource lifetime from current-context lifetime."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Group.invoke",
+    "why": "The chain branch currently exits each child context before processing the aggregate results."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.__enter__",
+    "why": "Context entry both increments cleanup depth and changes the current context."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.__exit__",
+    "why": "Outermost exit forwards exception information to resource teardown and pops the current context."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.scope",
+    "why": "Documents the distinction between temporary current-context promotion and resource cleanup."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.invoke",
+    "why": "Callback invocation introduces nested entries for the callback's context, which affect cleanup depth and current-context identity."
+   }
+  ],
+  "expected_answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -1900,12 +1900,16 @@\n                 args, sub_ctx.args = sub_ctx.args, []\n \n-            rv = []\n-            for sub_ctx in contexts:\n-                with sub_ctx:\n-                    rv.append(sub_ctx.command.invoke(sub_ctx))\n-            return _process_result(rv)\n+            with ExitStack() as stack:\n+                for sub_ctx in contexts:\n+                    stack.enter_context(sub_ctx)\n+                rv = []\n+                for sub_ctx in contexts:\n+                    with sub_ctx:\n+                        rv.append(sub_ctx.command.invoke(sub_ctx))\n+                with ctx:\n+                    return _process_result(rv)\n \n     def resolve_command(\n         self, ctx: Context, args: list[str]\n     ) -> tuple[str | None, Command | None, list[str]]:\n         cmd_name = make_str(args[0])\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_chain_resource_lifetime.py\n@@ -0,0 +1,103 @@\n+import pytest\n+\n+import click\n+\n+\n+@pytest.mark.parametrize(\"outcome\", [\"return\", \"raise\", \"no_callback\"])\n+def test_chain_resources_span_result_processing(outcome):\n+    events = []\n+    resources = []\n+    children = []\n+    group_contexts = []\n+    exits = []\n+    failure = RuntimeError(\"result failed\")\n+    final_value = object()\n+\n+    class Resource:\n+        def __init__(self, label):\n+            self.label = label\n+            self.closed = False\n+\n+        def __enter__(self):\n+            events.append((\"enter\", self.label))\n+            return self\n+\n+        def __exit__(self, exc_type, exc_value, tb):\n+            self.closed = True\n+            exits.append((exc_type, exc_value, tb is not None))\n+            events.append((\"exit\", self.label))\n+\n+    @click.group(chain=True)\n+    @click.option(\"--tag\", default=\"kept\")\n+    @click.pass_context\n+    def cli(ctx, tag):\n+        group_contexts.append(ctx)\n+        ctx.with_resource(Resource(\"group\"))\n+        ctx.call_on_close(lambda: events.append((\"close\", \"group\")))\n+\n+    def run_child(ctx):\n+        assert click.get_current_context() is ctx\n+        assert ctx.parent is group_contexts[0]\n+        assert all(not resource.closed for resource in resources)\n+        children.append(ctx)\n+        label = f\"{ctx.info_name}-{len(children)}\"\n+        resource = ctx.with_resource(Resource(label))\n+        resources.append(resource)\n+        ctx.call_on_close(lambda: events.append((\"close\", label)))\n+        events.append((\"run\", label))\n+        return resource\n+\n+    cli.add_command(click.Command(\"a\", callback=click.pass_context(run_child)))\n+    cli.add_command(click.Command(\"b\", callback=click.pass_context(run_child)))\n+\n+    if outcome != \"no_callback\":\n+        @cli.result_callback()\n+        @click.pass_context\n+        def process_result(ctx, result, tag):\n+            assert ctx is group_contexts[0]\n+            assert click.get_current_context() is ctx\n+            assert tag == \"kept\"\n+            assert len(result) == 3\n+            assert all(value is resource for value, resource in zip(result, resources))\n+            assert all(not resource.closed for resource in result)\n+            events.append((\"result\", tag))\n+            if outcome == \"raise\":\n+                raise failure\n+            return final_value\n+\n+    outer = click.Context(click.Command(\"outer\"))\n+    with outer:\n+        if outcome == \"raise\":\n+            with pytest.raises(RuntimeError) as caught:\n+                cli.main([\"a\", \"b\", \"a\"], prog_name=\"cli\", standalone_mode=False)\n+            assert caught.value is failure\n+        else:\n+            result = cli.main([\"a\", \"b\", \"a\"], prog_name=\"cli\", standalone_mode=False)\n+            if outcome == \"return\":\n+                assert result is final_value\n+            else:\n+                assert len(result) == 3\n+                assert all(value is resource for value, resource in zip(result, resources))\n+        assert click.get_current_context() is outer\n+    assert len({id(child) for child in children}) == 3\n+    assert all(resource.closed for resource in resources)\n+    assert len(exits) == 4\n+    for exc_type, exc_value, has_tb in exits:\n+        assert exc_type is (RuntimeError if outcome == \"raise\" else None)\n+        assert exc_value is (failure if outcome == \"raise\" else None)\n+        assert has_tb == (outcome == \"raise\")\n+    expected = [\n+        (\"enter\", \"group\"),\n+        (\"enter\", \"a-1\"), (\"run\", \"a-1\"),\n+        (\"enter\", \"b-2\"), (\"run\", \"b-2\"),\n+        (\"enter\", \"a-3\"), (\"run\", \"a-3\"),\n+    ]\n+    if outcome != \"no_callback\":\n+        expected.append((\"result\", \"kept\"))\n+    expected.extend([\n+        (\"close\", \"a-3\"), (\"exit\", \"a-3\"),\n+        (\"close\", \"b-2\"), (\"exit\", \"b-2\"),\n+        (\"close\", \"a-1\"), (\"exit\", \"a-1\"),\n+        (\"close\", \"group\"), (\"exit\", \"group\"),\n+    ])\n+    assert events == expected\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the unmodified snapshot, not the original setup regression. The new hidden test file covers normal result processing, a raising result callback, and no result callback. Repeating command a verifies independent contexts and invocation-order teardown. Resource exits record exception information without raising assertions during cleanup, avoiding context-stack contamination when testing the starting implementation. Run the existing suite, including tests/test_chain.py and tests/test_context.py, alongside the hidden tests. The expected patch changes Group.invoke ownership rather than Context.__exit__.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Extend Click's resource-lifetime contract for groups with chain=True. Once subcommand parsing has succeeded, resources registered on the chained subcommand contexts must remain open through execution of the chain and the group's result callback, rather than closing after each subcommand returns. After result processing, clean up child contexts in reverse invocation order, preserving reverse registration order within each context, before cleaning up the group's resources. Each registered resource and close callback must be released exactly once.\n\nKeep subcommand execution order, the ordered result list, and the result callback's return value unchanged. Each command callback must still see its own context as current, while the result callback must see the group context. Restore the caller's current context afterward. If the result callback raises, forward that exception information to child resource teardown; when no resource suppresses it, propagate the same exception to the caller. Apply the lifetime rule even when no result callback is registered. Do not change non-chained invocation behavior. Failed context construction is outside this request.\n\nReturn a unified diff against the repository's non-test files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves toward dependency and control-flow reasoning across Group.invoke, Context.__enter__, Context.scope, and Context.__exit__. combine_verify_finish becomes important for checking current-context identity, reverse teardown order, and exception unwinding together; selective inspection of chain tests is useful without requiring broad repository exploration.",
+  "change_type": "constraint",
+  "description": "Introduce a stronger resource-lifetime contract for successful chained commands. In src/click/core.py, change Group.invoke with chain=True so resources registered on each subcommand context remain usable by the group's result callback and are released only after result processing finishes. Preserve subcommand execution order and the result list, keep the group context current during result processing, and unwind child contexts in reverse order before group resources. Cover normal result processing and a result callback that raises using tests/test_chain.py and tests/test_context.py. Assume command parsing succeeds; failed context construction is outside this task.",
+  "expected_answer_change": "The patch should manage child context entries with an ExitStack or equivalent structured ownership spanning both command execution and _process_result. It must balance pushes and pops so the result callback sees the group context, retain child resources until result processing completes, and forward result-processing exceptions through child resource teardown. Acceptance tests should assert resource availability and exact teardown order rather than reuse the seed's suppression tests.",
+  "why_substantive": "This changes the intentional lifetime boundary in the chain branch: currently each with sub_ctx block ends before _process_result(rv). The original Context.__exit__ repair cannot extend those lifetimes because different child contexts have independent depth counters. The new answer requires restructuring the invocation owner rather than repairing exception propagation."
+ },
+ "task_id": "pallets-click-r01-00-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[no_callback]",
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[raise]",
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[return]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1994
+   },
+   "patch_files": [
+    "src/click/core.py",
+    "docs/commands.md"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[no_callback]",
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[raise]",
+   "tests/test_chain_resource_lifetime.py::test_chain_resources_span_result_processing[return]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

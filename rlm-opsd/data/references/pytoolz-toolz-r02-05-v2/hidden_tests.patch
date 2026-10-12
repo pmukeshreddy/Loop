@@ -1,0 +1,129 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_backend_bootstrap.py
+@@ -0,0 +1,126 @@
++import subprocess
++import sys
++from pathlib import Path
++
++import pytest
++
++
++BOOTSTRAP = r"""
++import importlib
++import importlib.abc
++import importlib.util
++import sys
++import types
++
++sys.path.insert(0, sys.argv[1])
++both = sys.argv[2] == "both"
++
++def fast_pipe(*args):
++    return args
++
++def slow_pipe(*args):
++    return args
++
++def forbidden_merge(*args):
++    raise AssertionError("bootstrap must not call toolz.merge")
++
++class FixtureLoader(importlib.abc.Loader):
++    def create_module(self, spec):
++        return None
++
++    def exec_module(self, module):
++        backend, _, child = module.__name__.partition(".")
++        module.__package__ = backend
++        module.__file__ = module.__name__ + ".py"
++        module.__doc__ = module.__name__ + " documentation"
++        module.choice = object()
++        module.payload = []
++        module.pipe = fast_pipe if backend == "cytoolz" else slow_pipe
++        if not child:
++            module.__path__ = []
++            if backend == "toolz":
++                module.merge = forbidden_merge
++            module.audit = importlib.import_module(backend + ".audit")
++
++class FixtureFinder(importlib.abc.MetaPathFinder):
++    def find_spec(self, fullname, path=None, target=None):
++        backend, _, child = fullname.partition(".")
++        if backend not in {"cytoolz", "toolz"}:
++            return None
++        if (backend == "toolz" and not both) or child not in {"", "audit"}:
++            raise ModuleNotFoundError("no fixture: " + fullname, name=fullname)
++        return importlib.util.spec_from_loader(
++            fullname, FixtureLoader(), is_package=not child
++        )
++
++sys.meta_path.insert(0, FixtureFinder())
++import tlz
++from tlz import _build_tlz as builder
++
++fast = sys.modules["cytoolz"]
++slow = sys.modules["toolz"] if both else fast
++assert tlz.__name__ == "tlz"
++assert tlz.__package__ == "tlz"
++assert tlz.__doc__.startswith("``tlz`` mirrors")
++assert tlz.__file__ == slow.__file__
++assert tlz.choice is fast.choice
++assert tlz.payload is fast.payload
++assert tlz.pipe is slow.pipe
++assert tlz._build_tlz is sys.modules["tlz._build_tlz"]
++assert tlz.audit is sys.modules["tlz.audit"]
++assert tlz.audit is not fast.audit
++assert importlib.import_module("tlz.audit") is tlz.audit
++assert tlz.audit.__name__ == "tlz.audit"
++assert tlz.audit.__package__ == "tlz"
++assert tlz.audit.__doc__ == fast.audit.__doc__
++assert tlz.audit.__file__ == slow.audit.__file__
++assert tlz.audit.choice is fast.audit.choice
++assert tlz.audit.payload is fast.audit.payload
++assert tlz.audit.pipe is slow.audit.pipe
++
++loader = builder.TlzLoader()
++target = types.ModuleType("tlz.audit", "caller documentation")
++chosen = target.choice = object()
++target.__file__ = "caller.py"
++loader.exec_module(target)
++assert target.__name__ == "tlz.audit"
++assert target.choice is chosen
++assert target.__doc__ == "caller documentation"
++assert target.__file__ == slow.audit.__file__
++assert target.pipe is slow.audit.pipe
++
++attempts = []
++replacement = types.ModuleType("toolz.policy")
++def dependency_failure(name):
++    attempts.append(name)
++    if name.startswith("cytoolz"):
++        raise ModuleNotFoundError("nested dependency", name="unrelated_dependency")
++    return replacement
++builder.import_module = dependency_failure
++assert loader._load_toolz("tlz.policy") == {"toolz": replacement}
++assert attempts == ["cytoolz.policy", "toolz.policy"]
++
++attempts.clear()
++def initialization_failure(name):
++    attempts.append(name)
++    raise ImportError("initialization failed")
++builder.import_module = initialization_failure
++try:
++    loader._load_toolz("tlz.policy")
++except ImportError as error:
++    assert error.args == ("tlz.policy",)
++else:
++    raise AssertionError("both failures must raise ImportError")
++assert attempts == ["cytoolz.policy", "toolz.policy"]
++"""
++
++
++@pytest.mark.parametrize("environment", ["cytoolz_only", "both"])
++def test_tlz_bootstrap_without_merge_dependency(environment):
++    root = Path(__file__).resolve().parents[2]
++    result = subprocess.run(
++        [sys.executable, "-I", "-c", BOOTSTRAP, str(root), environment],
++        capture_output=True,
++        text=True,
++    )
++    assert result.returncode == 0, result.stdout + result.stderr

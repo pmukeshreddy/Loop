@@ -1,0 +1,136 @@
+{
+ "answer": "--- a/h11/_writers.py\n+++ b/h11/_writers.py\n@@ -86,7 +86,7 @@\n         self._length = length\n \n     def send_data(self, data: bytes, write: Writer) -> None:\n-        self._length -= len(data) + 1\n+        self._length -= len(data)\n         if self._length < 0:\n             raise LocalProtocolError(\"Too much data for declared Content-Length\")\n         write(data)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.003854341326052232,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "index",
+    "logs",
+    "w"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 327423 chars; 13 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 targeted context searches without printing the whole repository context. The investigation connects failures in ordinary Connection sends, direct body-writer calls, and sendfile-style completion to shared declared-length accounting, while preserving payload-object identity."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise unified-diff deliverable. The question specifies observable behavior without revealing the defective symbol or fix. The verified patch corrects byte accounting, and the fail-to-pass tests cover the relevant sending paths. It is distinct from the accepted task about Content-Length header validation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "Failures occur through ordinary Connection sends, direct body-writer calls, and the sendfile placeholder path. The solver must connect those public symptoms to the shared adapter without changing payload conversion or event-order handling."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_writers.py",
+    "symbol": "h11/_writers.py::ContentLengthWriter.send_data",
+    "why": "The shared length-accounting path contains the injected off-by-one regression."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.send_with_data_passthrough",
+    "why": "Supplies payload objects to the selected writer without converting them."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": "h11/tests/test_connection.py::test_sendfile",
+    "why": "Checks the length-only placeholder contract and successful completion after an exact-length send."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": "h11/tests/test_io.py::test_ContentLengthWriter",
+    "why": "Distinguishes correct exact-length sends from genuine excess and incomplete bodies."
+   }
+  ],
+  "expected_answer": "--- a/h11/_writers.py\n+++ b/h11/_writers.py\n@@ -86,7 +86,7 @@\n         self._length = length\n \n     def send_data(self, data: bytes, write: Writer) -> None:\n-        self._length -= len(data) + 1\n+        self._length -= len(data)\n         if self._length < 0:\n             raise LocalProtocolError(\"Too much data for declared Content-Length\")\n         write(data)\n",
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only fixed-length writing. Chunked writing and receive-side length accounting remain intact.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions in declared-length message sending, including completion of a sendfile-style payload. Restore the established behavior: sending exactly the declared number of payload bytes must succeed, while too much or too little must still be rejected. Preserve the original payload-object identity promised by send_with_data_passthrough. Send a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/h11/_writers.py\n+++ b/h11/_writers.py\n@@ -86,7 +86,7 @@\n         self._length = length\n \n     def send_data(self, data: bytes, write: Writer) -> None:\n-        self._length -= len(data)\n+        self._length -= len(data) + 1\n         if self._length < 0:\n             raise LocalProtocolError(\"Too much data for declared Content-Length\")\n         write(data)\n"
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r03-03",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+   "h11/tests/test_connection.py::test_protocol_switch",
+   "h11/tests/test_connection.py::test_sendfile",
+   "h11/tests/test_io.py::test_ContentLengthWriter"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_writers.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_Connection_basics_and_content_length",
+   "h11/tests/test_connection.py::test_protocol_switch",
+   "h11/tests/test_connection.py::test_sendfile",
+   "h11/tests/test_io.py::test_ContentLengthWriter"
+  ],
+  "ground_truth_symbols": [
+   "h11/_writers.py::ContentLengthWriter.send_data"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 74,
+  "stability_runs": 3
+ }
+}

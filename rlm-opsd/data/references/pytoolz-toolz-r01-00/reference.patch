@@ -1,0 +1,15 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -56,7 +56,11 @@
+         toolz_mods = self._load_toolz(module.__name__)
+         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']
+         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']
+-        module.__dict__.update(fast_mod.__dict__)
++        # Keep the mirror's import identity and docstring, not the backend's.
++        module.__dict__.update(
++            (k, v) for k, v in fast_mod.__dict__.items()
++            if k not in {'__name__', '__loader__', '__spec__', '__doc__'}
++        )
+         package = fast_mod.__package__
+         if package is not None:
+             package, dot, submodules = package.partition('.')

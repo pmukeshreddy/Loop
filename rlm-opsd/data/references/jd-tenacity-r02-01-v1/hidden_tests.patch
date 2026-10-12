@@ -1,0 +1,83 @@
+--- /dev/null
++++ b/tests/test_random_exponential_jitter_mode.py
+@@ -0,0 +1,80 @@
++import datetime
++from unittest import mock
++
++import pytest
++
++import tenacity
++
++
++class TestWaitConditions:
++    @pytest.mark.parametrize(
++        "kwargs, attempt, low, high",
++        [
++            ({"multiplier": 0.5, "max": 60}, 1, 0.25, 0.5),
++            ({"multiplier": 0.5, "max": 60}, 2, 0.5, 1),
++            ({"multiplier": 0.5, "max": 60}, 7, 16, 32),
++            ({"multiplier": 0.5, "max": 60}, 8, 30, 60),
++            ({"multiplier": 0.5, "max": 60}, 10000, 30, 60),
++            ({"multiplier": 2, "exp_base": 3}, 3, 9, 18),
++            ({"multiplier": 10, "max": 5}, 1, 2.5, 5),
++            ({"min": 5}, 1, 5, 5),
++            ({"min": 5}, 4, 5, 8),
++            ({"min": 5}, 5, 8, 16),
++        ],
++    )
++    def test_equal_intervals(self, kwargs, attempt, low, high):
++        policy = tenacity.wait_random_exponential(**kwargs, jitter_mode="equal")
++        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})
++        state.attempt_number = attempt
++        sample = (low + high) / 2
++        with mock.patch("tenacity.wait.random.uniform", return_value=sample) as uniform:
++            assert policy(state) == sample
++        uniform.assert_called_once_with(low, high)
++
++    @pytest.mark.parametrize(
++        "attempt, low, high", [(1, 3, 3), (4, 4, 8), (10, 5, 10)]
++    )
++    def test_equal_timedelta_bounds(self, attempt, low, high):
++        policy = tenacity.wait_random_exponential(
++            max=datetime.timedelta(seconds=10),
++            min=datetime.timedelta(seconds=3),
++            jitter_mode="equal",
++        )
++        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})
++        state.attempt_number = attempt
++        sample = (low + high) / 2
++        with mock.patch("tenacity.wait.random.uniform", return_value=sample) as uniform:
++            assert policy(state) == sample
++        uniform.assert_called_once_with(low, high)
++
++    @pytest.mark.parametrize(
++        "factory", [tenacity.wait_random_exponential, tenacity.wait_full_jitter]
++    )
++    @pytest.mark.parametrize("mode", [None, "full"])
++    def test_full_mode_compatibility(self, factory, mode):
++        kwargs = {} if mode is None else {"jitter_mode": mode}
++        policy = factory(2, 40, 3, 5, **kwargs)
++        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})
++        state.attempt_number = 3
++        with mock.patch("tenacity.wait.random.uniform", return_value=11) as uniform:
++            assert policy(state) == 11
++        uniform.assert_called_once_with(5, 18)
++
++    def test_public_alias_identity(self):
++        assert tenacity.wait_full_jitter is tenacity.wait_random_exponential
++
++    @pytest.mark.parametrize("mode", ["", "FULL", "decorrelated"])
++    def test_invalid_mode_rejected_at_construction(self, mode):
++        with pytest.raises(ValueError):
++            tenacity.wait_random_exponential(jitter_mode=mode)
++
++    def test_mode_is_keyword_only(self):
++        with pytest.raises(TypeError):
++            tenacity.wait_random_exponential(1, 60, 2, 0, "equal")
++
++    def test_equal_default_constructor_arguments(self):
++        policy = tenacity.wait_random_exponential(jitter_mode="equal")
++        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})
++        with mock.patch("tenacity.wait.random.uniform", return_value=0.75) as uniform:
++            assert policy(state) == 0.75
++        uniform.assert_called_once_with(0.5, 1)

@@ -1,0 +1,18 @@
+--- a/src/wtforms/csrf/session.py
++++ b/src/wtforms/csrf/session.py
+@@ -72,6 +72,15 @@
+             raise ValidationError(field.gettext("CSRF failed."))
+ 
+         if self.time_limit:
++            if len(expires) != 14 or any(c < "0" or c > "9" for c in expires):
++                raise ValidationError(field.gettext("CSRF token invalid expiration."))
++            try:
++                datetime.strptime(expires, self.TIME_FORMAT)
++            except ValueError:
++                raise ValidationError(
++                    field.gettext("CSRF token invalid expiration.")
++                ) from None
++
+             now_formatted = self.now().strftime(self.TIME_FORMAT)
+             if now_formatted > expires:
+                 raise ValidationError(field.gettext("CSRF token expired."))

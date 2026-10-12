@@ -1,0 +1,26 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -495,6 +495,23 @@
+         if not a.alias:
+             _OBJ_SETATTR.__get__(a)("alias", _default_init_alias_for(a.name))
+             _OBJ_SETATTR.__get__(a)("alias_is_default", True)
++
++    # Validate the final constructor aliases, including inherited and
++    # transformer-added fields. Positional and keyword-only fields share the
++    # same namespace, while fields excluded from init do not participate.
++    aliases = {}
++    for a in attrs:
++        if a.init is False:
++            continue
++
++        if a.alias in aliases:
++            msg = (
++                f"Duplicate constructor alias {a.alias!r} for attributes "
++                f"{aliases[a.alias]!r} and {a.name!r}."
++            )
++            raise ValueError(msg)
++
++        aliases[a.alias] = a.name
+ 
+     # Create AttrsClass *after* applying the field_transformer since it may
+     # add or remove attributes!

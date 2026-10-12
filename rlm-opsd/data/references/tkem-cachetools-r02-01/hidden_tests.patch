@@ -1,0 +1,75 @@
+--- /dev/null
++++ b/tests/test_weighted_ttl_adapter.py
+@@ -0,0 +1,72 @@
++import unittest
++
++from cachetools.func import ttl_cache
++
++
++class Timer:
++    def __init__(self):
++        self.now = 0
++
++    def __call__(self):
++        return self.now
++
++
++class WeightedTTLAdapterTest(unittest.TestCase):
++    def test_bounded(self):
++        timer = Timer()
++        calls = []
++
++        @ttl_cache(maxsize=5, ttl=10, timer=timer, getsizeof=len)
++        def load(key):
++            calls.append(key)
++            return key
++
++        self.assertEqual(load("aaa"), "aaa")
++        self.assertEqual(load("bb"), "bb")
++        self.assertEqual(load.cache_info(), (0, 2, 5, 5))
++        self.assertEqual(load("aaa"), "aaa")
++        self.assertEqual(load("cccc"), "cccc")
++        self.assertEqual(load.cache_info(), (1, 3, 5, 4))
++        self.assertEqual(calls, ["aaa", "bb", "cccc"])
++        timer.now = 10
++        self.assertEqual(load.cache_info(), (1, 3, 5, 0))
++
++    def test_unbounded(self):
++        timer = Timer()
++
++        @ttl_cache(maxsize=None, ttl=3, timer=timer, typed=True, getsizeof=len)
++        def load(key):
++            return key
++
++        load("abcd")
++        load("ef")
++        self.assertEqual(load.cache_info(), (0, 2, None, 6))
++        self.assertEqual(load.cache_parameters(), {"maxsize": None, "typed": True})
++        self.assertIsNone(load.cache.maxsize)
++        self.assertEqual(load.cache.currsize, 6)
++        timer.now = 3
++        self.assertEqual(load.cache_info(), (0, 2, None, 0))
++        load("ef")
++        self.assertEqual(load.cache_info(), (0, 3, None, 2))
++
++    def test_callable_branch(self):
++        def load(key):
++            return key
++
++        wrapper = ttl_cache(load, getsizeof=len)
++        self.assertEqual(wrapper("abc"), "abc")
++        self.assertEqual(wrapper.cache_info(), (0, 1, 128, 3))
++        self.assertEqual(wrapper.cache_parameters(), {"maxsize": 128, "typed": False})
++
++    def test_oversized_result_is_not_cached(self):
++        calls = []
++
++        @ttl_cache(maxsize=2, getsizeof=len)
++        def load(key):
++            calls.append(key)
++            return key
++
++        self.assertEqual(load("abc"), "abc")
++        self.assertEqual(load("abc"), "abc")
++        self.assertEqual(calls, ["abc", "abc"])
++        self.assertEqual(load.cache_info(), (0, 2, 2, 0))

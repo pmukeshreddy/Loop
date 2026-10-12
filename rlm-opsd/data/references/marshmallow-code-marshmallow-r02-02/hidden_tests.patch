@@ -1,0 +1,45 @@
+--- /dev/null
++++ b/tests/test_container_enclosing_arguments.py
+@@ -0,0 +1,42 @@
++import pytest
++
++from marshmallow import Schema, fields
++
++
++@pytest.mark.parametrize("through_schema", [False, True])
++@pytest.mark.parametrize(
++    "build, payload, expected_values",
++    [
++        (lambda f: fields.List(f), ["a", "b"], ["a", "b"]),
++        (lambda f: fields.Tuple((f,)), ["a"], ["a"]),
++        (lambda f: fields.Dict(keys=f), {"a": 1}, ["a"]),
++        (lambda f: fields.Dict(values=f), {"a": "b"}, ["b"]),
++        (lambda f: fields.List(fields.List(f)), [["a"]], ["a"]),
++        (lambda f: fields.Dict(values=fields.Tuple((f,))), {"a": ["b"]}, ["b"]),
++    ],
++)
++def test_container_children_receive_enclosing_arguments(
++    build, payload, expected_values, through_schema
++):
++    seen = []
++
++    class Observe(fields.Raw):
++        def _deserialize(self, value, attr, data, **kwargs):
++            seen.append((value, attr, data))
++            return value
++
++    field = build(Observe())
++    field.data_key = "external"
++    record = {"external": payload, "other": "untouched"}
++    if through_schema:
++        class Record(Schema):
++            declared = field
++            other = fields.Raw()
++
++        Record().load(record)
++    else:
++        field.deserialize(payload, "external", record)
++
++    assert [value for value, _, _ in seen] == expected_values
++    assert all(attr == "external" for _, attr, _ in seen)
++    assert all(data is record for _, _, data in seen)

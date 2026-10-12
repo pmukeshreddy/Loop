@@ -1,0 +1,37 @@
+--- a/lark/lexer.py
++++ b/lark/lexer.py
+@@ -593,13 +593,6 @@
+         terminals, self.callback = _create_unless(self.terminals, self.g_regex_flags, self.re, self.use_bytes)
+         assert all(self.callback.values())
+ 
+-        for type_, f in self.user_callbacks.items():
+-            if type_ in self.callback:
+-                # Already a callback there, probably UnlessCallback
+-                self.callback[type_] = CallChain(self.callback[type_], f, lambda t: t.type == type_)
+-            else:
+-                self.callback[type_] = f
+-
+         return Scanner(terminals, self.g_regex_flags, self.re, self.use_bytes)
+ 
+     @property
+@@ -627,7 +620,7 @@
+ 
+             ignored = type_ in self.ignore_types
+             t = None
+-            if not ignored or type_ in self.callback:
++            if not ignored or type_ in self.callback or type_ in self.user_callbacks:
+                 t = Token(type_, value, line_ctr.char_pos, line_ctr.line, line_ctr.column)
+             line_ctr.feed(value, type_ in self.newline_types)
+             if t is not None:
+@@ -636,6 +629,11 @@
+                 t.end_pos = line_ctr.char_pos
+                 if t.type in self.callback:
+                     t = self.callback[t.type](t)
++                # Dispatch once, after UnlessCallback has resolved embedded literals.
++                # Keep ignored tokens' callback behavior tied to the scanner type.
++                if not ignored or t.type == type_:
++                    if t.type in self.user_callbacks:
++                        t = self.user_callbacks[t.type](t)
+                 if not ignored:
+                     if not isinstance(t, Token):
+                         raise LexError("Callbacks must return a token (returned %r)" % t)

@@ -1,0 +1,235 @@
+{
+ "answer": "--- a/src/jinja2/utils.py\n+++ b/src/jinja2/utils.py\n@@ -430,17 +430,49 @@\n \n @abc.MutableMapping.register\n class LRUCache:\n-    \"\"\"A simple LRU Cache implementation.\"\"\"\n+    \"\"\"A simple LRU Cache implementation.\n+\n+    A positive capacity bounds storage, zero disables storage, and -1\n+    allows unlimited storage. Capacity must be an integer, not a bool,\n+    and must be at least -1.\n+    \"\"\"\n \n     # this is fast for small capacities (something below 1000) but doesn't\n     # scale.  But as long as it's only used as storage for templates this\n     # won't do any harm.\n \n     def __init__(self, capacity: int) -> None:\n+        self._validate_capacity(capacity)\n         self.capacity = capacity\n         self._mapping: t.Dict[t.Any, t.Any] = {}\n         self._queue: te.Deque[t.Any] = deque()\n         self._postinit()\n+\n+    @staticmethod\n+    def _validate_capacity(capacity: int) -> None:\n+        if isinstance(capacity, bool) or not isinstance(capacity, int):\n+            raise TypeError(\"capacity must be an integer\")\n+        if capacity < -1:\n+            raise ValueError(\"capacity must be at least -1\")\n+\n+    def resize(self, capacity: int) -> None:\n+        \"\"\"Change the capacity, discarding the oldest entries as needed.\n+\n+        Zero clears the cache and disables storage. -1 allows unlimited\n+        storage. A positive capacity keeps only the most recently used\n+        entries that fit. Invalid capacities leave the cache unchanged.\n+        \"\"\"\n+        self._validate_capacity(capacity)\n+\n+        with self._wlock:\n+            self.capacity = capacity\n+\n+            if capacity == 0:\n+                self._mapping.clear()\n+                self._queue.clear()\n+            elif capacity > 0:\n+                while len(self._mapping) > capacity:\n+                    del self._mapping[self._popleft()]\n \n     def _postinit(self) -> None:\n         # alias all queue methods for faster lookup\n@@ -532,9 +564,12 @@\n         has the highest priority then.\n         \"\"\"\n         with self._wlock:\n+            if self.capacity == 0:\n+                return\n+\n             if key in self._mapping:\n                 self._remove(key)\n-            elif len(self._mapping) == self.capacity:\n+            elif self.capacity > 0 and len(self._mapping) >= self.capacity:\n                 del self._mapping[self._popleft()]\n \n             self._append(key)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "cache",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "inspect_locate",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": false,
+    "evidence": "context 24157 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch coordinates constructor validation, resize transitions, and insertion policy. The reference execution inspected the constructed result and checked the final diff, while the supplied verification tests exercise validation atomicity, disabled storage, unlimited recency, and rebounding.",
+   "inspect_locate": "The reference execution used 10 targeted context searches without printing the entire context, supporting inspection of the cache's existing mutation, ordering, copying, and serialization behavior."
+  },
+  "notes": "This is a natural, precisely specified production-change request whose implementation depends on the repository's mapping/queue invariant and locking discipline. Although it overlaps the accepted positive-only resize task, the constructor contract and disabled/unlimited storage modes require substantive additional behavior and insertion-path changes, rather than a cosmetic variation. The question specifies desired behavior without revealing implementation details or prescribing solver operations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must coordinate constructor validation, insertion policy, and resize transitions. Its hunks and behavior must be checked together against the mapping/queue invariant, invalid-input atomicity, and copy and serialization compatibility.",
+   "inspect_locate": "The supplied utility module contains substantial unrelated code. The relevant evidence is the cache class, where constructor state, insertion, recency promotion, setdefault, copying, and pickle restoration must be connected to determine how the three modes interact."
+  },
+  "context": {
+   "files": [
+    "src/jinja2/utils.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__init__",
+    "why": "Construction currently stores capacity without validation and initializes the mapping, recency queue, and mutation lock."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__setitem__",
+    "why": "The current size-equality eviction branch pops an empty queue at capacity zero. Insertion must distinguish disabled, unlimited, and bounded storage."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__getitem__",
+    "why": "Reads promote keys to the newest end of the queue, determining which entries a transition to bounded storage must retain."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.setdefault",
+    "why": "Missing-key defaults pass through insertion but are returned directly, so disabled storage must preserve that return behavior."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.copy",
+    "why": "Copies construct a new cache using the selected capacity and independently populate its mapping and queue."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__setstate__",
+    "why": "Pickle restoration restores capacity and ordering and rebuilds queue aliases and the mutation lock."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_lru_capacity_modes.py\n@@ -0,0 +1,140 @@\n+import copy\n+import pickle\n+\n+import pytest\n+\n+from jinja2.utils import LRUCache\n+\n+\n+INVALID = [(True, TypeError), (False, TypeError), (1.0, TypeError),\n+           (\"2\", TypeError), (None, TypeError), (-2, ValueError),\n+           (-100, ValueError), (2 + 0j, TypeError), ([], TypeError)]\n+\n+\n+@pytest.mark.parametrize(\"capacity,error\", INVALID)\n+def test_constructor_validation(capacity, error):\n+    with pytest.raises(error):\n+        LRUCache(capacity)\n+\n+\n+@pytest.mark.parametrize(\"initial\", [0, -1, 3])\n+@pytest.mark.parametrize(\"capacity,error\", INVALID)\n+def test_invalid_resize_is_atomic(initial, capacity, error):\n+    cache = LRUCache(initial)\n+    if initial != 0:\n+        for key in \"abc\":\n+            cache[key] = key.upper()\n+        assert cache[\"a\"] == \"A\"\n+    before = (cache.capacity, list(cache.items()), list(reversed(cache)))\n+    with pytest.raises(error):\n+        cache.resize(capacity)\n+    assert (cache.capacity, list(cache.items()), list(reversed(cache))) == before\n+\n+\n+def test_disabled_storage():\n+    cache = LRUCache(0)\n+    marker = object()\n+    for _ in range(3):\n+        cache[\"a\"] = marker\n+        assert cache.setdefault(\"b\", marker) is marker\n+        assert cache.setdefault(\"b\") is None\n+        assert cache.get(\"a\", marker) is marker\n+        assert \"a\" not in cache and \"b\" not in cache\n+        assert len(cache) == 0\n+        assert list(cache.items()) == list(cache.keys()) == list(cache.values()) == []\n+        assert list(reversed(cache)) == []\n+        with pytest.raises(KeyError):\n+            cache[\"a\"]\n+    assert cache.resize(2) is None\n+    cache[\"a\"] = 1\n+    assert cache[\"a\"] == 1\n+    cache.resize(0)\n+    assert cache.capacity == 0 and len(cache) == 0\n+    cache[\"a\"] = 2\n+    assert cache.setdefault(\"b\", 3) == 3\n+    assert list(cache.items()) == [] and list(reversed(cache)) == []\n+    cache.resize(-1)\n+    cache[\"c\"] = 4\n+    assert list(cache.items()) == [(\"c\", 4)]\n+\n+\n+def test_unbounded_recency_and_rebounding():\n+    cache = LRUCache(-1)\n+    for key in range(20):\n+        cache[key] = key\n+    assert len(cache) == 20\n+    assert cache[0] == 0\n+    cache[1] = 100\n+    assert cache.setdefault(2, -2) == 2\n+    assert cache.setdefault(20, 20) == 20\n+    order = [20, 2, 1, 0] + list(range(19, 2, -1))\n+    assert list(cache) == order\n+    assert cache.resize(-1) is None\n+    assert list(cache) == order\n+    cache.resize(3)\n+    assert cache.capacity == 3\n+    assert list(cache.items()) == [(20, 20), (2, 2), (1, 100)]\n+    cache[21] = 21\n+    assert list(cache) == [21, 20, 2]\n+    assert 1 not in cache\n+    cache[20] = 200\n+    assert list(cache.items()) == [(20, 200), (21, 21), (2, 2)]\n+\n+\n+def test_bounded_mode_transitions():\n+    cache = LRUCache(3)\n+    for key in \"abc\":\n+        cache[key] = key\n+    assert cache[\"a\"] == \"a\"\n+    for capacity in (3, 6, -1):\n+        assert cache.resize(capacity) is None\n+        assert cache.capacity == capacity\n+        assert list(cache) == [\"a\", \"c\", \"b\"]\n+    for key in \"defgh\":\n+        cache[key] = key\n+    assert len(cache) == 8\n+    cache.resize(2)\n+    assert list(cache) == [\"h\", \"g\"]\n+    cache[\"i\"] = \"i\"\n+    assert list(cache) == [\"i\", \"h\"]\n+    cache.resize(0)\n+    assert list(cache) == []\n+    cache.resize(1)\n+    cache[\"x\"] = 1\n+    cache[\"y\"] = 2\n+    assert list(cache.items()) == [(\"y\", 2)]\n+\n+\n+@pytest.mark.parametrize(\"mode\", [0, -1, 2])\n+def test_mode_copy_and_pickle(mode):\n+    original = LRUCache(4)\n+    for key in \"abcd\":\n+        original[key] = [key]\n+    assert original[\"b\"] == [\"b\"]\n+    original.resize(mode)\n+    expected = list(original.items())\n+    clones = [original.copy(), copy.copy(original)]\n+    clones += [\n+        pickle.loads(pickle.dumps(original, protocol))\n+        for protocol in range(pickle.HIGHEST_PROTOCOL + 1)\n+    ]\n+    for clone in clones:\n+        assert clone.capacity == mode\n+        assert list(clone.items()) == expected\n+        assert list(reversed(clone)) == list(reversed(original))\n+        clone[\"new\"] = [\"new\"]\n+        if mode == 0:\n+            assert len(clone) == 0\n+        elif mode == -1:\n+            assert len(clone) == len(expected) + 1\n+        else:\n+            assert len(clone) == mode\n+        clone.resize(1)\n+        clone[\"last\"] = 42\n+        assert list(clone.items()) == [(\"last\", 42)]\n+        assert original.capacity == mode\n+        assert list(original.items()) == expected\n+        clone.resize(0)\n+        assert len(clone) == 0 and list(reversed(clone)) == []\n+        assert original.capacity == mode\n+        assert list(original.items()) == expected\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the supplied snapshot, which has no resize method. The new acceptance file checks constructor validation, rejected-resize atomicity in every mode, disabled assignments and setdefault, unlimited recency, mode transitions, bounded eviction after transition, independent copies, and round trips through every supported pickle protocol. The original positive-only resize implementation cannot pass these tests: it lacks constructor validation and disabled insertion handling and rejects the newly supported modes. Context is limited to utils.py; the full module exceeds the direct-solve size threshold, but no repository-wide delegation is needed.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Give `jinja2.utils.LRUCache` a consistent capacity contract at construction and during live reconfiguration. Both `LRUCache(capacity)` and a new `resize(capacity)` method must accept three modes: positive integers bound storage using the existing LRU policy, zero disables storage, and -1 allows unlimited storage. Reject bool and all other non-integers with TypeError; integers below -1 must raise ValueError. A rejected resize must leave the capacity, contents, and recency order untouched.\n\nSwitching to zero must discard every entry. While disabled, assignments must retain nothing, and `setdefault` must return its supplied default without caching it. Unlimited storage must still track recency on successful reads and writes, but never evict because of size. Switching to a positive capacity must evict the oldest entries until only the most recently used entries that fit remain. Increasing the bound, selecting unlimited storage, or selecting the current capacity must preserve existing entries and their relative recency; later writes must respect the selected mode. `resize` must return None and follow the class's existing locking discipline for mutations. Shallow copies and pickle round trips must preserve capacity mode and ordering, and changing a copy's mode or entries must not alter the original cache. Deliver a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate and combine_verify_finish across multiple mutation paths. Persistent state is useful for maintaining a transition table and the oldest-to-newest queue invariant while checking copy and serialization behavior in each mode. A focused read of the cache class is sufficient; repository-wide delegation is unnecessary.",
+  "change_type": "constraint",
+  "description": "Extend src/jinja2/utils.py::LRUCache to support three capacity modes through both LRUCache.__init__ and a new resize method: positive integers mean bounded LRU storage, zero means disabled storage, and -1 means unbounded storage. Reject bool and non-integers with TypeError and integers below -1 with ValueError. Resizing to zero must clear existing entries, and subsequent __setitem__ calls must store nothing. In disabled mode, setdefault must still return its supplied default without retaining it. Unbounded mode must preserve recency tracking without evicting entries. Transitions back to a positive capacity must retain only the most recently used entries. Copies and pickle round trips must preserve the selected mode and ordering. Return a production-only unified diff.",
+  "expected_answer_change": "The answer must change LRUCache.__init__ and LRUCache.__setitem__ as well as introduce resize. Verification must cover writes while disabled, accumulation while unbounded, and eviction when returning from unbounded to bounded storage, rather than only positive-capacity resizing.",
+  "why_substantive": "This is not merely a different validation predicate for resize. The existing __setitem__ implementation attempts to pop an empty queue at capacity zero and has no explicit mode handling. The implementation must coordinate constructor validation, insertion policy, resize transitions, and setdefault behavior across disabled, bounded, and unbounded states."
+ },
+ "task_id": "pallets-jinja-r02-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_lru_capacity_modes.py::test_bounded_mode_transitions",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[(2+0j)-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[-100-ValueError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[-2-ValueError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[1.0-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[2-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[False-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[None-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[True-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[capacity8-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_disabled_storage",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[-1]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[0]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[2]",
+   "tests/test_lru_capacity_modes.py::test_unbounded_recency_and_rebounding"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 42,
+   "full_suite": {
+    "failed": 0,
+    "passed": 951
+   },
+   "patch_files": [
+    "src/jinja2/utils.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_lru_capacity_modes.py::test_bounded_mode_transitions",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[(2+0j)-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[-100-ValueError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[-2-ValueError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[1.0-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[2-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[False-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[None-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[True-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_constructor_validation[capacity8-TypeError]",
+   "tests/test_lru_capacity_modes.py::test_disabled_storage",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[(2+0j)-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-100-ValueError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[-2-ValueError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[1.0-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[2-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[False-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[None-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[True-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError--1]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError-0]",
+   "tests/test_lru_capacity_modes.py::test_invalid_resize_is_atomic[capacity8-TypeError-3]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[-1]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[0]",
+   "tests/test_lru_capacity_modes.py::test_mode_copy_and_pickle[2]",
+   "tests/test_lru_capacity_modes.py::test_unbounded_recency_and_rebounding"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

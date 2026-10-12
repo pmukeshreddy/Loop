@@ -1,0 +1,52 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_existing_exports.py
+@@ -0,0 +1,49 @@
++import types
++
++import toolz
++import tlz._build_tlz as builder
++
++
++def test_existing_exports_survive_population(monkeypatch):
++    fast = types.ModuleType('cytoolz.audit')
++    slow = types.ModuleType('toolz.audit')
++    fast.__package__ = 'cytoolz.audit'
++    slow.__package__ = 'toolz.audit'
++    child = types.ModuleType('cytoolz.audit.child')
++    child.__package__ = fast.__name__
++    fast.child = child
++    fast.pipe = object()
++    fast.alias = object()
++    slow.pipe = toolz.pipe
++    slow.alias = toolz.pipe
++    target = types.ModuleType('tlz.audit')
++    expected = {name: object() for name in ('pipe', 'alias', 'child')}
++    target.__dict__.update(expected)
++    calls = []
++
++    def resolve(name):
++        calls.append(name)
++        return {'cytoolz.audit': fast, 'toolz.audit': slow}[name]
++
++    monkeypatch.setattr(builder, 'import_module', resolve)
++    builder.TlzLoader().exec_module(target)
++    assert all(getattr(target, name) is value for name, value in expected.items())
++    assert calls == ['cytoolz.audit', 'toolz.audit']
++
++
++def test_new_exports_still_use_policy(monkeypatch):
++    fast = types.ModuleType('cytoolz.audit')
++    slow = types.ModuleType('toolz.audit')
++    fast.pipe = object()
++    slow.pipe = toolz.pipe
++    child = types.ModuleType('cytoolz.audit.child')
++    child.__package__ = fast.__name__
++    fast.child = child
++    mirrored = types.ModuleType('tlz.audit.child')
++    modules = {'cytoolz.audit': fast, 'toolz.audit': slow,
++               'tlz.audit.child': mirrored}
++    monkeypatch.setattr(builder, 'import_module', modules.__getitem__)
++    target = types.ModuleType('tlz.audit')
++    builder.TlzLoader().exec_module(target)
++    assert target.pipe is toolz.pipe
++    assert target.child is mirrored

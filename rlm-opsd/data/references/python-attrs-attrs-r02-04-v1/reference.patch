@@ -1,0 +1,29 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -2020,6 +2020,15 @@
+     filtered_attrs = []
+     attr_dict = {}
+     for a in attrs:
++        # Validate hooks even for fields that are not initialized.
++        if (
++            frozen
++            and a.on_setattr is not None
++            and a.on_setattr is not setters.NO_OP
++        ):
++            msg = "Frozen classes can't use on_setattr."
++            raise ValueError(msg)
++
+         if not a.init and a.default is NOTHING:
+             continue
+ 
+@@ -2027,10 +2036,6 @@
+         attr_dict[a.name] = a
+ 
+         if a.on_setattr is not None:
+-            if frozen is True and a.on_setattr is not setters.NO_OP:
+-                msg = "Frozen classes can't use on_setattr."
+-                raise ValueError(msg)
+-
+             needs_cached_setattr = True
+         elif has_cls_on_setattr and a.on_setattr is not setters.NO_OP:
+             needs_cached_setattr = True

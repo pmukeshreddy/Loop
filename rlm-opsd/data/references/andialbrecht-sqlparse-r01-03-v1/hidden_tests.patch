@@ -1,0 +1,130 @@
+--- /dev/null
++++ b/tests/test_lexer_configuration_capture.py
+@@ -0,0 +1,127 @@
++from io import StringIO
++
++import pytest
++
++from sqlparse import keywords, tokens as T
++from sqlparse.lexer import Lexer
++
++
++RULES = [
++    (r'\s+', T.Whitespace),
++    (r'[a-z]+', keywords.PROCESS_AS_KEYWORD),
++    (r'\d+', T.Number.Integer),
++]
++TEXT = 'alpha beta omega 7'
++ORIGINAL = [
++    (T.Keyword, 'alpha'), (T.Whitespace, ' '),
++    (T.Keyword.DML, 'beta'), (T.Whitespace, ' '),
++    (T.Name, 'omega'), (T.Whitespace, ' '),
++    (T.Number.Integer, '7'),
++]
++
++
++def configured():
++    mapping = {'ALPHA': T.Keyword, 'BETA': T.Keyword.DML}
++    lexer = Lexer()
++    lexer.clear()
++    lexer.set_SQL_REGEX(RULES)
++    lexer.add_keywords(mapping)
++    lexer.add_keywords({'BETA': T.Keyword.DDL})
++    return lexer, mapping
++
++
++@pytest.mark.parametrize('started', [False, True])
++@pytest.mark.parametrize('mutation', ['clear', 'regex', 'add', 'dictionary'])
++def test_configuration_is_fixed_at_call_time(started, mutation):
++    lexer, mapping = configured()
++    stream = iter(lexer.get_tokens(TEXT))
++    prefix = [next(stream)] if started else []
++    assert prefix == (ORIGINAL[:1] if started else [])
++    updated = list(ORIGINAL)
++    if mutation == 'clear':
++        lexer.clear()
++        updated = [(T.Error, c) for c in TEXT]
++    elif mutation == 'regex':
++        lexer.set_SQL_REGEX([
++            (r'\s+', T.Whitespace),
++            (r'[a-z]+', T.Literal),
++            (r'\d+', T.Number.Float),
++        ])
++        updated = [
++            (T.Literal, 'alpha'), (T.Whitespace, ' '),
++            (T.Literal, 'beta'), (T.Whitespace, ' '),
++            (T.Literal, 'omega'), (T.Whitespace, ' '),
++            (T.Number.Float, '7'),
++        ]
++    elif mutation == 'add':
++        lexer.add_keywords({'OMEGA': T.Keyword.DDL})
++        updated[4] = (T.Keyword.DDL, 'omega')
++    else:
++        mapping['ALPHA'] = T.Keyword.DDL
++        del mapping['BETA']
++        mapping['OMEGA'] = T.Keyword
++        updated[0] = (T.Keyword.DDL, 'alpha')
++        updated[2] = (T.Keyword.DDL, 'beta')
++        updated[4] = (T.Keyword, 'omega')
++    assert list(lexer.get_tokens(TEXT)) == updated
++    assert prefix + list(stream) == ORIGINAL
++
++
++class RecordingInput(StringIO):
++    def __init__(self, value):
++        super().__init__(value)
++        self.reads = 0
++
++    def read(self, *args, **kwargs):
++        self.reads += 1
++        return super().read(*args, **kwargs)
++
++
++def test_input_is_read_lazily_but_syntax_is_captured_immediately():
++    lexer, mapping = configured()
++    source = RecordingInput('alpha')
++    stream = iter(lexer.get_tokens(source))
++    assert source.reads == 0
++    source.seek(0)
++    source.write('beta')
++    source.truncate()
++    source.seek(0)
++    mapping['BETA'] = T.Keyword
++    assert next(stream) == (T.Keyword.DML, 'beta')
++    assert source.reads == 1
++    assert list(stream) == []
++    assert source.reads == 1
++    source.seek(0)
++    assert list(lexer.get_tokens(source)) == [(T.Keyword, 'beta')]
++
++
++@pytest.mark.parametrize('data, encoding', [
++    (b'caf\xc3\xa9', None),
++    (b'caf\xe9', 'latin-1'),
++    (b'caf\xe9', None),
++])
++def test_encoding_with_a_captured_keyword_dictionary(data, encoding):
++    lexer = Lexer()
++    lexer.clear()
++    lexer.set_SQL_REGEX([(r'\w+', keywords.PROCESS_AS_KEYWORD)])
++    mapping = {'CAFÉ': T.Keyword}
++    lexer.add_keywords(mapping)
++    stream = lexer.get_tokens(data, encoding)
++    mapping.clear()
++    assert list(stream) == [(T.Keyword, 'café')]
++    assert list(lexer.get_tokens(data, encoding)) == [(T.Name, 'café')]
++
++
++@pytest.mark.parametrize('started', [False, True])
++def test_delimited_spans_survive_configuration_changes(started):
++    text = '$tag$body;more$tag$ /* note; */ alpha'
++    baseline, _ = configured()
++    expected = list(baseline.get_tokens(text))
++    assert [value for _, value in expected] == [
++        '$tag$body;more$tag$', ' ', '/* note; */', ' ', 'alpha',
++    ]
++    lexer, _ = configured()
++    stream = iter(lexer.get_tokens(text))
++    prefix = [next(stream)] if started else []
++    lexer.clear()
++    assert prefix + list(stream) == expected

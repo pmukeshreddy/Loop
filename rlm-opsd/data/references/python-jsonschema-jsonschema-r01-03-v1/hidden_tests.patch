@@ -1,0 +1,100 @@
+--- /dev/null
++++ b/jsonschema/tests/test_context_iterables.py
+@@ -0,0 +1,97 @@
++import pytest
++
++from jsonschema.exceptions import ValidationError
++
++
++class SinglePass:
++    def __init__(self, values):
++        self.values = values
++        self.iterations = 0
++
++    def __iter__(self):
++        self.iterations += 1
++        assert self.iterations == 1
++        return iter(self.values)
++
++
++def as_generator(values):
++    yield from values
++
++
++@pytest.mark.parametrize("wrap", [list, tuple, iter, as_generator, SinglePass])
++def test_context_iterables_preserve_nested_locations(wrap):
++    leaf = ValidationError(
++        "leaf", path=["bad-name", 1],
++        schema_path=[0, "properties", "bad-name", "items", "type"],
++    )
++    nested = wrap([leaf])
++    child = ValidationError(
++        "child", path=["branch"], schema_path=[0, "oneOf"],
++        context=nested,
++    )
++    sibling = ValidationError(
++        "sibling", path=[4], schema_path=[1, "type"],
++    )
++    children = wrap([child, sibling])
++    root = ValidationError(
++        "root", path=["payload", 2],
++        schema_path=["properties", "payload", "items", "anyOf"],
++        context=children,
++    )
++
++    assert isinstance(root.context, list)
++    assert len(root.context) == 2
++    assert root.context[0] is child
++    assert root.context[1] is sibling
++    assert len(child.context) == 1
++    assert child.context[0] is leaf
++    assert sibling.context == []
++    assert leaf.context == []
++    assert root.parent is None
++    assert child.parent is root
++    assert sibling.parent is root
++    assert leaf.parent is child
++
++    assert child.path is child.relative_path
++    assert leaf.schema_path is leaf.relative_schema_path
++    assert list(root.path) == ["payload", 2]
++    assert list(root.schema_path) == ["properties", "payload", "items", "anyOf"]
++    assert list(child.path) == ["branch"]
++    assert list(child.schema_path) == [0, "oneOf"]
++    assert list(sibling.path) == [4]
++    assert list(sibling.schema_path) == [1, "type"]
++    assert list(leaf.path) == ["bad-name", 1]
++    assert list(leaf.schema_path) == [
++        0, "properties", "bad-name", "items", "type",
++    ]
++
++    assert list(child.absolute_path) == ["payload", 2, "branch"]
++    assert list(sibling.absolute_path) == ["payload", 2, 4]
++    assert list(leaf.absolute_path) == [
++        "payload", 2, "branch", "bad-name", 1,
++    ]
++    assert list(child.absolute_schema_path) == [
++        "properties", "payload", "items", "anyOf", 0, "oneOf",
++    ]
++    assert list(sibling.absolute_schema_path) == [
++        "properties", "payload", "items", "anyOf", 1, "type",
++    ]
++    assert list(leaf.absolute_schema_path) == [
++        "properties", "payload", "items", "anyOf", 0, "oneOf",
++        0, "properties", "bad-name", "items", "type",
++    ]
++    assert root.json_path == "$.payload[2]"
++    assert child.json_path == "$.payload[2].branch"
++    assert sibling.json_path == "$.payload[2][4]"
++    assert leaf.json_path == "$.payload[2].branch['bad-name'][1]"
++
++    if isinstance(children, SinglePass):
++        assert children.iterations == 1
++        assert nested.iterations == 1
++
++
++def test_empty_generator_context():
++    error = ValidationError("empty", context=as_generator([]))
++    assert error.context == []
++    assert error.parent is None
++    assert error.json_path == "$"

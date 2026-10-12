@@ -1,0 +1,156 @@
+--- /dev/null
++++ b/tests/test_transaction_finalization.py
+@@ -0,0 +1,153 @@
++import builtins
++import os
++import stat
++
++import pytest
++
++import dotenv.main as main
++
++
++def edit(path, operation, **kwargs):
++    if operation == "set":
++        return main.set_key(path, "REMOVE", "new", quote_mode="never", **kwargs)
++    return main.unset_key(path, "REMOVE", **kwargs)
++
++
++def record_sources(monkeypatch, path):
++    sources = []
++    real_open = builtins.open
++
++    def tracked_open(file, *args, **kwargs):
++        stream = real_open(file, *args, **kwargs)
++        if os.fspath(file) == os.fspath(path):
++            sources.append(stream)
++        return stream
++
++    monkeypatch.setattr(builtins, "open", tracked_open)
++    return sources
++
++
++class FaultyOutput:
++    def __init__(self, wrapped, phase, failure):
++        self.wrapped = wrapped
++        self.phase = phase
++        self.failure = failure
++
++    def __getattr__(self, name):
++        return getattr(self.wrapped, name)
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, exc_type, exc, traceback):
++        self.close()
++
++    def write(self, value):
++        if self.phase == "write":
++            raise self.failure
++        return self.wrapped.write(value)
++
++    def flush(self):
++        self.wrapped.flush()
++        if self.phase == "flush":
++            raise self.failure
++
++    def close(self):
++        try:
++            if self.phase == "flush":
++                self.flush()
++        finally:
++            self.wrapped.close()
++        if self.phase == "close":
++            raise self.failure
++
++
++@pytest.mark.parametrize("operation", ["set", "unset"])
++@pytest.mark.parametrize("phase", ["flush", "close", "write"])
++def test_edit_failure_is_atomic_and_cleans_up(tmp_path, monkeypatch, operation, phase):
++    path = tmp_path / ".env"
++    original = b"KEEP=one\nREMOVE=old\n"
++    path.write_bytes(original)
++    sources = record_sources(monkeypatch, path)
++    failure = OSError("injected output failure")
++    factory = main.tempfile.NamedTemporaryFile
++    outputs = []
++    replacements = []
++
++    def faulty_factory(*args, **kwargs):
++        output = FaultyOutput(factory(*args, **kwargs), phase, failure)
++        outputs.append(output)
++        return output
++
++    monkeypatch.setattr(main.tempfile, "NamedTemporaryFile", faulty_factory)
++    monkeypatch.setattr(main.os, "replace", lambda *args, **kwargs: replacements.append(args))
++    with pytest.raises(OSError) as caught:
++        edit(path, operation)
++
++    assert caught.value is failure
++    assert path.read_bytes() == original
++    assert replacements == []
++    assert outputs and all(output.wrapped.closed for output in outputs)
++    assert sources and all(source.closed for source in sources)
++    assert list(tmp_path.glob(".tmp_*")) == []
++
++
++@pytest.mark.parametrize("operation", ["set", "unset"])
++def test_creation_failure_closes_source(tmp_path, monkeypatch, operation):
++    path = tmp_path / ".env"
++    original = b"KEEP=one\nREMOVE=old\n"
++    path.write_bytes(original)
++    sources = record_sources(monkeypatch, path)
++    failure = OSError("injected temporary-file creation failure")
++    replacements = []
++
++    def unavailable(*args, **kwargs):
++        raise failure
++
++    monkeypatch.setattr(main.tempfile, "NamedTemporaryFile", unavailable)
++    monkeypatch.setattr(main.os, "replace", lambda *args, **kwargs: replacements.append(args))
++    with pytest.raises(OSError) as caught:
++        edit(path, operation)
++
++    assert caught.value is failure
++    assert path.read_bytes() == original
++    assert replacements == []
++    assert sources and all(source.closed for source in sources)
++    assert list(tmp_path.glob(".tmp_*")) == []
++
++
++@pytest.mark.parametrize("operation", ["set", "unset"])
++def test_success_preserves_mode(tmp_path, operation):
++    path = tmp_path / ".env"
++    path.write_text("KEEP=one\nREMOVE=old\n", encoding="utf-8")
++    path.chmod(0o640)
++    result = edit(path, operation)
++    expected = "KEEP=one\nREMOVE=new\n" if operation == "set" else "KEEP=one\n"
++    assert result[0] is True
++    assert path.read_text(encoding="utf-8") == expected
++    if os.name != "nt":
++        assert stat.S_IMODE(path.stat().st_mode) == 0o640
++    assert list(tmp_path.glob(".tmp_*")) == []
++
++
++@pytest.mark.skipif(os.name == "nt", reason="Requires POSIX symlinks")
++@pytest.mark.parametrize("operation", ["set", "unset"])
++@pytest.mark.parametrize("follow", [False, True])
++def test_success_preserves_symlink_policy(tmp_path, operation, follow):
++    target = tmp_path / "target.env"
++    original = "KEEP=one\nREMOVE=old\n"
++    target.write_text(original, encoding="utf-8")
++    target.chmod(0o640)
++    path = tmp_path / ".env"
++    path.symlink_to(target)
++
++    edit(path, operation, follow_symlinks=follow)
++    expected = "KEEP=one\nREMOVE=new\n" if operation == "set" else "KEEP=one\n"
++    assert path.read_text(encoding="utf-8") == expected
++    assert path.is_symlink() is follow
++    if follow:
++        assert target.read_text(encoding="utf-8") == expected
++        assert stat.S_IMODE(target.stat().st_mode) == 0o640
++    else:
++        assert target.read_text(encoding="utf-8") == original
++    assert list(tmp_path.glob(".tmp_*")) == []

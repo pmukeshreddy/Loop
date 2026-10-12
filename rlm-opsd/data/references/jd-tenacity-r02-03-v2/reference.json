@@ -1,0 +1,162 @@
+{
+ "answer": "--- a/tenacity/asyncio/__init__.py\n+++ b/tenacity/asyncio/__init__.py\n@@ -130,7 +130,12 @@\n                         result = await fn(*args, **kwargs)\n                     else:\n                         result = fn(*args, **kwargs)\n-                except BaseException:\n+                except BaseException as exc:\n+                    # Cancellation must bypass outcome storage and retry handling.\n+                    import asyncio\n+\n+                    if isinstance(exc, asyncio.CancelledError):\n+                        raise\n                     retry_state.set_exception(sys.exc_info())  # type: ignore[arg-type]\n                 else:\n                     retry_state.set_result(result)\n--- a/tenacity/__init__.py\n+++ b/tenacity/__init__.py\n@@ -252,6 +252,12 @@\n         exc_value: BaseException | None,\n         traceback: \"types.TracebackType | None\",\n     ) -> bool | None:\n+        if exc_value is not None:\n+            # Keep asyncio lazy-imported, and leave synchronous attempts unchanged.\n+            import asyncio\n+\n+            if isinstance(exc_value, asyncio.CancelledError):\n+                return False\n         return self.__exit__(exc_type, exc_value, traceback)\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002324008826250979,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "a",
+    "b",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 13 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff combines changes at both asynchronous cancellation boundaries across two files. The execution reports that the final value was constructed and inspected before submission; executable verification is supplied separately rather than demonstrated by repository execution in the reference trace.",
+   "inspect_locate": "The reference execution used 13 targeted code searches without printing the whole context. The task requires distinguishing exception capture in direct asynchronous calls from the shared attempt context manager, while preserving synchronous exception handling and explicit outcome storage."
+  },
+  "notes": "This is a natural, repository-dependent behavioral change with a precise production-only unified-diff format. The cancellation contract and preservation requirements constrain the implementation without revealing the defective internal method or prescribing solver operations. It is materially distinct from the parent sleep-callback task and the listed accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must cover both asynchronous boundaries consistently while preserving the shared synchronous behavior. Its hunks must be checked against two files, and cancellation must escape without creating an outcome or triggering subsequent retry actions.",
+   "inspect_locate": "The two asynchronous entry paths capture exceptions differently: direct invocation handles them in the asynchronous controller, while asynchronous attempt contexts delegate to a shared synchronous context-manager method. The solver must locate those boundaries and distinguish them from shared outcome storage and synchronous retry execution."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.__call__",
+    "why": "Both native asynchronous and synchronous attempted operations are inside a BaseException handler that currently stores cancellation as an outcome."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::AttemptManager.__aexit__",
+    "why": "Asynchronous context exit currently delegates every exception to synchronous context exit, which suppresses and stores it."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::AttemptManager.__exit__",
+    "why": "This shared synchronous boundary must retain its existing exception-storage and suppression behavior."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::RetryCallState.set_exception",
+    "why": "Outcome storage is shared across execution modes and must continue accepting cancellation when called explicitly."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._begin_iter",
+    "why": "Stored failures enter retry evaluation here, with special handling for TryAgain that must remain intact."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_async_cancellation_boundaries.py\n@@ -0,0 +1,162 @@\n+import asyncio\n+\n+import pytest\n+\n+from tenacity import (\n+    AsyncRetrying,\n+    AttemptManager,\n+    Retrying,\n+    RetryCallState,\n+    TryAgain,\n+    stop_after_attempt,\n+    wait_fixed,\n+)\n+\n+\n+class ChildCancellation(asyncio.CancelledError):\n+    pass\n+\n+\n+class OtherBaseError(BaseException):\n+    pass\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"async_call\", \"sync_call\", \"async_context\"])\n+@pytest.mark.parametrize(\"enabled\", [True, False])\n+@pytest.mark.parametrize(\"error_type\", [asyncio.CancelledError, ChildCancellation])\n+def test_cancellation_escapes_without_an_outcome(mode, enabled, error_type):\n+    async def scenario():\n+        error = error_type(\"cancelled\")\n+        calls = []\n+        states = []\n+        events = []\n+\n+        def policy(state):\n+            events.append(\"retry\")\n+            return state.outcome.failed\n+\n+        async def sleep(delay):\n+            events.append(\"sleep\")\n+\n+        controller = AsyncRetrying(\n+            retry=policy,\n+            stop=stop_after_attempt(2),\n+            sleep=sleep,\n+            before=states.append,\n+            after=lambda state: events.append(\"after\"),\n+            before_sleep=lambda state: events.append(\"before_sleep\"),\n+            enabled=enabled,\n+        )\n+\n+        def operation():\n+            calls.append(\"attempt\")\n+            if len(calls) == 1:\n+                raise error\n+            return \"ok\"\n+\n+        async def async_operation():\n+            return operation()\n+\n+        with pytest.raises(error_type) as caught:\n+            if mode == \"async_call\":\n+                await controller(async_operation)\n+            elif mode == \"sync_call\":\n+                await controller(operation)\n+            else:\n+                async for attempt in controller:\n+                    if not enabled:\n+                        states.append(attempt.retry_state)\n+                    async with attempt:\n+                        operation()\n+\n+        assert caught.value is error\n+        assert calls == [\"attempt\"]\n+        assert events == []\n+        for state in states:\n+            assert state.outcome is None\n+            assert state.outcome_timestamp is None\n+            assert state.attempt_number == 1\n+\n+    asyncio.run(scenario())\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"async_call\", \"sync_call\", \"async_context\"])\n+@pytest.mark.parametrize(\"error_type\", [ValueError, OtherBaseError, TryAgain])\n+def test_other_exceptions_still_retry(mode, error_type):\n+    async def scenario():\n+        calls = []\n+        sleeps = []\n+        states = []\n+\n+        def operation():\n+            calls.append(\"attempt\")\n+            if len(calls) == 1:\n+                raise error_type(\"retry me\")\n+            return \"ok\"\n+\n+        async def async_operation():\n+            return operation()\n+\n+        async def sleep(delay):\n+            sleeps.append(float(delay))\n+\n+        controller = AsyncRetrying(\n+            retry=lambda state: state.outcome.failed,\n+            stop=stop_after_attempt(3),\n+            wait=wait_fixed(0.25),\n+            sleep=sleep,\n+            before=states.append,\n+        )\n+        if mode == \"async_call\":\n+            assert await controller(async_operation) == \"ok\"\n+        elif mode == \"sync_call\":\n+            assert await controller(operation) == \"ok\"\n+        else:\n+            async for attempt in controller:\n+                async with attempt:\n+                    operation()\n+        assert calls == [\"attempt\", \"attempt\"]\n+        assert sleeps == [0.25]\n+        assert states[-1].attempt_number == 2\n+        assert not states[-1].outcome.failed\n+\n+    asyncio.run(scenario())\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"call\", \"context\"])\n+def test_synchronous_retrying_still_retries_cancellation(mode):\n+    calls = []\n+    error = asyncio.CancelledError(\"sync\")\n+\n+    def operation():\n+        calls.append(\"attempt\")\n+        if len(calls) == 1:\n+            raise error\n+        return \"ok\"\n+\n+    controller = Retrying(\n+        retry=lambda state: state.outcome.failed,\n+        stop=stop_after_attempt(2),\n+        sleep=lambda delay: None,\n+    )\n+    if mode == \"call\":\n+        assert controller(operation) == \"ok\"\n+    else:\n+        for attempt in controller:\n+            with attempt:\n+                operation()\n+    assert calls == [\"attempt\", \"attempt\"]\n+\n+\n+@pytest.mark.parametrize(\"controller_type\", [Retrying, AsyncRetrying])\n+def test_synchronous_attempt_context_and_state_can_store_cancellation(controller_type):\n+    error = asyncio.CancelledError(\"stored\")\n+    state = RetryCallState(controller_type(), fn=None, args=(), kwargs={})\n+    with AttemptManager(state):\n+        raise error\n+    assert state.outcome.failed\n+    assert state.outcome.exception() is error\n+    assert state.outcome_timestamp is not None\n+    state.prepare_for_next_attempt()\n+    state.set_exception((type(error), error, None))\n+    assert state.outcome.exception() is error\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the supplied snapshot, which already captures cancellation at both asynchronous boundaries; no artificial setup regression is needed. The new acceptance file uses asyncio.run and needs no asynchronous pytest plugin. Its 25 parameterized cases cover cancellation identity and subclasses, enabled and disabled execution, absence of cancellation outcomes and subsequent actions, continued retries for ordinary exceptions and another BaseException subclass, TryAgain, and unchanged synchronous capture and explicit storage. The requested production change is distinct from the original sleep-return adaptation. Regression tests are supplied by the task rather than requested from the solver.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Cancellation of an attempted operation must not be treated as a retryable failure by `AsyncRetrying`. When an operation raises `asyncio.CancelledError` or a subclass, propagate that same exception immediately, even if the retry policy accepts every `BaseException`. Apply this contract both to direct controller calls, including synchronous operations passed to the asynchronous controller, and to `async with attempt` blocks obtained through `async for attempt in controller`.\n\nCancellation must not create a stored attempt outcome or invoke retry evaluation, after-attempt callbacks, or sleep scheduling for that cancelled attempt. This must also hold when the controller is disabled. Preserve existing handling of all other exceptions, including explicit retries through `TryAgain`, and leave synchronous `Retrying`, synchronous `with attempt` blocks, and explicit `RetryCallState.set_exception()` storage unchanged.\n\nReturn a unified diff containing production changes only. Leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves toward exception-boundary inspection and implementation with acceptance tests. The solver must trace direct execution separately from asynchronous context-manager delegation, then verify that the cancellation exception escapes before retry scheduling while the shared synchronous path remains intact.",
+  "change_type": "failure_condition",
+  "description": "Make asyncio cancellation bypass retry handling when it occurs inside an attempted operation. AsyncRetrying.__call__ must immediately propagate asyncio.CancelledError, even when the retry policy would accept every BaseException. Likewise, cancellation raised inside an async with AttemptManager block obtained through async for must escape immediately instead of becoming a stored retry outcome. Preserve retries for other exceptions, including TryAgain, and leave synchronous Retrying and AttemptManager.__exit__ behavior unchanged. Return a unified diff with production changes and regression tests. The relevant production symbols are AsyncRetrying.__call__ in tenacity/asyncio/__init__.py and AttemptManager.__aexit__, AttemptManager.__exit__, and RetryCallState.set_exception in tenacity/__init__.py.",
+  "expected_answer_change": "The verified patch must prevent cancellation from reaching RetryCallState.set_exception in the two specified asynchronous entry paths. Tests must establish immediate propagation, no subsequent retry-policy or sleep invocation, and continued retry behavior for non-cancellation exceptions. No returned-value adaptation at the sleep sites is required.",
+  "why_substantive": "The failure is cancellation being captured as an attempt outcome, not an incompatible sleep return value. Direct calls capture BaseException in the controller, whereas asynchronous attempt contexts delegate exception handling to a shared synchronous context-manager method. The solution must introduce cancellation-specific propagation at those distinct boundaries without changing synchronous exception capture."
+ },
+ "task_id": "jd-tenacity-r02-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-False-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-async_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-sync_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-False-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-async_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-sync_call]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 209
+   },
+   "patch_files": [
+    "tenacity/asyncio/__init__.py",
+    "tenacity/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-False-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-async_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[CancelledError-True-sync_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-False-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-async_call]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-async_context]",
+   "tests/test_async_cancellation_boundaries.py::test_cancellation_escapes_without_an_outcome[ChildCancellation-True-sync_call]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

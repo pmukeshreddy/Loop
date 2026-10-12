@@ -1,0 +1,151 @@
+--- /dev/null
++++ b/tests/test_peek.py
+@@ -0,0 +1,148 @@
++import pytest
++
++from cachetools import Cache, FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, TLRUCache
++
++
++POLICIES = [Cache, FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, TLRUCache]
++
++
++class Timer:
++    def __init__(self):
++        self.now = 0
++
++    def __call__(self):
++        return self.now
++
++
++def make_cache(policy, maxsize=3, timer=None, **kwargs):
++    if timer is None:
++        timer = Timer()
++    if issubclass(policy, TTLCache):
++        return policy(maxsize, ttl=10, timer=timer, **kwargs)
++    if issubclass(policy, TLRUCache):
++        return policy(maxsize, ttu=lambda k, v, now: now + 10, timer=timer, **kwargs)
++    return policy(maxsize, **kwargs)
++
++
++@pytest.mark.parametrize("policy", POLICIES, ids=lambda p: p.__name__)
++def test_peek_values_and_missing(policy):
++    calls = []
++
++    class MissingCache(policy):
++        def __missing__(self, key):
++            calls.append(key)
++            self[key] = "generated"
++            return "generated"
++
++    cache = make_cache(MissingCache, maxsize=4)
++    default = object()
++    value = object()
++    assert cache.peek("absent") is None
++    assert cache.peek(key="absent", default=default) is default
++    assert calls == []
++    assert "absent" not in cache
++    cache["value"] = value
++    cache["none"] = None
++    cache["false"] = False
++    assert cache.peek("value", default) is value
++    assert cache.peek("none", default) is None
++    assert cache.peek("false", default) is False
++    assert calls == []
++    assert cache["absent"] == "generated"
++    assert calls == ["absent"]
++    assert cache.peek("absent") == "generated"
++    assert calls == ["absent"]
++
++
++@pytest.mark.parametrize("policy", POLICIES, ids=lambda p: p.__name__)
++def test_peek_preserves_weighted_storage(policy):
++    calls = []
++
++    def size(value):
++        calls.append(value)
++        return len(value)
++
++    cache = make_cache(policy, maxsize=5, getsizeof=size)
++    value = [1, 2, 3]
++    cache["a"] = value
++    cache["b"] = [4, 5]
++    calls.clear()
++    assert cache.peek("a") is value
++    assert cache.peek("missing") is None
++    assert calls == []
++    assert len(cache) == 2
++    assert cache.currsize == 5
++
++
++@pytest.mark.parametrize("policy", [FIFOCache, LRUCache, TTLCache, TLRUCache])
++def test_peek_preserves_eviction_order(policy):
++    cache = make_cache(policy, maxsize=2)
++    cache["a"] = 1
++    cache["b"] = 2
++    for _ in range(5):
++        assert cache.peek("a") == 1
++    cache["c"] = 3
++    assert "a" not in cache
++    assert "b" in cache
++    assert "c" in cache
++
++
++def test_peek_preserves_lfu_frequency():
++    cache = LFUCache(2)
++    cache["a"] = 1
++    cache["b"] = 2
++    assert cache.get("b") == 2
++    for _ in range(5):
++        assert cache.peek("a") == 1
++    cache["c"] = 3
++    assert "a" not in cache
++    assert "b" in cache
++    assert "c" in cache
++
++
++@pytest.mark.parametrize("policy", [LRUCache, LFUCache, TTLCache, TLRUCache])
++@pytest.mark.parametrize("access", ["get", "index", "replace"])
++def test_peek_does_not_change_existing_access_semantics(policy, access):
++    cache = make_cache(policy, maxsize=2)
++    cache["a"] = 1
++    cache["b"] = 2
++    if access == "get":
++        assert cache.get("a") == 1
++    elif access == "index":
++        assert cache["a"] == 1
++    else:
++        cache["a"] = 10
++    assert cache.peek("b") == 2
++    cache["c"] = 3
++    assert "a" in cache
++    assert "b" not in cache
++    assert "c" in cache
++
++
++@pytest.mark.parametrize("policy", [TTLCache, TLRUCache])
++def test_peek_expired_entries_are_retained(policy):
++    timer = Timer()
++    calls = []
++
++    class MissingCache(policy):
++        def __missing__(self, key):
++            calls.append(key)
++            return "generated"
++
++    cache = make_cache(MissingCache, timer=timer)
++    cache["old"] = "old value"
++    timer.now = 5
++    cache["live"] = "live value"
++    timer.now = 10
++    default = object()
++    assert cache.peek("old") is None
++    assert cache.peek("old", default) is default
++    assert cache.peek("missing", default) is default
++    assert cache.peek("live", default) == "live value"
++    assert calls == []
++    assert list(cache.expire()) == [("old", "old value")]
++    assert cache.peek("live") == "live value"
++    timer.now = 15
++    assert cache.peek("live", default) is default
++    assert list(cache.expire()) == [("live", "live value")]
++    assert calls == []

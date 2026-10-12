@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -1,9 +1,15 @@\n import math\n import json\n+from contextvars import ContextVar\n \n from jmespath import exceptions\n from jmespath.compat import string_type as STRING_TYPE\n from jmespath.compat import get_methods\n+\n+\n+# Keep the mapping factory local to an evaluation, not on a potentially\n+# shared custom Functions instance.  Direct function calls default to dict.\n+_MERGE_DICT_CLS = ContextVar('jmespath_merge_dict_cls', default=dict)\n \n \n # python types -> jmespath types\n@@ -261,7 +267,7 @@\n \n     @signature({\"types\": [\"object\"], \"variadic\": True})\n     def _func_merge(self, *arguments):\n-        merged = {}\n+        merged = _MERGE_DICT_CLS.get()()\n         for arg in arguments:\n             merged.update(arg)\n         return merged\n--- a/jmespath/visitor.py\n+++ b/jmespath/visitor.py\n@@ -168,7 +168,13 @@\n         for child in node['children']:\n             current = self.visit(child, value)\n             resolved_args.append(current)\n-        return self._functions.call_function(node['value'], resolved_args)\n+        # Scope the built-in merge factory without changing custom function\n+        # instances or their dispatch interface.  Restore it for nested searches.\n+        token = functions._MERGE_DICT_CLS.set(self._dict_cls)\n+        try:\n+            return self._functions.call_function(node['value'], resolved_args)\n+        finally:\n+            functions._MERGE_DICT_CLS.reset(token)\n \n     def visit_filter_projection(self, node, value):\n         base = self.visit(node['children'][0], value)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.003862373389035589,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 4040,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was inspected after construction and delivered through FINAL_VAR. However, the reference execution records no repository execution, so it supports final-artifact inspection rather than an independently demonstrated runtime verification loop.",
+   "inspect_locate": "The execution used 10 targeted searches without printing the whole repository context. The change requires connecting interpreter option handling and function dispatch in visitor.py with dictionary construction in functions.py, while accounting for public and compiled entry points.",
+   "persistent_state": "The seven-turn execution reused repository material through the files variable. The coordinated patch preserves the option-flow and provider-lifetime constraints: inherited merge behavior must change without mutating a shared custom-functions instance or replacing an explicit override's result."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise production-only unified-diff deliverable. Its requirements form a coherent option-propagation change rather than unrelated checks, and they do not prescribe a particular implementation or solver workflow. The supplied verification covers mapping types, overwrite semantics, input preservation, expression references, inherited and overridden custom functions, and reuse across searches. The task is distinct from the existing merge argument-validation task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "A production diff must reconcile mapping construction, inherited function dispatch, custom overrides, and exact patch contexts across the affected files.",
+   "inspect_locate": "The option is consumed in the interpreter, whereas merge constructs its result in the function provider. Public and compiled searches reach those components through another module.",
+   "persistent_state": "The investigation must retain the option-flow and provider-lifetime findings while constructing coordinated changes, including the constraint that a reused custom provider must not leak settings between searches."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.__init__",
+    "why": "Mapping options and custom function providers are selected here for each fresh interpreter."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.visit_function_expression",
+    "why": "Function dispatch currently does not communicate the interpreter's mapping choice."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_merge",
+    "why": "The built-in independently creates a plain dictionary."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::FunctionRegistry._populate_function_table",
+    "why": "Inherited implementations and explicit overrides are registered as different callable methods."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::ParsedResult.search",
+    "why": "Each compiled search creates a fresh interpreter, while a supplied custom-functions instance can be reused."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_merge_mapping_options.py\n@@ -0,0 +1,59 @@\n+from collections import OrderedDict\n+\n+import jmespath\n+from jmespath import functions\n+\n+\n+class MarkerDict(dict):\n+    pass\n+\n+\n+class Inherited(functions.Functions):\n+    pass\n+\n+\n+class Overridden(functions.Functions):\n+    @functions.signature({'types': ['object'], 'variadic': True})\n+    def _func_merge(self, *args):\n+        return {'override': True}\n+\n+\n+def test_public_and_compiled_merge_use_configured_mapping():\n+    data = {'a': {'x': 1, 'y': 2}, 'b': {'x': 3, 'z': 4}}\n+    compiled = jmespath.compile('merge(a, b)')\n+    for mapping in (OrderedDict, MarkerDict):\n+        options = jmespath.Options(dict_cls=mapping)\n+        for result in (jmespath.search('merge(a, b)', data, options),\n+                       compiled.search(data, options)):\n+            assert type(result) is mapping\n+            assert result == {'x': 3, 'y': 2, 'z': 4}\n+            assert list(result) == ['x', 'y', 'z']\n+    assert data == {'a': {'x': 1, 'y': 2}, 'b': {'x': 3, 'z': 4}}\n+    assert type(compiled.search(data)) is dict\n+\n+\n+def test_inherited_merge_does_not_leak_mapping_options():\n+    provider = Inherited()\n+    data = {'a': {'x': 1}, 'b': {'y': 2}}\n+    compiled = jmespath.compile('merge(a, b)')\n+    for mapping in (MarkerDict, None, OrderedDict, None):\n+        options = jmespath.Options(dict_cls=mapping, custom_functions=provider)\n+        result = compiled.search(data, options)\n+        assert type(result) is (dict if mapping is None else mapping)\n+        assert result == {'x': 1, 'y': 2}\n+\n+\n+def test_merge_inside_expression_reference_uses_mapping():\n+    options = jmespath.Options(dict_cls=MarkerDict)\n+    result = jmespath.search('map(&merge(@, `{\"extra\":1}`), rows)',\n+                             {'rows': [{'a': 2}, {}]}, options)\n+    assert result == [{'a': 2, 'extra': 1}, {'extra': 1}]\n+    assert all(type(item) is MarkerDict for item in result)\n+\n+\n+def test_custom_merge_override_is_not_rewrapped():\n+    options = jmespath.Options(dict_cls=MarkerDict,\n+                               custom_functions=Overridden())\n+    result = jmespath.search('merge(`{}`)', {}, options)\n+    assert type(result) is dict\n+    assert result == {'override': True}\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests deliberately reuse a custom provider. Implementations must not permanently mutate that provider's mapping configuration or rewrap the return value of an explicit custom override.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Make `Options.dict_cls` apply to the dictionaries constructed by the built-in `merge` function, not just multi-select hashes. This must work through both `jmespath.search` and a compiled expression's `search`, including a merge evaluated inside an expression reference. With no `dict_cls`, merge must still return a plain dict. Preserve merge's overwrite behavior and leave its arguments unmodified. The inherited built-in merge on a custom `Functions` subclass must honor the option too, but an explicitly overridden custom merge must keep control of its own return value. Reusing one custom-functions instance across searches with different options must not leak the mapping choice between searches. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r02-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_merge_mapping_options.py::test_inherited_merge_does_not_leak_mapping_options",
+   "tests/test_merge_mapping_options.py::test_merge_inside_expression_reference_uses_mapping",
+   "tests/test_merge_mapping_options.py::test_public_and_compiled_merge_use_configured_mapping"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 995
+   },
+   "patch_files": [
+    "jmespath/functions.py",
+    "jmespath/visitor.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_merge_mapping_options.py::test_inherited_merge_does_not_leak_mapping_options",
+   "tests/test_merge_mapping_options.py::test_merge_inside_expression_reference_uses_mapping",
+   "tests/test_merge_mapping_options.py::test_public_and_compiled_merge_use_configured_mapping"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,17 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -50,7 +50,13 @@
+             return ModuleSpec(fullname, self)
+ 
+     def create_module(self, spec):
+-        return types.ModuleType(spec.name)
++        module = types.ModuleType(spec.name)
++        module.__spec__ = spec
++        module.__loader__ = spec.loader
++        module.__package__ = spec.parent
++        if spec.submodule_search_locations is not None:
++            module.__path__ = list(spec.submodule_search_locations)
++        return module
+ 
+     def exec_module(self, module):
+         toolz_mods = self._load_toolz(module.__name__)

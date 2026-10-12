@@ -1,0 +1,214 @@
+{
+ "answer": [
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator",
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock",
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond",
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_info",
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock_info",
+  "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond_info",
+  "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+  "tests/test_func.py::LFUDecoratorTest::test_decorator_nocache",
+  "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+  "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+  "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_cached.py::CachedTest::test_too_large\",\n  \"tests/test_cached.py::CachedInfoTest::test_too_large\",\n  \"tests/test_cached.py::CachedLockTest::test_too_large\",\n  \"tests/test_cached.py::CachedLockInfoTest::test_too_large\",\n  \"tests/test_cached.py::CachedConditionTest::test_too_large\",\n  \"tests/test_cached.py::CachedConditionInfoTest::test_too_large\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "t",
+    "tcache",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 17135,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "2 sub-calls (0 failed); 2 call sites on selected context, 0 on the whole context; max prompt 17135 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 15 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 'm', 't', 'tcache', 'trees']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "2 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Two sub-calls examined selected context rather than the whole repository, supporting separate analysis of wrapper branches and test families. Their results were not incorporated into the final answer, so the evidence for their contribution is limited.",
+   "combine_verify_finish": "The final node-ID collection was computed in code and inspected after construction. Independent impact verification confirms the same eleven affected tests.",
+   "inspect_locate": "The execution used 15 scoped searches to connect cached wrapper dispatch with direct tests and the functools-style adapters. Identifying inherited tests under their collecting classes requires repository-specific investigation.",
+   "persistent_state": "Variables representing files, parsed trees, and test inventories were reused across six turns, supporting consistent tracking of affected configurations and inherited tests."
+  },
+  "notes": "This is a natural change-impact request with a precise behavioral boundary and output format. The proposed change does not reveal the affected tests, and determining them requires tracing decorator dispatch, cache insertion behavior, and inherited test collection. It is distinct from the previously accepted cache-accounting repair task. Recursive decomposition is not established by the execution, consistent with its omission from behaviors_established."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining failure requires semantic reading of the synchronization/statistics branches and separate test families, not merely locating insertion calls.",
+   "combine_verify_finish": "The deliverable is the deduplicated set of concrete pytest node IDs, including inherited tests under their collecting classes.",
+   "inspect_locate": "Relevant tests reach function memoization through both cached and the functools-style adapters, including inherited test methods.",
+   "persistent_state": "A retained dispatch matrix and inherited-test inventory avoid losing which configurations reach each changed helper.",
+   "recursive_decomposition": "The impact divides into direct function decorators, adapter-created decorators, and threading tests; their newly failing node IDs must be reconciled."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_wrapper",
+    "why": "Dispatch determines which of the six changed memoizing helpers each configuration uses."
+   },
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_cache",
+    "why": "All functools-style adapters use the statistics-enabled condition path."
+   },
+   {
+    "path": "tests/test_cached.py",
+    "symbol": "tests/test_cached.py::CacheWrapperTest",
+    "why": "The zero-capacity tests expect successful computation despite rejected storage in all six paths."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition_info",
+    "why": "Its finally block remains active when the insertion error propagates, distinguishing cleanup failures from the intended change."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Reraising in the existing handlers implements the planned observable change without modifying cleanup or success paths. Collect the full existing suite so adapter and inherited tests are included.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/cachetools/_cached.py\n+++ b/src/cachetools/_cached.py\n@@ -30,9 +30,9 @@\n             with lock:\n                 try:\n                     cache[k] = v\n                 except ValueError:\n-                    pass  # value too large\n+                    raise\n                 return v\n         finally:\n             with lock:\n                 pending.remove(k)\n@@ -72,9 +72,9 @@\n                 # stored a value for this key while we were calling\n                 # func(), prefer the cached value.\n                 return cache.setdefault(k, v)\n             except ValueError:\n-                return v  # value too large\n+                raise\n \n     def cache_clear():\n         nonlocal hits, misses\n         with lock:\n@@ -105,9 +105,9 @@\n         v = func(*args, **kwargs)\n         try:\n             cache[k] = v\n         except ValueError:\n-            pass  # value too large\n+            raise\n         return v\n \n     def cache_clear():\n         nonlocal hits, misses\n@@ -165,9 +165,9 @@\n             with lock:\n                 try:\n                     cache[k] = v\n                 except ValueError:\n-                    pass  # value too large\n+                    raise\n                 return v\n         finally:\n             with lock:\n                 pending.remove(k)\n@@ -198,9 +198,9 @@\n                 # stored a value for this key while we were calling\n                 # func(), prefer the cached value.\n                 return cache.setdefault(k, v)\n             except ValueError:\n-                return v  # value too large\n+                raise\n \n     def cache_clear():\n         with lock:\n             cache.clear()\n@@ -218,9 +218,9 @@\n         v = func(*args, **kwargs)\n         try:\n             cache[k] = v\n         except ValueError:\n-            pass  # value too large\n+            raise\n         return v\n \n     wrapper.cache_clear = lambda: cache.clear()\n     return wrapper\n",
+  "question": "We plan to stop suppressing `ValueError` from cache insertion in every memoizing function-wrapper path used by `cachetools.cached`, with and without statistics and with unlocked, lock-only, or condition synchronization. Such insertion errors will propagate to the caller; successful insertions, condition cleanup, and exceptions from the wrapped function will retain their current behavior. The method-decorator helpers will not change. Which existing tests would newly fail? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "tkem-cachetools-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond_info",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_info",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock_info",
+   "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::LFUDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond_info",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_info",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock_info",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::LFUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond_info",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_info",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock",
+    "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock_info",
+    "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::LFUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+    "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_cond_info",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_info",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock",
+   "tests/test_cached.py::CacheWrapperTest::test_zero_size_cache_decorator_lock_info",
+   "tests/test_func.py::FIFODecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::LFUDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::LRUDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::RRDecoratorTest::test_decorator_nocache",
+   "tests/test_func.py::TTLDecoratorTest::test_decorator_nocache"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

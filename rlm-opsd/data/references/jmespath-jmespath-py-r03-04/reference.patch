@@ -1,0 +1,81 @@
+--- a/jmespath/_utils.py
++++ b/jmespath/_utils.py
+@@ -0,0 +1,17 @@
++def equals(x, y):
++    """Compare JSON values without treating booleans as numbers."""
++    if isinstance(x, bool) or isinstance(y, bool):
++        return isinstance(x, bool) and isinstance(y, bool) and x == y
++    if isinstance(x, list) or isinstance(y, list):
++        return (
++            isinstance(x, list) and isinstance(y, list)
++            and len(x) == len(y)
++            and all(equals(a, b) for a, b in zip(x, y))
++        )
++    if isinstance(x, dict) or isinstance(y, dict):
++        return (
++            isinstance(x, dict) and isinstance(y, dict)
++            and set(x) == set(y)
++            and all(equals(x[key], y[key]) for key in x)
++        )
++    return x == y
+--- a/jmespath/visitor.py
++++ b/jmespath/visitor.py
+@@ -1,38 +1,9 @@
+ import operator
+ 
+ from jmespath import functions
++from jmespath._utils import equals as _equals
+ from jmespath.compat import string_type
+ from numbers import Number
+-
+-
+-def _equals(x, y):
+-    if _is_special_number_case(x, y):
+-        return False
+-    else:
+-        return x == y
+-
+-
+-def _is_special_number_case(x, y):
+-    # We need to special case comparing 0 or 1 to
+-    # True/False.  While normally comparing any
+-    # integer other than 0/1 to True/False will always
+-    # return False.  However 0/1 have this:
+-    # >>> 0 == True
+-    # False
+-    # >>> 0 == False
+-    # True
+-    # >>> 1 == True
+-    # True
+-    # >>> 1 == False
+-    # False
+-    #
+-    # Also need to consider that:
+-    # >>> 0 in [True, False]
+-    # True
+-    if _is_actual_number(x) and x in (0, 1):
+-        return isinstance(y, bool)
+-    elif _is_actual_number(y) and y in (0, 1):
+-        return isinstance(x, bool)
+ 
+ 
+ def _is_comparable(x):
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -2,6 +2,7 @@
+ import json
+ 
+ from jmespath import exceptions
++from jmespath._utils import equals
+ from jmespath.compat import string_type as STRING_TYPE
+ from jmespath.compat import get_methods
+ 
+@@ -212,6 +213,8 @@
+ 
+     @signature({'types': ['array', 'string']}, {'types': []})
+     def _func_contains(self, subject, search):
++        if isinstance(subject, list):
++            return any(equals(element, search) for element in subject)
+         return search in subject
+ 
+     @signature({'types': ['string', 'array', 'object']})

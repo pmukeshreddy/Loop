@@ -1,0 +1,147 @@
+{
+ "answer": [
+  "tests/test_asyncio.py::TestAsyncio::test_attempt_number_is_correct_for_interleaved_coroutines",
+  "tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts\",\n  \"tests/test_tenacity.py::TestBeforeAfterAttempts::test_before_after_callbacks\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 'p', 't']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final test-node set was computed in code and inspected before submission, combining affected tests from two files without duplicates.",
+   "inspect_locate": "The execution used 19 targeted searches across repository context to connect the shared callback-phase change with assertions in synchronous and asynchronous tests.",
+   "persistent_state": "The six-turn investigation reused repository text and intermediate findings through stored variables rather than repeatedly copying evidence."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. The callback timing specification matches the verified patch, and identifying the exact affected tests requires repository-specific reasoning about callback counts and callback-maintained state. The requested output is clear, the question does not disclose the failing tests, and the investigation is distinct from the previously accepted statistics-counter change."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact set of pytest node IDs assembled from different test classes and files; inherited tests and indirect callback effects must be accounted for without duplicates.",
+   "inspect_locate": "The change is in the shared action builder, while assertions about callback counts, callback-maintained state, and controller behavior are scattered through synchronous and asynchronous tests.",
+   "persistent_state": "The investigation reuses the identified callback phase, candidate tests, and findings about which execution adapters inherit the changed action builder."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::BaseRetrying._post_retry_check_actions",
+    "why": "Determines whether after runs for accepted outcomes and appends the result-propagation action."
+   },
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.iter",
+    "why": "Executes the inherited action sequence through asynchronous action adaptation."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestBeforeAfterAttempts.test_after_attempts",
+    "why": "Uses after to maintain state that controls the target and asserts the final callback-maintained attempt number."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe changes only after scheduling. In particular, it does not move retry evaluation, create a sleep action for accepted outcomes, or change exhaustion handling. Determine the complete failing-node set by running the existing suite.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": "--- a/tenacity/__init__.py\n+++ b/tenacity/__init__.py\n@@ -500,15 +500,15 @@\n         if not self.iter_state.is_explicit_retry:\n             self._add_action_func(self._run_retry)\n         self._add_action_func(self._post_retry_check_actions)\n \n     def _post_retry_check_actions(self, retry_state: \"RetryCallState\") -> None:\n+        if self.after is not None:\n+            self._add_action_func(self.after)\n+\n         if not (self.iter_state.is_explicit_retry or self.iter_state.retry_run_result):\n             self._add_action_func(lambda rs: rs.outcome.result())\n             return\n \n-        if self.after is not None:\n-            self._add_action_func(self.after)\n-\n         self._add_action_func(self._run_wait)\n         self._add_action_func(self._run_stop)\n         self._add_action_func(self._post_stop_check_actions)\n",
+  "question": "We are considering changing the `after` callback contract: after retry evaluation, invoke `after` for every completed outcome, including an accepted result or an exception that the retry policy declines to retry. For accepted outcomes, the callback would run immediately before returning the result or propagating the exception. Retried outcomes would retain their current callback order, and `before` and `before_sleep` would be unchanged. Which existing tests would newly fail? Return a JSON list of complete pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jd-tenacity-r02-00",
+ "truth": {
+  "answer": [
+   "tests/test_asyncio.py::TestAsyncio::test_attempt_number_is_correct_for_interleaved_coroutines",
+   "tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_asyncio.py::TestAsyncio::test_attempt_number_is_correct_for_interleaved_coroutines",
+    "tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_asyncio.py::TestAsyncio::test_attempt_number_is_correct_for_interleaved_coroutines",
+    "tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_asyncio.py::TestAsyncio::test_attempt_number_is_correct_for_interleaved_coroutines",
+   "tests/test_tenacity.py::TestBeforeAfterAttempts::test_after_attempts"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

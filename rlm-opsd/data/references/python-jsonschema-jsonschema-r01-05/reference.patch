@@ -1,0 +1,39 @@
+--- a/jsonschema/_types.py
++++ b/jsonschema/_types.py
+@@ -153,7 +153,7 @@
+         type_checkers = self._type_checkers.update(definitions)
+         return evolve(self, type_checkers=type_checkers)
+ 
+-    def remove(self, *types) -> TypeChecker:
++    def remove(self, *types, missing_ok=False) -> TypeChecker:
+         """
+         Produce a new checker with the given types forgotten.
+ 
+@@ -163,11 +163,16 @@
+ 
+                 the names of the types to remove.
+ 
++            missing_ok (bool):
++
++                If True, skip unknown types, including types already
++                removed earlier in this call. Defaults to False.
++
+         Raises:
+ 
+             `jsonschema.exceptions.UndefinedTypeCheck`:
+ 
+-                if any given type is unknown to this object
++                if a given type is unknown and ``missing_ok`` is False
+ 
+         """
+         type_checkers = self._type_checkers
+@@ -175,7 +180,8 @@
+             try:
+                 type_checkers = type_checkers.remove(each)
+             except KeyError:
+-                raise UndefinedTypeCheck(each) from None
++                if not missing_ok:
++                    raise UndefinedTypeCheck(each) from None
+         return evolve(self, type_checkers=type_checkers)
+ 
+ 

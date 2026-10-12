@@ -1,0 +1,168 @@
+{
+ "answer": [
+  "tests/test_compliance.py::test_error_expression[given1-abs(`false`)-invalid-type-functions.json]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\"tests/test_compliance.py::TestCompliance::test_functions\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.004453552989398179,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "candidates",
+    "errors_by_file",
+    "files",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 31477,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 31477 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "9 turns; variables reused across turns: ['candidates', 'errors_by_file', 'files', 't']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "One sub-call examined a selected 31,477-character context rather than the whole repository. This establishes scoped delegation, although its result did not feed the final answer, so evidence of its usefulness is limited.",
+   "combine_verify_finish": "The final test-ID collection was computed in code and inspected before submission; independent executable verification confirmed the failure set.",
+   "inspect_locate": "The execution used nine searches across repository context to connect signature validation with numeric-function tests and parameterized compliance cases.",
+   "persistent_state": "Candidate cases, classifications, and file data were retained and reused across nine turns, with no hand-copied answer literals."
+  },
+  "notes": "This is a natural, precisely bounded change-impact question. Naming the proposed mapping change defines the investigation rather than revealing the affected test. Identifying the exact newly failing parameterized node requires repository-specific reasoning about validation order and unchanged downstream behavior. The task is distinct from the existing accepted tasks. Recursive decomposition is not established by the execution, consistent with its omission from the established-behaviors list."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining the failure set requires semantic review of test cases across several numeric functions and array-subtype signatures. Merely finding boolean literals is insufficient because arity checks, other argument errors, and independent higher-order key checks can preserve a test's outcome.",
+   "combine_verify_finish": "The deliverable is an exact aggregate of pytest node IDs, including parameterized compliance cases, which must be deduplicated and checked against the independently assessed failure groups.",
+   "inspect_locate": "Relevant tests must be located through function signatures, signature-validation callers, and data-driven compliance cases rather than merely through calls to one public function.",
+   "persistent_state": "The investigation reuses the signature classification, candidate test cases, and accumulated node IDs while resolving which candidates actually change outcome.",
+   "recursive_decomposition": "The impact separates into scalar-number validation, numeric-array validation, and higher-order functions whose derived-key validation does not use the changed mapping."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::REVERSE_TYPES_MAP",
+    "why": "This mapping is the complete proposed change."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._type_check_single",
+    "why": "Scalar validation uses exact Python type names supplied by the reverse mapping."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._subtype_check",
+    "why": "Array-number signatures also receive the changed permitted subtype family."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._create_key_func",
+    "why": "Derived-key checks use TYPES_MAP independently and therefore must not be assumed to accept booleans after this proposal."
+   },
+   {
+    "path": "tests/test_compliance.py",
+    "symbol": "tests/test_compliance.py::test_error_expression",
+    "why": "A formerly invalid-type expression that succeeds becomes a failing error-expectation case; other remaining errors may keep a case passing."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply only the supplied probe. Compute newly failing tests relative to the unchanged baseline, using the repository's normal collected suite and complete parameterized node IDs.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -30,7 +30,7 @@\n     'object': ('dict', 'OrderedDict',),\n     'null': ('NoneType',),\n     'string': ('unicode', 'str'),\n-    'number': ('float', 'int', 'long'),\n+    'number': ('float', 'int', 'long', 'bool'),\n     'expref': ('_Expression',),\n }\n \n",
+  "question": "We are considering allowing Python booleans wherever the signature validator accepts the JMESPath `number` type. The proposed implementation adds `'bool'` to the `number` entry in `REVERSE_TYPES_MAP`, so signatures using `array-number` inherit the same allowance. No function body, type-reporting mapping, arity rule, or expression-reference key validation would change. Which existing tests would newly fail with exactly this change? Return a JSON list of complete pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_compliance.py::test_error_expression"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_compliance.py::test_error_expression"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_compliance.py::test_error_expression"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_compliance.py::test_error_expression"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

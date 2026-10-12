@@ -1,0 +1,147 @@
+{
+ "answer": "--- a/src/attr/setters.py\n+++ b/src/attr/setters.py\n@@ -12,8 +12,43 @@\n     \"\"\"\n     Run all *setters* and return the return value of the last one.\n \n+    Lists and tuples of setters are expanded in left-to-right order, including\n+    nested containers. Empty containers are ignored. The expanded sequence is\n+    captured when the pipeline is created, so later changes to input lists do\n+    not affect it. With no setters, the supplied value is returned unchanged.\n+\n+    Cyclic containers raise `ValueError`; non-callable leaves (including\n+    `NO_OP`) raise `TypeError`. Hooks are not called during construction.\n+\n     .. versionadded:: 20.1.0\n     \"\"\"\n+    hooks = []\n+    active = {id(setters)}\n+    stack = [(iter(setters), id(setters))]\n+\n+    # Track only the current ancestry: shared acyclic containers must be\n+    # expanded at every occurrence. An explicit stack avoids recursion limits.\n+    while stack:\n+        iterator, container_id = stack[-1]\n+        try:\n+            setter = next(iterator)\n+        except StopIteration:\n+            stack.pop()\n+            active.remove(container_id)\n+            continue\n+\n+        if isinstance(setter, (list, tuple)):\n+            container_id = id(setter)\n+            if container_id in active:\n+                raise ValueError(\"Cyclic setter container.\")\n+            active.add(container_id)\n+            stack.append((iter(setter), container_id))\n+        elif callable(setter):\n+            hooks.append(setter)\n+        else:\n+            raise TypeError(\"Setters must be callable.\")\n+\n+    setters = tuple(hooks)\n \n     def wrapped_pipe(instance, attrib, new_value):\n         rv = new_value\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 1645 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 1,645-character, single-module context supports a focused implementation without delegation. The task requires substantive reasoning about stack-safe traversal, active-path cycle detection versus repeated shared containers, eager callable validation, and construction-time snapshotting. The reference execution completed with zero sub-calls."
+  },
+  "notes": "The request is precise, natural, repository-dependent, and specifies a production-only unified diff. Its requirements constrain observable behavior without prescribing solver operations or revealing an implementation. Although related to the accepted nested-hook task, this variation adds substantive requirements: 10,000-level stack safety, cycle rejection that preserves repeated shared containers, and mutation-independent capture. These materially change the implementation and verification obligations rather than merely rewording the parent."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the small setter module, well under 16,000 characters. The substantive reasoning concerns stack-safe expansion, distinguishing cycles from shared containers, eager validation, and capturing a stable hook sequence; no cross-module investigation or delegation is needed."
+  },
+  "context": {
+   "files": [
+    "src/attr/setters.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::pipe",
+    "why": "This function constructs the closure and currently iterates the unvalidated variadic arguments directly. It owns all observable expansion, validation, snapshot, and execution behavior required by the task."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_setters_pipe_graphs.py\n@@ -0,0 +1,142 @@\n+# SPDX-License-Identifier: MIT\n+\n+import sys\n+\n+import pytest\n+\n+import attr\n+from attr import setters\n+\n+\n+@pytest.fixture\n+def subject():\n+    @attr.s\n+    class Subject:\n+        value = attr.ib()\n+\n+    instance = Subject(0)\n+    return instance, attr.fields(Subject).value\n+\n+\n+def test_nested_order_and_forwarding(subject):\n+    instance, attribute = subject\n+    calls = []\n+\n+    def hook(label):\n+        def apply(inst, attrib, value):\n+            assert inst is instance\n+            assert attrib is attribute\n+            calls.append((label, value))\n+            return value + label\n+\n+        return apply\n+\n+    a, b, c = hook(\"a\"), hook(\"b\"), hook(\"c\")\n+    pipeline = setters.pipe([a, ([], b)], (), c)\n+    assert calls == []\n+    assert pipeline(instance, attribute, \"\") == \"abc\"\n+    assert calls == [(\"a\", \"\"), (\"b\", \"a\"), (\"c\", \"ab\")]\n+\n+\n+def test_empty_pipelines(subject):\n+    instance, attribute = subject\n+    value = object()\n+    assert setters.pipe()(instance, attribute, value) is value\n+    assert setters.pipe([], ([], ()))(instance, attribute, value) is value\n+\n+\n+def test_variadic_callables(subject):\n+    instance, attribute = subject\n+    add = lambda inst, attrib, value: value + 2\n+    double = lambda inst, attrib, value: value * 2\n+    assert setters.pipe(add, double)(instance, attribute, 3) == 10\n+\n+\n+def test_shared_sequences_and_snapshot(subject):\n+    instance, attribute = subject\n+    add = lambda inst, attrib, value: value + \"a\"\n+    finish = lambda inst, attrib, value: value + \"z\"\n+    shared = [add, ()]\n+    branch = (shared, [shared])\n+    root = [branch, branch]\n+    pipeline = setters.pipe(root, finish)\n+    assert pipeline(instance, attribute, \"\") == \"aaaaz\"\n+\n+    shared[:] = [setters.NO_OP, shared]\n+    root[:] = [None, root]\n+    for _ in range(2):\n+        assert pipeline(instance, attribute, \"\") == \"aaaaz\"\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"list\", \"tuple\", \"mixed\"])\n+def test_ten_thousand_levels(kind, subject):\n+    instance, attribute = subject\n+    calls = []\n+\n+    def hook(inst, attrib, value):\n+        assert inst is instance\n+        assert attrib is attribute\n+        calls.append(value)\n+        return value + 1\n+\n+    nested = hook\n+    for level in range(10000):\n+        if kind == \"list\" or (kind == \"mixed\" and level % 2):\n+            nested = [nested]\n+        else:\n+            nested = (nested,)\n+    limit = sys.getrecursionlimit()\n+    pipeline = setters.pipe(nested)\n+    assert calls == []\n+    assert sys.getrecursionlimit() == limit\n+    assert pipeline(instance, attribute, 4) == 5\n+    assert calls == [4]\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"self\", \"indirect\", \"mixed\", \"deep\"])\n+def test_cycles_are_rejected_at_creation(kind):\n+    calls = []\n+\n+    def hook(inst, attrib, value):\n+        calls.append(value)\n+        return value\n+\n+    root = [hook]\n+    if kind == \"self\":\n+        root.append(root)\n+    elif kind == \"indirect\":\n+        other = [root]\n+        root.append(other)\n+    elif kind == \"mixed\":\n+        root.append((root,))\n+    else:\n+        nested = root\n+        for _ in range(10000):\n+            nested = (nested,)\n+        root.append(nested)\n+    with pytest.raises(ValueError):\n+        setters.pipe(root)\n+    assert calls == []\n+\n+\n+@pytest.mark.parametrize(\"leaf\", [None, setters.NO_OP, 42, \"hook\", {}])\n+def test_invalid_leaves_are_rejected_at_creation(leaf):\n+    calls = []\n+\n+    def hook(inst, attrib, value):\n+        calls.append(value)\n+        return value\n+\n+    with pytest.raises(TypeError):\n+        setters.pipe(hook, leaf)\n+    with pytest.raises(TypeError):\n+        setters.pipe([hook, ([], [leaf])])\n+    assert calls == []\n+\n+\n+def test_deep_invalid_leaf_is_still_type_error():\n+    nested = setters.NO_OP\n+    for _ in range(10000):\n+        nested = [nested]\n+    with pytest.raises(TypeError):\n+        setters.pipe(nested)\n",
+  "include_failure_log": false,
+  "notes": "Implementation task against the supplied baseline; no setup defect is needed. The new acceptance tests cover callable-only compatibility, empty identity pipelines, argument forwarding, execution order, repeated expansion of shared list and tuple containers, post-construction mutations, deep valid inputs, shallow and deep cycles, and eager invalid-leaf errors. The original accepted recursive implementation cannot pass the deep-input or cycle tests. A stack-safe traversal with active-path cycle detection and a captured flat hook sequence should satisfy these requirements.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Allow callers of attr.setters.pipe to group hooks in arbitrarily nested lists and tuples while retaining its existing variadic callable interface. Construction must support at least 10,000 levels of list, tuple, or mixed nesting without RecursionError and without changing Python's recursion limit. Expand these containers in left-to-right order, ignoring empty containers. A shared acyclic container must contribute its hooks at every occurrence; a cycle through lists or tuples must instead raise ValueError when pipe is created. Any non-callable leaf, including attr.setters.NO_OP, must raise TypeError at creation. Construction must not invoke any hooks.\n\nThe returned pipeline must capture the expanded hook sequence at construction: subsequent changes to the input lists, even changes introducing invalid leaves or cycles, must not affect it. On invocation, each hook receives the original instance and Attribute along with the preceding hook's result; a pipeline with no hooks returns the supplied value unchanged. Submit a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct_solve because pipe remains self-contained, but shifts the reasoning toward graph traversal, stack safety, aliasing, and distinguishing two construction-time failure classes.",
+  "change_type": "constraint",
+  "description": "Extend src/attr/setters.py::pipe with nested-list/tuple support that also handles nesting at least 10,000 levels deep without RecursionError. Reject cyclic sequence graphs with ValueError at pipeline creation, while allowing a shared acyclic sequence to appear multiple times and expanding it each time. Preserve eager TypeError for non-callable leaves, left-to-right execution, and construction-time snapshot semantics. Deliver a production-only unified diff.",
+  "expected_answer_change": "The patch must use an explicit traversal stack rather than Python recursion, with container identities tracked only along the active traversal path. Completed containers must leave that tracking set so shared subtrees expand repeatedly. The resulting hook sequence must be captured at construction so later list mutation cannot change pipeline execution.",
+  "why_substantive": "The accepted recursive add_hooks implementation fails both deeply nested inputs and cycles with RecursionError. This variation requires a different traversal algorithm and distinguishing an ancestor cycle from harmless reuse of the same container; a global visited set would incorrectly suppress repeated hooks."
+ },
+ "task_id": "python-attrs-attrs-r02-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[deep]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[indirect]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[mixed]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[self]",
+   "tests/test_setters_pipe_graphs.py::test_deep_invalid_leaf_is_still_type_error",
+   "tests/test_setters_pipe_graphs.py::test_empty_pipelines",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[42]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[None]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[hook]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[leaf1]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[leaf4]",
+   "tests/test_setters_pipe_graphs.py::test_nested_order_and_forwarding",
+   "tests/test_setters_pipe_graphs.py::test_shared_sequences_and_snapshot",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[list]",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[mixed]",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[tuple]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 16,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1395
+   },
+   "patch_files": [
+    "src/attr/setters.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[deep]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[indirect]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[mixed]",
+   "tests/test_setters_pipe_graphs.py::test_cycles_are_rejected_at_creation[self]",
+   "tests/test_setters_pipe_graphs.py::test_deep_invalid_leaf_is_still_type_error",
+   "tests/test_setters_pipe_graphs.py::test_empty_pipelines",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[42]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[None]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[hook]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[leaf1]",
+   "tests/test_setters_pipe_graphs.py::test_invalid_leaves_are_rejected_at_creation[leaf4]",
+   "tests/test_setters_pipe_graphs.py::test_nested_order_and_forwarding",
+   "tests/test_setters_pipe_graphs.py::test_shared_sequences_and_snapshot",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[list]",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[mixed]",
+   "tests/test_setters_pipe_graphs.py::test_ten_thousand_levels[tuple]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

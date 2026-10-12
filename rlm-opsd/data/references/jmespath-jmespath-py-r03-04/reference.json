@@ -1,0 +1,149 @@
+{
+ "answer": "--- a/jmespath/_utils.py\n+++ b/jmespath/_utils.py\n@@ -0,0 +1,17 @@\n+def equals(x, y):\n+    \"\"\"Compare JSON values without treating booleans as numbers.\"\"\"\n+    if isinstance(x, bool) or isinstance(y, bool):\n+        return isinstance(x, bool) and isinstance(y, bool) and x == y\n+    if isinstance(x, list) or isinstance(y, list):\n+        return (\n+            isinstance(x, list) and isinstance(y, list)\n+            and len(x) == len(y)\n+            and all(equals(a, b) for a, b in zip(x, y))\n+        )\n+    if isinstance(x, dict) or isinstance(y, dict):\n+        return (\n+            isinstance(x, dict) and isinstance(y, dict)\n+            and set(x) == set(y)\n+            and all(equals(x[key], y[key]) for key in x)\n+        )\n+    return x == y\n--- a/jmespath/visitor.py\n+++ b/jmespath/visitor.py\n@@ -1,38 +1,9 @@\n import operator\n \n from jmespath import functions\n+from jmespath._utils import equals as _equals\n from jmespath.compat import string_type\n from numbers import Number\n-\n-\n-def _equals(x, y):\n-    if _is_special_number_case(x, y):\n-        return False\n-    else:\n-        return x == y\n-\n-\n-def _is_special_number_case(x, y):\n-    # We need to special case comparing 0 or 1 to\n-    # True/False.  While normally comparing any\n-    # integer other than 0/1 to True/False will always\n-    # return False.  However 0/1 have this:\n-    # >>> 0 == True\n-    # False\n-    # >>> 0 == False\n-    # True\n-    # >>> 1 == True\n-    # True\n-    # >>> 1 == False\n-    # False\n-    #\n-    # Also need to consider that:\n-    # >>> 0 in [True, False]\n-    # True\n-    if _is_actual_number(x) and x in (0, 1):\n-        return isinstance(y, bool)\n-    elif _is_actual_number(y) and y in (0, 1):\n-        return isinstance(x, bool)\n \n \n def _is_comparable(x):\n--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -2,6 +2,7 @@\n import json\n \n from jmespath import exceptions\n+from jmespath._utils import equals\n from jmespath.compat import string_type as STRING_TYPE\n from jmespath.compat import get_methods\n \n@@ -212,6 +213,8 @@\n \n     @signature({'types': ['array', 'string']}, {'types': []})\n     def _func_contains(self, subject, search):\n+        if isinstance(subject, list):\n+            return any(equals(element, search) for element in subject)\n         return search in subject\n \n     @signature({'types': ['string', 'array', 'object']})\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.004847672722973239,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 14,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 14 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was constructed programmatically and inspected after construction. It consistently applies recursive equality to comparison operators and array membership while leaving string membership unchanged.",
+   "inspect_locate": "The execution used 14 targeted context searches without printing the whole repository. The resulting patch connects equality handling in visitor.py with membership handling in functions.py through a shared comparator.",
+   "recursive_decomposition": "Not established by the reference execution: there were no sub-calls or stored sub-call results. Recursive value comparison is part of the requested implementation, but does not itself demonstrate recursive solver decomposition."
+  },
+  "notes": "The task is a natural, repository-dependent behavioral change with a precise production-only diff format. Its requirements form one coherent equality policy, rather than unrelated checks. It does not disclose defective implementation symbols or prescribe solver operations, and it is distinct from the accepted tasks. The supplied tests cover nested boolean/number distinctions, numeric equivalence, object key order, filters, compiled searches, and membership."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The resulting production changes must consistently implement the same recursive rule in both public entry paths and be assembled into an applicable diff.",
+   "inspect_locate": "Equality operators and array membership currently enter different modules and use different equality mechanisms.",
+   "recursive_decomposition": "The investigation separates structural comparator equality, array membership equality, and integration through filter evaluation. The shared semantic rule must be reconciled with function dispatch and the existing module dependency direction."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::_equals",
+    "why": "The current scalar special case falls through to Python structural equality for nested values."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_contains",
+    "why": "Array membership currently uses Python membership, independently of comparator equality."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.visit_filter_projection",
+    "why": "Filters expose both comparator and function-call equality paths."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_recursive_json_equality.py\n@@ -0,0 +1,29 @@\n+import pytest\n+import jmespath\n+\n+\n+@pytest.mark.parametrize(\"left, right, equal\", [\n+    (0, False, False),\n+    (1, True, False),\n+    ([0], [False], False),\n+    ([{\"v\": [1]}], [{\"v\": [True]}], False),\n+    ({\"x\": {\"a\": 0}}, {\"x\": {\"a\": False}}, False),\n+    ({\"a\": 1, \"b\": [0]}, {\"b\": [0.0], \"a\": 1.0}, True),\n+    ([{\"x\": False}], [{\"x\": False}], True),\n+    ([1, 2], [2, 1], False),\n+    ({\"a\": None}, {}, False),\n+])\n+def test_recursive_equality(left, right, equal):\n+    data = {\"a\": left, \"b\": right}\n+    assert jmespath.search(\"a == b\", data) is equal\n+    assert jmespath.compile(\"a != b\").search(data) is (not equal)\n+    assert jmespath.search(\"contains([a], b)\", data) is equal\n+\n+\n+def test_filter_and_membership_paths():\n+    data = {\"items\": [{\"v\": {\"n\": [0]}}, {\"v\": {\"n\": [False]}}]}\n+    assert jmespath.search('items[?v == `{\"n\":[false]}`]', data) == [data[\"items\"][1]]\n+    assert jmespath.search('items[?contains([v], `{\"n\":[false]}`)]', data) == [data[\"items\"][1]]\n+    assert jmespath.search(\"contains('alphabet', 'pha')\", None) is True\n+    assert jmespath.search(\"contains(`[false]`, `0`)\", None) is False\n+    assert jmespath.search(\"contains(`[1.0]`, `1`)\", None) is True\n",
+  "include_failure_log": false,
+  "notes": "Hidden acceptance tests repair a latent semantic gap without a setup regression. A shared equality implementation must avoid introducing an import cycle between functions and visitor.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Correct equality for nested JSON values. The `==` and `!=` operators must distinguish booleans from numbers at every depth, not just for scalar operands: for example, `[0]` must not equal `[false]`. Arrays compare positionally; objects compare by identical key sets and recursively equal values, independent of key order. Integer and floating-point representations of the same number must still compare equal.\n\nArray-subject `contains` must use this same equality rule when testing membership, including for nested arrays and objects. String-subject `contains` must retain its current substring behavior. Apply the rule through ordinary searches, compiled searches, and filter predicates, without changing unrelated ordering or truth-value behavior. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r03-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_recursive_json_equality.py::test_filter_and_membership_paths",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[0-False-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[1-True-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left2-right2-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left3-right3-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left4-right4-False]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1001
+   },
+   "patch_files": [
+    "jmespath/_utils.py",
+    "jmespath/visitor.py",
+    "jmespath/functions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_recursive_json_equality.py::test_filter_and_membership_paths",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[0-False-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[1-True-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left2-right2-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left3-right3-False]",
+   "tests/test_recursive_json_equality.py::test_recursive_equality[left4-right4-False]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

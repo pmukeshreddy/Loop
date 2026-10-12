@@ -1,0 +1,176 @@
+{
+ "answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -13,6 +13,7 @@\n import typing\n import uuid\n from collections.abc import Mapping as _Mapping\n+from contextvars import ContextVar\n from enum import Enum as EnumType\n \n try:\n@@ -81,10 +82,19 @@\n     \"Url\",\n ]\n \n+_post_dump_suppressed: ContextVar[bool] = ContextVar(\n+    \"marshmallow_field_post_dump_suppressed\", default=False\n+)\n+\n _InternalT = typing.TypeVar(\"_InternalT\")\n _ProcessorT = typing.TypeVar(\n     \"_ProcessorT\",\n-    bound=types.PostLoadCallable | types.PreLoadCallable | types.Validator,\n+    bound=(\n+        types.PostLoadCallable\n+        | types.PreLoadCallable\n+        | types.PostDumpCallable\n+        | types.Validator\n+    ),\n )\n \n \n@@ -96,6 +106,7 @@\n     validate: types.Validator | typing.Iterable[types.Validator] | None\n     pre_load: types.PreLoadCallable | typing.Iterable[types.PreLoadCallable] | None\n     post_load: types.PostLoadCallable | typing.Iterable[types.PostLoadCallable] | None\n+    post_dump: types.PostDumpCallable | typing.Iterable[types.PostDumpCallable] | None\n     required: bool\n     allow_none: bool | None\n     load_only: bool\n@@ -147,6 +158,10 @@\n     :param post_load: Callable or collection of callables that are applied to the\n         deserialized value after validation. Each callable receives the value\n         and returns a transformed value.\n+    :param post_dump: Callable or collection of callables applied in order to the\n+        serialized value, including dump defaults and ``None``, but not missing\n+        values. Each callable receives the value and returns a transformed value.\n+        For nested and container fields, these run after child serialization.\n     :param required: Raise a :exc:`ValidationError` if the field value\n         is not supplied during deserialization.\n     :param allow_none: Set this to `True` if `None` should be considered a valid value during\n@@ -203,6 +218,9 @@\n         post_load: (\n             types.PostLoadCallable | typing.Iterable[types.PostLoadCallable] | None\n         ) = None,\n+        post_dump: (\n+            types.PostDumpCallable | typing.Iterable[types.PostDumpCallable] | None\n+        ) = None,\n         required: bool = False,\n         allow_none: bool | None = None,\n         load_only: bool = False,\n@@ -219,6 +237,7 @@\n         self.validators = self._normalize_processors(validate, param=\"validate\")\n         self.pre_load = self._normalize_processors(pre_load, param=\"pre_load\")\n         self.post_load = self._normalize_processors(post_load, param=\"post_load\")\n+        self.post_dump = self._normalize_processors(post_dump, param=\"post_dump\")\n \n         # If allow_none is None and load_default is None\n         # None should be considered valid by default\n@@ -337,7 +356,30 @@\n                 return value\n         else:\n             value = None\n-        return self._serialize(value, attr, obj, **kwargs)\n+        return self._serialize_with_processors(value, attr, obj, **kwargs)\n+\n+    def _serialize_with_processors(\n+        self, value, attr, obj, *, _apply_post_dump: bool = True, **kwargs\n+    ):\n+        \"\"\"Serialize a runtime value, then apply field-local dump processors.\n+\n+        Suppression is context-local so Enum choice preparation also skips\n+        processors in container children and nested schemas.\n+        \"\"\"\n+        token = None\n+        if not _apply_post_dump:\n+            token = _post_dump_suppressed.set(True)\n+        try:\n+            result = self._serialize(value, attr, obj, **kwargs)\n+            if not _post_dump_suppressed.get():\n+                for processor in self.post_dump:\n+                    if result is missing_:\n+                        break\n+                    result = processor(result)\n+            return result\n+        finally:\n+            if token is not None:\n+                _post_dump_suppressed.reset(token)\n \n     # If value is None, None may be returned\n     @typing.overload\n@@ -775,7 +817,10 @@\n     def _serialize(self, value, attr, obj, **kwargs) -> list[_InternalT] | None:\n         if value is None:\n             return None\n-        return [self.inner._serialize(each, attr, obj, **kwargs) for each in value]\n+        return [\n+            self.inner._serialize_with_processors(each, attr, obj, **kwargs)\n+            for each in value\n+        ]\n \n     def _deserialize(self, value, attr, data, **kwargs) -> list[_InternalT | None]:\n         if not utils.is_collection(value):\n@@ -859,7 +904,7 @@\n             return None\n \n         return tuple(\n-            field._serialize(each, attr, obj, **kwargs)\n+            field._serialize_with_processors(each, attr, obj, **kwargs)\n             for field, each in zip(self.tuple_fields, value, strict=True)\n         )\n \n@@ -1668,7 +1713,8 @@\n             keys = {k: k for k in value}\n         else:\n             keys = {\n-                k: self.key_field._serialize(k, None, None, **kwargs) for k in value\n+                k: self.key_field._serialize_with_processors(k, None, None, **kwargs)\n+                for k in value\n             }\n \n         # Serialize values\n@@ -1679,7 +1725,9 @@\n                     result[keys[k]] = v\n         else:\n             for k, v in value.items():\n-                result[keys[k]] = self.value_field._serialize(v, None, None, **kwargs)\n+                result[keys[k]] = self.value_field._serialize_with_processors(\n+                    v, None, None, **kwargs\n+                )\n \n         return result\n \n@@ -1952,7 +2000,12 @@\n         if by_value is False:\n             self.field: Field = String()\n             self.choices_text = \", \".join(\n-                str(self.field._serialize(m, None, None)) for m in enum.__members__\n+                str(\n+                    self.field._serialize_with_processors(\n+                        m, None, None, _apply_post_dump=False\n+                    )\n+                )\n+                for m in enum.__members__\n             )\n         # Serialization by value\n         else:\n@@ -1967,7 +2020,12 @@\n                         \"marshmallow.fields.Field.\"\n                     ) from error\n             self.choices_text = \", \".join(\n-                str(self.field._serialize(m.value, None, None)) for m in enum\n+                str(\n+                    self.field._serialize_with_processors(\n+                        m.value, None, None, _apply_post_dump=False\n+                    )\n+                )\n+                for m in enum\n             )\n             if \"allow_none\" not in kwargs and any(m.value is None for m in enum):\n                 self.allow_none = True\n@@ -1981,7 +2039,7 @@\n             val = value.value\n         else:\n             val = value.name\n-        return self.field._serialize(val, attr, obj, **kwargs)\n+        return self.field._serialize_with_processors(val, attr, obj, **kwargs)\n \n     def _deserialize(self, value, attr, data, **kwargs) -> _EnumT:\n         if isinstance(value, self.enum):\n--- a/src/marshmallow/types.py\n+++ b/src/marshmallow/types.py\n@@ -30,6 +30,8 @@\n PreLoadCallable = typing.Callable[[typing.Any], typing.Any]\n #: Type for field-level post-load functions\n PostLoadCallable = typing.Callable[[T], T]\n+#: Type for field-level post-dump functions\n+PostDumpCallable = typing.Callable[[typing.Any], typing.Any]\n \n \n class SchemaValidator(typing.Protocol):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0011206393122761057,
+  "facts": {
+   "code_blocks": 9,
+   "context_searches": 26,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "changes",
+    "classes",
+    "cn",
+    "field",
+    "idx",
+    "lines",
+    "methods",
+    "n",
+    "new",
+    "old",
+    "path",
+    "s",
+    "selected",
+    "wrapper"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 6152,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 10,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 26 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "10 turns; variables reused across turns: ['changes', 'classes', 'cn', 'field', 'idx', 'lines', 'methods', 'n', 'new', 'old', 'path', 's']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The production changes were assembled into a unified diff in code and inspected before submission. The supplied acceptance evidence exercises scalar defaults, None, container children, Enum construction, nested fields, Pluck, computed fields, processor ordering, and unchanged loading.",
+   "inspect_locate": "The execution used 26 targeted searches without printing the whole repository context. Locating the public serialization path, private child serializers, and Enum construction behavior was useful for this cross-cutting feature.",
+   "persistent_state": "The execution reused implementation and source-inspection variables across 10 turns, retaining processor semantics and the distinction between runtime serialization and constructor-time choice preparation."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise deliverable. Its requirements describe related consequences of one field-processing API rather than unrelated checks, and it does not prescribe solver operations or disclose an implementation. It is distinct from the accepted tasks. Recursive decomposition is not established by the execution: the single sub-call's result did not reach the final answer."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable requires coordinated production edits and an exact unified diff whose hunks and coverage can be checked before submission.",
+   "inspect_locate": "Serialization is split between Field.serialize, concrete private serializers, schema serialization, and several composition mechanisms.",
+   "persistent_state": "The implementation must retain the common processor semantics while tracking which private child calls need runtime processing and which constructor-time calls must remain untouched.",
+   "recursive_decomposition": "Ordinary fields, positional containers, mappings, Enum conversion, and Nested/Pluck composition have independent serialization paths that must all honor the new processor contract."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field.serialize",
+    "why": "The public entry point retrieves values and defaults, handles missing values, and invokes conversion."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field._normalize_processors",
+    "why": "Existing field processor normalization establishes the required argument behavior."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Mapping._serialize",
+    "why": "Keys and values currently use private child serializers and therefore need explicit runtime processor support."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Enum.__init__",
+    "why": "Choice preparation uses child serialization at construction time and must not execute the new runtime processors."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Pluck._serialize",
+    "why": "The enclosing processor must run after extraction rather than on the intermediate nested mapping."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_field_post_dump_acceptance.py\n@@ -0,0 +1,49 @@\n+from enum import Enum\n+\n+import pytest\n+\n+from marshmallow import Schema, fields, missing\n+\n+\n+def test_scalar_defaults_and_none():\n+    field = fields.Int(post_dump=lambda value: \"none\" if value is None else value + 1)\n+    assert field.serialize(\"x\", {}) is missing\n+    assert fields.Int(dump_default=4, post_dump=lambda v: v + 1).serialize(\"x\", {}) == 5\n+    assert field.serialize(\"x\", {\"x\": None}) == \"none\"\n+    with pytest.raises(ValueError, match=\"'post_dump' parameter\"):\n+        fields.Int(post_dump=\"not_callable\")\n+\n+\n+def test_collection_children():\n+    plus = lambda value: value + 1\n+    assert fields.List(fields.Int(post_dump=plus), post_dump=tuple).serialize(\"x\", {\"x\": [1, 2]}) == (2, 3)\n+    assert fields.Tuple((fields.Int(post_dump=plus),), post_dump=list).serialize(\"x\", {\"x\": (1,)}) == [2]\n+    field = fields.Dict(keys=fields.Int(post_dump=str), values=fields.Int(post_dump=plus), post_dump=lambda d: sorted(d.items()))\n+    assert field.serialize(\"x\", {\"x\": {1: 2}}) == [(\"1\", 3)]\n+\n+\n+def test_enum_runtime_only():\n+    class State(Enum):\n+        A = 1\n+    calls = []\n+    child = fields.Int(post_dump=lambda value: (calls.append(value), value + 10)[1])\n+    field = fields.Enum(State, by_value=child, post_dump=lambda value: value + 1)\n+    assert calls == []\n+    assert field.serialize(\"x\", {\"x\": State.A}) == 12\n+    assert calls == [1]\n+\n+\n+def test_nested_pluck_and_computed():\n+    class Child(Schema):\n+        number = fields.Int(post_dump=lambda value: value + 1)\n+    class Parent(Schema):\n+        child = fields.Nested(Child, post_dump=lambda d: {\"number\": d[\"number\"] * 2})\n+        pluck = fields.Pluck(Child, \"number\", post_dump=lambda value: value + 1)\n+        computed = fields.Function(lambda obj: obj[\"source\"], post_dump=lambda value: value * 2)\n+    assert Parent().dump({\"child\": {\"number\": 2}, \"pluck\": {\"number\": 2}, \"source\": 4}) == {\"child\": {\"number\": 6}, \"pluck\": 4, \"computed\": 8}\n+\n+\n+def test_processors_in_order():\n+    field = fields.Int(post_dump=[str, lambda value: \"n=\" + value])\n+    assert field.serialize(\"x\", {\"x\": 5}) == \"n=5\"\n+    assert field.deserialize(\"5\") == 5\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests exercise observable processor results and ordering without requiring a particular helper or implementation strategy. Preserve the existing suite.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Add a field-local post_dump argument alongside pre_load and post_load. It must accept a callable, an iterable of callables, or None, using the same normalization and invalid-argument convention as the existing field processors. During serialization, apply these functions in order to the field's serialized result. Process dump defaults and serialized None values, but never process the missing sentinel. This must work for computed fields and for every runtime child serialization in List, Tuple, Dict, and Enum, as well as fields inside Nested and Pluck. An enclosing field's processors run after its children; Pluck's processors receive the extracted scalar or list. Enum construction must not execute these processors while preparing its displayed choices. Loading must remain unchanged. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r03-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_field_post_dump_acceptance.py::test_collection_children",
+   "tests/test_field_post_dump_acceptance.py::test_enum_runtime_only",
+   "tests/test_field_post_dump_acceptance.py::test_nested_pluck_and_computed",
+   "tests/test_field_post_dump_acceptance.py::test_processors_in_order",
+   "tests/test_field_post_dump_acceptance.py::test_scalar_defaults_and_none"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1193
+   },
+   "patch_files": [
+    "src/marshmallow/fields.py",
+    "src/marshmallow/types.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_field_post_dump_acceptance.py::test_collection_children",
+   "tests/test_field_post_dump_acceptance.py::test_enum_runtime_only",
+   "tests/test_field_post_dump_acceptance.py::test_nested_pluck_and_computed",
+   "tests/test_field_post_dump_acceptance.py::test_processors_in_order",
+   "tests/test_field_post_dump_acceptance.py::test_scalar_defaults_and_none"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,165 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -734,10 +734,23 @@\n             want to set it to ``[\"venusian\", \"pyramid.config\"]``. This argument\n             is called *additional_ignores* in other APIs throughout\n             *structlog*.\n-    \"\"\"\n-\n-    def __init__(self, ignore_frame_names: list[str] | None = None):\n+\n+        stacklevel:\n+            Skip this many additional frames outward from the first application\n+            frame after ignoring structlog and *ignore_frame_names*. Ignored\n+            prefixes are not checked again, and offsets beyond the available\n+            stack stop at its outermost frame. Explicit logger names are\n+            unaffected.\n+    \"\"\"\n+\n+    def __init__(\n+        self,\n+        ignore_frame_names: list[str] | None = None,\n+        *,\n+        stacklevel: int = 0,\n+    ):\n         self._ignore = ignore_frame_names\n+        self._stacklevel = stacklevel\n         logging.setLoggerClass(_FixedFindCallerLogger)\n \n     def __call__(self, *args: Any) -> logging.Logger:\n@@ -759,7 +772,9 @@\n \n         # We skip all frames that originate from within structlog or one of the\n         # configured names.\n-        _, name = _find_first_app_frame_and_name(self._ignore)\n+        _, name = _find_first_app_frame_and_name(\n+            self._ignore, stacklevel=self._stacklevel\n+        )\n \n         return logging.getLogger(name)\n \n--- a/src/structlog/processors.py\n+++ b/src/structlog/processors.py\n@@ -699,21 +699,35 @@\n             *additional_ignores*, **no filtering** is applied to subsequent\n             frames.\n \n+        stacklevel:\n+            Skip this many additional frames outward from the first application\n+            frame after applying the ignores, before rendering the stack.\n+            Ignored prefixes are not checked again, and offsets beyond the\n+            available stack stop at its outermost frame.\n+\n     .. versionadded:: 0.4.0\n     .. versionadded:: 22.1.0  *additional_ignores*\n     \"\"\"\n \n-    __slots__ = (\"_additional_ignores\",)\n-\n-    def __init__(self, additional_ignores: list[str] | None = None) -> None:\n+    __slots__ = (\"_additional_ignores\", \"_stacklevel\")\n+\n+    def __init__(\n+        self,\n+        additional_ignores: list[str] | None = None,\n+        *,\n+        stacklevel: int = 0,\n+    ) -> None:\n         self._additional_ignores = additional_ignores\n+        self._stacklevel = stacklevel\n \n     def __call__(\n         self, logger: WrappedLogger, name: str, event_dict: EventDict\n     ) -> EventDict:\n         if event_dict.pop(\"stack_info\", None):\n             event_dict[\"stack\"] = _format_stack(\n-                _find_first_app_frame_and_name(self._additional_ignores)[0]\n+                _find_first_app_frame_and_name(\n+                    self._additional_ignores, stacklevel=self._stacklevel\n+                )[0]\n             )\n \n         return event_dict\n@@ -842,6 +856,13 @@\n         additional_ignores:\n             Additional names with which a stack frame's module name must not\n             start for it to be considered when determening the callsite.\n+\n+        stacklevel:\n+            Skip this many additional frames outward from the first application\n+            frame after applying the ignores. Ignored prefixes are not checked\n+            again, and offsets beyond the available stack stop at its outermost\n+            frame. Callsite information taken from a foreign `logging.LogRecord`\n+            is unaffected.\n \n     .. note::\n \n@@ -890,12 +911,19 @@\n         event_dict_key: str\n         record_attribute: str\n \n-    __slots__ = (\"_active_handlers\", \"_additional_ignores\", \"_record_mappings\")\n+    __slots__ = (\n+        \"_active_handlers\",\n+        \"_additional_ignores\",\n+        \"_record_mappings\",\n+        \"_stacklevel\",\n+    )\n \n     def __init__(\n         self,\n         parameters: Collection[CallsiteParameter] = _all_parameters,\n         additional_ignores: list[str] | None = None,\n+        *,\n+        stacklevel: int = 0,\n     ) -> None:\n         if additional_ignores is None:\n             additional_ignores = []\n@@ -903,6 +931,7 @@\n         # processor is used in ProcessorFormatter, and additionally the logging\n         # module should not be logging using structlog.\n         self._additional_ignores = [\"logging\", *additional_ignores]\n+        self._stacklevel = stacklevel\n         self._active_handlers: list[\n             tuple[CallsiteParameter, Callable[[str, FrameType], Any]]\n         ] = []\n@@ -938,7 +967,8 @@\n             return event_dict\n \n         frame, module = _find_first_app_frame_and_name(\n-            additional_ignores=self._additional_ignores\n+            additional_ignores=self._additional_ignores,\n+            stacklevel=self._stacklevel,\n         )\n         for parameter, handler in self._active_handlers:\n             event_dict[parameter.value] = handler(module, frame)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0006968690466916425,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "adder",
+    "files",
+    "targets"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['adder', 'files', 'targets']; hand-copied literals 1"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The implementation required consistent default values and offset forwarding across three APIs while preserving the foreign-record path. The reference execution constructed a multi-hunk production diff and inspected the final computed value before finishing.",
+   "inspect_locate": "The execution used 12 targeted context searches to locate three public consumers across two modules and inspect the shared frame-selection semantics. This was useful for identifying the constructor changes and the appropriate frame-finder call sites.",
+   "persistent_state": "Variables were reused across turns, but the supplied evidence does not establish substantial persistent-state practice beyond ordinary implementation bookkeeping.",
+   "recursive_decomposition": "Not established: the reference execution made no sub-calls. This should not be credited as a demonstrated behavior."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise offset semantics and a clear unified-diff deliverable. Naming the APIs to extend and specifying their contract does not reveal the implementation. The three changes form one coherent feature rather than unrelated checks. The existing frame-selection task concerns understanding helper behavior, not exposing that behavior through these public constructors, so it is not a duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a multi-hunk production diff whose defaults and call-site wiring must agree across all three consumers.",
+   "inspect_locate": "The three public consumers reside in two modules and share a frame finder whose existing ignore and offset rules constrain the implementation.",
+   "persistent_state": "The solver must retain the agreed offset semantics and exact source excerpts while coordinating constructor, state, and invocation changes.",
+   "recursive_decomposition": "Logger naming, callsite enrichment, and stack rendering are independent consumers with different constructor layouts and stored state. Their changes can be investigated separately and then reconciled against the common frame-selection contract."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_frames.py",
+    "symbol": "src/structlog/_frames.py::_find_first_app_frame_and_name",
+    "why": "Already implements post-ignore offsets and outermost-frame clamping."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::LoggerFactory",
+    "why": "Infers names through the shared finder while explicit factory names bypass inference."
+   },
+   {
+    "path": "src/structlog/processors.py",
+    "symbol": "src/structlog/processors.py::CallsiteParameterAdder",
+    "why": "Has separate foreign-record and frame-based paths, with slotted instance state."
+   },
+   {
+    "path": "src/structlog/processors.py",
+    "symbol": "src/structlog/processors.py::StackInfoRenderer",
+    "why": "Selects a frame before passing it to stack rendering and also uses slots."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_public_stacklevel.py\n@@ -0,0 +1,55 @@\n+import logging\n+\n+import pytest\n+\n+from structlog.processors import CallsiteParameter, CallsiteParameterAdder, StackInfoRenderer\n+from structlog.stdlib import LoggerFactory\n+\n+\n+@pytest.fixture\n+def bridge():\n+    namespace = {\"__name__\": \"stacklevel_bridge\"}\n+    exec(\n+        compile(\n+            \"def invoke(target, *args):\\n    return target(*args)\\n\",\n+            \"stacklevel_bridge_site.py\",\n+            \"exec\",\n+        ),\n+        namespace,\n+    )\n+    return namespace[\"invoke\"]\n+\n+\n+@pytest.mark.parametrize(\"level, expected\", [(0, \"stacklevel_bridge\"), (1, __name__)])\n+def test_factory_offset(bridge, level, expected):\n+    old_class = logging.getLoggerClass()\n+    try:\n+        factory = LoggerFactory(stacklevel=level)\n+        assert bridge(factory).name == expected\n+    finally:\n+        logging.setLoggerClass(old_class)\n+\n+\n+@pytest.mark.parametrize(\"level, expected\", [(0, \"stacklevel_bridge\"), (1, __name__)])\n+def test_callsite_offset(bridge, level, expected):\n+    adder = CallsiteParameterAdder(\n+        [CallsiteParameter.QUAL_MODULE],\n+        stacklevel=level,\n+    )\n+    assert bridge(adder, None, \"info\", {})[\"qual_module\"] == expected\n+\n+\n+@pytest.mark.parametrize(\"level\", [0, 1])\n+def test_stack_offset(bridge, level):\n+    renderer = StackInfoRenderer(stacklevel=level)\n+    event = bridge(renderer, None, \"info\", {\"stack_info\": True})\n+    assert (\"stacklevel_bridge_site.py\" in event[\"stack\"]) is (level == 0)\n+\n+\n+def test_ignores_are_applied_before_offset(bridge):\n+    adder = CallsiteParameterAdder(\n+        [CallsiteParameter.QUAL_MODULE],\n+        additional_ignores=[\"stacklevel_bridge\"],\n+        stacklevel=0,\n+    )\n+    assert bridge(adder, None, \"info\", {})[\"qual_module\"] == __name__\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests use actual application frames created in a synthetic module, not replacement private frame-selection helpers. Existing suites continue checking default and foreign-record behavior.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Expose a keyword-only `stacklevel: int = 0` constructor option on `structlog.stdlib.LoggerFactory`, `structlog.processors.CallsiteParameterAdder`, and `structlog.processors.StackInfoRenderer`. For these APIs, stacklevel counts additional frames outward from the first application frame selected after the existing structlog and configured-prefix ignores. Use the frame finder's existing offset semantics: ignored prefixes are not filtered again after applying the offset, and an offset beyond the available stack stops at its outermost frame. Support nonnegative offsets; no new validation policy is required. The option must affect inferred logger names, frame-based callsite fields, and rendered stacks respectively. Foreign-record callsite enrichment must continue using its existing LogRecord path without applying the offset. Preserve all current behavior when the option is omitted. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r03-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_public_stacklevel.py::test_callsite_offset[0-stacklevel_bridge]",
+   "tests/test_public_stacklevel.py::test_callsite_offset[1-tests.test_public_stacklevel]",
+   "tests/test_public_stacklevel.py::test_factory_offset[0-stacklevel_bridge]",
+   "tests/test_public_stacklevel.py::test_factory_offset[1-tests.test_public_stacklevel]",
+   "tests/test_public_stacklevel.py::test_ignores_are_applied_before_offset",
+   "tests/test_public_stacklevel.py::test_stack_offset[0]",
+   "tests/test_public_stacklevel.py::test_stack_offset[1]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 891
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py",
+    "src/structlog/processors.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_public_stacklevel.py::test_callsite_offset[0-stacklevel_bridge]",
+   "tests/test_public_stacklevel.py::test_callsite_offset[1-tests.test_public_stacklevel]",
+   "tests/test_public_stacklevel.py::test_factory_offset[0-stacklevel_bridge]",
+   "tests/test_public_stacklevel.py::test_factory_offset[1-tests.test_public_stacklevel]",
+   "tests/test_public_stacklevel.py::test_ignores_are_applied_before_offset",
+   "tests/test_public_stacklevel.py::test_stack_offset[0]",
+   "tests/test_public_stacklevel.py::test_stack_offset[1]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

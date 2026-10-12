@@ -1,0 +1,157 @@
+{
+ "answer": "--- a/src/dotenv/cli.py\n+++ b/src/dotenv/cli.py\n@@ -44,6 +44,11 @@\n     help=\"Location of the .env file, defaults to .env file in current working directory.\",\n )\n @click.option(\n+    \"--encoding\",\n+    default=\"utf-8\",\n+    help=\"Encoding of the .env file. Default is utf-8.\",\n+)\n+@click.option(\n     \"-q\",\n     \"--quote\",\n     default=\"always\",\n@@ -59,13 +64,15 @@\n )\n @click.version_option(version=__version__)\n @click.pass_context\n-def cli(ctx: click.Context, file: Any, quote: Any, export: Any) -> None:\n+def cli(\n+    ctx: click.Context, file: Any, encoding: str, quote: Any, export: Any\n+) -> None:\n     \"\"\"This script is used to set, get or unset values from a .env file.\"\"\"\n-    ctx.obj = {\"QUOTE\": quote, \"EXPORT\": export, \"FILE\": file}\n+    ctx.obj = {\"QUOTE\": quote, \"EXPORT\": export, \"FILE\": file, \"ENCODING\": encoding}\n \n \n @contextmanager\n-def stream_file(path: os.PathLike) -> Iterator[IO[str]]:\n+def stream_file(path: os.PathLike, encoding: str = \"utf-8\") -> Iterator[IO[str]]:\n     \"\"\"\n     Open a file and yield the corresponding (decoded) stream.\n \n@@ -73,7 +80,7 @@\n     \"\"\"\n \n     try:\n-        with open(path) as stream:\n+        with open(path, encoding=encoding) as stream:\n             yield stream\n     except OSError as exc:\n         print(f\"Error opening env file: {exc}\", file=sys.stderr)\n@@ -94,7 +101,7 @@\n     \"\"\"Display all the stored key/value.\"\"\"\n     file = ctx.obj[\"FILE\"]\n \n-    with stream_file(file) as stream:\n+    with stream_file(file, encoding=ctx.obj[\"ENCODING\"]) as stream:\n         values = dotenv_values(stream=stream)\n \n     if output_format == \"json\":\n@@ -124,7 +131,9 @@\n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n     export = ctx.obj[\"EXPORT\"]\n-    success, key, value = set_key(file, key, value, quote, export)\n+    success, key, value = set_key(\n+        file, key, value, quote, export, encoding=ctx.obj[\"ENCODING\"]\n+    )\n     if success:\n         click.echo(f\"{key}={value}\")\n     else:\n@@ -138,7 +147,7 @@\n     \"\"\"Retrieve the value for the given key.\"\"\"\n     file = ctx.obj[\"FILE\"]\n \n-    with stream_file(file) as stream:\n+    with stream_file(file, encoding=ctx.obj[\"ENCODING\"]) as stream:\n         values = dotenv_values(stream=stream)\n \n     # Empty strings are valid values; only missing keys / bare keys (None) fail.\n@@ -159,7 +168,7 @@\n     \"\"\"\n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n-    success, key = unset_key(file, key, quote)\n+    success, key = unset_key(file, key, quote, encoding=ctx.obj[\"ENCODING\"])\n     if success:\n         click.echo(f\"Successfully removed {key}\")\n     else:\n@@ -189,7 +198,9 @@\n         )\n     dotenv_as_dict = {\n         k: v\n-        for (k, v) in DotEnv(file, override=override, encoding=\"utf-8\").dict().items()\n+        for (k, v) in DotEnv(\n+            file, override=override, encoding=ctx.obj[\"ENCODING\"]\n+        ).dict().items()\n         if v is not None and (override or k not in os.environ)\n     }\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002863320282825922,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "cli",
+    "files",
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 25231,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 171130 chars; 9 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['cli', 'files', 'index']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines global option registration, context propagation, explicit stream decoding, and encoding forwarding to mutation and run APIs. The constructed final value was inspected before completion.",
+   "inspect_locate": "The execution used nine targeted context searches to identify the three distinct CLI I/O routes: stream-based reads, library mutation calls, and direct DotEnv construction for run.",
+   "persistent_state": "The execution reused cli, files, and index across six turns while coordinating the shared Click context and all five command paths."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise production-only unified-diff format. Correct implementation requires coordinating distinct read and mutation paths while preserving existing behavior. The verified patch and supplied encoding tests support the requested functionality. Existing tasks concern different controls or regressions, so this is not a duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch combines option registration, context propagation, stream opening, and multiple call-site edits, whose exact contexts and argument forwarding need checking.",
+   "inspect_locate": "CLI commands use three distinct I/O routes: stream_file for reads, library mutation functions for edits, and direct DotEnv construction for run.",
+   "persistent_state": "A command-to-I/O-route inventory and the shared Click context changes must remain consistent while updating all five command paths."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::cli",
+    "why": "Global options are stored in the Click context shared by all commands."
+   },
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::stream_file",
+    "why": "Read-only commands currently open streams without an explicit encoding."
+   },
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::run",
+    "why": "Run constructs DotEnv directly with a hard-coded UTF-8 encoding."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::set_key",
+    "why": "The library mutation route already accepts an encoding and forwards it to transactional rewriting."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::unset_key",
+    "why": "Removal likewise already exposes the encoding needed by the CLI."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cli_encoding_option.py\n@@ -0,0 +1,53 @@\n+import json\n+\n+import pytest\n+\n+from click.testing import CliRunner\n+\n+import dotenv.cli as cli_module\n+\n+\n+@pytest.mark.parametrize(\"command\", [\"list\", \"get\", \"set\", \"unset\", \"run\"])\n+def test_cli_latin1_all_commands(tmp_path, monkeypatch, command):\n+    path = tmp_path / \".env\"\n+    path.write_bytes(\"NAME=caf\u00e9\\nREF=${NAME}\\nBARE\\n\".encode(\"latin-1\"))\n+    captured = {}\n+\n+    def capture(commandline, env):\n+        captured.update(env)\n+\n+    monkeypatch.setattr(cli_module, \"run_command\", capture)\n+    tail = {\n+        \"list\": [\"list\", \"--format\", \"json\"],\n+        \"get\": [\"get\", \"REF\"],\n+        \"set\": [\"set\", \"NAME\", \"d\u00e9j\u00e0\"],\n+        \"unset\": [\"unset\", \"NAME\"],\n+        \"run\": [\"run\", \"unused-command\"],\n+    }[command]\n+    result = CliRunner().invoke(\n+        cli_module.cli,\n+        [\"--file\", str(path), \"--encoding\", \"latin-1\", *tail],\n+    )\n+    assert result.exit_code == 0, result.output\n+    if command == \"list\":\n+        assert json.loads(result.output) == {\"NAME\": \"caf\u00e9\", \"REF\": \"caf\u00e9\", \"BARE\": None}\n+    elif command == \"get\":\n+        assert result.output == \"caf\u00e9\\n\"\n+    elif command == \"set\":\n+        assert result.output == \"NAME=d\u00e9j\u00e0\\n\"\n+        assert path.read_bytes() == \"NAME='d\u00e9j\u00e0'\\nREF=${NAME}\\nBARE\\n\".encode(\"latin-1\")\n+    elif command == \"unset\":\n+        assert result.output == \"Successfully removed NAME\\n\"\n+        assert path.read_bytes() == b\"REF=${NAME}\\nBARE\\n\"\n+    else:\n+        assert captured == {\"NAME\": \"caf\u00e9\", \"REF\": \"caf\u00e9\"}\n+\n+\n+def test_cli_encoding_default_utf8(tmp_path):\n+    path = tmp_path / \".env\"\n+    path.write_bytes(\"NAME=\u96ea\\n\".encode(\"utf-8\"))\n+    result = CliRunner().invoke(\n+        cli_module.cli, [\"--file\", str(path), \"get\", \"NAME\"]\n+    )\n+    assert result.exit_code == 0, result.output\n+    assert result.output == \"\u96ea\\n\"\n",
+  "include_failure_log": false,
+  "notes": "The hidden run test intercepts the public run_command boundary to inspect the selected child-environment overlay without replacing the pytest process.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add a global `--encoding` option to the dotenv CLI, defaulting to `utf-8`. It must control decoding for `list`, `get`, and `run`, and both reading and writing for `set` and `unset`. Commands must continue to display decoded Unicode values normally, and interpolation, quote/export options, override behavior, and existing error statuses must remain unchanged. The option belongs before the subcommand, alongside `--file`; do not change the public library API signatures. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "theskumar-python-dotenv-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[get]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[list]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[run]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[set]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[unset]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 263
+   },
+   "patch_files": [
+    "src/dotenv/cli.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[get]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[list]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[run]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[set]",
+   "tests/test_cli_encoding_option.py::test_cli_latin1_all_commands[unset]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

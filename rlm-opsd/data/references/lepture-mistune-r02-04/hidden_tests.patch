@@ -1,0 +1,43 @@
+--- /dev/null
++++ b/tests/test_container_enablement_idempotence.py
+@@ -0,0 +1,40 @@
++import pytest
++
++from mistune import create_markdown
++from mistune.plugins.math import math_in_list, math_in_quote
++from mistune.plugins.table import table_in_list, table_in_quote
++
++
++@pytest.mark.parametrize(
++    "plugin, enable, attr, source, fragment",
++    [
++        ("table", table_in_quote, "block_quote_rules", "> A | B\n> - | -\n> 1 | 2\n", "<table>"),
++        ("table", table_in_list, "list_rules", "- A | B\n  - | -\n  1 | 2\n", "<table>"),
++        ("math", math_in_quote, "block_quote_rules", "> $$\n> x\n> $$\n", 'class="math"'),
++        ("math", math_in_list, "list_rules", "- $$\n  x\n  $$\n", 'class="math"'),
++    ],
++)
++def test_repeated_container_enabling_preserves_rules_and_rendering(plugin, enable, attr, source, fragment):
++    md = create_markdown(escape=False, plugins=[plugin, enable])
++    rules = getattr(md.block, attr)
++    initial_rules = list(rules)
++    expected = md(source)
++    assert fragment in expected
++    for _ in range(3):
++        md.use(enable)
++        assert getattr(md.block, attr) == initial_rules
++        assert md(source) == expected
++
++
++def test_reenabling_does_not_move_existing_rules_relative_to_other_extensions():
++    md = create_markdown(plugins=["table", "math", table_in_quote, math_in_quote])
++    rules = md.block.block_quote_rules
++    table_pos = rules.index("table")
++    rules.insert(table_pos, "block_html")
++    initial_rules = list(rules)
++    md.use(table_in_quote)
++    md.use(math_in_quote)
++    assert rules == initial_rules
++    assert rules.count("table") == 1
++    assert rules.count("nptable") == 1
++    assert rules.count("block_math") == 1

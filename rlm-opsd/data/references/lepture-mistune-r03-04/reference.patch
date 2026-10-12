@@ -1,0 +1,100 @@
+--- a/src/mistune/directives/_base.py
++++ b/src/mistune/directives/_base.py
+@@ -71,7 +71,7 @@
+     parser: Type[DirectiveParser]
+     directive_pattern: Optional[str] = None
+ 
+-    def __init__(self, plugins: List["DirectivePlugin"]):
++    def __init__(self, plugins: List["DirectivePlugin"], *, strict_options: bool = False):
+         self._methods: Dict[
+             str,
+             Callable[
+@@ -80,6 +80,7 @@
+             ],
+         ] = {}
+         self.__plugins = plugins
++        self.strict_options = strict_options
+ 
+     def register(
+         self,
+@@ -98,6 +99,8 @@
+         method = self._methods.get(_type)
+         if method:
+             try:
++                if self.strict_options:
++                    self._validate_options(method, _type, m)
+                 token = method(block, m, state)
+             except ValueError as e:
+                 token = {"type": "block_error", "raw": str(e)}
+@@ -114,6 +117,39 @@
+         else:
+             state.append_token(token)
+         return token
++
++    def _validate_options(
++        self,
++        method: Callable[
++            ["BlockParser", Match[str], "BlockState"],
++            Union[Dict[str, Any], List[Dict[str, Any]]],
++        ],
++        directive_type: str,
++        m: Match[str],
++    ) -> None:
++        # Check the handler, not its registered name: custom replacements and
++        # overrides must remain free to define their own options.
++        from .admonition import Admonition
++        from .image import Figure, Image
++        from .include import Include
++        from .toc import TableOfContents
++
++        option_names = {
++            Admonition.parse: {"class"},
++            Image.parse: {"alt", "align", "height", "width", "target"},
++            Figure.parse: {"alt", "align", "height", "width", "target", "figwidth", "figclass"},
++            Include.parse: {"encoding"},
++            TableOfContents.parse: {"collapse", "min-level", "max-level"},
++        }
++        allowed = option_names.get(getattr(method, "__func__", None))
++        if allowed is None:
++            return
++
++        # Keep source order (including duplicates) and leave value validation
++        # to the handler.
++        for key, _ in self.parser.parse_options(m):
++            if key not in allowed:
++                raise ValueError(f'Unknown option "{key}" for directive "{directive_type}"')
+ 
+     @abstractmethod
+     def parse_directive(self, block: "BlockParser", m: Match[str], state: "BlockState") -> Optional[int]:
+--- a/src/mistune/directives/_fenced.py
++++ b/src/mistune/directives/_fenced.py
+@@ -90,12 +90,15 @@
+     :param plugins: list of directive plugins
+     :param markers: characters to determine the fence, default is backtick
+                     and curly-bracket
++    :param strict_options: reject unsupported option names for built-in handlers
+     """
+ 
+     parser = FencedParser
+ 
+-    def __init__(self, plugins: List[DirectivePlugin], markers: str = "`~") -> None:
+-        super(FencedDirective, self).__init__(plugins)
++    def __init__(
++        self, plugins: List[DirectivePlugin], markers: str = "`~", *, strict_options: bool = False
++    ) -> None:
++        super(FencedDirective, self).__init__(plugins, strict_options=strict_options)
+         self.markers = markers
+         _marker_pattern = "|".join(re.escape(c) for c in markers)
+         self.directive_pattern = (
+--- a/src/mistune/directives/_rst.py
++++ b/src/mistune/directives/_rst.py
+@@ -61,6 +61,9 @@
+             # ...
+             RSTDirective([Admonition()]),
+         ])
++
++    :param plugins: list of directive plugins
++    :param strict_options: reject unsupported option names for built-in handlers
+     """
+ 
+     parser = RSTParser

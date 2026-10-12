@@ -1,0 +1,151 @@
+{
+  "task_id": "jmespath-jmespath-py-r03-04",
+  "family": "recursive_decomposition",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 253730,
+    "context_lengths": [
+      4541,
+      1129,
+      55,
+      6648,
+      1716,
+      4509,
+      310,
+      2154,
+      408,
+      4159,
+      12759,
+      8600,
+      19598,
+      10862,
+      721,
+      2010,
+      778,
+      1878,
+      652,
+      512,
+      4222,
+      242,
+      81,
+      1242,
+      849,
+      2075,
+      5353,
+      5679,
+      628,
+      1141,
+      15927,
+      18370,
+      24772,
+      8837,
+      5230,
+      10440,
+      2380,
+      3675,
+      15143,
+      795,
+      10496,
+      1395,
+      4730,
+      735,
+      2327,
+      5908,
+      14633,
+      2296,
+      130
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context))\nprint(context[0][:700])\nprint(context[len(context)//2][:400])\nprint(context[-1][:400])\nfiles = {c.split('\\n',1)[0][8:]: c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint(list(files))\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context))\nprint(context[0][:700])\nprint(context[len(context)//2][:400])\nprint(context[-1][:400])\nfiles = {c.split('\\n',1)[0][8:]: c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint(list(files))"
+      ],
+      "stdout_raw_chars": 2540,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 49\n# File: CHANGELOG.rst\nNext Release (TBD)\n==================\n\n* No changes yet.\n\n\n1.1.0\n=====\n\n* Fix concurrency issue with cache\n  (`pr #335 <https://github.com/jmespath/jmespath.py/pull/335>`__)\n* Added support for Python 3.12-3.14 (`pr #331 <https://github.com/jmespath/jmespath.py/pull/331>`__)\n* Removed support for Python 3.7-3.8 (`pr #335 <https://github.com/jmespath/jmespath.py/pull/335>`__)\n\n\n1.0.1\n=====\n\n* Add support for Python 3.11\n  (`issue #285 <https://github.com/jmespath/jmespath.py/issues/285>`__)\n* Fix boolean correctness for floats\n  (`issue #281 <https://github.com/jmespath/jmespath.py/issues/281>`__)\n* Fix Python 3.9 warning about random sampling used in parser cache.\n  (`i\n# File: tests/__init__.py\nimport sys\nfrom jmespath import ast\n\nimport unittest\nimport json\nfrom collections import OrderedDict\n\n\n# Helper method used to create an s-expression\n# of the AST to make unit test assertions easier.\n# You get a nice string diff on assert failures.\ndef as_s_expression(node):\n    parts = []\n    _as_s_expression(node, parts)\n    return ''.join(parts)\n\n\ndef _as_s_expression(\n# File: tox.ini\n[tox]\nenvlist = py39,py310,py311,py312,py313,py314\n\n[testenv]\ncommands = python -m pytest tests\ndeps =\n    pytest\n\n['CHANGELOG.rst', 'LICENSE', 'MANIFEST.in', 'README.rst', 'bin/jp.py', 'extra/test_hypothesis.py', 'jmespath/__init__.py', 'jmespath/ast.py', 'jmespath/compat.py', 'jmespath/exceptions.py', 'jmespath/functions.py', 'jmespath/lexer.py', 'jmespath/parser.py', 'jmespath/visitor.py', 'perf/cases/basic.json', 'perf/cases/deep_hierarchy.json', 'perf/cases/deep_projection.json', 'perf/cases/functions.json', 'perf/cases/multiwildcard.json', 'perf/cases/wildcardindex.json', 'perf/perftest.py', 'requirements.txt', 'setup.cfg', 'setup.py', 'tests/__init__.py', 'tests/compliance/basic.json', 'tests/compliance/benchmarks.json', 'tests/compliance/boolean.json', 'tests/compliance/current.json', 'tests/compliance/escape.json', 'tests/compliance/filters.json', 'tests/compliance/functions.json', 'tests/compliance/identifiers.json', 'tests/compliance/indices.json', 'tests/compliance/literal.json', 'tests/compliance/multiselect.json', 'tests/compliance/pipe.json', 'tests/compliance/slice.json', 'tests/compliance/syntax.json', 'tests/compliance/unicode.json', 'tests/compliance/wildcard.json', 'tests/legacy/literal.json', 'tests/test_compliance.py', 'tests/test_custom_functions.py', 'tests/test_functions.py', 'tests/test_lexer.py', 'tests/test_parser.py', 'tests/test_search.py', 'tox.ini']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re\nhits = {}\nfor p in ['jmespath/visitor.py', 'jmespath/functions.py', 'jmespath/__init__.py', 'jmespath/parser.py']:\n    hits[p] = [(m.start(), files[p][max(0,m.start()-180):m.end()+420]) for m in re.finditer(r'def _equals|def _is_actual_number|def _func_contains|COMPARATOR_FUNC|def visit_comparator|def search|def compile', files[p])]\nfor p, h in hits.items():\n    print(p)\n    for pos,text in h:\n        print(pos,text)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re\nhits = {}\nfor p in ['jmespath/visitor.py', 'jmespath/functions.py', 'jmespath/__init__.py', 'jmespath/parser.py']:\n    hits[p] = [(m.start(), files[p][max(0,m.start()-180):m.end()+420]) for m in re.finditer(r'def _equals|def _is_actual_number|def _func_contains|COMPARATOR_FUNC|def visit_comparator|def search|def compile', files[p])]\nfor p, h in hits.items():\n    print(p)\n    for pos,text in h:\n        print(pos,text)"
+      ],
+      "stdout_raw_chars": 4942,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "jmespath/visitor.py\n117 import operator\n\nfrom jmespath import functions\nfrom jmespath.compat import string_type\nfrom numbers import Number\n\n\ndef _equals(x, y):\n    if _is_special_number_case(x, y):\n        return False\n    else:\n        return x == y\n\n\ndef _is_special_number_case(x, y):\n    # We need to special case comparing 0 or 1 to\n    # True/False.  While normally comparing any\n    # integer other than 0/1 to True/False will always\n    # return False.  However 0/1 have this:\n    # >>> 0 == True\n    # False\n    # >>> 0 == False\n    # True\n    # >>> 1 == True\n   \n1130 g on this behavior that\n    # it's been added back.  This should eventually become\n    # part of the official spec.\n    return _is_actual_number(x) or isinstance(x, string_type)\n\n\ndef _is_actual_number(x):\n    # We need to handle python's quirkiness with booleans,\n    # specifically:\n    #\n    # >>> isinstance(False, int)\n    # True\n    # >>> isinstance(True, int)\n    # True\n    if isinstance(x, bool):\n        return False\n    return isinstance(x, Number)\n\n\nclass Options(object):\n    \"\"\"Options to control how a JMESPath function is evaluated.\"\"\"\n    def __init__(self, dict_cls=None, custom_functions=None):\n       \n2987  return method(node, *args, **kwargs)\n\n    def default_visit(self, node, *args, **kwargs):\n        raise NotImplementedError(\"default_visit\")\n\n\nclass TreeInterpreter(Visitor):\n    COMPARATOR_FUNC = {\n        'eq': _equals,\n        'ne': lambda x, y: not _equals(x, y),\n        'lt': operator.lt,\n        'gt': operator.gt,\n        'lte': operator.le,\n        'gte': operator.ge\n    }\n    _EQUALITY_OPS = ['eq', 'ne']\n    MAP_TYPE = dict\n\n    def __init__(self, options=None):\n        super(TreeInterpreter, self).__init__()\n        self._dict_cls = self.MAP_TYPE\n        if options is None:\n            options = Op\n4168         return result\n\n    def visit_field(self, node, value):\n        try:\n            return value.get(node['value'])\n        except AttributeError:\n            return None\n\n    def visit_comparator(self, node, value):\n        # Common case: comparator is == or !=\n        comparator_func = self.COMPARATOR_FUNC[node['value']]\n        if node['value'] in self._EQUALITY_OPS:\n            return comparator_func(\n                self.visit(node['children'][0], value),\n                self.visit(node['children'][1], value)\n            )\n        else:\n            # Ordering operators are only valid for numbers.\n       \n4286 )\n        except AttributeError:\n            return None\n\n    def visit_comparator(self, node, value):\n        # Common case: comparator is == or !=\n        comparator_func = self.COMPARATOR_FUNC[node['value']]\n        if node['value'] in self._EQUALITY_OPS:\n            return comparator_func(\n                self.visit(node['children'][0], value),\n                self.visit(node['children'][1], value)\n            )\n        else:\n            # Ordering operators are only valid for numbers.\n            # Evaluating any other type with a comparison operator\n            # will yield a None value.\n            le\njmespath/functions.py\n7452    try:\n                    return float(arg)\n                except ValueError:\n                    return None\n\n    @signature({'types': ['array', 'string']}, {'types': []})\n    def _func_contains(self, subject, search):\n        return search in subject\n\n    @signature({'types': ['string', 'array', 'object']})\n    def _func_length(self, arg):\n        return len(arg)\n\n    @signature({'types': ['string']}, {'types': ['string']})\n    def _func_ends_with(self, search, suffix):\n        return search.endswith(suffix)\n\n    @signature({'types': ['string']}, {'types': ['string']})\n    def _func_starts_with(self, searc\njmespath/__init__.py\n90 from jmespath import parser\nfrom jmespath.visitor import Options\n\n__version__ = '1.1.0'\n\n\ndef compile(expression):\n    return parser.Parser().parse(expression)\n\n\ndef search(expression, data, options=None):\n    return parser.Parser().parse(expression).search(data, options=options)\n\n162 from jmespath import parser\nfrom jmespath.visitor import Options\n\n__version__ = '1.1.0'\n\n\ndef compile(expression):\n    return parser.Parser().parse(expression)\n\n\ndef search(expression, data, options=None):\n    return parser.Parser().parse(expression).search(data, options=options)\n\njmespath/parser.py\n18820 s._CACHE.clear()\n\n\n@with_repr_method\nclass ParsedResult(object):\n    def __init__(self, expression, parsed):\n        self.expression = expression\n        self.parsed = parsed\n\n    def search(self, value, options=None):\n        interpreter = visitor.TreeInterpreter(options)\n        result = interpreter.visit(self.parsed, value)\n        return result\n\n    def _render_dot_file(self):\n        \"\"\"Render the parsed AST as a dot file.\n\n        Note that this is marked as an internal method because\n        the AST is an implementation detail and is subject\n        to change.  This method can be used to help tro\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(files['jmespath/visitor.py'][:1550])\nprint(files['jmespath/functions.py'][:1150])\nfor p,t in files.items():\n    if '_equals' in t or '_is_special_number_case' in t:\n        print(p,[(m.group(), m.start()) for m in re.finditer('_equals|_is_special_number_case',t)])\nprint(files['jmespath/visitor.py'][5100:6800])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(files['jmespath/visitor.py'][:1550])\nprint(files['jmespath/functions.py'][:1150])\nfor p,t in files.items():\n    if '_equals' in t or '_is_special_number_case' in t:\n        print(p,[(m.group(), m.start()) for m in re.finditer('_equals|_is_special_number_case',t)])\nprint(files['jmespath/visitor.py'][5100:6800])"
+      ],
+      "stdout_raw_chars": 4548,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "import operator\n\nfrom jmespath import functions\nfrom jmespath.compat import string_type\nfrom numbers import Number\n\n\ndef _equals(x, y):\n    if _is_special_number_case(x, y):\n        return False\n    else:\n        return x == y\n\n\ndef _is_special_number_case(x, y):\n    # We need to special case comparing 0 or 1 to\n    # True/False.  While normally comparing any\n    # integer other than 0/1 to True/False will always\n    # return False.  However 0/1 have this:\n    # >>> 0 == True\n    # False\n    # >>> 0 == False\n    # True\n    # >>> 1 == True\n    # True\n    # >>> 1 == False\n    # False\n    #\n    # Also need to consider that:\n    # >>> 0 in [True, False]\n    # True\n    if _is_actual_number(x) and x in (0, 1):\n        return isinstance(y, bool)\n    elif _is_actual_number(y) and y in (0, 1):\n        return isinstance(x, bool)\n\n\ndef _is_comparable(x):\n    # The spec doesn't officially support string types yet,\n    # but enough people are relying on this behavior that\n    # it's been added back.  This should eventually become\n    # part of the official spec.\n    return _is_actual_number(x) or isinstance(x, string_type)\n\n\ndef _is_actual_number(x):\n    # We need to handle python's quirkiness with booleans,\n    # specifically:\n    #\n    # >>> isinstance(False, int)\n    # True\n    # >>> isinstance(True, int)\n    # True\n    if isinstance(x, bool):\n        return False\n    return isinstance(x, Number)\n\n\nclass Options(object):\n    \"\"\"Options to control how a JMESPath function is evaluated.\"\"\"\n    def __init__(self, dict_cls=None, custom_fun\nimport math\nimport json\n\nfrom jmespath import exceptions\nfrom jmespath.compat import string_type as STRING_TYPE\nfrom jmespath.compat import get_methods\n\n\n# python types -> jmespath types\nTYPES_MAP = {\n    'bool': 'boolean',\n    'list': 'array',\n    'dict': 'object',\n    'NoneType': 'null',\n    'unicode': 'string',\n    'str': 'string',\n    'float': 'number',\n    'int': 'number',\n    'long': 'number',\n    'OrderedDict': 'object',\n    '_Projection': 'array',\n    '_Expression': 'expref',\n}\n\n\n# jmespath types -> python types\nREVERSE_TYPES_MAP = {\n    'boolean': ('bool',),\n    'array': ('list', '_Projection'),\n    'object': ('dict', 'OrderedDict',),\n    'null': ('NoneType',),\n    'string': ('unicode', 'str'),\n    'number': ('float', 'int', 'long'),\n    'expref': ('_Expression',),\n}\n\n\ndef signature(*arguments):\n    def _record_signature(func):\n        func.signature = arguments\n        return func\n    return _record_signature\n\n\nclass FunctionRegistry(type):\n    def __init__(cls, name, bases, attrs):\n        cls._populate_function_table()\n        super(FunctionRegistry, cls).__init__(name, bases, attrs)\n\n    def _populate_function_table(cls\njmespath/visitor.py [('_equals', 121), ('_is_special_number_case', 143), ('_is_special_number_case', 233), ('_equals', 3021), ('_equals', 3061)]\nisit_expref(self, node, value):\n        return _Expression(node['children'][0], self)\n\n    def visit_function_expression(self, node, value):\n        resolved_args = []\n        for child in node['children']:\n            current = self.visit(child, value)\n            resolved_args.append(current)\n        return self._functions.call_function(node['value'], resolved_args)\n\n    def visit_filter_projection(self, node, value):\n        base = self.visit(node['children'][0], value)\n        if not isinstance(base, list):\n            return None\n        comparator_node = node['children'][2]\n        collected = []\n        for element in base:\n            if self._is_true(self.visit(comparator_node, element)):\n                current = self.visit(node['children'][1], element)\n                if current is not None:\n                    collected.append(current)\n        return collected\n\n    def visit_flatten(self, node, value):\n        base = self.visit(node['children'][0], value)\n        if not isinstance(base, list):\n            # Can't flatten the object if it's not a list.\n            return None\n        merged_list = []\n        for element in base:\n            if isinstance(element, list):\n                merged_list.extend(element)\n            else:\n                merged_list.append(element)\n        return merged_list\n\n    def visit_identity(self, node, value):\n        return value\n\n    def visit_index(self, node, value):\n        # Even though we can index strings, we don't\n        # want to support that.\n        if not isinstance(value, list):\n            return None\n        try:\n            return value[node['value']]\n        except IndexError:\n            return None\n\n    def\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\nold = dict(files)\nnew = dict(files)\nhelper_path = 'jmespath/_utils.py'\nnew[helper_path] = '''def equals(x, y):\n    \"\"\"Compare JSON values without treating booleans as numbers.\"\"\"\n    if isinstance(x, bool) or isinstance(y, bool):\n        return isinstance(x, bool) and isinstance(y, bool) and x == y\n    if isinstance(x, list) or isinstance(y, list):\n        return (\n            isinstance(x, list) and isinstance(y, list)\n            and len(x) == len(y)\n            and all(equals(a, b) for a, b in zip(x, y))\n        )\n    if isinstance(x, dict) or isinstance(y, dict):\n        return (\n            isinstance(x, dict) and isinstance(y, dict)\n            and set(x) == set(y)\n            and all(equals(x[key], y[key]) for key in x)\n        )\n    return x == y\n'''\np = 'jmespath/visitor.py'\nstart = old[p].index('def _equals(')\nend = old[p].index('def _is_comparable(')\nnew[p] = old[p][:start] + old[p][end:]\nnew[p] = new[p].replace('from jmespath import functions\\n', 'from jmespath import functions\\nfrom jmespath._utils import equals as _equals\\n', 1)\np = 'jmespath/functions.py'\nnew[p] = old[p].replace('from jmespath import exceptions\\n', 'from jmespath import exceptions\\nfrom jmespath._utils import equals\\n', 1)\nnew[p] = new[p].replace('    def _func_contains(self, subject, search):\\n        return search in subject\\n', '    def _func_contains(self, subject, search):\\n        if isinstance(subject, list):\\n            return any(equals(element, search) for element in subject)\\n        return search in subject\\n', 1)\nedited = [helper_path, 'jmespath/visitor.py', 'jmespath/functions.py']\nfor p in edited:\n    ast.parse(new[p])\n    assert new[p] != old.get(p, '')\n    if p in old:\n        assert old[p] == files[p]\nassert new['jmespath/visitor.py'][new['jmespath/visitor.py'].index('def _is_comparable('):] == old['jmespath/visitor.py'][old['jmespath/visitor.py'].index('def _is_comparable('):]\npatch = ''.join(''.join(difflib.unified_diff(old.get(p, '').splitlines(keepends=True), new[p].splitlines(keepends=True), fromfile='a/' + p, tofile='b/' + p)) for p in edited)\nprint(patch)\n``` text?\n\n\n```repl\nprint('patch' in globals())\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\nold = dict(files)\nnew = dict(files)\nhelper_path = 'jmespath/_utils.py'\nnew[helper_path] = '''def equals(x, y):\n    \"\"\"Compare JSON values without treating booleans as numbers.\"\"\"\n    if isinstance(x, bool) or isinstance(y, bool):\n        return isinstance(x, bool) and isinstance(y, bool) and x == y\n    if isinstance(x, list) or isinstance(y, list):\n        return (\n            isinstance(x, list) and isinstance(y, list)\n            and len(x) == len(y)\n            and all(equals(a, b) for a, b in zip(x, y))\n        )\n    if isinstance(x, dict) or isinstance(y, dict):\n        return (\n            isinstance(x, dict) and isinstance(y, dict)\n            and set(x) == set(y)\n            and all(equals(x[key], y[key]) for key in x)\n        )\n    return x == y\n'''\np = 'jmespath/visitor.py'\nstart = old[p].index('def _equals(')\nend = old[p].index('def _is_comparable(')\nnew[p] = old[p][:start] + old[p][end:]\nnew[p] = new[p].replace('from jmespath import functions\\n', 'from jmespath import functions\\nfrom jmespath._utils import equals as _equals\\n', 1)\np = 'jmespath/functions.py'\nnew[p] = old[p].replace('from jmespath import exceptions\\n', 'from jmespath import exceptions\\nfrom jmespath._utils import equals\\n', 1)\nnew[p] = new[p].replace('    def _func_contains(self, subject, search):\\n        return search in subject\\n', '    def _func_contains(self, subject, search):\\n        if isinstance(subject, list):\\n            return any(equals(element, search) for element in subject)\\n        return search in subject\\n', 1)\nedited = [helper_path, 'jmespath/visitor.py', 'jmespath/functions.py']\nfor p in edited:\n    ast.parse(new[p])\n    assert new[p] != old.get(p, '')\n    if p in old:\n        assert old[p] == files[p]\nassert new['jmespath/visitor.py'][new['jmespath/visitor.py'].index('def _is_comparable('):] == old['jmespath/visitor.py'][old['jmespath/visitor.py'].index('def _is_comparable('):]\npatch = ''.join(''.join(difflib.unified_diff(old.get(p, '').splitlines(keepends=True), new[p].splitlines(keepends=True), fromfile='a/' + p, tofile='b/' + p)) for p in edited)\nprint(patch)"
+      ],
+      "stdout_raw_chars": 2360,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/jmespath/_utils.py\n+++ b/jmespath/_utils.py\n@@ -0,0 +1,17 @@\n+def equals(x, y):\n+    \"\"\"Compare JSON values without treating booleans as numbers.\"\"\"\n+    if isinstance(x, bool) or isinstance(y, bool):\n+        return isinstance(x, bool) and isinstance(y, bool) and x == y\n+    if isinstance(x, list) or isinstance(y, list):\n+        return (\n+            isinstance(x, list) and isinstance(y, list)\n+            and len(x) == len(y)\n+            and all(equals(a, b) for a, b in zip(x, y))\n+        )\n+    if isinstance(x, dict) or isinstance(y, dict):\n+        return (\n+            isinstance(x, dict) and isinstance(y, dict)\n+            and set(x) == set(y)\n+            and all(equals(x[key], y[key]) for key in x)\n+        )\n+    return x == y\n--- a/jmespath/visitor.py\n+++ b/jmespath/visitor.py\n@@ -1,38 +1,9 @@\n import operator\n \n from jmespath import functions\n+from jmespath._utils import equals as _equals\n from jmespath.compat import string_type\n from numbers import Number\n-\n-\n-def _equals(x, y):\n-    if _is_special_number_case(x, y):\n-        return False\n-    else:\n-        return x == y\n-\n-\n-def _is_special_number_case(x, y):\n-    # We need to special case comparing 0 or 1 to\n-    # True/False.  While normally comparing any\n-    # integer other than 0/1 to True/False will always\n-    # return False.  However 0/1 have this:\n-    # >>> 0 == True\n-    # False\n-    # >>> 0 == False\n-    # True\n-    # >>> 1 == True\n-    # True\n-    # >>> 1 == False\n-    # False\n-    #\n-    # Also need to consider that:\n-    # >>> 0 in [True, False]\n-    # True\n-    if _is_actual_number(x) and x in (0, 1):\n-        return isinstance(y, bool)\n-    elif _is_actual_number(y) and y in (0, 1):\n-        return isinstance(x, bool)\n \n \n def _is_comparable(x):\n--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -2,6 +2,7 @@\n import json\n \n from jmespath import exceptions\n+from jmespath._utils import equals\n from jmespath.compat import string_type as STRING_TYPE\n from jmespath.compat import get_methods\n \n@@ -212,6 +213,8 @@\n \n     @signature({'types': ['array', 'string']}, {'types': []})\n     def _func_contains(self, subject, search):\n+        if isinstance(subject, list):\n+            return any(equals(element, search) for element in subject)\n         return search in subject\n \n     @signature({'types': ['string', 'array', 'object']})\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/jmespath/_utils.py\n+++ b/jmespath/_utils.py\n@@ -0,0 +1,17 @@\n+def equals(x, y):\n+    \"\"\"Compare JSON values without treating booleans as numbers.\"\"\"\n+    if isinstance(x, bool) or isinstance(y, bool):\n+        return isinstance(x, bool) and isinstance(y, bool) and x == y\n+    if isinstance(x, list) or isinstance(y, list):\n+        return (\n+            isinstance(x, list) and isinstance(y, list)\n+            and len(x) == len(y)\n+            and all(equals(a, b) for a, b in zip(x, y))\n+        )\n+    if isinstance(x, dict) or isinstance(y, dict):\n+        return (\n+            isinstance(x, dict) and isinstance(y, dict)\n+            and set(x) == set(y)\n+            and all(equals(x[key], y[key]) for key in x)\n+        )\n+    return x == y\n--- a/jmespath/visitor.py\n+++ b/jmespath/visitor.py\n@@ -1,38 +1,9 @@\n import operator\n \n from jmespath import functions\n+from jmespath._utils import equals as _equals\n from jmespath.compat import string_type\n from numbers import Number\n-\n-\n-def _equals(x, y):\n-    if _is_special_number_case(x, y):\n-        return False\n-    else:\n-        return x == y\n-\n-\n-def _is_special_number_case(x, y):\n-    # We need to special case comparing 0 or 1 to\n-    # True/False.  While normally comparing any\n-    # integer other than 0/1 to True/False will always\n-    # return False.  However 0/1 have this:\n-    # >>> 0 == True\n-    # False\n-    # >>> 0 == False\n-    # True\n-    # >>> 1 == True\n-    # True\n-    # >>> 1 == False\n-    # False\n-    #\n-    # Also need to consider that:\n-    # >>> 0 in [True, False]\n-    # True\n-    if _is_actual_number(x) and x in (0, 1):\n-        return isinstance(y, bool)\n-    elif _is_actual_number(y) and y in (0, 1):\n-        return isinstance(x, bool)\n \n \n def _is_comparable(x):\n--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -2,6 +2,7 @@\n import json\n \n from jmespath import exceptions\n+from jmespath._utils import equals\n from jmespath.compat import string_type as STRING_TYPE\n from jmespath.compat import get_methods\n \n@@ -212,6 +213,8 @@\n \n     @signature({'types': ['array', 'string']}, {'types': []})\n     def _func_contains(self, subject, search):\n+        if isinstance(subject, list):\n+            return any(equals(element, search) for element in subject)\n         return search in subject\n \n     @signature({'types': ['string', 'array', 'object']})\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 211.70736408299854
+  }
+}

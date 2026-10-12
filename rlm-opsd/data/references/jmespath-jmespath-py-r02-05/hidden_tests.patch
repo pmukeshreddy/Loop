@@ -1,0 +1,57 @@
+--- /dev/null
++++ b/tests/test_parser_lru_cache.py
+@@ -0,0 +1,54 @@
++import pytest
++
++import jmespath
++from jmespath import exceptions
++from jmespath.parser import Parser
++
++
++@pytest.fixture(autouse=True)
++def empty_cache():
++    Parser.purge()
++    yield
++    Parser.purge()
++
++
++def fill_cache():
++    return [jmespath.compile('lru_field_%s' % i)
++            for i in range(Parser._MAX_SIZE)]
++
++
++def test_compile_hit_protects_entry_and_evicts_least_recent():
++    entries = fill_cache()
++    assert jmespath.compile('lru_field_0') is entries[0]
++    jmespath.compile('lru_new')
++    assert jmespath.compile('lru_field_0') is entries[0]
++    assert jmespath.compile('lru_field_1') is not entries[1]
++
++
++def test_search_hit_and_cross_parser_hits_update_same_recency():
++    entries = fill_cache()
++    assert jmespath.search('lru_field_0', {'lru_field_0': 7}) == 7
++    assert Parser().parse('lru_field_1') is entries[1]
++    jmespath.compile('lru_new')
++    assert Parser().parse('lru_field_0') is entries[0]
++    assert jmespath.compile('lru_field_1') is entries[1]
++    assert jmespath.compile('lru_field_2') is not entries[2]
++
++
++def test_repeated_hits_do_not_consume_capacity():
++    entries = fill_cache()
++    for _ in range(20):
++        assert jmespath.compile('lru_field_0') is entries[0]
++    for i in range(1, Parser._MAX_SIZE):
++        assert jmespath.compile('lru_field_%s' % i) is entries[i]
++
++
++def test_invalid_expression_does_not_evict_and_purge_remains_shared():
++    entries = fill_cache()
++    with pytest.raises(exceptions.ParseError):
++        jmespath.compile('invalid[')
++    assert jmespath.compile('lru_field_0') is entries[0]
++    Parser().purge()
++    fresh = jmespath.compile('lru_field_0')
++    assert fresh is not entries[0]
++    assert fresh.parsed == entries[0].parsed

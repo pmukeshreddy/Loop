@@ -1,0 +1,91 @@
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -44,6 +44,11 @@
+     help="Location of the .env file, defaults to .env file in current working directory.",
+ )
+ @click.option(
++    "--encoding",
++    default="utf-8",
++    help="Encoding of the .env file. Default is utf-8.",
++)
++@click.option(
+     "-q",
+     "--quote",
+     default="always",
+@@ -59,13 +64,15 @@
+ )
+ @click.version_option(version=__version__)
+ @click.pass_context
+-def cli(ctx: click.Context, file: Any, quote: Any, export: Any) -> None:
++def cli(
++    ctx: click.Context, file: Any, encoding: str, quote: Any, export: Any
++) -> None:
+     """This script is used to set, get or unset values from a .env file."""
+-    ctx.obj = {"QUOTE": quote, "EXPORT": export, "FILE": file}
++    ctx.obj = {"QUOTE": quote, "EXPORT": export, "FILE": file, "ENCODING": encoding}
+ 
+ 
+ @contextmanager
+-def stream_file(path: os.PathLike) -> Iterator[IO[str]]:
++def stream_file(path: os.PathLike, encoding: str = "utf-8") -> Iterator[IO[str]]:
+     """
+     Open a file and yield the corresponding (decoded) stream.
+ 
+@@ -73,7 +80,7 @@
+     """
+ 
+     try:
+-        with open(path) as stream:
++        with open(path, encoding=encoding) as stream:
+             yield stream
+     except OSError as exc:
+         print(f"Error opening env file: {exc}", file=sys.stderr)
+@@ -94,7 +101,7 @@
+     """Display all the stored key/value."""
+     file = ctx.obj["FILE"]
+ 
+-    with stream_file(file) as stream:
++    with stream_file(file, encoding=ctx.obj["ENCODING"]) as stream:
+         values = dotenv_values(stream=stream)
+ 
+     if output_format == "json":
+@@ -124,7 +131,9 @@
+     file = ctx.obj["FILE"]
+     quote = ctx.obj["QUOTE"]
+     export = ctx.obj["EXPORT"]
+-    success, key, value = set_key(file, key, value, quote, export)
++    success, key, value = set_key(
++        file, key, value, quote, export, encoding=ctx.obj["ENCODING"]
++    )
+     if success:
+         click.echo(f"{key}={value}")
+     else:
+@@ -138,7 +147,7 @@
+     """Retrieve the value for the given key."""
+     file = ctx.obj["FILE"]
+ 
+-    with stream_file(file) as stream:
++    with stream_file(file, encoding=ctx.obj["ENCODING"]) as stream:
+         values = dotenv_values(stream=stream)
+ 
+     # Empty strings are valid values; only missing keys / bare keys (None) fail.
+@@ -159,7 +168,7 @@
+     """
+     file = ctx.obj["FILE"]
+     quote = ctx.obj["QUOTE"]
+-    success, key = unset_key(file, key, quote)
++    success, key = unset_key(file, key, quote, encoding=ctx.obj["ENCODING"])
+     if success:
+         click.echo(f"Successfully removed {key}")
+     else:
+@@ -189,7 +198,9 @@
+         )
+     dotenv_as_dict = {
+         k: v
+-        for (k, v) in DotEnv(file, override=override, encoding="utf-8").dict().items()
++        for (k, v) in DotEnv(
++            file, override=override, encoding=ctx.obj["ENCODING"]
++        ).dict().items()
+         if v is not None and (override or k not in os.environ)
+     }
+ 

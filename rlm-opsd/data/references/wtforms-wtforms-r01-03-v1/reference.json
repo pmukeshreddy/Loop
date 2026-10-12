@@ -1,0 +1,191 @@
+{
+ "answer": "--- a/src/wtforms/fields/list.py\n+++ b/src/wtforms/fields/list.py\n@@ -121,6 +121,9 @@\n         \"\"\"\n         self.errors = []\n \n+        # Check the type of extra_validators before validating any entries.\n+        self.check_validators(extra_validators)\n+\n         # Run validators on all entries within\n         for subfield in self.entries:\n             subfield.validate(form)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001978762374078758,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "idx"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was constructed programmatically and inspected before completion. The verified change places the shared validator check before child validation while retaining the existing validation and aggregation path. The reference execution did not run repository tests, so executable correctness evidence comes from the supplied verification rather than that execution.",
+   "inspect_locate": "The execution used 11 targeted searches without printing the whole context. The task requires relating ordinary Field validation checks to the FieldList override and form-level extra-validator forwarding, rather than merely locating a named function."
+  },
+  "notes": "This is a natural, narrowly scoped compatibility fix with clear timing, diagnostic, and preservation requirements. Although the patch is small, its placement requires understanding both the ordinary-field contract and FieldList's child-first behavior. The question specifies observable behavior without revealing the helper or exact fix. It is substantively distinct from the parent task, which concerns mutation and reuse of hook collections."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must enforce rejection before child validation without disrupting the existing child-first execution path. Its placement and exact context must be checked against valid list and tuple inputs, nested errors, declared-before-extra ordering, and StopValidation behavior.",
+   "inspect_locate": "The relevant contract is distributed across ordinary Field validation, the FieldList override, and form-level forwarding of extra validators. The solver must locate the shared validator checks and distinguish collection checking from validation-chain execution and nested error aggregation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.check_validators",
+    "why": "Defines the distinct TypeError diagnostics for non-callable entries and validator classes."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.validate",
+    "why": "Checks extra-validator entries before running validation hooks or the declared validator chain."
+   },
+   {
+    "path": "src/wtforms/fields/list.py",
+    "symbol": "src/wtforms/fields/list.py::FieldList.validate",
+    "why": "Currently validates children and directly executes the combined validator chain without checking extra-validator entries."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field._run_validation_chain",
+    "why": "An earlier StopValidation prevents later invalid entries from being reached, so execution alone cannot enforce the collection contract."
+   },
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::BaseForm.validate",
+    "why": "Forwards per-field extra-validator sequences, allowing the acceptance tests to exercise the normal form-level entry point."
+   }
+  ],
+  "expected_answer": "--- a/src/wtforms/fields/list.py\n+++ b/src/wtforms/fields/list.py\n@@ -125,8 +125,10 @@\n         of its own validators.\n         \"\"\"\n         self.errors = []\n \n+        self.check_validators(extra_validators)\n+\n         # Run validators on all entries within\n         for subfield in self.entries:\n             subfield.validate(form)\n             self.errors.append(subfield.errors)\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_fieldlist_extra_validator_contract.py\n@@ -0,0 +1,123 @@\n+import pytest\n+\n+from wtforms import FieldList\n+from wtforms import Form\n+from wtforms import StringField\n+from wtforms.validators import StopValidation\n+from wtforms.validators import ValidationError\n+\n+\n+class ValidatorClass:\n+    def __call__(self, form, field):\n+        pass\n+\n+\n+@pytest.mark.parametrize(\"invalid\", [None, 42, ValidatorClass])\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+@pytest.mark.parametrize(\"stopping\", [False, True])\n+@pytest.mark.parametrize(\"count\", [0, 2])\n+def test_invalid_extras_are_rejected_before_validation(invalid, sequence, stopping, count):\n+    events = []\n+\n+    class Child(StringField):\n+        def validate(self, form, extra_validators=()):\n+            events.append(\"child\")\n+            return super().validate(form, extra_validators)\n+\n+    def declared(form, field):\n+        events.append(\"declared\")\n+        if stopping:\n+            raise StopValidation(\"halt\")\n+\n+    def extra(form, field):\n+        events.append(\"extra\")\n+\n+    class Sample(Form):\n+        items = FieldList(Child(), validators=[declared], min_entries=count)\n+\n+    class Ordinary(Form):\n+        value = StringField()\n+\n+    supplied = sequence([extra, invalid])\n+    ordinary = Ordinary()\n+    with pytest.raises(TypeError) as baseline:\n+        ordinary.value.validate(ordinary, supplied)\n+    sample = Sample()\n+    with pytest.raises(TypeError) as actual:\n+        sample.validate(extra_validators={\"items\": supplied})\n+    assert str(actual.value) == str(baseline.value)\n+    reason = (\n+        \"it is a class, it should be an instance\"\n+        if invalid is ValidatorClass\n+        else \"it is not callable\"\n+    )\n+    assert str(actual.value) == f\"{invalid} is not a valid validator because {reason}\"\n+    assert events == []\n+\n+\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+@pytest.mark.parametrize(\"child_failure\", [False, True])\n+def test_valid_extras_preserve_nested_errors_and_order(sequence, child_failure):\n+    events = []\n+\n+    def child(form, field):\n+        events.append(field.name)\n+        if field.data == \"bad\":\n+            raise ValidationError(\"bad\")\n+\n+    def record(label, message=None):\n+        def validator(form, field):\n+            events.append(label)\n+            if child_failure and message:\n+                raise ValidationError(message)\n+        return validator\n+\n+    class Sample(Form):\n+        rows = FieldList(\n+            FieldList(StringField(validators=[child]), validators=[record(\"inner\")]),\n+            validators=[record(\"declared-1\"), record(\"declared-2\", \"outer\")],\n+        )\n+\n+    sample = Sample(data={\"rows\": [[\"ok\", \"bad\" if child_failure else \"ok\"], [\"ok\"]]})\n+    supplied = sequence([record(\"extra-1\"), record(\"extra-2\", \"extra\")])\n+    assert sample.validate(extra_validators={\"rows\": supplied}) is not child_failure\n+    assert events == [\n+        \"rows-0-0\",\n+        \"rows-0-1\",\n+        \"inner\",\n+        \"rows-1-0\",\n+        \"inner\",\n+        \"declared-1\",\n+        \"declared-2\",\n+        \"extra-1\",\n+        \"extra-2\",\n+    ]\n+    if child_failure:\n+        assert sample.rows.errors == [[[], [\"bad\"]], [], \"outer\", \"extra\"]\n+        assert sample.errors == {\"rows\": [[[], [\"bad\"]], [], \"outer\", \"extra\"]}\n+    else:\n+        assert sample.rows.errors == []\n+        assert sample.errors == {}\n+\n+\n+@pytest.mark.parametrize(\"sequence\", [list, tuple])\n+def test_valid_extras_preserve_stop_validation(sequence):\n+    events = []\n+\n+    def child(form, field):\n+        events.append(\"child\")\n+\n+    def stop(form, field):\n+        events.append(\"stop\")\n+        raise StopValidation(\"halt\")\n+\n+    def extra(form, field):\n+        events.append(\"extra\")\n+\n+    class Sample(Form):\n+        items = FieldList(StringField(validators=[child]), validators=[stop])\n+\n+    sample = Sample(data={\"items\": [\"ok\"]})\n+    assert sample.validate(extra_validators={\"items\": sequence([extra])}) is False\n+    assert events == [\"child\", \"stop\"]\n+    assert sample.items.errors == [\"halt\"]\n",
+  "include_failure_log": false,
+  "notes": "This implements the existing missing-check defect as an implementation task with a new acceptance-test file, rather than injecting another regression. The invalid-input cases compare diagnostics with an ordinary field and assert that neither child validation nor list-level validators execute. Valid-input cases cover both list and tuple collections, nested error shapes, successful validation, ordering, and StopValidation. The expected production change is confined to FieldList validation and differs from the original form-hook collection-copying repair.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Bring `FieldList` extra-validator handling into line with ordinary fields. When a supplied list or tuple contains a non-callable entry or a validator class rather than an instance, validation must raise the same diagnostic `TypeError` as ordinary `Field.validate`, before any enclosed field starts validation or any list-level validator runs. Invalid entries must still be rejected when a declared validator would otherwise raise `StopValidation`, and when the list has no entries. For valid collections, retain child-first validation, nested error aggregation, declared-before-extra ordering, and the existing stopping behavior. Return a unified diff against production repository files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across the base field and subclass, followed by combine_verify_finish to verify both early rejection and preserved valid-input behavior. Persistent state concerns shift from caller-owned collection reuse to the absence of child-validation side effects when the validator collection is invalid.",
+  "change_type": "failure_condition",
+  "description": "Make FieldList reject malformed extra validators consistently with ordinary Field validation. In src/wtforms/fields/list.py, FieldList.validate currently sends extra_validators directly into Field._run_validation_chain without calling Field.check_validators from src/wtforms/fields/core.py. Require non-callable entries and validator classes to raise the same diagnostic TypeError as Field.validate, before any enclosed field's validation executes, even when an earlier declared validator would raise StopValidation. Preserve child-first execution for valid validator collections, nested error aggregation, and declared-before-extra ordering. Deliver a unified diff and acceptance tests covering invalid entries, validator classes, an earlier stopping validator, and valid list and tuple inputs.",
+  "expected_answer_change": "The answer depends on comparing Field.validate's upfront check_validators call with FieldList.validate's child-first loop and direct validation-chain invocation. The patch must perform the missing check before child validation while retaining the existing execution and error-aggregation behavior for valid inputs.",
+  "why_substantive": "The defect is inconsistent validator checking in a subclass override, not mutation during inline-hook assembly. The repair belongs in FieldList.validate and must distinguish validation of the hook collection from execution of the hooks. Copying sequences in Form.validate does not fix it."
+ },
+ "task_id": "wtforms-wtforms-r01-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-ValidatorClass]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 24,
+   "full_suite": {
+    "failed": 8,
+    "passed": 376
+   },
+   "patch_files": [
+    "src/wtforms/fields/list.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-False-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[0-True-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-False-tuple-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-list-ValidatorClass]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-42]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-None]",
+   "tests/test_fieldlist_extra_validator_contract.py::test_invalid_extras_are_rejected_before_validation[2-True-tuple-ValidatorClass]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,41 @@
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -508,7 +508,9 @@
+     ##### Serialization/Deserialization API #####
+ 
+     @staticmethod
+-    def _call_and_store(getter_func, data, *, field_name, error_store, index=None):
++    def _call_and_store(
++        getter_func, data, *, field_name, error_store, index=None, preserve_falsy=False
++    ):
+         """Call ``getter_func`` with ``data`` as its argument, and store any `ValidationErrors`.
+ 
+         :param getter_func: Function for getting the serialized/deserialized
+@@ -517,13 +519,17 @@
+         :param field_name: Field name.
+         :param index: Index of the item being validated, if validating a collection,
+             otherwise `None`.
++        :param preserve_falsy: Retain falsy exception partial data during field
++            deserialization, but not during decorated field validation.
+         """
+         try:
+             value = getter_func(data)
+         except ValidationError as error:
+             error_store.store_error(error.messages, field_name, index=index)
+-            # When a Nested field fails validation, the marshalled data is stored
+-            # on the ValidationError's valid_data attribute
++            # Failed fields may still provide partial data, including empty
++            # containers. Decorated validators retain their truthiness behavior.
++            if preserve_falsy:
++                return error.valid_data if error.valid_data is not None else missing
+             return error.valid_data or missing
+         return value
+ 
+@@ -683,6 +689,7 @@
+                     field_name=field_name,
+                     error_store=error_store,
+                     index=index,
++                    preserve_falsy=True,
+                 )
+                 if value is not missing:
+                     key = field_obj.attribute or attr_name

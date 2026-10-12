@@ -1,0 +1,150 @@
+{
+ "answer": "--- a/src/wtforms/fields/core.py\n+++ b/src/wtforms/fields/core.py\n@@ -297,6 +297,7 @@\n         :param extra_filters: A sequence of extra filters to run.\n         \"\"\"\n         self.process_errors = []\n+        self.raw_data = None\n         if data is unset_value:\n             try:\n                 data = self.default()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0034532946666085214,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 16 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 16 targeted code searches without printing the whole context. Inspection was useful to connect form reprocessing and the shared field lifecycle with submission-sensitive validators and datetime rendering, while checking that empty submissions, defaults, Python-data processing, and filters retain their existing semantics."
+  },
+  "notes": "This is a natural, precisely constrained lifecycle repair. The question specifies observable symptoms and compatibility requirements without naming the defective processing method or prescribing the fix. The verified patch resets stale submission state while retaining bound fields and existing downstream policies. The task differs substantively from its parent\u2019s falsey-multidict investigation and from the accepted Python-data/default-conversion repair."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The symptoms span form reprocessing, two validators, and datetime rendering. The solver must locate the shared processing lifecycle and connect its submission-state assignments to those downstream consumers. Only short sections need semantic inspection, so chunked delegation is unnecessary; the full relevant modules are too large for a focused context under 16,000 characters."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.process",
+    "why": "Assigns submission metadata only when formdata is not None, allowing an earlier instance-level raw_data value to survive a later Python-only processing call."
+   },
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::BaseForm.process",
+    "why": "Reuses existing bound fields while forwarding the latest formdata and Python values to their processors."
+   },
+   {
+    "path": "src/wtforms/validators.py",
+    "symbol": "src/wtforms/validators.py::InputRequired.__call__",
+    "why": "Decides whether input was submitted using raw_data rather than the current Python-side data."
+   },
+   {
+    "path": "src/wtforms/validators.py",
+    "symbol": "src/wtforms/validators.py::Disabled.__call__",
+    "why": "Rejects any truthy raw_data, including stale values from a previous processing call."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeField._value",
+    "why": "Prefers submitted text over formatting the current Python datetime whenever raw_data remains truthy."
+   },
+   {
+    "path": "tests/common.py",
+    "symbol": "tests/common.py::DummyPostData",
+    "why": "Provides the existing multidict fixture used to exercise both nonempty and falsey empty submissions."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_reprocess_submission.py\n@@ -0,0 +1,113 @@\n+from datetime import datetime\n+\n+from tests.common import DummyPostData\n+from wtforms.fields import DateTimeField\n+from wtforms.fields import Field\n+from wtforms.fields import StringField\n+from wtforms.form import Form\n+from wtforms.validators import Disabled\n+from wtforms.validators import InputRequired\n+\n+\n+def test_reprocessing_input_required():\n+    class RequiredForm(Form):\n+        value = StringField(validators=[InputRequired()])\n+\n+    form = RequiredForm(DummyPostData(value=[\"sent\"]))\n+    field = form.value\n+    assert form.validate()\n+\n+    form.process(formdata=None, data={\"value\": \"python\"})\n+    assert form.value is field\n+    assert field.data == \"python\"\n+    assert not form.validate()\n+    assert field.errors == [\"This field is required.\"]\n+    assert field.raw_data is None\n+\n+    form.process(DummyPostData(value=[\"again\"]))\n+    assert form.validate()\n+    assert field.raw_data == [\"again\"]\n+\n+\n+def test_reprocessing_disabled():\n+    class DisabledForm(Form):\n+        value = StringField(validators=[Disabled()])\n+\n+    form = DisabledForm(DummyPostData(value=[\"sent\"]))\n+    field = form.value\n+    assert not form.validate()\n+\n+    form.process(formdata=None, data={\"value\": \"python\"})\n+    assert form.value is field\n+    assert field.data == \"python\"\n+    assert form.validate()\n+    assert field.errors == []\n+    assert field.raw_data is None\n+\n+    form.process(DummyPostData(), data={\"value\": \"python\"})\n+    assert field.raw_data == []\n+    assert form.validate()\n+\n+\n+def test_reprocessing_datetime_rendering():\n+    class DateTimeForm(Form):\n+        value = DateTimeField()\n+\n+    submitted = \"2025-04-06 07:08:09\"\n+    replacement = datetime(2030, 2, 3, 4, 5, 6)\n+    form = DateTimeForm(DummyPostData(value=[submitted]))\n+    field = form.value\n+    assert field.data == datetime(2025, 4, 6, 7, 8, 9)\n+    assert f'value=\"{submitted}\"' in str(field())\n+\n+    form.process(formdata=None, data={\"value\": replacement})\n+    assert form.value is field\n+    assert field.data == replacement\n+    assert field.object_data == replacement\n+    assert 'value=\"2030-02-03 04:05:06\"' in str(field())\n+    assert field.raw_data is None\n+\n+\n+def test_reprocessing_defaults_filters_and_empty_submission():\n+    class SubmissionField(Field):\n+        def process_formdata(self, valuelist):\n+            self.data = valuelist[0] if valuelist else \"empty\"\n+\n+    class LifecycleForm(Form):\n+        value = SubmissionField(\n+            default=lambda: \"default\",\n+            filters=[lambda value: f\"{value}:field\"],\n+        )\n+\n+    form = LifecycleForm(DummyPostData(value=[\"sent\"]))\n+    field = form.value\n+    assert field.data == \"sent:field\"\n+\n+    form.process(\n+        formdata=None,\n+        data={\"value\": \"python\"},\n+        extra_filters={\"value\": [lambda value: f\"{value}:extra\"]},\n+    )\n+    assert form.value is field\n+    assert field.raw_data is None\n+    assert field.object_data == \"python\"\n+    assert field.data == \"python:field:extra\"\n+\n+    form.process(formdata=None)\n+    assert field.raw_data is None\n+    assert field.object_data == \"default\"\n+    assert field.data == \"default:field\"\n+\n+    form.process(DummyPostData(), data={\"value\": \"python\"})\n+    assert field.raw_data == []\n+    assert field.object_data == \"python\"\n+    assert field.data == \"empty:field\"\n+\n+    form.process(DummyPostData(other=[\"unrelated\"]), data={\"value\": \"python\"})\n+    assert field.raw_data == []\n+    assert field.data == \"empty:field\"\n+\n+    form.process(DummyPostData(value=[\"new\"]), data={\"value\": \"python\"})\n+    assert field.raw_data == [\"new\"]\n+    assert field.object_data == \"python\"\n+    assert field.data == \"new:field\"\n",
+  "include_failure_log": false,
+  "notes": "Start from the unmodified snapshot; do not apply the original task's truthiness probe. This addresses an existing lifecycle defect, so verification uses a new hidden test file rather than introducing a setup regression. The hidden tests exercise reused field identities, downstream validation and public rendering, transitions back to submissions, callable defaults, object_data, filter ordering, and empty-submission processing. A minimal repair clears raw_data at the beginning of each shared Field.process call while retaining the existing `formdata is not None` submission condition. The deliverable is a production patch, not the original task's test-ID set.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Repeated processing of an existing form instance can leave validation and rendering behaving as though an earlier submission were still present. Repair this lifecycle behavior. After a nonempty submission, calling `Form.process(formdata=None, data=...)` on the same instance must behave like fresh construction with that Python data: `InputRequired` must treat it as unsent, `Disabled` must not reject it because of the earlier submission, and `DateTimeField` must display the new Python datetime rather than the old submitted text. The existing bound fields must remain in use, and their `raw_data` must describe only the latest processing call.\n\nPreserve the distinction between absent formdata and an empty multidict: an empty multidict is still a submission, missing fields receive `raw_data == []`, and their submitted-data processing still runs. Preserve Python-data processing, `object_data`, defaults, and filter ordering, without changing validator or rendering policies. Submit a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from repository-wide change-impact enumeration to focused lifecycle diagnosis and repair. Direct inspection of Field.process, the relevant validators, and DateTimeField._value is useful; targeted regression tests then verify that one state-reset change fixes multiple downstream symptoms without changing empty-submission semantics.",
+  "change_type": "failure_condition",
+  "description": "Investigate and repair stale submission state when an existing form instance is processed again without formdata. Start from the unmodified snapshot, not the seed probe patch. In src/wtforms/fields/core.py::Field.process, raw_data is assigned for submissions but is not reset when formdata is None. Add regression tests in tests/test_form.py that first process a nonempty tests/common.py::DummyPostData and then call process(formdata=None, data=...) on the same instance. Cover fields using src/wtforms/validators.py::InputRequired and Disabled, plus a src/wtforms/fields/datetime.py::DateTimeField whose second Python value differs from its first submitted value. Submit a unified diff that makes raw_data describe only the latest processing call, while preserving Python-data processing, defaults, filters, and the distinction between None and an empty multidict.",
+  "expected_answer_change": "The repair should reset raw_data to None for a new processing call without formdata, while continuing to assign [] for an empty submitted multidict. Without that reset, InputRequired can incorrectly accept Python-only data after an earlier submission, Disabled can reject a later non-submission because an old value remains, and DateTimeField._value can display the previous submitted text instead of the new Python datetime. The tests must verify these transitions on reused instances, not merely fresh construction.",
+  "why_substantive": "The seed concerns skipping processing for falsey submissions on newly constructed forms. This variation concerns state surviving between calls even with the original submission condition intact. It requires tracing consumers of stale raw_data through validation and datetime rendering, and it produces a repair and new regression tests rather than the seed's two failing test IDs."
+ },
+ "task_id": "wtforms-wtforms-r01-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_reprocess_submission.py::test_reprocessing_datetime_rendering",
+   "tests/test_reprocess_submission.py::test_reprocessing_defaults_filters_and_empty_submission",
+   "tests/test_reprocess_submission.py::test_reprocessing_disabled",
+   "tests/test_reprocess_submission.py::test_reprocessing_input_required"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 8,
+    "passed": 350
+   },
+   "patch_files": [
+    "src/wtforms/fields/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_reprocess_submission.py::test_reprocessing_datetime_rendering",
+   "tests/test_reprocess_submission.py::test_reprocessing_defaults_filters_and_empty_submission",
+   "tests/test_reprocess_submission.py::test_reprocessing_disabled",
+   "tests/test_reprocess_submission.py::test_reprocessing_input_required"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

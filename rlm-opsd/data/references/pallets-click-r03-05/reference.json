@@ -1,0 +1,174 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -886,19 +886,45 @@\n \n             ctx = self._make_sub_context(other_cmd)\n \n+            # Resolve shared destinations before converting any defaults. A losing\n+            # declaration may have a different type, or an invalid default.\n+            defaults: dict[str, tuple[Parameter, t.Any, ParameterSource]] = {}\n+\n             for param in other_cmd.params:\n-                if param.name not in kwargs and param.expose_value:\n-                    default_value = param.get_default(ctx)\n-                    # We explicitly hide the :attr:`UNSET` value to the user, as we\n-                    # choose to make it an implementation detail. And because ``invoke``\n-                    # has been designed as part of Click public API, we return ``None``\n-                    # instead. Refs:\n-                    # https://github.com/pallets/click/issues/3066\n-                    # https://github.com/pallets/click/issues/3065\n-                    # https://github.com/pallets/click/pull/3068\n-                    if default_value is UNSET:\n-                        default_value = None\n-                    kwargs[param.name] = param.type_cast_value(ctx, default_value)\n+                if not param.expose_value or param.name in kwargs:\n+                    continue\n+\n+                default_value = param.get_default(ctx)\n+                source = (\n+                    ParameterSource.DEFAULT_MAP\n+                    if ctx._default_map_has(param.name)\n+                    else ParameterSource.DEFAULT\n+                )\n+                existing = defaults.get(param.name)\n+\n+                if existing is not None:\n+                    previous_param, previous_value, previous_source = existing\n+                    same_source = source == previous_source\n+                    auto_would_downgrade_explicit = (\n+                        same_source\n+                        and source == ParameterSource.DEFAULT\n+                        and previous_param._default_explicit\n+                        and not param._default_explicit\n+                    )\n+                    if not (\n+                        previous_value is UNSET\n+                        or source < previous_source\n+                        or (same_source and not auto_would_downgrade_explicit)\n+                    ):\n+                        continue\n+\n+                defaults[param.name] = (param, default_value, source)\n+\n+            for name, (param, default_value, _) in defaults.items():\n+                # Hide the internal sentinel at the public invocation boundary.\n+                if default_value is UNSET:\n+                    default_value = None\n+                kwargs[name] = param.type_cast_value(ctx, default_value)\n \n             # Track all kwargs as params, so that forward() will pass\n             # them on in subsequent calls.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.06324618640147818,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 23,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "new",
+    "old",
+    "patch",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 23 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "9 turns; variables reused across turns: ['core', 'files', 'new', 'old', 'patch', 'path']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final patch combines raw default selection with winner-only conversion and preserves existing kwargs tracking. The diff was computed and inspected before submission; the execution summary does not show runtime testing.",
+   "inspect_locate": "The reference execution performed 23 targeted searches without printing the whole context, locating dispatch, default acquisition, source arbitration, and forwarding behavior needed for the change.",
+   "persistent_state": "Across nine turns, the solver reused repository content and patch-construction variables while retaining the precedence, explicit-default, and child-context requirements.",
+   "recursive_decomposition": "Not established by the reference execution: no sub-calls occurred. It is also absent from the behaviors_established list."
+  },
+  "notes": "This is a coherent, repository-dependent implementation request with a precise production-only unified-diff format. Its detailed requirements define observable behavior rather than prescribe solver operations or disclose a patch. The shared-destination arbitration problem is distinct from the accepted tasks concerning repeated-option string defaults and default-map fallback."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch must coordinate default selection and conversion while preserving supplied kwargs, callback boundaries, and forwarded parameter tracking.",
+   "inspect_locate": "Programmatic dispatch, lazy option defaults, shared-name parsing arbitration, inherited maps, and forwarding are implemented in separate sections of core.py.",
+   "persistent_state": "The solver must retain source precedence and explicit-default rules while integrating them with the existing child-context and kwargs tracking behavior.",
+   "recursive_decomposition": "The investigation separates effective default acquisition, destination arbitration before conversion, and dispatch/forwarding state. Each has independently testable contracts that must be reconciled in the final implementation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.invoke",
+    "why": "Currently fills kwargs immediately for the first exposed declaration of a destination."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.handle_parse_result",
+    "why": "Defines the slot and explicit-default arbitration policy to reproduce for defaults."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.get_default",
+    "why": "Selects map versus declared defaults and evaluates factories."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.get_default",
+    "why": "Adds lazy flag derivations without instantiating substituted callable activation values."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.forward",
+    "why": "Propagates the invoked context's tracked kwargs."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_invoke_shared_destination_defaults.py\n@@ -0,0 +1,82 @@\n+import pytest\n+\n+import click\n+\n+\n+@pytest.mark.parametrize(\n+    \"configs,expected\",\n+    [\n+        ([{\"is_flag\": True, \"default\": True}, {\"is_flag\": True}], True),\n+        ([{\"is_flag\": True}, {\"is_flag\": True, \"default\": True}], True),\n+        ([{\"flag_value\": \"red\", \"default\": True}, {\"flag_value\": \"blue\", \"default\": True}], \"blue\"),\n+        ([{\"flag_value\": \"blue\", \"default\": True}, {\"flag_value\": \"red\", \"default\": True}], \"red\"),\n+        ([{\"is_flag\": True, \"default\": None}, {\"is_flag\": True}], None),\n+        ([{\"is_flag\": True}, {\"is_flag\": True, \"default\": None}], None),\n+        ([{\"count\": True, \"default\": 1}, {\"count\": True, \"default\": 2}], 2),\n+        ([{\"count\": True, \"default\": 2}, {\"count\": True, \"default\": 1}], 1),\n+    ],\n+)\n+def test_shared_defaults(configs, expected):\n+    params = [\n+        click.Option([f\"--p{i}\", \"value\"], **config)\n+        for i, config in enumerate(configs)\n+    ]\n+    cmd = click.Command(\"target\", params=params, callback=lambda value: value)\n+    parent = click.Context(click.Command(\"parent\"))\n+    assert parent.invoke(cmd) == expected\n+\n+\n+@pytest.mark.parametrize(\"map_value\", [None, \"green\"])\n+def test_inherited_map(map_value):\n+    params = [\n+        click.Option([\"--red\", \"value\"], flag_value=\"red\", default=True),\n+        click.Option([\"--blue\", \"value\"], flag_value=\"blue\", default=True),\n+    ]\n+    cmd = click.Command(\"target\", params=params, callback=lambda value: value)\n+    parent = click.Context(\n+        click.Command(\"parent\"), default_map={\"target\": {\"value\": map_value}}\n+    )\n+    assert parent.invoke(cmd) == map_value\n+\n+\n+def test_only_winner_is_cast_and_supplied_kwargs_are_untouched():\n+    calls = []\n+    def first():\n+        calls.append(\"first\")\n+        return \"bad\"\n+    def second():\n+        calls.append(\"second\")\n+        return \"12\"\n+    params = [\n+        click.Option([\"--one\", \"value\"], type=int, default=first),\n+        click.Option([\"--two\", \"value\"], type=int, default=second),\n+    ]\n+    @click.pass_context\n+    def callback(ctx, value):\n+        assert ctx.params[\"value\"] == value\n+        return value\n+    cmd = click.Command(\"target\", params=params, callback=callback)\n+    parent = click.Context(click.Command(\"parent\"))\n+    assert parent.invoke(cmd) == 12\n+    assert calls == [\"first\", \"second\"]\n+    calls.clear()\n+    assert parent.invoke(cmd, value=\"uncast\") == \"uncast\"\n+    assert calls == []\n+\n+\n+def test_forward_keeps_selected_shared_defaults():\n+    target = click.Command(\n+        \"target\",\n+        params=[\n+            click.Option([\"--a\", \"value\"], default=1),\n+            click.Option([\"--b\", \"value\"], default=2),\n+        ],\n+        callback=lambda value: value,\n+    )\n+    @click.pass_context\n+    def relay(ctx, value):\n+        assert ctx.params[\"value\"] == value\n+        return ctx.forward(target)\n+    intermediate = click.Command(\"relay\", params=target.params, callback=relay)\n+    parent = click.Context(click.Command(\"parent\"))\n+    assert parent.invoke(intermediate) == 2\n",
+  "include_failure_log": false,
+  "notes": "This is default-only programmatic dispatch, not a request to parse empty command-line arguments. In particular, losing raw defaults must not be type-cast, and parameter callbacks must not run. The public command callback still runs normally.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Make Context.invoke(Command, ...) resolve omitted shared destinations consistently instead of taking the first declaration's default. For each destination absent from the supplied kwargs, acquire the effective defaults of its exposed parameters in declaration order, including inherited default_map values and Option's lazy default rules. Select the raw winner before type conversion using parsing's slot policy: an UNSET slot is empty; a default-map source outranks a declared-default source; equal sources let the later candidate win, except that an inferred declared default must not displace an explicitly declared default. An explicit None is a populated value. Evaluate each candidate's applicable default factory once, without consulting environment variables, prompting, or running parameter callbacks. Convert only the selected winner with that parameter's type_cast_value, presenting a winning UNSET as None at the public boundary. Supplied kwargs must remain untouched and must prevent default evaluation for their destinations. Keep the selected kwargs in the invoked child context so subsequent Context.forward calls retain them. Preserve existing behavior for direct callable invocation and destinations with a single declaration. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-click-r03-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_invoke_shared_destination_defaults.py::test_forward_keeps_selected_shared_defaults",
+   "tests/test_invoke_shared_destination_defaults.py::test_only_winner_is_cast_and_supplied_kwargs_are_untouched",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs1-True]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs2-blue]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs3-red]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs5-None]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs6-2]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs7-1]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2003
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_invoke_shared_destination_defaults.py::test_forward_keeps_selected_shared_defaults",
+   "tests/test_invoke_shared_destination_defaults.py::test_only_winner_is_cast_and_supplied_kwargs_are_untouched",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs1-True]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs2-blue]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs3-red]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs5-None]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs6-2]",
+   "tests/test_invoke_shared_destination_defaults.py::test_shared_defaults[configs7-1]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

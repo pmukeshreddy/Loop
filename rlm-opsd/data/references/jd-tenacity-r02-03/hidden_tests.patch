@@ -1,0 +1,59 @@
+--- /dev/null
++++ b/tests/test_async_sleep_callbacks.py
+@@ -0,0 +1,56 @@
++import asyncio
++
++import pytest
++
++from tenacity import AsyncRetrying, stop_after_attempt, wait_fixed
++
++
++@pytest.mark.parametrize("mode", ["call", "iterate"])
++@pytest.mark.parametrize("kind", ["sync", "coroutine_factory", "awaitable", "async"])
++def test_sleep_callback_contract(mode, kind):
++    async def scenario():
++        calls = []
++        awaited = []
++
++        async def complete():
++            awaited.append(True)
++
++        class Completion:
++            def __await__(self):
++                return complete().__await__()
++
++        def ordinary_sleep(delay):
++            calls.append(float(delay))
++            if kind == "coroutine_factory":
++                return complete()
++            if kind == "awaitable":
++                return Completion()
++            return None
++
++        async def async_sleep(delay):
++            calls.append(float(delay))
++            await complete()
++
++        controller = AsyncRetrying(
++            sleep=async_sleep if kind == "async" else ordinary_sleep,
++            wait=wait_fixed(2),
++            stop=stop_after_attempt(3),
++            retry_error_callback=lambda rs: "done",
++        )
++        attempts = []
++
++        async def failing():
++            attempts.append(True)
++            raise ValueError("retry")
++
++        if mode == "call":
++            assert await controller(failing) == "done"
++        else:
++            async for attempt in controller:
++                with attempt:
++                    await failing()
++        assert len(attempts) == 3
++        assert calls == [2.0, 2.0]
++        assert len(awaited) == (0 if kind == "sync" else 2)
++
++    asyncio.run(scenario())

@@ -1,0 +1,109 @@
+--- /dev/null
++++ b/tests/test_function_metadata_collisions.py
+@@ -0,0 +1,106 @@
++import warnings
++from threading import Condition, RLock
++
++import pytest
++
++from cachetools import cached
++from cachetools.func import ttl_cache
++
++
++RESERVED = (
++    "cache",
++    "cache_key",
++    "cache_lock",
++    "cache_condition",
++    "cache_info",
++    "cache_clear",
++)
++
++
++def target():
++    def function(value: int) -> int:
++        """Application function."""
++        return value * 2
++
++    function.application_attribute = object()
++    for name in RESERVED:
++        setattr(function, name, object())
++    function.__wrapped__ = object()
++    return function
++
++
++def check_copied(wrapper, function):
++    assert wrapper.application_attribute is function.application_attribute
++    assert wrapper.__wrapped__ is function
++    assert wrapper.__name__ == function.__name__
++    assert wrapper.__doc__ == function.__doc__
++    assert wrapper.__annotations__ == function.__annotations__
++
++
++@pytest.mark.parametrize("info", [False, True])
++@pytest.mark.parametrize("uncached", [False, True])
++@pytest.mark.parametrize("sync", ["none", "lock", "condition", "both"])
++def test_cached_metadata_collisions(info, uncached, sync):
++    function = target()
++    cache = None if uncached else {}
++    lock = RLock() if sync in ("lock", "both") else None
++    condition = Condition(lock) if sync == "both" else (
++        Condition() if sync == "condition" else None
++    )
++
++    def key(value):
++        return ("request", value)
++
++    with warnings.catch_warnings():
++        warnings.simplefilter("ignore", DeprecationWarning)
++        wrapper = cached(
++            cache, key=key, lock=lock, condition=condition, info=info
++        )(function)
++
++    check_copied(wrapper, function)
++    assert wrapper.cache is cache
++    assert wrapper.cache_key is key
++    assert wrapper.cache_lock is (lock if lock is not None else condition)
++    assert wrapper.cache_condition is condition
++    assert callable(wrapper.cache_clear)
++    if info:
++        assert tuple(wrapper.cache_info()) == (0, 0, 0 if uncached else None, 0)
++    else:
++        assert wrapper.cache_info is None
++    assert wrapper(2) == wrapper(2) == 4
++    if cache is not None:
++        assert cache == {key(2): 4}
++    if info:
++        expected = (0, 2, 0, 0) if uncached else (1, 1, None, 1)
++        assert tuple(wrapper.cache_info()) == expected
++    wrapper.cache_clear()
++    if cache is not None:
++        assert cache == {}
++    if info:
++        assert tuple(wrapper.cache_info()) == (0, 0, 0 if uncached else None, 0)
++
++
++@pytest.mark.parametrize("form", ["bounded", "unbounded", "callable"])
++def test_ttl_metadata_collisions(form):
++    function = target()
++    function.cache_parameters = object()
++    now = [0]
++    maxsize = {"bounded": 3, "unbounded": None, "callable": 128}[form]
++    if form == "callable":
++        wrapper = ttl_cache(function, timer=lambda: now[0])
++    else:
++        wrapper = ttl_cache(maxsize=maxsize, ttl=5, timer=lambda: now[0])(function)
++    check_copied(wrapper, function)
++    assert wrapper.cache.maxsize == maxsize
++    assert callable(wrapper.cache_key)
++    assert isinstance(wrapper.cache_condition, Condition)
++    assert wrapper.cache_lock is wrapper.cache_condition
++    assert wrapper.cache_parameters() == {"maxsize": maxsize, "typed": False}
++    assert wrapper(2) == wrapper(2) == 4
++    assert tuple(wrapper.cache_info()) == (1, 1, maxsize, 1)
++    now[0] = 1000
++    assert wrapper(2) == 4
++    assert tuple(wrapper.cache_info()) == (1, 2, maxsize, 1)
++    wrapper.cache_clear()
++    assert len(wrapper.cache) == 0
++    assert tuple(wrapper.cache_info()) == (0, 0, maxsize, 0)

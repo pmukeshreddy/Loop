@@ -1,0 +1,160 @@
+--- /dev/null
++++ b/tests/test_invoke_default_map_strings.py
+@@ -0,0 +1,157 @@
++import pytest
++
++import click
++
++
++class CommaType(click.ParamType):
++    name = "comma"
++    envvar_list_splitter = ","
++
++    def convert(self, value, param, ctx):
++        return value
++
++
++def make_command(option):
++    def callback(**values):
++        ctx = click.get_current_context()
++        return values["item"], dict(ctx.params), ctx.get_parameter_source("item")
++
++    return click.Command("child", params=[option], callback=callback)
++
++
++def invoke(command, default_map, **kwargs):
++    parent = click.Context(click.Command("parent"), default_map={"child": default_map})
++    return parent.invoke(command, **kwargs)
++
++
++@pytest.mark.parametrize(
++    "type_,nargs,raw,expected",
++    [
++        (str, 1, "red blue", ("red", "blue")),
++        (str, 1, "", ()),
++        (int, 2, "1 2 3 4 5", ((1, 2), (3, 4))),
++        (CommaType(), 1, "red blue,green", ("red blue", "green")),
++        (CommaType(), 2, "a,b,c,d,e", (("a", "b"), ("c", "d"))),
++        ((str, int), 2, "a 1 b 2 tail", (("a", 1), ("b", 2))),
++    ],
++)
++def test_strings_in_both_invocation_paths(type_, nargs, raw, expected):
++    option = click.Option(["--item"], multiple=True, nargs=nargs, type=type_)
++    command = make_command(option)
++    value, params, source = invoke(command, {"item": raw})
++    assert value == expected
++    assert params == {"item": expected}
++    assert source is None
++    with command.make_context("child", [], default_map={"item": raw}) as ctx:
++        assert ctx.params["item"] == expected
++        assert ctx.get_parameter_source("item") is click.ParameterSource.DEFAULT_MAP
++
++
++@pytest.mark.parametrize("parsed", [False, True])
++def test_callable_map_entry_is_evaluated_once(parsed):
++    calls = []
++
++    def default():
++        calls.append(None)
++        return "1 2 3"
++
++    option = click.Option(["--item"], type=int, nargs=2, multiple=True)
++    command = make_command(option)
++    if parsed:
++        with command.make_context("child", [], default_map={"item": default}) as ctx:
++            assert ctx.params["item"] == ((1, 2),)
++    else:
++        assert invoke(command, {"item": default})[0] == ((1, 2),)
++    assert calls == [None]
++
++
++@pytest.mark.parametrize("explicit", ["not split", ["not cast"], None, object()])
++def test_explicit_kwargs_bypass_defaults_and_conversion(explicit):
++    def default():
++        raise AssertionError("Explicit kwargs must not acquire defaults")
++
++    command = make_command(click.Option(["--item"], multiple=True, type=int))
++    value, params, source = invoke(command, {"item": default}, item=explicit)
++    assert value is explicit
++    assert params["item"] is explicit
++    assert source is None
++
++
++@pytest.mark.parametrize("mapped", [None, ["1", "2"], ("3", "4")])
++def test_non_string_map_values_keep_existing_conversion(mapped):
++    option = click.Option(["--item"], multiple=True, type=int, default=(9,))
++    command = make_command(option)
++    expected = () if mapped is None else tuple(map(int, mapped))
++    assert invoke(command, {"item": mapped})[0] == expected
++
++
++@pytest.mark.parametrize("callable_default", [False, True])
++def test_declared_string_defaults_are_not_normalized(callable_default):
++    default = (lambda: "1 2") if callable_default else "1 2"
++    option = click.Option(["--item"], multiple=True, type=int, default=default)
++    with pytest.raises(click.BadParameter, match="Value must be an iterable"):
++        invoke(make_command(option), {})
++
++
++@pytest.mark.parametrize("mapped", [False, True])
++def test_invoke_does_not_acquire_environment_prompt_or_parameter_callbacks(monkeypatch, mapped):
++    def unexpected(*args, **kwargs):
++        raise AssertionError("Programmatic invocation must not process parameters")
++
++    monkeypatch.setenv("ITEM_EXPLICIT", "environment")
++    monkeypatch.setenv("APP_CHILD_ITEM", "automatic")
++    monkeypatch.setattr(click.Option, "prompt_for_value", unexpected)
++    option = click.Option(
++        ["--item"], multiple=True, default=("declared",),
++        envvar="ITEM_EXPLICIT", prompt=True, callback=unexpected,
++    )
++    command = make_command(option)
++    mapping = {"item": "map values"} if mapped else {}
++    parent = click.Context(
++        click.Command("parent"), auto_envvar_prefix="APP", default_map={"child": mapping}
++    )
++    expected = ("map", "values") if mapped else ("declared",)
++    assert parent.invoke(command) == (expected, {"item": expected}, None)
++
++
++def test_flag_count_and_non_repeated_options_are_unchanged():
++    flag = click.Option(["--item"], multiple=True, is_flag=True, flag_value="on")
++    with pytest.raises(click.BadParameter, match="Value must be an iterable"):
++        invoke(make_command(flag), {"item": "on off"})
++    assert invoke(make_command(flag), {"item": ["on", "off"]})[0] == ("on", "off")
++    count = click.Option(["--item"], count=True)
++    assert invoke(make_command(count), {"item": "3"})[0] == 3
++    scalar = click.Option(["--item"], type=str)
++    assert invoke(make_command(scalar), {"item": "a b"})[0] == "a b"
++    pair = click.Option(["--item"], type=str, nargs=2)
++    with pytest.raises(click.BadParameter, match="Value must be an iterable"):
++        invoke(make_command(pair), {"item": "a b"})
++
++
++def test_declared_sequences_and_missing_values_keep_existing_behavior():
++    option = click.Option(["--item"], multiple=True, type=int, default=["1", "2"])
++    assert invoke(make_command(option), {})[0] == (1, 2)
++    option = click.Option(["--item"], multiple=True, type=int)
++    assert invoke(make_command(option), {})[0] == ()
++
++
++def test_nested_default_map_inheritance():
++    option = click.Option(["--item"], multiple=True, type=int)
++    child = make_command(option)
++    middle = click.Command("middle", callback=lambda: click.get_current_context().invoke(child))
++    parent = click.Context(
++        click.Command("parent"), default_map={"middle": {"child": {"item": "1 2"}}}
++    )
++    assert parent.invoke(middle) == ((1, 2), {"item": (1, 2)}, None)
++
++
++def test_parsed_precedence_is_preserved(monkeypatch):
++    monkeypatch.setenv("ITEM", "env values")
++    option = click.Option(["--item"], multiple=True, envvar="ITEM")
++    command = make_command(option)
++    with command.make_context("child", [], default_map={"item": "map values"}) as ctx:
++        assert ctx.params["item"] == ("env", "values")
++        assert ctx.get_parameter_source("item") is click.ParameterSource.ENVIRONMENT
++    with command.make_context("child", ["--item", "cli"], default_map={"item": "map values"}) as ctx:
++        assert ctx.params["item"] == ("cli",)
++        assert ctx.get_parameter_source("item") is click.ParameterSource.COMMANDLINE

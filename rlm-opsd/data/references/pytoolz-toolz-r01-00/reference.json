@@ -1,0 +1,131 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -56,7 +56,11 @@\n         toolz_mods = self._load_toolz(module.__name__)\n         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n-        module.__dict__.update(fast_mod.__dict__)\n+        # Keep the mirror's import identity and docstring, not the backend's.\n+        module.__dict__.update(\n+            (k, v) for k, v in fast_mod.__dict__.items()\n+            if k not in {'__name__', '__loader__', '__spec__', '__doc__'}\n+        )\n         package = fast_mod.__package__\n         if package is not None:\n             package, dot, submodules = package.partition('.')\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 275449 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch reconciles backend exports with the mirror module's existing metadata while retaining backend selection and override policies. The reference constructed and inspected the final diff; separate executable verification established that the failing identity test passes.",
+   "inspect_locate": "The reference execution used 12 targeted context searches without printing the entire repository. The investigation connects the identity assertions, root-package initialization, and loader namespace construction rather than relying on a single symbol lookup."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise unified-diff deliverable. The question describes symptoms and compatibility constraints without identifying the defective statement or prescribing investigative operations. It is distinct from the existing task about configurable slow-backend overrides."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact-source patch. The solver must reconcile backend exports with metadata already assigned to the target module and verify that the repair preserves the other namespace policies.",
+   "inspect_locate": "The attached failure concerns imported module identities. The investigation must connect the assertions in test_tlz, the root-package bootstrap, and the namespace construction performed by the loader."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tlz/__init__.py",
+    "symbol": null,
+    "why": "The root package already has its own identity and documentation when the loader populates it."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "Namespace population must preserve metadata assigned to the target rather than copying backend identity metadata over it."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "Checks root and child names, package metadata, module identity reuse, documentation, and file attribution."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The injected change leaves backend discovery intact and should produce assertion failures rather than making the optional backend mandatory. Restoring the original merge is a sufficient repair.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in the identities exposed by `tlz` after a loader cleanup. Restore the expected identities of the root package and its mirrored submodules without changing backend preference, the `toolz.pipe` exception, or the existing introspection behavior. Send a unified diff against the repository files; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -55,7 +55,7 @@\n         toolz_mods = self._load_toolz(module.__name__)\n         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n-        module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))\n+        module.__dict__.update(fast_mod.__dict__)\n         package = fast_mod.__package__\n         if package is not None:\n             package, dot, submodules = package.partition('.')\n"
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "toolz/tests/test_tlz.py::test_tlz"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 192
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "toolz/tests/test_tlz.py::test_tlz"
+  ],
+  "ground_truth_symbols": [
+   "tlz/_build_tlz.py::TlzLoader.exec_module"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 191,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,128 @@
+{
+ "answer": "--- a/src/structlog/_base.py\n+++ b/src/structlog/_base.py\n@@ -146,7 +146,7 @@\n \n             ValueError:\n                 if the final processor doesn't return a str, bytes, bytearray,\n-                tuple, or a dict.\n+                tuple, or a Mapping.\n \n         Returns:\n              `tuple` of ``(*args, **kw)``\n@@ -181,12 +181,12 @@\n             # of ``(args, kwargs)`` and pass it right through.\n             return event_dict\n \n-        if isinstance(event_dict, dict):\n+        if isinstance(event_dict, Mapping):\n             return (), event_dict\n \n         msg = (\n             \"Last processor didn't return an appropriate value.  \"\n-            \"Valid return values are a dict, a tuple of (args, kwargs), bytes, or a str.\"\n+            \"Valid return values are a Mapping, a tuple of (args, kwargs), bytes, or a str.\"\n         )\n         raise ValueError(msg)\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "base"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 9065 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 9,065-character context covers event adaptation and generic dispatch. The reference execution completed without sub-calls and produced a focused patch to final-result adaptation, leaving intermediate processor values unchanged."
+  },
+  "notes": "This is a natural, precisely scoped compatibility enhancement. The question specifies the public behavior without naming the internal defective symbol or prescribing solver operations. Implementing it requires repository-specific reasoning about where processor chaining ends and backend argument adaptation begins. The verified patch broadens the final mapping check while preserving the other return-value branches. The task is distinct from the accepted context-isolation and standard-library integration tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The explicit context contains only event adaptation and generic dispatch, comfortably below 16,000 characters. The task requires reasoning about the distinction between processor-chain values and final backend keyword arguments."
+  },
+  "context": {
+   "files": [
+    "src/structlog/_base.py",
+    "src/structlog/_generic.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_base.py",
+    "symbol": "src/structlog/_base.py::BoundLoggerBase._process_event",
+    "why": "Runs processors and adapts the final result into backend arguments, currently accepting only dict for keyword arguments."
+   },
+   {
+    "path": "src/structlog/_generic.py",
+    "symbol": "src/structlog/_generic.py::BoundLogger.__getattr__",
+    "why": "Routes generic logger methods through the shared event-processing and dispatch implementation."
+   },
+   {
+    "path": "tests/test_base.py",
+    "symbol": "tests/test_base.py::TestProcessing",
+    "why": "Existing tests protect the other final-result contracts and unsupported-value error behavior."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_final_mapping_contract.py\n@@ -0,0 +1,33 @@\n+from collections import UserDict\n+from types import MappingProxyType\n+\n+import pytest\n+\n+from structlog._generic import BoundLogger\n+from structlog.testing import ReturnLogger\n+\n+\n+@pytest.mark.parametrize(\"factory\", [UserDict, MappingProxyType])\n+def test_final_mapping(factory):\n+    result = factory({\"event\": \"rendered\", \"request\": \"r\"})\n+    logger = BoundLogger(ReturnLogger(), [lambda *_: result], {\"bound\": 1})\n+    assert logger.info(\"original\") == ((), dict(result))\n+    assert logger._context == {\"bound\": 1}\n+\n+\n+def test_intermediate_mapping():\n+    def first(_, __, ed):\n+        return UserDict(ed)\n+\n+    def last(_, __, ed):\n+        ed[\"added\"] = True\n+        return ed\n+\n+    logger = BoundLogger(ReturnLogger(), [first, last], {\"bound\": 1})\n+    assert logger.info(\"event\") == ((), {\"bound\": 1, \"event\": \"event\", \"added\": True})\n+\n+\n+def test_invalid_result_still_rejected():\n+    logger = BoundLogger(ReturnLogger(), [lambda *_: [\"not\", \"kwargs\"]], {})\n+    with pytest.raises(ValueError, match=\"Last processor didn't return\"):\n+        logger.info(\"event\")\n",
+  "include_failure_log": false,
+  "notes": "Accept forwarding the Mapping directly or converting it to a dictionary at final adaptation. Do not require an intermediate mapping to be converted or copied.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Allow a processor chain on a generic `BoundLogger` to finish with any `collections.abc.Mapping`, not just a `dict`. For example, a final `UserDict` or read-only `MappingProxyType` should supply keyword arguments to the wrapped method just as a final dictionary does. Intermediate mappings must still flow unchanged to the next processor. Preserve the existing handling of strings, bytes, bytearrays, argument/keyword tuples, and unsupported return values. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r02-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_final_mapping_contract.py::test_final_mapping[UserDict]",
+   "tests/test_final_mapping_contract.py::test_final_mapping[mappingproxy]",
+   "tests/test_final_mapping_contract.py::test_intermediate_mapping"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 888
+   },
+   "patch_files": [
+    "src/structlog/_base.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_final_mapping_contract.py::test_final_mapping[UserDict]",
+   "tests/test_final_mapping_contract.py::test_final_mapping[mappingproxy]",
+   "tests/test_final_mapping_contract.py::test_intermediate_mapping"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

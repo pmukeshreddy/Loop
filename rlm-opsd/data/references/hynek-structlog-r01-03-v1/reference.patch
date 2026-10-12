@@ -1,0 +1,37 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -890,6 +890,10 @@
+     This processor can be used for adding data passed in the ``extra``
+     parameter of the `logging` module's log methods to the event dictionary.
+ 
++    The attributes ``_record`` and ``_from_structlog`` are reserved for
++    `ProcessorFormatter` metadata and are never copied, even if included in
++    ``allow``.
++
+     Args:
+         allow:
+             An optional collection of attributes that, if present in
+@@ -927,7 +931,10 @@
+         cls, event_dict: EventDict, record: logging.LogRecord
+     ) -> None:
+         for key, value in record.__dict__.items():
+-            if key not in _LOG_RECORD_KEYS:
++            if (
++                key not in _LOG_RECORD_KEYS
++                and key not in ("_record", "_from_structlog")
++            ):
+                 event_dict[key] = value
+ 
+     @classmethod
+@@ -938,7 +945,10 @@
+         record: logging.LogRecord,
+     ) -> None:
+         for key in allow:
+-            if key in record.__dict__:
++            if (
++                key not in ("_record", "_from_structlog")
++                and key in record.__dict__
++            ):
+                 event_dict[key] = record.__dict__[key]
+ 
+ 

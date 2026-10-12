@@ -1,0 +1,28 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1296,8 +1296,11 @@
+         """Writes all the options into the formatter if they exist."""
+         opts = []
+         for param in self.get_params(ctx):
++            if isinstance(param, Argument):
++                continue
++
+             rv = param.get_help_record(ctx)
+-            if rv is not None and not isinstance(param, Argument):
++            if rv is not None:
+                 opts.append(rv)
+ 
+         if opts:
+@@ -1308,8 +1311,11 @@
+         """Writes the arguments that have a help record into the formatter."""
+         args = []
+         for param in self.get_params(ctx):
++            if not isinstance(param, Argument):
++                continue
++
+             rv = param.get_help_record(ctx)
+-            if rv is not None and isinstance(param, Argument):
++            if rv is not None:
+                 args.append(rv)
+ 
+         if args:

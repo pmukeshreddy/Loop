@@ -1,0 +1,119 @@
+--- /dev/null
++++ b/jsonschema/tests/test_false_schema_locations.py
+@@ -0,0 +1,116 @@
++import pytest
++
++from jsonschema import (
++    Draft6Validator,
++    Draft7Validator,
++    Draft201909Validator,
++    Draft202012Validator,
++)
++
++
++VALIDATORS = (
++    Draft6Validator, Draft7Validator,
++    Draft201909Validator, Draft202012Validator,
++)
++
++
++def check_false(error, instance):
++    assert error.message == f"False schema does not allow {instance!r}"
++    assert error.validator is None
++    assert error.validator_value is None
++    assert error.instance is instance
++    assert error.schema is False
++    assert error.context == []
++
++
++@pytest.mark.parametrize("Validator", VALIDATORS)
++@pytest.mark.parametrize("path,schema_path", [
++    (None, None), (0, None), ("", None), (None, 0),
++    (None, ""), (0, ""), ("", 0), ("item", "branch"),
++])
++def test_direct_descent(Validator, path, schema_path):
++    instance = {"payload": 1}
++    validator = Validator({})
++    errors = list(validator.descend(
++        instance, False, path=path, schema_path=schema_path,
++    ))
++    assert len(errors) == 1
++    error = errors[0]
++    check_false(error, instance)
++    assert list(error.path) == ([] if path is None else [path])
++    assert list(error.schema_path) == (
++        [] if schema_path is None else [schema_path]
++    )
++    assert error.parent is None
++    assert list(error.absolute_path) == list(error.path)
++    assert list(error.absolute_schema_path) == list(error.schema_path)
++    assert list(validator.descend(instance, True, path=path)) == []
++
++
++@pytest.mark.parametrize("Validator", VALIDATORS)
++def test_root_false(Validator):
++    instance = {"payload": 1}
++    errors = list(Validator(False).iter_errors(instance))
++    assert len(errors) == 1
++    error = errors[0]
++    check_false(error, instance)
++    assert list(error.path) == []
++    assert list(error.schema_path) == []
++    assert list(error.absolute_path) == []
++    assert list(error.absolute_schema_path) == []
++    assert error.parent is None
++
++
++@pytest.mark.parametrize("Validator", VALIDATORS)
++def test_nested_empty_property(Validator):
++    schema = {"properties": {"outer": {"properties": {"": False}}}}
++    instance = {"outer": {"": {"payload": 1}}}
++    errors = list(Validator(schema).iter_errors(instance))
++    assert len(errors) == 1
++    error = errors[0]
++    check_false(error, instance["outer"][""])
++    assert list(error.path) == ["outer", ""]
++    assert list(error.schema_path) == ["properties", "outer", "properties", ""]
++    assert list(error.absolute_path) == ["outer", ""]
++    assert list(error.absolute_schema_path) == list(error.schema_path)
++
++
++def test_nested_prefix_items():
++    schema = {"properties": {"outer": {"prefixItems": [False, False]}}}
++    instance = {"outer": [{"payload": 1}, {"payload": 2}]}
++    errors = list(Draft202012Validator(schema).iter_errors(instance))
++    assert len(errors) == 2
++    for index, error in enumerate(errors):
++        check_false(error, instance["outer"][index])
++        assert list(error.path) == ["outer", index]
++        assert list(error.schema_path) == [
++            "properties", "outer", "prefixItems", index,
++        ]
++        assert list(error.absolute_path) == ["outer", index]
++        assert list(error.absolute_schema_path) == list(error.schema_path)
++
++
++def test_anyof_context_below_prefix_items():
++    schema = {"properties": {"outer": {"prefixItems": [
++        {"anyOf": [False, {"properties": {"": False}}]},
++    ]}}}
++    instance = {"outer": [{"": {"payload": 1}}]}
++    errors = list(Draft202012Validator(schema).iter_errors(instance))
++    assert len(errors) == 1
++    aggregate = errors[0]
++    assert aggregate.validator == "anyOf"
++    assert list(aggregate.path) == ["outer", 0]
++    base = ["properties", "outer", "prefixItems", 0, "anyOf"]
++    assert list(aggregate.schema_path) == base
++    assert len(aggregate.context) == 2
++    first, second = aggregate.context
++    check_false(first, instance["outer"][0])
++    check_false(second, instance["outer"][0][""])
++    assert list(first.path) == []
++    assert list(first.schema_path) == [0]
++    assert list(second.path) == [""]
++    assert list(second.schema_path) == [1, "properties", ""]
++    for child, relative in [(first, []), (second, [""])]:
++        assert child.parent is aggregate
++        assert list(child.absolute_path) == ["outer", 0] + relative
++        assert list(child.absolute_schema_path) == base + list(child.schema_path)

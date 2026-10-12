@@ -1,0 +1,65 @@
+--- /dev/null
++++ b/mkdocs/tests/test_pathlike_config.py
+@@ -0,0 +1,62 @@
++import os
++from pathlib import Path
++
++import pytest
++
++from mkdocs.config.base import LegacyConfig
++from mkdocs.config import config_options as c
++from mkdocs.utils.yaml import ConfigDirPlaceholder
++
++
++@pytest.mark.parametrize("factory", [c.FilesystemObject, c.Dir, c.File])
++def test_pathlike_filesystem_option(factory, tmp_path):
++    target = tmp_path / "target"
++    if factory is c.Dir:
++        target.mkdir()
++    else:
++        target.write_text("content")
++    cfg = LegacyConfig((("path", factory(exists=True)),), config_file_path=str(tmp_path / "mkdocs.yml"))
++    cfg.load_dict({"path": Path("target")})
++    errors, warnings = cfg.validate()
++    assert errors == []
++    assert warnings == []
++    assert cfg["path"] == str(target)
++    assert isinstance(cfg["path"], str)
++
++
++def test_list_of_paths_accepts_lazy_placeholder(tmp_path):
++    (tmp_path / "assets").mkdir()
++    cfg = LegacyConfig((("paths", c.ListOfPaths()),), config_file_path=str(tmp_path / "mkdocs.yml"))
++    raw = ConfigDirPlaceholder(cfg, "assets")
++    cfg.load_dict({"paths": [raw, Path("assets")]})
++    errors, warnings = cfg.validate()
++    assert errors == []
++    assert warnings == []
++    assert cfg["paths"] == [str(tmp_path / "assets")] * 2
++
++
++def test_theme_accepts_pathlike_custom_dir(tmp_path):
++    (tmp_path / "custom").mkdir()
++    cfg = LegacyConfig((("theme", c.Theme()),), config_file_path=str(tmp_path / "mkdocs.yml"))
++    cfg.load_dict({"theme": {"name": None, "custom_dir": Path("custom")}})
++    errors, warnings = cfg.validate()
++    assert errors == []
++    assert warnings == []
++    assert cfg["theme"].dirs[0] == str(tmp_path / "custom")
++    assert isinstance(cfg["theme"].dirs[0], str)
++
++
++class BytesPath(os.PathLike):
++    def __fspath__(self):
++        return b"assets"
++
++
++@pytest.mark.parametrize("theme", [False, True])
++def test_bytes_pathlike_is_validation_error(theme, tmp_path):
++    (tmp_path / "assets").mkdir()
++    option = c.Theme() if theme else c.Dir()
++    cfg = LegacyConfig((("value", option),), config_file_path=str(tmp_path / "mkdocs.yml"))
++    value = {"name": None, "custom_dir": BytesPath()} if theme else BytesPath()
++    cfg.load_dict({"value": value})
++    errors, _ = cfg.validate()
++    assert [key for key, _ in errors] == ["value"]

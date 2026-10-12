@@ -1,0 +1,17 @@
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -664,6 +664,14 @@
+             with self.timer as time:
+                 if time < curr.expires and not curr.removed:
+                     yield curr.key
++
++    def __setstate__(self, state):
++        self.__dict__.update(state)
++        # Rebuild the heap from current items, discarding obsolete records
++        # without changing their LRU order or expiration times.
++        self.__order = list(self.__items.values())
++        heapq.heapify(self.__order)
++        self.expire(self.timer())
+ 
+     @property
+     def ttu(self):

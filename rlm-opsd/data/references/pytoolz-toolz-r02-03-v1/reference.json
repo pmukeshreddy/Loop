@@ -1,0 +1,145 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -56,6 +56,8 @@\n         toolz_mods = self._load_toolz(module.__name__)\n         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n+        if not hasattr(module, '__path__') and hasattr(fast_mod, '__path__'):\n+            module.__path__ = list(fast_mod.__path__)\n         module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))\n         package = fast_mod.__package__\n         if package is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.7698274190420787,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5157 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 5,157-character context contains the complete loader implementation, and the reference execution used no sub-calls. The task requires reasoning about namespace merge precedence, selected-backend behavior, mutable path ownership, and the distinction between an absent attribute and an existing empty value."
+  },
+  "notes": "A focused, natural implementation request with explicit behavioral constraints and a precise production-only unified-diff format. The verified patch establishes independent path ownership while preserving existing target bindings. Naming the affected loader method localizes the requested change without supplying the patch. This is substantively distinct from the parent task: it handles backend-derived paths during execution rather than spec-derived metadata during module creation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context is under 16,000 characters and contains the complete loader implementation. Resolving the task requires reasoning about mutable-object ownership and merge precedence, including the distinction between a missing attribute and an existing empty list."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "The namespace merge retains existing target bindings but copies absent backend bindings by reference, which leaks ownership of a mutable backend path."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.create_module",
+    "why": "Directly created modules have no path, so creation-time metadata changes alone cannot repair the execution-time aliasing."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "Existing assertions establish import identities, backend preference for pipe, documentation, and file introspection that the repair must preserve."
+   }
+  ],
+  "expected_answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -56,6 +56,8 @@\n         toolz_mods = self._load_toolz(module.__name__)\n         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n+        if '__path__' not in module.__dict__ and hasattr(fast_mod, '__path__'):\n+            module.__path__ = list(fast_mod.__path__)\n         module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))\n         package = fast_mod.__package__\n         if package is not None:\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_path_ownership.py\n@@ -0,0 +1,85 @@\n+import types\n+\n+import pytest\n+import toolz\n+import tlz._build_tlz as builder\n+\n+\n+@pytest.fixture(params=['both', 'cytoolz', 'toolz'])\n+def backends(request, monkeypatch):\n+    fast = types.ModuleType('cytoolz.audit', 'fast documentation')\n+    slow = types.ModuleType('toolz.audit', 'slow documentation')\n+    for backend in (fast, slow):\n+        backend.__package__ = backend.__name__\n+        backend.__file__ = backend.__name__ + '.py'\n+        backend.marker = object()\n+    fast.pipe = object()\n+    slow.pipe = toolz.pipe\n+    available = {}\n+    if request.param in ('both', 'cytoolz'):\n+        available[fast.__name__] = fast\n+    if request.param in ('both', 'toolz'):\n+        available[slow.__name__] = slow\n+\n+    def fake_import(name):\n+        if name in available:\n+            return available[name]\n+        raise ImportError(name)\n+\n+    monkeypatch.setattr(builder, 'import_module', fake_import)\n+    selected = fast if fast.__name__ in available else slow\n+    introspection = slow if slow.__name__ in available else fast\n+    return builder.TlzLoader(), selected, introspection\n+\n+\n+def execute(backends, target):\n+    loader, selected, introspection = backends\n+    loader.exec_module(target)\n+    assert target.__name__ == 'tlz.audit'\n+    assert target.__package__ == 'tlz.audit'\n+    assert target.marker is selected.marker\n+    assert target.__file__ == introspection.__file__\n+    expected_pipe = toolz.pipe if introspection.pipe is toolz.pipe else selected.pipe\n+    assert target.pipe is expected_pipe\n+\n+\n+@pytest.mark.parametrize('locations', [[], ['first', 'second'], ('first', 'second')])\n+def test_missing_target_path_gets_independent_list(backends, locations):\n+    _, selected, _ = backends\n+    selected.__path__ = locations.copy() if isinstance(locations, list) else locations\n+    target = types.ModuleType('tlz.audit')\n+    execute(backends, target)\n+    assert target.__doc__ == selected.__doc__\n+    assert isinstance(target.__path__, list)\n+    assert target.__path__ == list(locations)\n+    assert target.__path__ is not selected.__path__\n+    target.__path__.append('target-only')\n+    assert list(selected.__path__) == list(locations)\n+    if isinstance(selected.__path__, list):\n+        selected.__path__.append('backend-only')\n+        assert 'backend-only' not in target.__path__\n+\n+\n+@pytest.mark.parametrize('existing', [[], ['local'], ('local',), None])\n+def test_existing_target_path_is_preserved(backends, existing):\n+    _, selected, _ = backends\n+    selected.__path__ = ['backend']\n+    target = types.ModuleType('tlz.audit', 'target documentation')\n+    target.__path__ = existing\n+    target.marker = object()\n+    retained = target.marker\n+    loader, _, _ = backends\n+    loader.exec_module(target)\n+    assert target.__path__ is existing\n+    assert target.marker is retained\n+    assert target.__doc__ == 'target documentation'\n+\n+\n+def test_no_selected_path_is_not_synthesized(backends):\n+    _, selected, introspection = backends\n+    if introspection is not selected:\n+        introspection.__path__ = ['slow-only']\n+    target = types.ModuleType('tlz.audit')\n+    execute(backends, target)\n+    assert not hasattr(target, '__path__')\n+    assert not hasattr(selected, '__path__')\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains the path-aliasing defect, so this task uses new hidden acceptance tests rather than injecting an artificial regression. The tests exercise both-backend and single-backend configurations, list and tuple source paths, preservation of existing target paths, bidirectional mutation isolation, and absence of a selected-backend path. Nine parametrized cases should fail on the supplied code. The expected repair changes exec_module, unlike the original task's create_module metadata initialization.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Fix package-path ownership during `TlzLoader.exec_module` in `tlz/_build_tlz.py`. A target module constructed directly with `types.ModuleType` currently shares the backend's mutable search path after execution. When the target has no `__path__` and the selected backend has one, the target must receive a fresh list containing that backend's search locations, so later mutations cannot affect either module through the other. Any `__path__` already present on the target must survive by identity, including an empty list. If neither the target nor the selected backend has a path, leave the attribute absent; a path available only on the nonselected backend must not be used. Preserve backend selection, other namespace population, and existing introspection behavior. Return a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct solving, but shifts the investigation from `ModuleSpec` initialization to mutable-object ownership across the namespace merge. Focused synthetic package fixtures are more useful than the existing import assertions in `toolz/tests/test_tlz.py`, which do not check path aliasing.",
+  "change_type": "failure_condition",
+  "description": "Repair mutable package-path leakage in `tlz/_build_tlz.py::TlzLoader.exec_module`. When executing a target with no existing `__path__`, and the selected fast backend has `__path__`, populate the target with an independent list of the backend's search locations rather than sharing the backend's path object. Preserve any target `__path__` already present by identity, including an empty list. Do not add `__path__` when neither the target nor the selected backend has it. Keep backend preference, namespace population, and introspection behavior unchanged. Return a production-only unified diff.",
+  "expected_answer_change": "The repair belongs in `TlzLoader.exec_module`, around its `toolz.merge` namespace population. It must distinguish an absent target path from an existing empty path and copy the selected backend's path only in the former case. Verification should show that mutating the newly populated target path does not mutate the backend, while a preexisting target path retains its identity.",
+  "why_substantive": "The seed initializes metadata during object creation from a supplied spec. This variation addresses aliasing introduced later by the namespace merge during execution, including targets constructed directly with `types.ModuleType`. The seed patch would not prevent a target without a path from inheriting the backend's mutable path by reference."
+ },
+ "task_id": "pytoolz-toolz-r02-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations2]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations2]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations2]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 9,
+   "full_suite": {
+    "failed": 0,
+    "passed": 216
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[both-locations2]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[cytoolz-locations2]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations0]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations1]",
+   "toolz/tests/test_tlz_path_ownership.py::test_missing_target_path_gets_independent_list[toolz-locations2]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

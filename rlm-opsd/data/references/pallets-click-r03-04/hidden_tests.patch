@@ -1,0 +1,63 @@
+--- /dev/null
++++ b/tests/test_normalized_name_completion.py
+@@ -0,0 +1,60 @@
++import click
++
++
++def normalize(value):
++    return value.casefold().replace("_", "-")
++
++
++def values(items):
++    return [item.value for item in items]
++
++
++def test_option_prefixes_and_source_filtering():
++    command = click.Command(
++        "cli",
++        params=[
++            click.Option(["--dry_run/--no_dry_run"]),
++            click.Option(["--tag_name"], multiple=True),
++            click.Option(["--hidden_name"], hidden=True),
++        ],
++    )
++    ctx = command.make_context(
++        "cli", ["--dry_run", "--tag_name", "x"],
++        token_normalize_func=normalize, resilient_parsing=True,
++    )
++    assert values(command.shell_complete(ctx, "--TAG-")) == ["--tag_name"]
++    assert values(command.shell_complete(ctx, "--NO-")) == []
++    assert values(command.shell_complete(ctx, "--HIDDEN-")) == []
++    fresh = command.make_context(
++        "cli", [], token_normalize_func=normalize, resilient_parsing=True,
++    )
++    assert values(command.shell_complete(fresh, "--NO-")) == ["--no_dry_run"]
++    assert values(command.shell_complete(fresh, "--DRY-")) == ["--dry_run"]
++
++
++def test_groups_preserve_original_names_and_distinct_matches():
++    group = click.Group("cli", commands=[
++        click.Command("Load_Data"), click.Command("load-data"),
++        click.Command("Load_Secret", hidden=True),
++    ])
++    ctx = click.Context(group, token_normalize_func=normalize)
++    assert values(group.shell_complete(ctx, "LOAD-")) == ["Load_Data", "load-data"]
++    plain = click.Context(group)
++    assert values(group.shell_complete(plain, "LOAD-")) == []
++
++
++def test_chained_siblings_use_their_owning_context_normalizer():
++    child = click.Command("child")
++    group = click.Group("cli", chain=True, commands=[
++        child, click.Command("Build_Task"), click.Command("Build_Secret", hidden=True),
++    ])
++    parent = click.Context(group, token_normalize_func=normalize)
++    ctx = click.Context(child, parent=parent, token_normalize_func=lambda s: s)
++    assert values(child.shell_complete(ctx, "BUILD-")) == ["Build_Task"]
++
++
++def test_parameter_custom_completions_are_not_prefix_filtered():
++    option = click.Option(["--value"], shell_complete=lambda c, p, i: ["Unrelated"])
++    command = click.Command("cli", params=[option])
++    ctx = click.Context(command, token_normalize_func=normalize)
++    assert values(option.shell_complete(ctx, "LOAD-")) == ["Unrelated"]

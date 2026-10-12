@@ -1,0 +1,151 @@
+{
+ "answer": "--- a/jsonschema/_utils.py\n+++ b/jsonschema/_utils.py\n@@ -327,9 +327,10 @@\n \n     for keyword in [\"allOf\", \"oneOf\", \"anyOf\"]:\n         for subschema in schema.get(keyword, []):\n-            evaluated_keys += find_evaluated_property_keys_by_schema(\n-                validator, instance, subschema,\n-            )\n+            if is_valid(validator.descend(instance, subschema)):\n+                evaluated_keys += find_evaluated_property_keys_by_schema(\n+                    validator, instance, subschema,\n+                )\n \n     if \"if\" in schema:\n         if validator.evolve(schema=schema[\"if\"]).is_valid(instance):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008097674480096247,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 29,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "logs",
+    "p",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1210224 chars; 29 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['files', 'logs', 'p', 't']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production-only diff was constructed from inspected source and checked after construction. Independent executable verification confirms that restoring the validity guard repairs the reported regressions.",
+   "inspect_locate": "The investigation connects the failing Draft 2020-12 cases to draft dispatch, the unevaluatedProperties handler, and the recursive coverage helper. Distinguishing applicator validity from the coverage contributed by its branches requires reasoning across those locations.",
+   "persistent_state": "The execution reused repository text and investigation variables across seven turns, although this supports rather than independently establishes a task-specific need for persistent state."
+  },
+  "notes": "A natural, repository-dependent debugging request with a precise output format. It describes the observable failure without exposing the defective helper or the fix. The verified patch gates branch coverage on successful validation, and the task is distinct from the existing unevaluatedProperties diagnostics task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled from exact production-file text and checked against both successful-branch and failed-branch coverage requirements.",
+   "inspect_locate": "The failing unevaluatedProperties cases lead through draft dispatch, the keyword handler, and a separate recursive coverage helper. Applicator validation and coverage reconstruction must be distinguished.",
+   "persistent_state": "The investigation reuses the failing schemas, their branch-validity results, and the mapping between draft configurations and coverage helpers."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_evaluated_property_keys_by_schema",
+    "why": "Reconstructs property coverage from applicator branches and is the injected defect site."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::unevaluatedProperties",
+    "why": "Uses reconstructed coverage to decide which property values still require validation."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_property_keys_by_schema",
+    "why": "Provides the unaffected Draft 2019-09 implementation for comparison."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::Draft202012Validator",
+    "why": "Connects the failing draft to the modern keyword implementation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup removes only the modern property-coverage branch-validity guard. Conformance failures should be confined to schemas combining applicators with unevaluatedProperties.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows Draft 2020-12 regressions involving `unevaluatedProperties` and applicators. Properties mentioned inside unsuccessful branches are sometimes being accepted, even though the applicator itself still reports validity correctly. Repair the underlying regression while preserving coverage contributed by successful branches and leaving Draft 2019-09 behavior unchanged. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/jsonschema/_utils.py\n+++ b/jsonschema/_utils.py\n@@ -367,11 +367,9 @@ def find_evaluated_property_keys_by_schema(validator, instance, schema):\n \n     for keyword in [\"allOf\", \"oneOf\", \"anyOf\"]:\n         for subschema in schema.get(keyword, []):\n-            if not is_valid(validator.descend(instance, subschema)):\n-                continue\n             evaluated_keys += find_evaluated_property_keys_by_schema(\n                 validator, instance, subschema,\n             )\n \n     if \"if\" in schema:\n"
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r02-00",
+ "truth": {
+  "fail_to_pass": [
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_dynamic_evalation_inside_nested_refs_xx_foo_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_unevaluatedProperties_with_anyOf_when_one_matches_and_has_unevaluated_properties",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_unevaluatedProperties_with_anyOf_when_two_match_and_has_unevaluated_properties"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7288
+   },
+   "patch_files": [
+    "jsonschema/_utils.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_dynamic_evalation_inside_nested_refs_xx_foo_is_invalid",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_unevaluatedProperties_with_anyOf_when_one_matches_and_has_unevaluated_properties",
+   "jsonschema/tests/test_jsonschema_test_suite.py::TestDraft202012::test_unevaluatedProperties_unevaluatedProperties_with_anyOf_when_two_match_and_has_unevaluated_properties"
+  ],
+  "ground_truth_symbols": [
+   "jsonschema/_utils.py::find_evaluated_property_keys_by_schema"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7285,
+  "stability_runs": 3
+ }
+}

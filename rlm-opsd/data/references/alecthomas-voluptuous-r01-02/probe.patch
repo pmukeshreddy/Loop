@@ -1,0 +1,11 @@
+--- a/voluptuous/schema_builder.py
++++ b/voluptuous/schema_builder.py
+@@ -222,6 +222,8 @@
+             return lambda _, v: v
+         if schema is Self:
+             return lambda p, v: self._compiled(p, v)
++        elif callable(schema):
++            return _compile_scalar(schema)
+         elif hasattr(schema, "__voluptuous_compile__"):
+             return schema.__voluptuous_compile__(self)
+         if isinstance(schema, Object):

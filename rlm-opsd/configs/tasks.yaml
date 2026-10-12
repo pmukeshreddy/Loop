@@ -1,70 +1,184 @@
-# M2 operational defaults. These are not teacher-gate / OPSD-exit thresholds.
+# AgentInstruct-style DeepSWE task generation for the OPSD phase.
+# Values here are operational/data-filter settings. They are not teacher-gate
+# or OPSD-exit thresholds (configs/gate.yaml, configs/exit.yaml).
 seed: 417
-workers: 2
-size_buckets: [8192, 32768, 131072, 524288, 2097152, 8388608]
-structures: [str, list]
-# Rotate encodings evenly through eligible cells; repo files use Markdown.
-encodings: [plain, jsonl, csv, logs, markdown]
-families:
-  sparse_retrieval: 1
-  multi_hop: 1
-  linear_aggregation: 1
-  quadratic_pairs: 1
-  repo_qa: 1
-  small_context_control: 3
+sources_dir: .deps/task-sources        # pinned clones, exported trees, per-repo venvs
+work_dir: .deps/task-generation        # resumable candidate state, rejection log, usage
+python: '3.12'
+harness_config: configs/harness.yaml   # the solver runs inside the student's harness limits
+# Reference executions only: timing limits absorb remote-API sub-call latency
+# (training sub-calls hit a local server). Turn, sub-call count/size, memory and
+# CPU limits stay exactly the student's.
+solver_harness_overrides:
+  subcall_timeout_s: 180
+  sandbox: {wall_time_s: 900}
+
+models:
+  auth: chatgpt                        # step1.auth: chatgpt (OAuth plan) or api-key
+  model: gpt-6.1-sol
+  request_timeout_s: 600
+  effort:                              # reasoning effort per role
+    source_analysis: high
+    question_generation: high
+    variation_suggester: medium
+    variation_editor: high
+    oracle: high
+    review: medium
+    baseline: low
+    solver_root: medium
+    solver_subcall: low
+
+targets:                               # accepted tasks after verification and review
+  train: 200
+  dev_behavior: 40
+
 splits:
-  train: 5
-  dev_behavior: 1
-direct_read_max_chars: 16384
-# Knobs are sampled independently for each task from its derived seed.
-# min/max are inclusive; quote ISO dates to keep them strings in YAML.
-family_knobs:
-  sparse_retrieval:
-    needles: {min: 1, max: 8}
-  multi_hop:
-    hops: {min: 2, max: 4}
-  linear_aggregation:
-    label_count: {min: 2, max: 8}
-    temporal_filter: {choices: [true, false]}
-    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
-  quadratic_pairs:
-    users: 24
-    label_count: {min: 2, max: 8}
-    temporal_filter: {choices: [true, false]}
-    cutoff_date: {min: '2023-01-01', max: '2023-06-28'}
-    pair_relation: {choices: [both_have_any, cover_labels]}
-  repo_qa:
-    files: {min: 8, max: 64}
-  small_context_control:
-    records: {min: 4, max: 24}
-decontamination:
-  ngram_size: 5
-  overlap_threshold: 0.8
-classification_sources:
-  train:
-    path: .deps/m2-sources/banking-train.csv
-    url: https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/train.csv
-    sha256: b06e26ac675513959a63135f11b94ea7786ed02da65db93a5650d8838cbc664b
-    revision: 57ec275d8078af65b7731c2a98be812d844a6d6b
-    partition: train
-    ambiguity_policy: drop
-  dev_behavior:
-    path: .deps/m2-sources/banking-test.csv
-    url: https://raw.githubusercontent.com/PolyAI-LDN/task-specific-datasets/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data/test.csv
-    sha256: d12d6e3bc4c3103966ae786dc435913c0c563dfa328f5a3646d0e62cfeeb474d
-    revision: 57ec275d8078af65b7731c2a98be812d844a6d6b
-    partition: test
-    ambiguity_policy: drop
-heldout_index: .deps/m2-sources/heldout-index.json
-# Real public queries, useful for partial checking. No source contexts are in
-# this artifact, so it MUST NOT certify complete heldout coverage.
-heldout_question_sources:
-  - benchmark: oolong_pairs
-    path: .deps/m2-sources/pairs-questions.json
-    url: https://huggingface.co/datasets/mit-oasys/oolong-pairs/resolve/d1e1522b86ac0c169bbc890b0471408aaa29e8fa/questions.json
-    sha256: 9d147c25ce727d09d35470ef267db59b3877132429b8b0269a46d941f252cada
-    revision: d1e1522b86ac0c169bbc890b0471408aaa29e8fa
-    license: MIT
-# Optional verified raw JSON/JSONL snapshots; see TASK_PIPELINE.md. Missing
-# snapshots are reported, and the training loader refuses incomplete coverage.
-heldout_snapshots: []
+  # Repositories are assigned before generation, stratified by size, so a task
+  # and all of its variations share a repository and therefore a split.
+  dev_behavior_repositories: 4
+
+generation:
+  seeds_per_round: 6
+  max_rounds_per_repo: 8
+  variations_per_seed: 2
+  concurrency: 18                      # candidates processed in parallel
+  test_concurrency: 6                  # concurrent repository test processes
+  stability_runs: 3                    # failing/passing evidence must hold on every run
+  solver_attempts: 2                   # reference solves per candidate before rejection
+  test_timeout_s: 900
+  oracle_timeout_s: 120
+  analysis_source_chars: 260000        # source text shown to the analyst per repository
+  generator_file_chars: 160000         # file text shown with each generation request
+
+context:
+  max_chars: 1200000
+  max_documents: 450
+  max_file_chars: 150000
+  direct_read_max_chars: 16384         # direct_solve tasks must stay below this
+  size_buckets: [16384, 65536, 262144, 1048576, 4194304]
+  exclude:                             # never placed in task contexts
+    - .git/**
+    - .github/**
+    - '**/AGENTS.md'
+    - '**/CLAUDE.md'
+    - '**/*.lock'
+    - '**/uv.lock'
+    - '**/*.png'
+    - '**/*.svg'
+    - '**/*.ico'
+    - '**/*.jpg'
+    - '**/*.gif'
+    - '**/*.pdf'
+
+filters:
+  max_setup_fail_fraction: 0.25        # a defect may not break most of the suite
+  max_impact_tests: 30                 # change-impact answers stay reviewable
+  min_impact_tests: 1
+  question_ngram_size: 5
+  max_question_similarity: 0.55        # within-repository near-duplicate questions
+  max_question_chars: 2500
+  max_question_code_lines: 12          # longer embedded listings read as quizzes, not requests
+
+practice:
+  # Thresholds used only to check that a reference execution exhibits the
+  # intended RLM behavior. Detector gate/exit thresholds stay user-owned.
+  large_context_min_chars: 65536
+  probe_max_chars: 3000
+  dump_threshold: 6000
+  read_threshold: 6000
+  many_hits: 60
+  subcall_max_chars: 32000
+  min_batch_chars: 0
+  hand_copy_min_chars: 120
+  dense_coverage_min: 0.5
+  min_turns_persistent_state: 3
+  min_subcalls_decomposition: 2
+
+heldout:
+  index: .deps/task-sources/heldout-index.json
+  deepswe_manifest: ../data/deep-swe/tasks/manifest.json
+  deepswe_tasks_dir: ../data/deep-swe/tasks
+  decontamination:
+    ngram_size: 5
+    overlap_threshold: 0.6
+  # Real public queries, useful for partial checking. No source contexts are in
+  # this artifact, so it MUST NOT certify complete heldout coverage.
+  question_sources:
+    - benchmark: oolong_pairs
+      path: .deps/m2-sources/pairs-questions.json
+      url: https://huggingface.co/datasets/mit-oasys/oolong-pairs/resolve/d1e1522b86ac0c169bbc890b0471408aaa29e8fa/questions.json
+      sha256: 9d147c25ce727d09d35470ef267db59b3877132429b8b0269a46d941f252cada
+      revision: d1e1522b86ac0c169bbc890b0471408aaa29e8fa
+      license: MIT
+  # Optional verified raw JSON/JSONL snapshots; see TASK_PIPELINE.md. Missing
+  # snapshots are reported, and the training loader refuses incomplete coverage.
+  snapshots: []
+
+# Permissive Python repositories, none of them a DeepSWE-113 upstream.
+# pythonpath entries are relative to the task checkout and shadow the
+# installed distribution, so tests and oracles exercise the edited tree.
+# Packages that pytest itself imports (pluggy, packaging, iniconfig) are
+# unsuitable: a defect in the checkout would break the test runner. Suites
+# that must run under unittest rather than pytest are excluded as well.
+repositories:
+  - {name: pallets/click, url: https://github.com/pallets/click.git, ref: 8.5.0,
+     commit: 8b19813f2bfca99f1018a587a8cf54fc959f2e5d, license: BSD-3-Clause,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest]}
+  - {name: pallets/jinja, url: https://github.com/pallets/jinja.git, ref: 3.1.6,
+     commit: 15206881c006c79667fe5154fe80c01c65410679, license: BSD-3-Clause,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, trio]}
+  - {name: marshmallow-code/marshmallow, url: https://github.com/marshmallow-code/marshmallow.git, ref: 4.3.1,
+     commit: c7b559a1fa3aba57ca6dba0ab336841c5038a782, license: MIT,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, simplejson]}
+  - {name: jd/tenacity, url: https://github.com/jd/tenacity.git, ref: 9.2.1,
+     commit: 4410996dd9a96864a2733ce0778bcaa112b72811, license: Apache-2.0,
+     pythonpath: [.], test_paths: [tests], test_deps: [pytest, tornado]}
+  - {name: pyparsing/pyparsing, url: https://github.com/pyparsing/pyparsing.git, ref: 3.3.3,
+     commit: d90d38b283efaece7ac7cace7050ba55cb82abe5, license: MIT,
+     pythonpath: [.], test_paths: [tests], test_deps: [pytest, railroad-diagrams, jinja2]}
+  - {name: hynek/structlog, url: https://github.com/hynek/structlog.git, ref: 26.1.0,
+     commit: 8174a86a2f14b5bd295eded733ff5fffc12aa173, license: Apache-2.0 OR MIT,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, pytest-asyncio, simplejson, time-machine]}
+  - {name: andialbrecht/sqlparse, url: https://github.com/andialbrecht/sqlparse.git, ref: 0.6.0,
+     commit: 2f40da99b50d81135aecf96f6b08fcfa338a96de, license: BSD-3-Clause,
+     pythonpath: [.], test_paths: [tests], test_deps: [pytest]}
+  - {name: lepture/mistune, url: https://github.com/lepture/mistune.git, ref: v3.3.4,
+     commit: 69ec2b8a6d5b37ecb3c56d96df4b40b9d3004657, license: BSD-3-Clause,
+     pythonpath: [src, .], test_paths: [tests], test_deps: [pytest]}
+  - {name: jmespath/jmespath.py, url: https://github.com/jmespath/jmespath.py.git, ref: 1.1.0,
+     commit: 6ff419a8b171d055a9bfc6904605bceb8b7a80ef, license: MIT,
+     pythonpath: [.], test_paths: [tests], test_deps: [pytest]}
+  - {name: lark-parser/lark, url: https://github.com/lark-parser/lark.git, ref: 1.3.1,
+     commit: f79772cd4c6d2076b5dc01f399dbb816cc484f77, license: MIT,
+     pythonpath: [.], test_paths: [tests], test_deps: [pytest, 'interegular>=0.3.1,<0.4.0', regex]}
+  - {name: pytoolz/toolz, url: https://github.com/pytoolz/toolz.git, ref: 1.2.0,
+     commit: 451af60dec590a6010e2babdbf391ea8f815122f, license: BSD-3-Clause,
+     pythonpath: [.], test_paths: [toolz], test_deps: [pytest]}
+  - {name: python-hyper/h11, url: https://github.com/python-hyper/h11.git, ref: v0.16.0,
+     commit: 1c5b07581f058886c8bdd87adababd7d959dc7ca, license: MIT,
+     pythonpath: [.], test_paths: [h11/tests], test_deps: [pytest]}
+  - {name: theskumar/python-dotenv, url: https://github.com/theskumar/python-dotenv.git, ref: v1.2.4,
+     commit: a565c2cc41599c48eabc6b7b7f5b826d43c5a6d7, license: BSD-3-Clause,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, click, sh]}
+  - {name: tkem/cachetools, url: https://github.com/tkem/cachetools.git, ref: v7.2.1,
+     commit: 9976f1a8076631560f49c5b0dfda7e4d00ee0a4a, license: MIT,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest]}
+  - {name: python-attrs/attrs, url: https://github.com/python-attrs/attrs.git, ref: 26.1.0,
+     commit: 7bfc49e9b22d5ba25b6e429524c3d49fee27cb36, license: MIT,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, hypothesis, pympler, cloudpickle]}
+  - {name: mahmoud/glom, url: https://github.com/mahmoud/glom.git, ref: v25.12.0,
+     commit: 811eadeec404bd99ee5a43ca551e8fb220b999f3, license: BSD-3-Clause,
+     pythonpath: [.], test_paths: [glom/test], test_deps: [pytest, pyyaml]}
+  - {name: alecthomas/voluptuous, url: https://github.com/alecthomas/voluptuous.git, ref: 0.16.0,
+     commit: 87825d6dbdab8830fcc6d559ecb3b88bdf68af6d, license: BSD-3-Clause,
+     pythonpath: [.], test_paths: [voluptuous/tests], test_deps: [pytest]}
+  - {name: python-jsonschema/jsonschema, url: https://github.com/python-jsonschema/jsonschema.git, ref: v4.26.0,
+     commit: a7277432b0f7bcd0551f6e589d30457017125df4, license: MIT,
+     pythonpath: [.], test_paths: [jsonschema/tests], test_deps: [pytest, jsonpath-ng, hypothesis]}
+  - {name: wtforms/wtforms, url: https://github.com/wtforms/wtforms.git, ref: 3.2.2,
+     commit: ea57c11591556333b4f0ac494d1e5d3f250ab305, license: BSD-3-Clause,
+     pythonpath: [src], test_paths: [tests], test_deps: [pytest, babel, python-dateutil, email_validator]}
+  - {name: mkdocs/mkdocs, url: https://github.com/mkdocs/mkdocs.git, ref: 1.6.1,
+     commit: bb7e8b62185b11d9f59bb7f50b13c15134f62f8a, license: BSD-2-Clause,
+     pythonpath: [.], test_paths: [mkdocs/tests], test_deps: [pytest, babel],
+     pytest_args: [-o, 'python_files=*tests.py']}

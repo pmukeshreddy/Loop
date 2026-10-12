@@ -1,0 +1,277 @@
+{
+ "answer": "--- a/sqlparse/sql.py\n+++ b/sqlparse/sql.py\n@@ -559,7 +559,14 @@\n     M_OPEN = T.Keyword, 'WHERE'\n     M_CLOSE = T.Keyword, (\n         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n+        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\n+\n+\n+class Qualify(TokenList):\n+    \"\"\"A QUALIFY clause.\"\"\"\n+    M_OPEN = T.Keyword, 'QUALIFY'\n+    M_CLOSE = T.Keyword, (\n+        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n \n \n class Over(TokenList):\n--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -346,21 +346,35 @@\n         tidx, token = tlist.token_next_by(t=T.Comment, idx=tidx)\n \n \n-@recurse(sql.Where)\n-def group_where(tlist):\n-    tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN)\n-    while token:\n-        eidx, end = tlist.token_next_by(m=sql.Where.M_CLOSE, idx=tidx)\n+def _group_clause(tlist, cls):\n+    \"\"\"Group WHERE/QUALIFY using whitespace-insensitive keyword boundaries.\"\"\"\n+    def is_boundary(token):\n+        # Normalize only for this comparison: token values and the global\n+        # Token.match/normalized semantics must remain unchanged.\n+        return (token.ttype == cls.M_CLOSE[0]\n+                and ' '.join(token.normalized.split()) in cls.M_CLOSE[1])\n+\n+    tidx, token = tlist.token_next_by(m=cls.M_OPEN)\n+    while token:\n+        eidx, end = tlist._token_matching(is_boundary, start=tidx + 1)\n \n         if end is None:\n             end = tlist._groupable_tokens[-1]\n         else:\n             end = tlist.tokens[eidx - 1]\n-        # TODO: convert this to eidx instead of end token.\n-        # i think above values are len(tlist) and eidx-1\n         eidx = tlist.token_index(end)\n-        tlist.group_tokens(sql.Where, tidx, eidx)\n-        tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n+        tlist.group_tokens(cls, tidx, eidx)\n+        tidx, token = tlist.token_next_by(m=cls.M_OPEN, idx=tidx)\n+\n+\n+@recurse(sql.Where)\n+def group_where(tlist):\n+    _group_clause(tlist, sql.Where)\n+\n+\n+@recurse(sql.Qualify)\n+def group_qualify(tlist):\n+    _group_clause(tlist, sql.Qualify)\n \n \n @recurse()\n@@ -454,6 +468,7 @@\n         group_over,\n         group_functions,\n         group_where,\n+        group_qualify,\n         group_period,\n         group_arrays,\n         group_identifier,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0018173664707687223,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 21,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "changes",
+    "files",
+    "g",
+    "new_s",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 30174,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 21 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed and inspected the final diff using reused variables. The changes coordinate the public Qualify class, WHERE termination, grouping integration, and clause-local whitespace normalization without changing global token matching semantics. The execution summary does not establish runtime testing, but it does establish assembly and inspection of the final artifact.",
+   "inspect_locate": "The reference execution used 21 targeted context searches and a scoped sub-call rather than printing the whole repository. The task requires connecting lexer recognition of compound keywords, token matching semantics, clause grouping order, and parenthesis handling across production modules."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only diff format. Naming the new public class specifies the requested API rather than revealing a defective implementation. Although it extends an accepted QUALIFY task, compound-keyword whitespace handling introduces a substantive additional defect and requires a different boundary-recognition implementation, so the variation is not merely cosmetic or duplicative."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must coordinate the public clause class, grouping schedule, and clause-specific boundary recognition while preserving original token spelling, ancestry, and unrelated matching semantics.",
+   "inspect_locate": "The change depends on reconciling compound keyword recognition in the lexer with exact token matching, recursive clause grouping, and parenthesis boundaries. These contracts are distributed across keywords.py, sql.py, and engine/grouping.py."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/keywords.py",
+    "symbol": "sqlparse/keywords.py::SQL_REGEX",
+    "why": "ORDER BY, GROUP BY, and UNION ALL already accept arbitrary separating whitespace through compound lexical patterns."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Token.match",
+    "why": "Ordinary keyword matching compares exact uppercased spellings; its existing public behavior must remain intact."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Where",
+    "why": "Defines the existing WHERE boundary set and the convention for introducing the public QUALIFY clause class."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Parenthesis",
+    "why": "Defines the delimiter-excluding groupable range needed when a nested clause has no terminating keyword."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group_where",
+    "why": "Currently locates clause boundaries through exact matching, creating the whitespace-sensitive termination behavior."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group",
+    "why": "The new QUALIFY grouping pass must participate in the production grouping schedule."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_clause_boundary_whitespace.py\n@@ -0,0 +1,108 @@\n+import pytest\n+\n+import sqlparse\n+from sqlparse import sql, tokens as T\n+\n+\n+def walk(node):\n+    yield node\n+    for child in node.get_sublists():\n+        yield from walk(child)\n+\n+\n+@pytest.mark.parametrize('spacing', [' ', '   ', '\\t', '\\n', '\\r\\n', ' \\t\\n '])\n+@pytest.mark.parametrize('clause,boundary,tail', [\n+    ('WHERE', 'ORDER BY', 'x'),\n+    ('WHERE', 'GROUP BY', 'x'),\n+    ('WHERE', 'UNION ALL', 'SELECT y FROM u'),\n+    ('QUALIFY', 'ORDER BY', 'x'),\n+    ('QUALIFY', 'UNION ALL', 'SELECT y FROM u'),\n+])\n+@pytest.mark.parametrize('nested', [False, True])\n+def test_compound_boundaries(spacing, clause, boundary, tail, nested):\n+    spelling = spacing.join(boundary.lower().split())\n+    prefix = clause.lower() + ' x > 0 \\t'\n+    inner = 'SELECT x FROM t ' + prefix + spelling + ' ' + tail\n+    source = 'SELECT * FROM (' + inner + ') AS q' if nested else inner\n+    stmt, = sqlparse.parse(source)\n+    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis)) if nested else stmt\n+    cls = sql.Where if clause == 'WHERE' else sql.Qualify\n+    groups = [t for t in container.tokens if isinstance(t, cls)]\n+    assert len(groups) == 1\n+    group = groups[0]\n+    assert str(group) == prefix\n+    index = container.token_index(group)\n+    terminator = container.tokens[index + 1]\n+    assert terminator.ttype is T.Keyword\n+    assert terminator.value == spelling\n+    assert terminator.normalized == spelling.upper()\n+    assert str(stmt) == source\n+    assert stmt.get_type() == 'SELECT'\n+    for node in walk(stmt):\n+        for child in node.tokens:\n+            assert child.parent is node\n+\n+\n+@pytest.mark.parametrize('nested', [False, True])\n+def test_where_then_qualify(nested):\n+    inner = 'SELECT x FROM t WHERE x > 0 QUALIFY n = 1 OrDeR\\tBy x'\n+    source = '(' + inner + ')' if nested else inner\n+    stmt, = sqlparse.parse(source)\n+    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis)) if nested else stmt\n+    where = [t for t in container.tokens if isinstance(t, sql.Where)]\n+    qualify = [t for t in container.tokens if isinstance(t, sql.Qualify)]\n+    assert len(where) == len(qualify) == 1\n+    assert str(where[0]) == 'WHERE x > 0 '\n+    assert str(qualify[0]) == 'QUALIFY n = 1 '\n+    assert container.tokens[container.token_index(qualify[0]) + 1].value == 'OrDeR\\tBy'\n+    assert str(stmt) == source\n+\n+\n+@pytest.mark.parametrize('clause,terminator,tail', [\n+    ('WHERE', 'LIMIT', '2'),\n+    ('WHERE', 'HAVING', 'x > 1'),\n+    ('WHERE', 'RETURNING', 'x'),\n+    ('WHERE', 'INTO', 'u'),\n+    ('QUALIFY', 'LIMIT', '2'),\n+    ('QUALIFY', 'UNION', 'SELECT y FROM u'),\n+    ('QUALIFY', 'EXCEPT', 'SELECT y FROM u'),\n+    ('QUALIFY', 'INTERSECT', 'SELECT y FROM u'),\n+])\n+def test_single_word_boundaries(clause, terminator, tail):\n+    source = 'SELECT x FROM t ' + clause + ' x > 0 ' + terminator + ' ' + tail\n+    stmt, = sqlparse.parse(source)\n+    cls = sql.Where if clause == 'WHERE' else sql.Qualify\n+    group, = [t for t in stmt.tokens if isinstance(t, cls)]\n+    assert str(group) == clause + ' x > 0 '\n+    assert stmt.tokens[stmt.token_index(group) + 1].value == terminator\n+    assert str(stmt) == source\n+\n+\n+@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])\n+def test_no_boundary_and_quoted_boundary(clause):\n+    body = clause + \" x = 'ORDER\\tBY' AND y = 'UNION\\nALL' \"\n+    source = '(SELECT x FROM t ' + body + ')'\n+    stmt, = sqlparse.parse(source)\n+    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis))\n+    cls = sql.Where if clause == 'WHERE' else sql.Qualify\n+    group, = [t for t in container.tokens if isinstance(t, cls)]\n+    assert str(group) == body\n+    assert container.tokens[-1].match(T.Punctuation, ')')\n+    assert str(stmt) == source\n+\n+\n+def test_token_matching_remains_exact():\n+    token = sql.Token(T.Keyword, 'oRdEr\\tbY')\n+    assert token.value == 'oRdEr\\tbY'\n+    assert token.normalized == 'ORDER\\tBY'\n+    assert not token.match(T.Keyword, 'ORDER BY')\n+    assert token.match(T.Keyword, 'ORDER\\tBY')\n+    assert not sql.Token(T.Name, 'ORDER\\tBY').match(T.Keyword, 'ORDER\\tBY')\n+\n+\n+def test_qualify_keeps_non_boundary_compounds():\n+    source = 'SELECT x FROM t QUALIFY n = 1 GROUP\\tBY x'\n+    stmt, = sqlparse.parse(source)\n+    group, = [t for t in stmt.tokens if isinstance(t, sql.Qualify)]\n+    assert str(group) == 'QUALIFY n = 1 GROUP\\tBY x'\n+    assert str(stmt) == source\n",
+  "include_failure_log": false,
+  "notes": "The supplied pinned files do not contain the accepted QUALIFY implementation. This task therefore explicitly includes that prerequisite capability rather than assuming an unavailable starting state or using a feature addition as a defect setup patch. The new acceptance file verifies the whitespace constraint as well as the required clause contracts. Applying only the original accepted answer still fails the noncanonical compound-boundary cases, so the required production answer differs substantively from the original.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make parsed WHERE and QUALIFY clauses terminate correctly when compound boundary keywords contain tabs, newlines, or multiple spaces between their words. For example, in `SELECT x FROM t WHERE x > 0 QUALIFY n = 1 ORDER\\tBY x`, where `\\t` denotes a literal tab, ORDER BY must remain outside the QUALIFY group. UNION ALL with a newline between its words must likewise remain outside the preceding clause.\n\nThis snapshot does not yet expose QUALIFY as a clause group, so include a public `sqlparse.sql.Qualify` TokenList subclass and its grouping integration. WHERE must end before ORDER BY, GROUP BY, LIMIT, UNION, UNION ALL, EXCEPT, INTERSECT, HAVING, RETURNING, INTO, or QUALIFY. QUALIFY must end before ORDER BY, LIMIT, UNION, UNION ALL, EXCEPT, or INTERSECT. Boundary recognition must be case-insensitive and insensitive to the whitespace separating words within a compound keyword token recognized by the lexer. Only keyword tokens at the clause's own nesting level count as boundaries; quoted text must not terminate a clause.\n\nBoth clause groups must work at statement level and inside parentheses. Include whitespace preceding a boundary in the clause, but exclude the boundary itself. With no boundary, include the remaining groupable tokens without consuming enclosing parenthesis delimiters. Preserve exact token values, SQL round-tripping, statement-type detection, and parent relationships. Do not change the global semantics of `Token.normalized` or `Token.match`, or broaden the boundary handling of unrelated groups. Return a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across the lexer-to-grouping contract and combine_verify_finish across tabs, newlines, mixed case, nested parentheses, and exact round-tripping. Persistent state is useful for maintaining the distinction between a keyword's original spelling and the canonical form used only for boundary recognition.",
+  "change_type": "constraint",
+  "description": "With the accepted QUALIFY implementation applied, make WHERE and QUALIFY termination insensitive to the whitespace separating words in compound boundary keywords. For example, `SELECT x FROM t WHERE x > 0 QUALIFY n = 1 ORDER\\tBY x` must leave ORDER BY outside Qualify, and `SELECT x FROM t QUALIFY n = 1 UNION\\nALL SELECT y FROM u` must leave UNION ALL outside it. Preserve the exact original token values and SQL round-tripping, and do not globally change Token.normalized or Token.match semantics. Deliver a production-only unified diff. Investigate sqlparse/keywords.py::SQL_REGEX, sqlparse/sql.py::Token.match, sqlparse/sql.py::Where.M_CLOSE, the added Qualify.M_CLOSE, and sqlparse/engine/grouping.py::group_where and group_qualify.",
+  "expected_answer_change": "The answer depends on SQL_REGEX accepting compound keywords through patterns containing `\\s+`, while Token.normalized only uppercases values and Token.match compares exact normalized strings. A correct patch needs whitespace-tolerant boundary recognition scoped to clause grouping, including WHERE's compound boundaries such as GROUP BY, without rewriting token values or changing unrelated matching behavior.",
+  "why_substantive": "The seed adds a clause class and a grouping pass, but its exact-string boundary matching does not accommodate every compound keyword spelling already accepted by the lexer. This variation requires reconciling lexical recognition with clause-specific matching rather than repeating the class introduction and schedule insertion."
+ },
+ "task_id": "andialbrecht-sqlparse-r02-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_no_boundary_and_quoted_boundary[QUALIFY]",
+   "tests/test_clause_boundary_whitespace.py::test_qualify_keeps_non_boundary_compounds",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-EXCEPT-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-INTERSECT-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-LIMIT-2]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-UNION-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_where_then_qualify[False]",
+   "tests/test_clause_boundary_whitespace.py::test_where_then_qualify[True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 62,
+   "full_suite": {
+    "failed": 0,
+    "passed": 582
+   },
+   "patch_files": [
+    "sqlparse/sql.py",
+    "sqlparse/engine/grouping.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-QUALIFY-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-GROUP BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[False-WHERE-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u- ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-QUALIFY-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-GROUP BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-ORDER BY-x-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-   ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u- \\t\\n ]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\r\\n]",
+   "tests/test_clause_boundary_whitespace.py::test_compound_boundaries[True-WHERE-UNION ALL-SELECT y FROM u-\\t]",
+   "tests/test_clause_boundary_whitespace.py::test_no_boundary_and_quoted_boundary[QUALIFY]",
+   "tests/test_clause_boundary_whitespace.py::test_qualify_keeps_non_boundary_compounds",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-EXCEPT-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-INTERSECT-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-LIMIT-2]",
+   "tests/test_clause_boundary_whitespace.py::test_single_word_boundaries[QUALIFY-UNION-SELECT y FROM u]",
+   "tests/test_clause_boundary_whitespace.py::test_where_then_qualify[False]",
+   "tests/test_clause_boundary_whitespace.py::test_where_then_qualify[True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,127 @@
+{
+ "answer": "--- a/tenacity/retry.py\n+++ b/tenacity/retry.py\n@@ -166,16 +166,22 @@\n class retry_if_exception_cause_type(retry_base):\n     \"\"\"Retries if any of the causes of the raised exception is of one or more types.\n \n-    The check on the type of the cause of the exception is done recursively (until finding\n-    an exception in the chain that has no ``__cause__``, or a cycle is detected).\n+    By default, only explicit ``__cause__`` links are followed. With\n+    ``include_context=True``, an unsuppressed ``__context__`` is followed when\n+    there is no explicit cause. Linked exceptions are checked recursively until\n+    the chain ends or a cycle is detected; the initial exception is not checked\n+    merely because it was raised.\n     \"\"\"\n \n     def __init__(\n         self,\n         exception_types: type[BaseException]\n         | tuple[type[BaseException], ...] = Exception,\n+        *,\n+        include_context: bool = False,\n     ) -> None:\n         self.exception_cause_types = exception_types\n+        self.include_context = include_context\n \n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> bool:\n@@ -184,15 +190,24 @@\n \n         if retry_state.outcome.failed:\n             exc = retry_state.outcome.exception()\n-            # Guard against cyclic __cause__ chains (e.g. ``raise e from e``),\n+            # Guard against cyclic cause/context chains (e.g. ``raise e from e``),\n             # which would otherwise spin forever inside the predicate and\n             # prevent stop conditions from ever running (see #658).\n             seen: set[int] = set()\n             while exc is not None and id(exc) not in seen:\n                 seen.add(id(exc))\n-                if isinstance(exc.__cause__, self.exception_cause_types):\n+                linked = exc.__cause__\n+                if (\n+                    linked is None\n+                    and self.include_context\n+                    and not exc.__suppress_context__\n+                ):\n+                    linked = exc.__context__\n+                if linked is None:\n+                    break\n+                if isinstance(linked, self.exception_cause_types):\n                     return True\n-                exc = exc.__cause__\n+                exc = linked\n \n         return False\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 3,
+   "repository_execution": [],
+   "reused_variables": [
+    "oldclass",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 10466 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 10,466-character, single-file context contains the constructor, traversal logic, cycle guard, and outcome contract together. The reference execution produced a focused patch without sub-calls, consistent with solving this localized implementation task directly."
+  },
+  "notes": "This is a natural, precisely specified feature request. It requires repository-dependent reasoning about cause precedence, suppressed context, linked-exception matching, cycle termination, and existing outcome handling. Naming the API and defining its new behavior does not leak a defective implementation or prescribe solver operations. The verified patch implements the requested semantics, and the supplied tests cover the principal behavior changes and compatibility requirements. The unified-diff output format and non-test file restriction are clear."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only retry.py, under 16,000 characters. The constructor, existing cause traversal, cycle guard, and outcome-validation contract are visible together, so the feature can be reasoned about and patched without delegation."
+  },
+  "context": {
+   "files": [
+    "tenacity/retry.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/retry.py",
+    "symbol": "tenacity/retry.py::retry_if_exception_cause_type.__init__",
+    "why": "The new opt-in belongs on the existing public strategy constructor."
+   },
+   {
+    "path": "tenacity/retry.py",
+    "symbol": "tenacity/retry.py::retry_if_exception_cause_type.__call__",
+    "why": "The existing traversal already validates outcomes, tests linked exceptions, and guards against cycles."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cause_context.py\n@@ -0,0 +1,65 @@\n+import pytest\n+\n+from tenacity import Future, RetryCallState, Retrying, retry_if_exception_cause_type\n+\n+\n+def state_for(exc):\n+    state = RetryCallState(Retrying(), None, (), {})\n+    state.outcome = Future.construct(1, exc, True)\n+    return state\n+\n+\n+def test_default_still_ignores_implicit_context():\n+    exc = RuntimeError(\"outer\")\n+    exc.__context__ = ValueError(\"inner\")\n+    policy = retry_if_exception_cause_type(ValueError)\n+    assert policy(state_for(exc)) is False\n+\n+\n+def test_opt_in_follows_multiple_implicit_links():\n+    root = RuntimeError(\"outer\")\n+    middle = LookupError(\"middle\")\n+    root.__context__ = middle\n+    middle.__context__ = ValueError(\"inner\")\n+    policy = retry_if_exception_cause_type(ValueError, include_context=True)\n+    assert policy(state_for(root)) is True\n+\n+\n+def test_explicit_cause_takes_precedence_over_context():\n+    root = RuntimeError(\"outer\")\n+    root.__cause__ = LookupError(\"explicit\")\n+    root.__context__ = ValueError(\"implicit\")\n+    policy = retry_if_exception_cause_type(ValueError, include_context=True)\n+    assert policy(state_for(root)) is False\n+    root.__cause__.__context__ = ValueError(\"deeper\")\n+    assert policy(state_for(root)) is True\n+\n+\n+def test_suppressed_context_and_root_are_not_matches():\n+    policy = retry_if_exception_cause_type(ValueError, include_context=True)\n+    root = ValueError(\"outer\")\n+    assert policy(state_for(root)) is False\n+    root.__context__ = ValueError(\"inner\")\n+    root.__suppress_context__ = True\n+    assert policy(state_for(root)) is False\n+\n+\n+def test_cycles_terminate_but_matching_link_still_counts():\n+    root = RuntimeError(\"outer\")\n+    middle = LookupError(\"middle\")\n+    root.__context__ = middle\n+    middle.__context__ = root\n+    policy = retry_if_exception_cause_type(ValueError, include_context=True)\n+    assert policy(state_for(root)) is False\n+    middle.__context__ = ValueError(\"inner\")\n+    middle.__context__.__cause__ = root\n+    assert policy(state_for(root)) is True\n+\n+\n+def test_success_and_unset_outcomes_keep_existing_contract():\n+    policy = retry_if_exception_cause_type(ValueError, include_context=True)\n+    state = RetryCallState(Retrying(), None, (), {})\n+    with pytest.raises(RuntimeError):\n+        policy(state)\n+    state.set_result(\"ok\")\n+    assert policy(state) is False\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests use public state and strategy APIs. The focused solver context is intentionally limited to the implementation module; no changes to package exports are needed.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Extend retry_if_exception_cause_type with a keyword-only `include_context: bool = False` constructor option. With the default, preserve its existing explicit-cause-only behavior. When enabled, each traversal step must follow __cause__ if it is not None; otherwise follow __context__ only if __suppress_context__ is false. Test the linked exception's type, not the initial exception merely because it was raised. Continue through mixed explicit and implicit links, terminate safely on cycles, and preserve the existing behavior for successful or unset outcomes. Return a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jd-tenacity-r01-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cause_context.py::test_cycles_terminate_but_matching_link_still_counts",
+   "tests/test_cause_context.py::test_explicit_cause_takes_precedence_over_context",
+   "tests/test_cause_context.py::test_opt_in_follows_multiple_implicit_links",
+   "tests/test_cause_context.py::test_success_and_unset_outcomes_keep_existing_contract",
+   "tests/test_cause_context.py::test_suppressed_context_and_root_are_not_matches"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 190
+   },
+   "patch_files": [
+    "tenacity/retry.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cause_context.py::test_cycles_terminate_but_matching_link_still_counts",
+   "tests/test_cause_context.py::test_explicit_cause_takes_precedence_over_context",
+   "tests/test_cause_context.py::test_opt_in_follows_multiple_implicit_links",
+   "tests/test_cause_context.py::test_success_and_unset_outcomes_keep_existing_contract",
+   "tests/test_cause_context.py::test_suppressed_context_and_root_are_not_matches"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

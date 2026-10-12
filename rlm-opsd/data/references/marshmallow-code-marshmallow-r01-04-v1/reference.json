@@ -1,0 +1,153 @@
+{
+ "answer": "--- a/src/marshmallow/orderedset.py\n+++ b/src/marshmallow/orderedset.py\n@@ -30,6 +30,9 @@\n         self.map = {}  # key --> [key, prev, next]\n         if iterable is not None:\n             self |= iterable\n+\n+    def __copy__(self):\n+        return self.__class__(self)\n \n     def __len__(self):\n         return len(self.map)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 2991 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the focused 2,991-character context with no sub-calls. The task requires understanding how construction, iteration, and mutation interact with the map and circular linked list, making direct reasoning over the implementation appropriate."
+  },
+  "notes": "This is a natural, narrowly scoped copying-contract change with explicit identity, storage-independence, mutation, and edge-case requirements. The question specifies desired behavior without revealing the implementation fix or prescribing solver operations. The verified patch reconstructs the container while preserving member identity. Although small, the task requires repository-specific reasoning and qualifies as direct_solve. It is substantively different from the existing move_to_end task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused OrderedSet file is under 4,000 characters. Reading its constructor, iteration methods, and mutators directly is sufficient to reason about shared ownership of the map, sentinel, and linked nodes, and to implement independent shallow copies without delegation."
+  },
+  "context": {
+   "files": [
+    "src/marshmallow/orderedset.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.__init__",
+    "why": "Initializes a fresh sentinel and map and populates the representation from an iterable."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.add",
+    "why": "Allocates linked-list nodes while retaining references to the original member objects."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.__iter__",
+    "why": "Supplies members in insertion order, allowing reconstruction without copying the members themselves."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.discard",
+    "why": "Mutates both the map and neighboring nodes, explaining why copying only the map is insufficient."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.pop",
+    "why": "Uses sentinel links to select endpoints and then delegates removal to discard."
+   }
+  ],
+  "expected_answer": "--- a/src/marshmallow/orderedset.py\n+++ b/src/marshmallow/orderedset.py\n@@ -31,6 +31,9 @@\n         if iterable is not None:\n             self |= iterable\n \n+    def __copy__(self):\n+        return self.__class__(self)\n+\n     def __len__(self):\n         return len(self.map)\n \n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_orderedset_shallow_copy.py\n@@ -0,0 +1,100 @@\n+import copy\n+\n+import pytest\n+\n+from marshmallow.orderedset import OrderedSet\n+\n+\n+def assert_members(value, expected):\n+    assert isinstance(value, OrderedSet)\n+    actual = list(value)\n+    assert len(value) == len(expected)\n+    assert len(actual) == len(expected)\n+    assert all(a is b for a, b in zip(actual, expected))\n+    backward = list(reversed(value))\n+    assert len(backward) == len(expected)\n+    assert all(a is b for a, b in zip(backward, reversed(expected)))\n+    for item in expected:\n+        assert item in value\n+\n+\n+@pytest.mark.parametrize(\"size\", [0, 1, 3])\n+def test_copy_preserves_order_and_member_identity(size):\n+    members = [object() for _ in range(size)]\n+    original = OrderedSet(members)\n+    cloned = copy.copy(original)\n+    assert cloned is not original\n+    assert_members(original, members)\n+    assert_members(cloned, members)\n+\n+\n+@pytest.mark.parametrize(\"size\", [0, 1, 3])\n+@pytest.mark.parametrize(\"mutate_copy\", [False, True])\n+def test_copy_mutations_are_independent(size, mutate_copy):\n+    members = [object() for _ in range(size)]\n+    original = OrderedSet(members)\n+    cloned = copy.copy(original)\n+    target, other = (cloned, original) if mutate_copy else (original, cloned)\n+    added = object()\n+    target.add(added)\n+    assert_members(target, [*members, added])\n+    assert_members(other, members)\n+    target.add(added)\n+    assert_members(target, [*members, added])\n+    assert_members(other, members)\n+    if members:\n+        target.discard(members[0])\n+        remaining = members[1:]\n+    else:\n+        target.discard(object())\n+        remaining = []\n+    assert_members(target, [*remaining, added])\n+    assert_members(other, members)\n+    assert target.pop(last=False) is (remaining[0] if remaining else added)\n+    expected = [*remaining[1:], added] if remaining else []\n+    assert_members(target, expected)\n+    assert_members(other, members)\n+    if expected:\n+        assert target.pop() is expected[-1]\n+        expected = expected[:-1]\n+    assert_members(target, expected)\n+    assert_members(other, members)\n+    while expected:\n+        assert target.pop() is expected.pop()\n+        assert_members(target, expected)\n+        assert_members(other, members)\n+    with pytest.raises(KeyError):\n+        target.pop()\n+    assert_members(target, [])\n+    assert_members(other, members)\n+\n+\n+@pytest.mark.parametrize(\"size\", [0, 1, 3])\n+def test_copy_of_copy_with_interleaved_mutations(size):\n+    members = [object() for _ in range(size)]\n+    original = OrderedSet(members)\n+    first = copy.copy(original)\n+    second = copy.copy(first)\n+    assert second is not first\n+    assert second is not original\n+    extra = object()\n+    second.add(extra)\n+    assert_members(second, [*members, extra])\n+    assert_members(first, members)\n+    assert_members(original, members)\n+    first.add(extra)\n+    assert_members(first, [*members, extra])\n+    assert_members(original, members)\n+    assert first.pop() is extra\n+    assert_members(first, members)\n+    assert_members(second, [*members, extra])\n+    original.add(extra)\n+    assert_members(original, [*members, extra])\n+    second.discard(extra)\n+    assert_members(second, members)\n+    assert_members(original, [*members, extra])\n+    assert_members(first, members)\n+    assert original.pop(last=False) is (members[0] if members else extra)\n+    assert_members(original, [*members[1:], extra] if members else [])\n+    assert_members(first, members)\n+    assert_members(second, members)\n",
+  "include_failure_log": false,
+  "notes": "This variation addresses an existing missing copy protocol rather than injecting another regression. The supplied source already exhibits shallow-copy aliasing, so the task uses new hidden implementation tests instead of a setup patch. The identity-only tests pass before implementation; the mutation-isolation tests fail on the supplied code. The tests exercise observable behavior without requiring a particular internal implementation. The expected solution rebuilds the representation and is distinct from the original move_to_end implementation.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Calling `copy.copy()` on an `OrderedSet` currently leaves the two instances sharing mutable storage. Make shallow copying safe: the result must be a distinct OrderedSet with the same iteration order and the exact same member objects, but an independent map, sentinel, and linked-list nodes. Subsequent `add`, `discard`, and `pop` operations on either instance must leave the other instance's membership, size, forward order, and reverse order unchanged. Preserve both first-member and last-member popping and the existing KeyError behavior for empty sets. This must also work for empty sets, singleton sets, and copies of previously copied sets. Return a unified diff against `src/marshmallow/orderedset.py`, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Direct solving remains appropriate because the representation is compact. The reasoning shifts from local pointer relocation to ownership and aliasing across two instances, with interleaved mutation checks providing useful verification.",
+  "change_type": "failure_condition",
+  "description": "Repair shallow-copy aliasing in OrderedSet. In src/marshmallow/orderedset.py, add support for copy.copy so the copy preserves iteration order and references the same member objects, but owns an independent map, sentinel, and linked-list nodes. Mutating either instance through OrderedSet.add, OrderedSet.discard, or OrderedSet.pop must not change the other instance. Cover empty sets, singleton sets, and copying an already copied set. Return a unified diff against this file without changing tests.",
+  "expected_answer_change": "The answer should implement OrderedSet.__copy__ using a fresh representation, informed by OrderedSet.__init__, OrderedSet.add, and OrderedSet.__iter__. It must preserve shallow member identity rather than deep-copying keys or merely copying the map, which would still share linked nodes.",
+  "why_substantive": "The defect is shared mutable representation after copying, not the absence of an endpoint-relocation operation. The investigation must establish which objects the default shallow-copy protocol shares and which parts of the linked structure must be rebuilt while retaining member identity."
+ },
+ "task_id": "marshmallow-code-marshmallow-r01-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-3]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-3]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[3]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 9,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1200
+   },
+   "patch_files": [
+    "src/marshmallow/orderedset.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[False-3]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_mutations_are_independent[True-3]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[0]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[1]",
+   "tests/test_orderedset_shallow_copy.py::test_copy_of_copy_with_interleaved_mutations[3]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

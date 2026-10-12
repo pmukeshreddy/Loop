@@ -1,0 +1,145 @@
+{
+ "answer": "--- a/src/mistune/inline_parser.py\n+++ b/src/mistune/inline_parser.py\n@@ -397,20 +397,39 @@\n         return known[name]\n     if not pattern:\n         return set()\n-    return _guess_pattern_start_chars(pattern) or set()\n+    return _guess_pattern_start_chars(pattern)\n \n \n def _guess_pattern_start_chars(pattern: str) -> Optional[Set[str]]:\n     if not pattern:\n-        return set()\n-\n+        return None\n+\n+    # Only infer a literal prefix. Unknown starts must use the regex scanner.\n     if pattern.startswith(\"\\\\\") and len(pattern) > 1:\n         c = pattern[1]\n-        if c in _REGEX_META_CHARS or c in PUNCTUATION:\n-            return {c}\n+        if c not in _REGEX_META_CHARS and c not in PUNCTUATION:\n+            return None\n+        prefix_end = 2\n+    else:\n+        c = pattern[0]\n+        if c in _REGEX_META_CHARS or c.isspace():\n+            return None\n+        prefix_end = 1\n+\n+    # A nullable leading literal need not be present at the match position.\n+    # Be conservative with counted repeats, too.\n+    if pattern[prefix_end : prefix_end + 1] in (\"?\", \"*\", \"{\"):\n         return None\n \n-    c = pattern[0]\n-    if c in _REGEX_META_CHARS or c.isspace():\n-        return None\n+    # An alternative can start somewhere other than the literal prefix.\n+    # Skip escaped characters so simple patterns like r\"\\|+\" stay fast.\n+    # Reject nested alternatives as well: false negatives here are safe.\n+    pos = prefix_end\n+    while pos < len(pattern):\n+        if pattern[pos] == \"\\\\\":\n+            pos += 2\n+        elif pattern[pos] == \"|\":\n+            return None\n+        else:\n+            pos += 1\n     return {c}\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.9432148157707944,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "file_path",
+    "old"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 15497 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference worked within one focused 15,497-character file, using targeted context searches and no sub-calls. Comparing start-character inference with the optimized and generic scanning branches was sufficient to produce the verified patch."
+  },
+  "notes": "This is a concrete maintainer-style regression request with explicit compatibility constraints and a precise patch format. It requires repository-specific reasoning about unsafe regex-prefix inference and fallback selection, rather than a simple lookup. The examples describe required behavior without identifying the defective symbol or supplying the patch. It is substantively distinct from the accepted parent task: fresh-parser inference failures require different changes from invalidating cached triggers after late registration."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused inline-parser file contains the trigger inference, trigger aggregation, and optimized versus generic scanning branches. Comparing those branches explains why a freshly registered rule can lose matches; broader repository investigation or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/mistune/inline_parser.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/inline_parser.py",
+    "symbol": "src/mistune/inline_parser.py::_get_rule_start_chars",
+    "why": "The injected regression conflates an unknown trigger set with an empty set, preventing the generic-scanner fallback."
+   },
+   {
+    "path": "src/mistune/inline_parser.py",
+    "symbol": "src/mistune/inline_parser.py::_guess_pattern_start_chars",
+    "why": "The existing first-literal inference is unsound for alternation and optional leading atoms, so merely restoring the unknown-trigger fallback does not satisfy the new cases."
+   },
+   {
+    "path": "src/mistune/inline_parser.py",
+    "symbol": "src/mistune/inline_parser.py::InlineParser.parse",
+    "why": "The optimized branch consumes ordinary text before calling scanner.match, whereas the fallback uses scanner.search and can find matches omitted from the inferred triggers."
+   },
+   {
+    "path": "tests/test_misc.py",
+    "symbol": "tests/test_misc.py::TestMiscCases.test_inline_plugin_with_untracked_trigger_uses_regex_scanner",
+    "why": "The setup regression makes this existing lookahead-plugin test fail, providing executable failure evidence."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_inline_trigger_soundness.py\n@@ -0,0 +1,66 @@\n+from unittest import TestCase\n+\n+from mistune import InlineParser\n+\n+\n+def make_inline(pattern, parser_cls=InlineParser):\n+    inline = parser_cls()\n+\n+    def parse_mark(inline, m, state):\n+        state.append_token({\"type\": \"plugin_mark\", \"raw\": m.group(0)})\n+        return m.end()\n+\n+    inline.register(\"plugin_mark\", pattern, parse_mark)\n+    return inline\n+\n+\n+class SearchGuard:\n+    def __init__(self, scanner):\n+        self.scanner = scanner\n+\n+    def match(self, *args, **kwargs):\n+        return self.scanner.match(*args, **kwargs)\n+\n+    def search(self, *args, **kwargs):\n+        raise AssertionError(\"A safely understood rule should retain fast scanning\")\n+\n+\n+class FastOnlyInline(InlineParser):\n+    def compile_sc(self, rules=None):\n+        return SearchGuard(super().compile_sc(rules))\n+\n+\n+class TestInlineTriggerSoundness(TestCase):\n+    def test_alternation_on_fresh_parsers(self):\n+        for text, expected in [(\"@@\", [\"@@\"]), (\"%%\", [\"%%\"]), (\"lead @@ tail\", [\"@@\"]), (\"lead %% tail\", [\"%%\"]), (\"lead @@ middle %% tail\", [\"@@\", \"%%\"])]:\n+            with self.subTest(text=text):\n+                inline = make_inline(r\"@+|%+\")\n+                tokens = inline(text, {})\n+                self.assertEqual([t[\"raw\"] for t in tokens if t[\"type\"] == \"plugin_mark\"], expected)\n+                self.assertEqual(\"\".join(t[\"raw\"] for t in tokens), text)\n+\n+    def test_optional_leading_characters(self):\n+        for pattern in (r\"@?%+\", r\"@*%+\", r\"@{0,2}%+\", r\"\\+?%+\"):\n+            with self.subTest(pattern=pattern):\n+                inline = make_inline(pattern)\n+                tokens = inline(\"lead %% tail\", {})\n+                self.assertEqual([t[\"raw\"] for t in tokens if t[\"type\"] == \"plugin_mark\"], [\"%%\"])\n+                self.assertEqual(\"\".join(t[\"raw\"] for t in tokens), \"lead %% tail\")\n+\n+    def test_lookahead_rule(self):\n+        inline = make_inline(r\"(?=x)x+\")\n+        self.assertEqual(inline(\"xx\", {}), [{\"type\": \"plugin_mark\", \"raw\": \"xx\"}])\n+\n+    def test_safe_custom_patterns_keep_fast_scanning(self):\n+        for pattern, text, raw in [(r\"@+\", \"lead @@ tail\", \"@@\"), (r\"\\|+\", \"lead || tail\", \"||\")]:\n+            with self.subTest(pattern=pattern):\n+                inline = make_inline(pattern, FastOnlyInline)\n+                tokens = inline(text, {})\n+                self.assertEqual([t[\"raw\"] for t in tokens if t[\"type\"] == \"plugin_mark\"], [raw])\n+                self.assertEqual(\"\".join(t[\"raw\"] for t in tokens), text)\n+\n+    def test_builtin_plain_text_keeps_fast_scanning(self):\n+        self.assertEqual(\n+            FastOnlyInline()(\"ordinary text\", {}),\n+            [{\"type\": \"text\", \"raw\": \"ordinary text\"}],\n+        )\n",
+  "include_failure_log": true,
+  "notes": "The setup patch introduces a new regression in unknown-trigger propagation and leaves registration cache invalidation intact. The snapshot already has unsound first-literal inference for alternation; the new hidden tests require repairing that defect as well. Run the existing suite and the added test file. SearchGuard instruments the public compile_sc extension point to verify that safe patterns retain the optimized scanning branch without imposing a particular inference implementation. A correct repair must differ from the original registration-cache fix.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Custom inline rules are being skipped on fresh parsers, not just after late plugin installation. A rule registered with pattern r\"@+|%+\" and a callback that appends a custom token must recognize both \"@@\" and \"%%\", whether they occur at the beginning of the input or after ordinary text. The attached pytest output also shows a lookahead-based rule being skipped. Repair inline scanning so its optimization cannot discard valid matches when a regex has alternative starts or an optional leading character. Preserve fast scanning for built-in rules and simple custom patterns such as r\"@+\" and r\"\\|+\"; when starting characters cannot be inferred safely, use the generic regex scanner. Keep registration and callback behavior unchanged. Return a unified diff against production files only, without modifying tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/mistune/inline_parser.py\n+++ b/src/mistune/inline_parser.py\n@@ -436,10 +436,10 @@\n     if name in known:\n         return known[name]\n     if not pattern:\n         return set()\n-    return _guess_pattern_start_chars(pattern)\n+    return _guess_pattern_start_chars(pattern) or set()\n \n \n def _guess_pattern_start_chars(pattern: str) -> Optional[Set[str]]:\n     if not pattern:\n         return set()\n"
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from tracking cache lifetime across renders to checking the semantic soundness of an optimization against the grammar scanner. Focused reading of the trigger helpers and parse loop is more useful than a broad repository search; contrasting optimized and fallback parsing provides the relevant evidence.",
+  "change_type": "failure_condition",
+  "description": "Repair an inline plugin whose rule matches multiple starting characters but loses some matches even when installed before the first render. Register a custom rule with pattern r\"@+|%+\" and a callback that emits a custom token. Require both \"@@\" and \"%%\", including occurrences after ordinary text, to reach the callback. Return a production-only unified diff that preserves fast scanning for safely understood patterns and uses the generic scanner when start characters cannot be inferred safely. Investigate src/mistune/inline_parser.py::_guess_pattern_start_chars, _get_rule_start_chars, InlineParser._get_fast_trigger_chars, and InlineParser.parse.",
+  "expected_answer_change": "The patch must make trigger inference conservative for alternation and other regex constructs that invalidate the assumption that the first literal is mandatory. For r\"@+|%+\", it must either derive both starting characters correctly or return None to select sc.search. It must retain the fast path for simple, safely inferred patterns such as r\"@+\" and retain the existing lookahead fallback covered by tests/test_misc.py::TestMiscCases.test_inline_plugin_with_untracked_trigger_uses_regex_scanner.",
+  "why_substantive": "This fails on a fresh parser with correctly invalidated caches. The defect is an unsound inference: _guess_pattern_start_chars treats the initial literal '@' as the only possible start of an alternation that also matches '%'. Repeating the accepted task's InlineParser.register fix cannot repair it."
+ },
+ "task_id": "lepture-mistune-r01-00-v1",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_misc.py::TestMiscCases::test_inline_plugin_with_untracked_trigger_uses_regex_scanner"
+  ],
+  "hidden_tests": [
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_alternation_on_fresh_parsers",
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_lookahead_rule",
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_optional_leading_characters"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1160
+   },
+   "patch_files": [
+    "src/mistune/inline_parser.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_misc.py::TestMiscCases::test_inline_plugin_with_untracked_trigger_uses_regex_scanner"
+  ],
+  "ground_truth_symbols": [
+   "src/mistune/inline_parser.py::_get_rule_start_chars"
+  ],
+  "hidden_tests": [
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_alternation_on_fresh_parsers",
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_lookahead_rule",
+   "tests/test_inline_trigger_soundness.py::TestInlineTriggerSoundness::test_optional_leading_characters"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1154,
+  "stability_runs": 3
+ }
+}

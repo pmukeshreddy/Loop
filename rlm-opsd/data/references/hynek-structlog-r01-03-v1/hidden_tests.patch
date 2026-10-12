@@ -1,0 +1,120 @@
+--- /dev/null
++++ b/tests/test_extra_adder_reserved_metadata.py
+@@ -0,0 +1,117 @@
++import json
++import logging
++
++import pytest
++
++from structlog.stdlib import ExtraAdder, ProcessorFormatter
++
++
++def make_record():
++    return logging.LogRecord(
++        "foreign", logging.INFO, "source.py", 7, "hello %s", ("world",), None
++    )
++
++
++@pytest.mark.parametrize(
++    "allow", [None, ["_record", "_from_structlog", "field", "_user"]]
++)
++@pytest.mark.parametrize("has_origin", [False, True])
++def test_reserved_metadata_is_not_copied(allow, has_origin):
++    record = make_record()
++    spoofed = object()
++    record.__dict__.update(
++        _record=spoofed, _from_structlog=True, field="new", _user="kept"
++    )
++    before = record.__dict__.copy()
++    ed = {"_record": record, "field": "old"}
++    if has_origin:
++        ed["_from_structlog"] = False
++
++    assert ExtraAdder(allow)(None, "info", ed) is ed
++    assert ed["_record"] is record
++    if has_origin:
++        assert ed["_from_structlog"] is False
++    else:
++        assert "_from_structlog" not in ed
++    assert ed["field"] == "new"
++    assert ed["_user"] == "kept"
++    assert record.__dict__ == before
++
++
++def test_allow_snapshot_and_standard_fields():
++    record = make_record()
++    record.field = "new"
++    record.other = "not allowed"
++    record._record = object()
++    record._from_structlog = True
++    allow = ["name", "field", "missing", "_record", "_from_structlog"]
++    adder = ExtraAdder(allow)
++    allow[:] = ["other"]
++    ed = {"_record": record, "_from_structlog": False, "field": None}
++
++    assert adder(None, "info", ed) == {
++        "_record": record,
++        "_from_structlog": False,
++        "field": "new",
++        "name": "foreign",
++    }
++    empty = {"_record": record}
++    assert ExtraAdder([])(None, "info", empty) == {"_record": record}
++
++
++@pytest.mark.parametrize("allow", [None, ["_record", "_from_structlog", "field"]])
++@pytest.mark.parametrize("ed", [{}, {"field": "old"}, {"_record": None}])
++def test_missing_record_is_noop(allow, ed):
++    before = ed.copy()
++    assert ExtraAdder(allow)(None, "info", ed) is ed
++    assert ed == before
++
++
++@pytest.mark.parametrize(
++    "allow", [None, ["_record", "_from_structlog", "field"]]
++)
++def test_foreign_chain_keeps_authoritative_metadata(allow):
++    spoofed = make_record()
++    record = logging.Logger("foreign").makeRecord(
++        "foreign", logging.INFO, "source.py", 7, "hello %s", ("world",), None,
++        extra={"_record": spoofed, "_from_structlog": True, "field": "extra"},
++    )
++    seen = []
++
++    def remember(_, __, ed):
++        seen.append(ed["_record"])
++        ed["field"] = "pre-chain"
++        return ed
++
++    def mark_record(_, __, ed):
++        assert ed["_record"] is seen[0]
++        assert ed["_from_structlog"] is False
++        ed["_record"].late = "from actual record"
++        return ed
++
++    def verify(_, __, ed):
++        assert ed["_record"] is seen[0]
++        assert ed["_record"] is not spoofed
++        assert ed["_from_structlog"] is False
++        assert ed["field"] == "extra"
++        assert ed["late"] == "from actual record"
++        return ed
++
++    formatter = ProcessorFormatter(
++        foreign_pre_chain=[
++            remember, ExtraAdder(allow), mark_record, ExtraAdder(["late"]),
++        ],
++        processors=[
++            verify, ProcessorFormatter.remove_processors_meta,
++            ExtraAdder(allow), lambda _, __, ed: json.dumps(ed),
++        ],
++    )
++
++    assert json.loads(formatter.format(record)) == {
++        "event": "hello world",
++        "field": "extra",
++        "late": "from actual record",
++    }
++    assert record._record is spoofed
++    assert record._from_structlog is True
++    assert record.args == ("world",)

@@ -1,0 +1,13 @@
+--- a/src/jinja2/optimizer.py
++++ b/src/jinja2/optimizer.py
+@@ -33,6 +33,10 @@
+     ) -> nodes.Node:
+         node = super().generic_visit(node, *args, **kwargs)
+ 
++        # Traverse volatile contexts without attempting constant folding.
++        if args and isinstance(args[0], nodes.EvalContext) and args[0].volatile:
++            return node
++
+         # Do constant folding. Some other nodes besides Expr have
+         # as_const, but folding them causes errors later on.
+         if isinstance(node, nodes.Expr):

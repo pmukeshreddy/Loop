@@ -1,0 +1,18 @@
+--- a/src/jinja2/environment.py
++++ b/src/jinja2/environment.py
+@@ -1062,10 +1062,13 @@
+             if isinstance(name, Template):
+                 return name
+             if parent is not None:
+-                name = self.join_path(name, parent)
++                try:
++                    name = self.join_path(name, parent)
++                except TemplateNotFound:
++                    continue
+             try:
+                 return self._load_template(name, globals)
+-            except TemplateNotFound:
++            except (TemplateNotFound, UndefinedError):
+                 pass
+         raise TemplatesNotFound(names)  # type: ignore
+ 

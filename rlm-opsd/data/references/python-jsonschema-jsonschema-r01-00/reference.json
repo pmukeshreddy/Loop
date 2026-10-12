@@ -1,0 +1,148 @@
+{
+ "answer": "--- a/jsonschema/validators.py\n+++ b/jsonschema/validators.py\n@@ -594,6 +594,7 @@\n         type_checker=type_checker,\n         format_checker=format_checker,\n         id_of=validator.ID_OF,\n+        applicable_validators=validator._APPLICABLE_VALIDATORS,\n     )\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0009097946841523691,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 14,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "index",
+    "logs",
+    "old",
+    "path",
+    "tree"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1209064 chars; 14 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['index', 'logs', 'old', 'path', 'tree']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final unified diff was computed and inspected after construction. Independent test verification established the repair, although the reference execution itself recorded no repository execution.",
+   "inspect_locate": "The reference execution performed 14 targeted searches without printing the whole context. The investigation connected validator extension, generated dispatch, and draft-specific reference-sibling policy, rather than stopping at the reference handler.",
+   "persistent_state": "The six-turn execution reused stored source, indexing, and log information to retain the parent configuration and construct the repair without hand-copying source literals."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise deliverable. The question supplies the affected behavior without naming the defective symbol or prescribing the fix. Forwarding the parent class's applicable-validator policy addresses the verified extension failure while retaining draft-specific dispatch and existing keyword overrides. The task is distinct from the previously accepted TypeChecker change."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a unified diff whose context must match the supplied starting state and whose change must preserve both legacy and modern draft behavior.",
+   "inspect_locate": "The failing extension tests must be connected to generated-validator dispatch, the concrete draft configurations, and the legacy reference-sibling policy rather than treated as reference-handler failures.",
+   "persistent_state": "The investigation reuses the parent class configuration, the generated class's dispatch rules, and the exact source text needed for the repair."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::extend",
+    "why": "Extension transfers class-level configuration into create, including the policy determining which keywords apply."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "Initialization and descent use the supplied applicable_validators policy, whose default differs from the older drafts' policy."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::ignore_ref_siblings",
+    "why": "This is the policy installed on Draft 3 through Draft 7 and inherited by their extensions."
+   },
+   {
+    "path": "jsonschema/tests/test_validators.py",
+    "symbol": null,
+    "why": "Existing validator-extension tests provide executable regression coverage."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only extension plumbing; the built-in concrete validator classes themselves retain their original policies.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in customized validators: validation involving a Draft 7 schema with a reference no longer behaves like validation with the original Draft 7 class. Repair the underlying configuration regression while preserving newer drafts' behavior and existing keyword overrides. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/jsonschema/validators.py\n+++ b/jsonschema/validators.py\n@@ -626,8 +626,7 @@\n         type_checker=type_checker,\n         format_checker=format_checker,\n         id_of=validator.ID_OF,\n-        applicable_validators=validator._APPLICABLE_VALIDATORS,\n     )\n \n \n Draft3Validator = create(\n"
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "jsonschema/tests/test_validators.py::TestCreateAndExtend::test_extend_applicable_validators"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7288
+   },
+   "patch_files": [
+    "jsonschema/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "jsonschema/tests/test_validators.py::TestCreateAndExtend::test_extend_applicable_validators"
+  ],
+  "ground_truth_symbols": [
+   "jsonschema/validators.py::extend"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7287,
+  "stability_runs": 3
+ }
+}

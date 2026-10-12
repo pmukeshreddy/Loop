@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -371,6 +371,20 @@\n             schema_value = schema[keyword]\n             if validator.is_type(schema_value, \"boolean\") and schema_value:\n                 evaluated_keys += instance.keys()\n+\n+            elif (\n+                keyword == \"additionalProperties\"\n+                and validator.is_type(schema_value, \"object\")\n+            ):\n+                evaluated_keys += (\n+                    property\n+                    for property in _utils.find_additional_properties(\n+                        instance, schema,\n+                    )\n+                    if _utils.is_valid(\n+                        validator.descend(instance[property], schema_value),\n+                    )\n+                )\n \n             elif validator.is_type(schema_value, \"object\"):\n                 for property in schema_value:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0004034079638066376,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 22,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "legacy_func",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 22 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch reconciles successful versus unsuccessful additional-property coverage, keyword-like instance names, declared-property and regex exclusions, and draft isolation. The reference execution constructed and inspected the final diff against the legacy implementation; the supplied executable verification establishes its behavior.",
+   "inspect_locate": "The reference execution used 22 context searches without printing the entire repository context. Locating Draft201909Validator's keyword registrations and the legacy evaluation-coverage helper was useful because ordinary additional-property validation and coverage accounting follow separate paths."
+  },
+  "notes": "This is a natural, repository-dependent bug-fix request with a precise production-only unified-diff format. The behavioral requirements do not reveal the defective helper or prescribe its implementation. Unlike the parent task, it concerns schema-valued additionalProperties in Draft 2019-09 rather than unsuccessful applicator branches in Draft 2020-12, so it is a substantive variation and not a duplicate of the listed tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must reconcile successful and unsuccessful additional-property coverage, exclusions for declared and pattern-matched names, boolean additionalProperties behavior, and isolation from Draft 2020-12. Its hunks must be checked against the exact legacy implementation.",
+   "inspect_locate": "The public Draft201909Validator entry point dispatches ordinary additional-property validation and unevaluated-property validation to different modules. Locating those registrations and following the coverage helper is necessary to distinguish successful instance-value validation from interpretation of schema keys."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_property_keys_by_schema",
+    "why": "The existing shared loop treats object-valued additionalProperties as a mapping of instance property names rather than validating additional values."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::unevaluatedProperties_draft2019",
+    "why": "Consumes coverage and validates each uncovered value, making false-positive and false-negative coverage observable through public validation errors."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::additionalProperties",
+    "why": "Establishes ordinary additional-property validation and its exclusion rules."
+   },
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_additional_properties",
+    "why": "Identifies additional names by excluding properties declarations and regex-search matches."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::Draft201909Validator",
+    "why": "Registers the legacy unevaluatedProperties handler while using the shared ordinary additionalProperties handler; Draft 2020-12 uses separate coverage reconstruction."
+   }
+  ],
+  "expected_answer": "--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -418,7 +418,7 @@\n             ),\n         )\n \n-    for keyword in [\n-        \"properties\", \"additionalProperties\", \"unevaluatedProperties\",\n-    ]:\n+    for keyword in [\"properties\", \"unevaluatedProperties\"]:\n         if keyword in schema:\n             schema_value = schema[keyword]\n             if validator.is_type(schema_value, \"boolean\") and schema_value:\n@@ -433,6 +431,14 @@\n                     if property in instance:\n                         evaluated_keys.append(property)\n \n+    if \"additionalProperties\" in schema:\n+        for property in _utils.find_additional_properties(instance, schema):\n+            if _utils.is_valid(validator.descend(\n+                instance[property], schema[\"additionalProperties\"],\n+            )):\n+                evaluated_keys.append(property)\n+\n     if \"patternProperties\" in schema:\n         for property in instance:\n             for pattern in schema[\"patternProperties\"]:\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_legacy_additional_property_coverage.py\n@@ -0,0 +1,95 @@\n+import pytest\n+\n+from jsonschema import Draft201909Validator, Draft202012Validator\n+\n+\n+@pytest.mark.parametrize(\"Validator\", [Draft201909Validator, Draft202012Validator])\n+@pytest.mark.parametrize(\"name\", [\"x\", \"type\", \"properties\"])\n+def test_successful_additional_values_are_evaluated(Validator, name):\n+    schema = {\n+        \"additionalProperties\": {\"type\": \"integer\"},\n+        \"unevaluatedProperties\": False,\n+    }\n+    assert list(Validator(schema).iter_errors({name: 1})) == []\n+\n+\n+@pytest.mark.parametrize(\"name\", [\"x\", \"type\"])\n+def test_failed_additional_values_remain_uncovered(name):\n+    schema = {\n+        \"additionalProperties\": {\"type\": \"integer\"},\n+        \"unevaluatedProperties\": False,\n+    }\n+    errors = list(Draft201909Validator(schema).iter_errors({name: \"bad\"}))\n+    assert len(errors) == 2\n+    ordinary = [error for error in errors if error.validator == \"type\"]\n+    assert len(ordinary) == 1\n+    assert list(ordinary[0].path) == [name]\n+    assert list(ordinary[0].schema_path) == [\"additionalProperties\", \"type\"]\n+    uncovered = [\n+        error for error in errors if error.validator == \"unevaluatedProperties\"\n+    ]\n+    assert len(uncovered) == 1\n+    assert repr(name) in uncovered[0].message\n+\n+\n+def test_only_failed_extras_are_reported_as_unevaluated():\n+    schema = {\n+        \"additionalProperties\": {\"type\": \"integer\"},\n+        \"unevaluatedProperties\": False,\n+    }\n+    instance = {\"good\": 1, \"bad\": \"no\", \"type\": \"no\"}\n+    errors = list(Draft201909Validator(schema).iter_errors(instance))\n+    assert sorted(\n+        list(error.path) for error in errors if error.validator == \"type\"\n+    ) == [[\"bad\"], [\"type\"]]\n+    uncovered = [\n+        error for error in errors if error.validator == \"unevaluatedProperties\"\n+    ]\n+    assert len(uncovered) == 1\n+    assert \"'bad'\" in uncovered[0].message\n+    assert \"'type'\" in uncovered[0].message\n+    assert \"'good'\" not in uncovered[0].message\n+\n+\n+@pytest.mark.parametrize(\"Validator\", [Draft201909Validator, Draft202012Validator])\n+def test_declared_and_pattern_matched_values_are_not_additional(Validator):\n+    schema = {\n+        \"properties\": {\"declared\": {\"type\": \"string\"}},\n+        \"patternProperties\": {\"mid\": {\"type\": \"string\"}},\n+        \"additionalProperties\": {\"type\": \"integer\"},\n+        \"unevaluatedProperties\": False,\n+    }\n+    instance = {\"declared\": \"text\", \"prefix_mid_suffix\": \"text\", \"x\": 1}\n+    assert list(Validator(schema).iter_errors(instance)) == []\n+\n+\n+def test_uncovered_failed_extra_is_checked_by_unevaluated_schema():\n+    schema = {\n+        \"additionalProperties\": {\"type\": \"integer\"},\n+        \"unevaluatedProperties\": {\"const\": \"allowed\"},\n+    }\n+    errors = list(Draft201909Validator(schema).iter_errors({\"type\": \"bad\"}))\n+    assert sorted(error.validator for error in errors) == [\n+        \"type\", \"unevaluatedProperties\",\n+    ]\n+    allowed = list(\n+        Draft201909Validator(schema).iter_errors({\"type\": \"allowed\"}),\n+    )\n+    assert [error.validator for error in allowed] == [\"type\"]\n+\n+\n+@pytest.mark.parametrize(\n+    \"extra_schema, valid\",\n+    [({}, False), ({\"additionalProperties\": True}, True),\n+     ({\"additionalProperties\": False}, False)],\n+)\n+def test_absent_and_boolean_additional_properties(extra_schema, valid):\n+    schema = dict(extra_schema, unevaluatedProperties=False)\n+    assert Draft201909Validator(schema).is_valid({\"x\": 1}) is valid\n+\n+\n+def test_empty_additional_schema_evaluates_extra_values():\n+    schema = {\"additionalProperties\": {}, \"unevaluatedProperties\": False}\n+    assert Draft201909Validator(schema).is_valid({\"x\": \"anything\"})\n",
+  "include_failure_log": false,
+  "notes": "This is a repair of a defect already present in the pinned source, verified through a new hidden acceptance-test file rather than an injected setup regression. Run the hidden tests and existing suite. The hidden tests use only public validator behavior and ValidationError metadata. They distinguish successful coverage, failed keyword-name collisions, mixed successful and failed extras, exclusions, empty schemas, and unchanged Draft 2020-12 behavior.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Correct Draft 2019-09 handling of schema-valued `additionalProperties` when `unevaluatedProperties` is present. In this checkout, `Draft201909Validator` rejects `{\"x\": 1}` against `{\"additionalProperties\": {\"type\": \"integer\"}, \"unevaluatedProperties\": false}`, even though the additional value passes its schema.\n\nSuccessfully validated additional properties must count as evaluated; values that fail that schema must remain uncovered and still be checked by `unevaluatedProperties`. This must also hold when an instance property happens to be named like a schema keyword, such as `type`. Properties declared in `properties` or matched by `patternProperties` must remain excluded from additional-property validation, including regex matches that do not cover the entire property name. Preserve the existing behavior when `additionalProperties` is absent or boolean, preserve ordinary validation errors, and leave Draft 2020-12 behavior unchanged.\n\nReturn a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate and combine_verify_finish through legacy draft dispatch and the distinction between schema syntax and instance-value validation. Comparison with the modern implementation is useful, but copying its applicator fix is not; focused reproductions must establish the legacy keyword's coverage behavior.",
+  "change_type": "dependency",
+  "description": "Repair a Draft 2019-09 coverage defect involving schema-valued additionalProperties rather than unsuccessful applicator branches. Draft201909Validator rejects {\"x\": 1} under {\"additionalProperties\": {\"type\": \"integer\"}, \"unevaluatedProperties\": false}, although x successfully passes additionalProperties. Require successful additional-property values to contribute coverage, unsuccessful values to remain uncovered, and properties/patternProperties exclusions to remain correct. Return a production-only unified diff. Investigate jsonschema/_legacy_keywords.py::find_evaluated_property_keys_by_schema and unevaluatedProperties_draft2019, compare jsonschema/_keywords.py::additionalProperties and jsonschema/_utils.py::find_additional_properties, and verify the dispatch in jsonschema/validators.py::Draft201909Validator. Leave Draft 2020-12 unchanged.",
+  "expected_answer_change": "The patch must separate properties-name coverage from additionalProperties subschema coverage in the legacy helper. For additionalProperties, it must identify additional keys using the schema's properties and patternProperties and validate their values against the subschema. Verification should include a passing integer extra, a failing string extra, and declared or pattern-matched properties whose values need not satisfy additionalProperties.",
+  "why_substantive": "The affected draft, keyword branch, and repair all change. The legacy helper currently treats keys inside a schema-valued additionalProperties schema as instance property names instead of determining which additional values successfully validate. Restoring the modern applicator validity guard cannot fix this defect."
+ },
+ "task_id": "python-jsonschema-jsonschema-r02-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_declared_and_pattern_matched_values_are_not_additional[Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_empty_additional_schema_evaluates_extra_values",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_failed_additional_values_remain_uncovered[type]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_only_failed_extras_are_reported_as_unevaluated",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_successful_additional_values_are_evaluated[properties-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_successful_additional_values_are_evaluated[x-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_uncovered_failed_extra_is_checked_by_unevaluated_schema"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7304
+   },
+   "patch_files": [
+    "jsonschema/_legacy_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_declared_and_pattern_matched_values_are_not_additional[Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_empty_additional_schema_evaluates_extra_values",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_failed_additional_values_remain_uncovered[type]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_only_failed_extras_are_reported_as_unevaluated",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_successful_additional_values_are_evaluated[properties-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_successful_additional_values_are_evaluated[x-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_additional_property_coverage.py::test_uncovered_failed_extra_is_checked_by_unevaluated_schema"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

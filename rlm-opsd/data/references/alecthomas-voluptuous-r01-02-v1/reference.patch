@@ -1,0 +1,47 @@
+--- a/voluptuous/validators.py
++++ b/voluptuous/validators.py
+@@ -257,23 +257,28 @@
+         self.discriminant = discriminant
+ 
+     def __voluptuous_compile__(self, schema: Schema) -> typing.Callable:
+-        self._compiled = []
++        # Keep compilation state local to the parent Schema, rather than on
++        # this validator, which may be shared by multiple schemas.
++        compiled = []
+         old_required = schema.required
+-        self.schema = schema
+-        for v in self.validators:
+-            schema.required = self.required
+-            self._compiled.append(schema._compile(v))
+-        schema.required = old_required
+-        return self._run
+-
+-    def _run(self, path: typing.List[typing.Hashable], value):
+-        if self.discriminant is not None:
+-            self._compiled = [
+-                self.schema._compile(v)
+-                for v in self.discriminant(value, self.validators)
+-            ]
+-
+-        return self._exec(self._compiled, value, path)
++        try:
++            for v in self.validators:
++                schema.required = self.required
++                compiled.append(schema._compile(v))
++        finally:
++            schema.required = old_required
++
++        def _run(path: typing.List[typing.Hashable], value):
++            funcs = compiled
++            if self.discriminant is not None:
++                # Selection is per call, using this compilation's parent.
++                funcs = [
++                    schema._compile(v)
++                    for v in self.discriminant(value, self.validators)
++                ]
++            return self._exec(funcs, value, path)
++
++        return _run
+ 
+     def __call__(self, v):
+         return self._exec((Schema(val) for val in self.validators), v)

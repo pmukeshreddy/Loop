@@ -1,0 +1,144 @@
+{
+ "answer": "--- a/voluptuous/humanize.py\n+++ b/voluptuous/humanize.py\n@@ -14,11 +14,19 @@\n     data: typing.Any, path: typing.List[typing.Hashable]\n ) -> typing.Optional[typing.Any]:\n     for item_index in path:\n-        try:\n-            data = data[item_index]\n-        except (KeyError, IndexError, TypeError):\n-            # The index is not present in the dictionary, list or other\n-            # indexable or data is not subscriptable\n+        if hasattr(type(data), '__getitem__'):\n+            try:\n+                data = data[item_index]\n+            except (KeyError, IndexError, TypeError):\n+                # A failed subscription must not fall back to an attribute.\n+                return None\n+        elif isinstance(item_index, str):\n+            try:\n+                data = getattr(data, item_index)\n+            except AttributeError:\n+                return None\n+        else:\n+            # Attribute names must be strings.\n             return None\n     return data\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 202298 chars; 13 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 targeted searches without printing the whole repository context. Connecting Object validation and error-path construction to humanized value resolution was useful for identifying how paths alternate between attributes and subscriptions and where to implement the change."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise lookup semantics and a clear production-only unified-diff format. Naming the public APIs does not reveal the defective helper or supply the fix. The requirements address meaningful compatibility hazards, including dictionary-method collisions and failed custom subscriptions. The task is substantively different from its truncation-budget parent and the other accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The relevant evidence is a small fraction of the repository: Object dispatch and attribute iteration in schema_builder.py, error-path construction in the mapping compiler, humanized rendering in humanize.py, and existing object and diagnostic tests. Following those connections establishes why one path can require both subscription and attribute access. The selected implementation is small enough that delegation is unnecessary."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::Schema._compile_object",
+    "why": "Object validation delegates attribute pairs to the mapping validator, producing paths containing attribute names."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::_iterate_object",
+    "why": "The supported object inputs include both instance dictionaries and __slots__."
+   },
+   {
+    "path": "voluptuous/humanize.py",
+    "symbol": "voluptuous/humanize.py::_nested_getitem",
+    "why": "Offending-value resolution currently uses subscription for every component and returns None when an ordinary object is encountered."
+   },
+   {
+    "path": "voluptuous/humanize.py",
+    "symbol": "voluptuous/humanize.py::validate_with_humanized_errors",
+    "why": "The public validation wrapper shares the same rendering dependency and must expose the corrected summary."
+   },
+   {
+    "path": "voluptuous/tests/tests.py",
+    "symbol": "voluptuous/tests/tests.py::test_object",
+    "why": "Existing Object examples establish attribute-based validation, while nearby humanization tests establish diagnostic formatting."
+   }
+  ],
+  "expected_answer": "--- a/voluptuous/humanize.py\n+++ b/voluptuous/humanize.py\n@@ -13,14 +13,17 @@\n def _nested_getitem(\n     data: typing.Any, path: typing.List[typing.Hashable]\n ) -> typing.Optional[typing.Any]:\n     for item_index in path:\n         try:\n-            data = data[item_index]\n-        except (KeyError, IndexError, TypeError):\n-            # The index is not present in the dictionary, list or other\n-            # indexable or data is not subscriptable\n+            if hasattr(type(data), '__getitem__'):\n+                data = data[item_index]\n+            elif isinstance(item_index, str):\n+                data = getattr(data, item_index)\n+            else:\n+                return None\n+        except (KeyError, IndexError, TypeError, AttributeError):\n             return None\n     return data\n \n \n def humanize_error(\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_humanize_objects.py\n@@ -0,0 +1,91 @@\n+import pytest\n+\n+from voluptuous import Error, Invalid, MultipleInvalid, Object, Required, Schema\n+from voluptuous.humanize import humanize_error, validate_with_humanized_errors\n+\n+\n+class Value:\n+    def __init__(self, value=None):\n+        self.value = value\n+\n+\n+class SlottedValue:\n+    __slots__ = ('value',)\n+\n+    def __init__(self, value=None):\n+        self.value = value\n+\n+\n+class Subscriptable:\n+    value = 'attribute'\n+\n+    def __init__(self, failure=None):\n+        self.failure = failure\n+\n+    def __getitem__(self, key):\n+        if self.failure is not None:\n+            raise self.failure(key)\n+        return 'subscription'\n+\n+\n+@pytest.mark.parametrize('cls', [Value, SlottedValue])\n+def test_object_inside_dictionary(cls):\n+    data = {'payload': cls('bad')}\n+    schema = Schema({'payload': Object({'value': int}, cls=cls)})\n+    with pytest.raises(MultipleInvalid) as caught:\n+        schema(data)\n+    assert humanize_error(data, caught.value) == (\n+        \"expected int for object value @ data['payload']['value']. Got 'bad'\"\n+    )\n+\n+\n+def test_mixed_attribute_and_subscription_path():\n+    data = {'payload': [SlottedValue(({'n': 'bad'},))]}\n+    schema = Schema({'payload': [Object({'value': ({'n': int},)})]})\n+    with pytest.raises(Error) as caught:\n+        validate_with_humanized_errors(data, schema)\n+    assert str(caught.value) == (\n+        \"expected int for dictionary value \"\n+        \"@ data['payload'][0]['value'][0]['n']. Got 'bad'\"\n+    )\n+\n+\n+def test_missing_dictionary_items_key():\n+    schema = Schema({Required('items'): int})\n+    with pytest.raises(MultipleInvalid) as caught:\n+        schema({})\n+    assert humanize_error({}, caught.value) == (\n+        \"required key not provided @ data['items']. Got None\"\n+    )\n+\n+\n+@pytest.mark.parametrize('cls', [Value, SlottedValue])\n+@pytest.mark.parametrize('path', [['absent'], [0], ['value', 'absent']])\n+def test_unresolvable_object_paths(cls, path):\n+    error = Invalid('bad', path=path)\n+    assert humanize_error(cls(42), error) == '%s. Got None' % error\n+\n+\n+@pytest.mark.parametrize('failure', [None, KeyError, IndexError, TypeError])\n+def test_custom_subscription_never_falls_back_to_attributes(failure):\n+    data = Subscriptable(failure)\n+    error = Invalid('bad', path=['value'])\n+    summary = \"'subscription'\" if failure is None else 'None'\n+    assert humanize_error(data, error) == '%s. Got %s' % (error, summary)\n+\n+\n+@pytest.mark.parametrize('data,path', [([], [0]), ((), [0]), ([1], ['append'])])\n+def test_sequence_lookup_failures_still_return_none(data, path):\n+    error = Invalid('bad', path=path)\n+    assert humanize_error(data, error) == '%s. Got None' % error\n+\n+\n+def test_recursive_sorted_rendering_with_object_values():\n+    data = Value({'z': 'long value', 'a': 12})\n+    alpha = Invalid('alpha', path=['value', 'a'])\n+    zeta = Invalid('zeta', path=['value', 'z'])\n+    errors = MultipleInvalid([zeta, MultipleInvalid([alpha])])\n+    assert humanize_error(data, errors, max_sub_error_length=6) == (\n+        \"alpha @ data['value']['a']. Got 12\\n\"\n+        \"zeta @ data['value']['z']. Got 'lo...\"\n+    )\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the supplied snapshot, not the original summary-budget task. The new acceptance file belongs under the repository's existing voluptuous/tests directory and uses only public validation and humanization APIs. It covers real nested Object failures, slotted instances, mixed attribute/container paths, missing dictionary keys, failed custom subscriptions, missing attributes, non-string components, recursive sorting, and unchanged truncation. The expected production patch changes path resolution rather than budget handling.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Humanized errors from an `Object` schema currently report `Got None` for invalid instance attributes, including when the object is nested in a dictionary. Add support for resolving those offending values in `humanize_error` and `validate_with_humanized_errors`, for both ordinary instances and instances using `__slots__`. Each path component must retain subscription semantics when the current value supports subscription, including custom subscriptable objects; a failed subscription must not fall back to an attribute. Attribute access is allowed only on non-subscriptable values and only for string path components. Missing attributes and unsuccessful lookups must continue to summarize as `None`, so a missing dictionary key named `items` must never resolve to the dictionary's method. Paths may alternate between attributes and container lookups. Preserve diagnostic and path formatting, recursive aggregation, sorting, and existing summary truncation behavior. Deliver a unified diff changing production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from a local boundary-case direct solve to a small cross-module dependency investigation. Selective reading of Object compilation, object iteration, and path rendering is useful to establish the correct traversal contract; delegation or recursive investigation is unnecessary.",
+  "change_type": "dependency",
+  "description": "Repair humanized diagnostics for schemas using Object in voluptuous/schema_builder.py. Schema._compile_object validates attribute values, but voluptuous/humanize.py::_nested_getitem only follows subscriptions, so an invalid MyValueClass.value is summarized as None instead of its actual value. Extend path resolution to traverse ordinary instance attributes, including slotted objects, while preserving subscription semantics for mappings, lists, tuples, and other subscriptable values. Attribute fallback must apply only to non-subscriptable objects and string path components; a missing mapping key must not resolve to a mapping method such as items. Missing attributes must retain the existing None fallback. Return a unified diff and acceptance tests covering an Object nested inside a dictionary, a slotted object, and a missing dictionary key named items.",
+  "expected_answer_change": "The patch should change voluptuous/humanize.py::_nested_getitem or introduce a helper it uses, not change the summary-budget slicing. The answer depends on Schema._compile_object and _iterate_object in voluptuous/schema_builder.py, Object's attribute-validation semantics, and the object examples in voluptuous/tests/tests.py::MyValueClass and test_object. Humanized Object failures should show the actual invalid attribute value without changing dictionary-key lookup behavior.",
+  "why_substantive": "This changes the data-access dependency behind offending-value rendering rather than the truncation boundary. It requires tracing how Object validation constructs paths and reconciling attribute-based validation with the renderer's subscription-only traversal."
+ },
+ "task_id": "alecthomas-voluptuous-r01-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_objects.py::test_mixed_attribute_and_subscription_path",
+   "voluptuous/tests/test_humanize_objects.py::test_object_inside_dictionary[SlottedValue]",
+   "voluptuous/tests/test_humanize_objects.py::test_object_inside_dictionary[Value]",
+   "voluptuous/tests/test_humanize_objects.py::test_recursive_sorted_rendering_with_object_values"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/humanize.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_objects.py::test_mixed_attribute_and_subscription_path",
+   "voluptuous/tests/test_humanize_objects.py::test_object_inside_dictionary[SlottedValue]",
+   "voluptuous/tests/test_humanize_objects.py::test_object_inside_dictionary[Value]",
+   "voluptuous/tests/test_humanize_objects.py::test_recursive_sorted_rendering_with_object_values"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,98 @@
+--- /dev/null
++++ b/tests/test_wait_exception_fallback.py
+@@ -0,0 +1,95 @@
++import pytest
++
++from tenacity import RetryCallState, Retrying
++from tenacity.wait import wait_combine, wait_exception, wait_fixed
++
++
++def make_state():
++    return RetryCallState(Retrying(), fn=None, args=(), kwargs={})
++
++
++@pytest.mark.parametrize("result", [None, 0, False, "ok", ValueError("result")])
++@pytest.mark.parametrize("combined", [False, True])
++@pytest.mark.parametrize("kind", ["function", "falsy", "strategy"])
++def test_success_routes_to_fallback(result, combined, kind):
++    state = make_state()
++    state.set_result(result)
++    calls = []
++
++    def predicate(error, /):
++        calls.append(("predicate", error))
++        return 99
++
++    def fallback(state, /):
++        calls.append(("fallback", state))
++        return 2.75
++
++    class FalsyFallback:
++        def __bool__(self):
++            return False
++
++        def __call__(self, state, /):
++            return fallback(state)
++
++    selected = fallback
++    if kind == "falsy":
++        selected = FalsyFallback()
++    elif kind == "strategy":
++        selected = wait_fixed(2.75)
++    policy = wait_exception(predicate, fallback=selected)
++    if combined:
++        policy = wait_combine(wait_fixed(3), policy)
++    assert policy(state) == (5.75 if combined else 2.75)
++    if kind == "strategy":
++        assert calls == []
++    else:
++        assert len(calls) == 1
++        assert calls[0][0] == "fallback"
++        assert calls[0][1] is state
++
++
++@pytest.mark.parametrize("outcome", ["missing", "success", "exception"])
++@pytest.mark.parametrize("configured", [False, True])
++@pytest.mark.parametrize("combined", [False, True])
++def test_outcome_guards_and_exception_routing(outcome, configured, combined):
++    state = make_state()
++    error = ValueError("failure")
++    if outcome == "success":
++        state.set_result(None)
++    elif outcome == "exception":
++        state.set_exception((type(error), error, None))
++    calls = []
++
++    def predicate(received, /):
++        calls.append(("predicate", received))
++        return 7
++
++    def fallback(received, /):
++        calls.append(("fallback", received))
++        return 2
++
++    policy = wait_exception(predicate, fallback=fallback if configured else None)
++    if combined:
++        policy = wait_combine(policy, wait_fixed(3))
++    if outcome == "missing" or (outcome == "success" and not configured):
++        with pytest.raises(RuntimeError):
++            policy(state)
++        assert calls == []
++    else:
++        expected = 7 if outcome == "exception" else 2
++        assert policy(state) == expected + (3 if combined else 0)
++        assert len(calls) == 1
++        assert calls[0][0] == ("predicate" if outcome == "exception" else "fallback")
++        assert calls[0][1] is (error if outcome == "exception" else state)
++
++
++def test_fallback_is_keyword_only():
++    with pytest.raises(TypeError):
++        wait_exception(lambda error: 1, wait_fixed(2))
++
++
++def test_default_still_rejects_success():
++    state = make_state()
++    state.set_result(None)
++    with pytest.raises(RuntimeError):
++        wait_exception(lambda error: 1)(state)

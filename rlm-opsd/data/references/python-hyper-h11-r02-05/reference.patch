@@ -1,0 +1,63 @@
+--- a/h11/_connection.py
++++ b/h11/_connection.py
+@@ -162,13 +162,34 @@
+             exceeded, then :meth:`next_event` will raise
+             :exc:`RemoteProtocolError`.
+ 
++        max_receive_body_size (int or None):
++            The maximum cumulative incoming body payload size in bytes per
++            request/response cycle, or ``None`` for no limit (the default).
++            Must be nonnegative. Only incoming :class:`Data` payloads count,
++            not headers, framing, trailers, or outgoing data. If returning a
++            complete Data event would exceed the limit, :meth:`next_event`
++            raises :exc:`RemoteProtocolError` with ``error_status_hint=413``
++            instead, even if only part of the event would fit. A declared
++            Content-Length above the limit is not itself rejected. Exactly
++            the limit is allowed, and zero permits bodyless messages.
++            The total resets only when :meth:`start_next_cycle` succeeds.
++
+     """
+ 
+     def __init__(
+         self,
+         our_role: Type[Sentinel],
+         max_incomplete_event_size: int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,
++        *,
++        max_receive_body_size: Optional[int] = None,
+     ) -> None:
++        if max_receive_body_size is not None:
++            if not isinstance(max_receive_body_size, int):
++                raise TypeError("max_receive_body_size must be an integer or None")
++            if max_receive_body_size < 0:
++                raise ValueError("max_receive_body_size must be nonnegative")
++        self._max_receive_body_size = max_receive_body_size
++        self._received_body_size = 0
+         self._max_incomplete_event_size = max_incomplete_event_size
+         # State and role tracking
+         if our_role not in (CLIENT, SERVER):
+@@ -251,6 +272,7 @@
+         # beyond a single request/response cycle
+         assert not self.client_is_waiting_for_100_continue
+         self._respond_to_state_changes(old_states)
++        self._received_body_size = 0
+ 
+     def _process_error(self, role: Type[Sentinel]) -> None:
+         old_states = dict(self._cstate.states)
+@@ -479,6 +501,17 @@
+             raise RemoteProtocolError("Can't receive data when peer state is ERROR")
+         try:
+             event = self._extract_next_receive_event()
++            if isinstance(event, Data):
++                received_body_size = self._received_body_size + len(event.data)
++                if (
++                    self._max_receive_body_size is not None
++                    and received_body_size > self._max_receive_body_size
++                ):
++                    raise RemoteProtocolError(
++                        "Received body exceeds max_receive_body_size",
++                        error_status_hint=413,
++                    )
++                self._received_body_size = received_body_size
+             if event not in [NEED_DATA, PAUSED]:
+                 self._process_event(self.their_role, cast(Event, event))
+             if event is NEED_DATA:

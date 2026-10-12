@@ -1,0 +1,39 @@
+--- a/src/jinja2/environment.py
++++ b/src/jinja2/environment.py
+@@ -1053,27 +1053,30 @@
+         if isinstance(names, Undefined):
+             names._fail_with_undefined_error()
+ 
+-        if not names:
+-            raise TemplatesNotFound(
+-                message="Tried to select from an empty list of templates."
+-            )
++        tried: t.List[str] = []
+ 
+         for name in names:
+             if isinstance(name, Template):
+                 return name
++            tried.append(name)
+             if parent is not None:
+                 name = self.join_path(name, parent)
+             try:
+                 return self._load_template(name, globals)
+             except (TemplateNotFound, UndefinedError):
+                 pass
+-        raise TemplatesNotFound(names)  # type: ignore
++        if not tried:
++            raise TemplatesNotFound(
++                message="Tried to select from an empty list of templates."
++            )
++
++        raise TemplatesNotFound(tried)
+ 
+     @internalcode
+     def get_or_select_template(
+         self,
+         template_name_or_list: t.Union[
+-            str, "Template", t.List[t.Union[str, "Template"]]
++            str, "Template", t.Iterable[t.Union[str, "Template"]]
+         ],
+         parent: t.Optional[str] = None,
+         globals: t.Optional[t.MutableMapping[str, t.Any]] = None,

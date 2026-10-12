@@ -1,0 +1,141 @@
+{
+ "answer": "--- a/jsonschema/validators.py\n+++ b/jsonschema/validators.py\n@@ -1262,7 +1262,9 @@\n         values.extendleft(value.values())\n \n \n-def validate(instance, schema, cls=None, *args, **kwargs):  # noqa: D417\n+def validate(\n+    instance, schema, cls=None, *args, schema_format_checker=_UNSET, **kwargs,\n+):  # noqa: D417\n     \"\"\"\n     Validate an instance under the given schema.\n \n@@ -1295,6 +1297,20 @@\n         cls (jsonschema.protocols.Validator):\n \n             The class that will be used to validate the instance.\n+\n+        format_checker (jsonschema.FormatChecker):\n+\n+            A format checker for instance validation, passed to the\n+            validator constructor. This does not configure schema-format\n+            checking.\n+\n+        schema_format_checker (jsonschema.FormatChecker):\n+\n+            A keyword-only format checker for schema validation, independent\n+            of ``format_checker``. If omitted, the validator class's default\n+            schema-format checking is used. If provided, it is passed to\n+            ``cls.check_schema`` as ``format_checker``. Passing ``None``\n+            disables only schema-format checking, not other schema validation.\n \n     If the ``cls`` argument is not provided, two things will happen\n     in accordance with the specification. First, if the schema has a\n@@ -1325,7 +1341,10 @@\n     if cls is None:\n         cls = validator_for(schema)\n \n-    cls.check_schema(schema)\n+    if schema_format_checker is _UNSET:\n+        cls.check_schema(schema)\n+    else:\n+        cls.check_schema(schema, format_checker=schema_format_checker)\n     validator = cls(schema, *args, **kwargs)\n     error = exceptions.best_match(validator.iter_errors(instance))\n     if error is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 20,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 20 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 20 targeted searches without printing the whole repository context. Connecting the convenience API, check_schema behavior, and constructor forwarding was useful for distinguishing omitted from explicit checker values while preserving compatibility with custom validator classes."
+  },
+  "notes": "This is a natural, precisely scoped API enhancement with a clear unified-diff output requirement. The behavioral requirements constrain the implementation without revealing an existing defect or prescribing solver operations. Correctness requires repository-specific reasoning about schema checking, instance checking, and argument forwarding, rather than merely locating the named function. The verified patch preserves the requested ordering and forwarding behavior. The task is substantively different from its parent and the listed accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The repository context is large, but the implementation depends on a small set of definitions: the public convenience function, generated validators' schema-checking method, constructor argument forwarding, and format-keyword dispatch. Locating and connecting these distinguishes schema checking from instance checking and establishes compatibility with custom validator classes. The relevant semantic reading is short enough that delegated sub-investigations are unnecessary."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::validate",
+    "why": "Owns schema validation, class selection, constructor forwarding, and best-match instance-error selection."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create.<locals>.Validator.check_schema",
+    "why": "Already distinguishes an omitted checker from explicit None and accepts an explicitly supplied checker for meta-schema validation."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::format",
+    "why": "Instance format assertions depend on the validator instance's format_checker, independently of class-level schema-checking defaults."
+   },
+   {
+    "path": "jsonschema/_format.py",
+    "symbol": "jsonschema/_format.py::FormatChecker",
+    "why": "Supports independently registered checkers and empty checker configurations used to verify phase isolation."
+   },
+   {
+    "path": "jsonschema/__init__.py",
+    "symbol": "jsonschema/__init__.py::validate",
+    "why": "Exports the convenience function directly, so the implementation must also provide the option through jsonschema.validate."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_schema_format_checker.py\n@@ -0,0 +1,132 @@\n+from unittest import TestCase\n+\n+from jsonschema import FormatChecker, SchemaError, ValidationError\n+from jsonschema import validators\n+\n+\n+DRAFTS = (\n+    validators.Draft3Validator,\n+    validators.Draft4Validator,\n+    validators.Draft6Validator,\n+    validators.Draft7Validator,\n+    validators.Draft201909Validator,\n+    validators.Draft202012Validator,\n+)\n+\n+\n+class TestSchemaFormatChecker(TestCase):\n+    def test_independent_phase_matrix(self):\n+        instance_checker = FormatChecker(formats=())\n+        instance_checker.checks(\"instance-only\")(lambda value: value == 13)\n+        modes = {\n+            \"default\": {},\n+            \"off\": {\"schema_format_checker\": None},\n+            \"regex\": {\"schema_format_checker\": FormatChecker([\"regex\"])},\n+            \"empty\": {\"schema_format_checker\": FormatChecker(formats=())},\n+        }\n+        for cls in DRAFTS:\n+            for pattern in (\"[\", \"^ok$\"):\n+                for mode, options in modes.items():\n+                    for check_instance in (False, True):\n+                        with self.subTest(\n+                            cls=cls, pattern=pattern, mode=mode,\n+                            check_instance=check_instance,\n+                        ):\n+                            schema = {\"pattern\": pattern, \"format\": \"instance-only\"}\n+                            kwargs = dict(options)\n+                            kwargs[\"format_checker\"] = (\n+                                instance_checker if check_instance else None\n+                            )\n+                            expected = (\n+                                SchemaError\n+                                if pattern == \"[\" and mode in {\"default\", \"regex\"}\n+                                else ValidationError if check_instance else None\n+                            )\n+                            if expected is None:\n+                                self.assertIsNone(validators.validate(\n+                                    12, schema, cls=cls, **kwargs,\n+                                ))\n+                            else:\n+                                with self.assertRaises(expected) as caught:\n+                                    validators.validate(12, schema, cls=cls, **kwargs)\n+                                self.assertEqual(caught.exception.validator, \"format\")\n+\n+    def test_disabling_formats_does_not_skip_other_schema_checks(self):\n+        for checker in (None, FormatChecker(formats=())):\n+            for schema in ({\"type\": 12}, {\"pattern\": 42}):\n+                with self.subTest(checker=checker, schema=schema):\n+                    with self.assertRaises(SchemaError):\n+                        validators.validate(\n+                            12, schema, schema_format_checker=checker,\n+                        )\n+\n+    def test_supplied_checker_controls_schema_only(self):\n+        calls = []\n+        checker = FormatChecker(formats=())\n+\n+        @checker.checks(\"regex\")\n+        def accept_regex(value):\n+            calls.append(value)\n+            return True\n+\n+        checker.checks(\"instance-only\")(lambda value: False)\n+        schema = {\"pattern\": \"[\", \"format\": \"instance-only\"}\n+        self.assertIsNone(validators.validate(\n+            12, schema, schema_format_checker=checker,\n+        ))\n+        self.assertEqual(calls, [\"[\"])\n+\n+        checker.checks(\"regex\")(lambda value: False)\n+        with self.assertRaises(SchemaError) as caught:\n+            validators.validate(\n+                12, {\"pattern\": \"^ok$\"}, schema_format_checker=checker,\n+            )\n+        self.assertEqual(caught.exception.instance, \"^ok$\")\n+\n+    def test_omission_preserves_legacy_class_and_constructor_arguments(self):\n+        calls = []\n+        checker = FormatChecker(formats=())\n+\n+        class Legacy:\n+            @classmethod\n+            def check_schema(cls, schema):\n+                calls.append((\"schema\", schema))\n+\n+            def __init__(self, schema, *args, **kwargs):\n+                calls.append((\"init\", schema, args, kwargs))\n+\n+            def iter_errors(self, instance):\n+                return iter(())\n+\n+        self.assertIsNone(validators.validate(\n+            12, {}, Legacy, \"positional\", format_checker=checker, token=7,\n+        ))\n+        self.assertEqual(calls, [\n+            (\"schema\", {}),\n+            (\"init\", {}, (\"positional\",), {\"format_checker\": checker, \"token\": 7}),\n+        ])\n+\n+    def test_explicit_values_reach_custom_check_schema_not_constructor(self):\n+        for checker in (None, FormatChecker(formats=())):\n+            calls = []\n+\n+            class Custom:\n+                @classmethod\n+                def check_schema(cls, schema, *, format_checker):\n+                    calls.append(format_checker)\n+\n+                def __init__(self, schema, token, *, format_checker=None):\n+                    calls.append((token, format_checker))\n+\n+                def iter_errors(self, instance):\n+                    return iter(())\n+\n+            instance_checker = FormatChecker(formats=())\n+            with self.subTest(checker=checker):\n+                self.assertIsNone(validators.validate(\n+                    12, {}, Custom, \"token\",\n+                    schema_format_checker=checker,\n+                    format_checker=instance_checker,\n+                ))\n+                self.assertIs(calls[0], checker)\n+                self.assertEqual(calls[1], (\"token\", instance_checker))\n",
+  "include_failure_log": false,
+  "notes": "Use the clean supplied checkout, whose evolve_fields configuration already preserves format_checker; do not apply the seed regression. Acceptance tests are added in a new test file as required by the task schema, rather than modifying the omitted test_validators.py. The phase matrix covers all six built-in drafts and uses numeric instances so disabling schema-format checks does not accidentally execute an invalid regex during instance validation. Additional tests check non-format schema errors, supplied checker behavior and phase isolation, legacy custom check_schema signatures, exact checker forwarding, and preservation of constructor arguments. The full validators.py exceeds the direct_solve context limit, so repository-scoped inspect_locate is used without claiming chunked reading or delegation.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add a keyword-only `schema_format_checker` option to the public `jsonschema.validate` convenience API. It must configure schema-format checking independently of the existing `format_checker` argument, which must continue to configure instance validation.\n\nWhen the new option is omitted, retain the existing `cls.check_schema(schema)` call without additional arguments, including for custom validator classes whose `check_schema` accepts only the schema. When explicitly supplied, pass its value as the `format_checker` keyword to the selected class's `check_schema`: `None` disables schema-format checking, while a `FormatChecker` supplies the checker for that phase only. Disabling schema-format checking must not bypass other schema validation. Schema validation must still precede instance validation, and a schema error must still prevent instance validation.\n\nConsume the new option in the convenience function rather than forwarding it to the validator constructor. Preserve the existing forwarding of all other positional and keyword arguments, validator-class selection, and instance-error selection. Document the distinction between the two checker options in the convenience function's docstring. Return a unified diff changing production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from inspect_locate to API implementation and acceptance-test design. Persistent state remains useful for tracking two independent checker configurations and the distinction between omission and explicit None; focused reading of validate, check_schema, and FormatChecker is sufficient.",
+  "change_type": "deliverable",
+  "description": "Using the checkout with the seed regression repaired, add a keyword-only schema_format_checker option to jsonschema/validators.py::validate. Omitting it must preserve the existing cls.check_schema(schema) call; explicitly supplying None must disable schema-format checking; supplying a FormatChecker must use that checker only for schema validation. The existing format_checker argument must continue to control instance validation independently. Document the distinction and add tests in jsonschema/tests/test_validators.py covering an invalid regex in a schema, a custom instance format, and all combinations of enabled and disabled schema/instance checking.",
+  "expected_answer_change": "The implementation belongs in jsonschema/validators.py::validate and delegates explicitly supplied values to create.<locals>.Validator.check_schema. It must consume schema_format_checker rather than forward it to the validator constructor, retain the no-extra-argument check_schema call when omitted, and leave format_checker in the constructor arguments. The solution requires new phase-isolation tests, not the seed's evolve_fields repair.",
+  "why_substantive": "This changes the public convenience API rather than repairing configuration transfer during evolution. The investigation must distinguish the schema-validation phase from the instance-validation phase and account for argument forwarding and backward compatibility with custom validator classes."
+ },
+ "task_id": "python-jsonschema-jsonschema-r02-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_explicit_values_reach_custom_check_schema_not_constructor",
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_independent_phase_matrix",
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_supplied_checker_controls_schema_only"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7293
+   },
+   "patch_files": [
+    "jsonschema/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_explicit_values_reach_custom_check_schema_not_constructor",
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_independent_phase_matrix",
+   "jsonschema/tests/test_schema_format_checker.py::TestSchemaFormatChecker::test_supplied_checker_controls_schema_only"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

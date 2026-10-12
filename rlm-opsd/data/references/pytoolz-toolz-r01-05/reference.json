@@ -1,0 +1,128 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -46,8 +46,17 @@\n \n     def find_spec(self, fullname, path, target=None):  # pragma: no cover\n         package, dot, submodules = fullname.partition('.')\n-        if package == 'tlz':\n-            return ModuleSpec(fullname, self)\n+        if package != 'tlz':\n+            return None\n+        try:\n+            toolz_mods = self._load_toolz(fullname)\n+        except ImportError:\n+            return None\n+        backend = (\n+            toolz_mods['cytoolz'] if 'cytoolz' in toolz_mods\n+            else toolz_mods['toolz']\n+        )\n+        return ModuleSpec(fullname, self, is_package=hasattr(backend, '__path__'))\n \n     def create_module(self, spec):\n         return types.ModuleType(spec.name)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 3532 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 3,532-character context supported a direct solution without sub-calls. The patch required connecting backend discovery and fallback behavior to finder ownership, backend preference, and ModuleSpec package metadata."
+  },
+  "notes": "This is a natural, precisely scoped implementation request with an explicit unified-diff deliverable. It specifies desired behavior without supplying the implementation. The verification cases distinguish selected-backend package status, missing backends, and namespace isolation. The task is distinct from the existing override-policy task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The finder and backend-discovery helper are adjacent in the small focused source. The required reasoning distinguishes ownership, availability, and package status under the same backend preference used by execution."
+  },
+  "context": {
+   "files": [
+    "tlz/__init__.py",
+    "tlz/_build_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.find_spec",
+    "why": "Currently returns an unqualified ModuleSpec for every owned name without checking availability or package status."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader._load_toolz",
+    "why": "Provides the existing independent backend attempts and ImportError fallback."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "Establishes the backend preference that specification creation must match."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_spec_metadata.py\n@@ -0,0 +1,60 @@\n+import types\n+\n+import pytest\n+\n+from tlz._build_tlz import TlzLoader\n+\n+\n+@pytest.mark.parametrize(\n+    'fast_available,slow_available,fast_package,slow_package,expected_package',\n+    [\n+        (True, True, True, False, True),\n+        (True, True, False, True, False),\n+        (False, True, False, True, True),\n+        (True, False, True, False, True),\n+        (False, True, False, False, False),\n+    ],\n+)\n+def test_find_spec_uses_selected_backend_package_status(\n+    monkeypatch, fast_available, slow_available, fast_package, slow_package, expected_package\n+):\n+    fast = types.ModuleType('cytoolz.spec_test')\n+    slow = types.ModuleType('toolz.spec_test')\n+    if fast_package:\n+        fast.__path__ = ['fast-path']\n+    if slow_package:\n+        slow.__path__ = ['slow-path']\n+    modules = {}\n+    if fast_available:\n+        modules[fast.__name__] = fast\n+    if slow_available:\n+        modules[slow.__name__] = slow\n+    attempted = []\n+\n+    def resolve(name):\n+        attempted.append(name)\n+        if name not in modules:\n+            raise ImportError(name)\n+        return modules[name]\n+\n+    monkeypatch.setattr('tlz._build_tlz.import_module', resolve)\n+    loader = TlzLoader()\n+    spec = loader.find_spec('tlz.spec_test', None)\n+    assert spec.name == 'tlz.spec_test'\n+    assert spec.loader is loader\n+    assert (spec.submodule_search_locations is not None) is expected_package\n+\n+\n+def test_find_spec_returns_none_for_unavailable_or_unowned_names(monkeypatch):\n+    calls = []\n+\n+    def missing(name):\n+        calls.append(name)\n+        raise ImportError(name)\n+\n+    monkeypatch.setattr('tlz._build_tlz.import_module', missing)\n+    loader = TlzLoader()\n+    assert loader.find_spec('tlz.no_such_backend', None) is None\n+    calls.clear()\n+    assert loader.find_spec('tlzextra.spec_test', None) is None\n+    assert calls == []\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests check ModuleSpec.submodule_search_locations as the public observable package indicator. Empty backend package paths still count as package status because the requirement is attribute presence, not truthiness.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make `TlzLoader.find_spec` report backend availability and package status accurately. For a name whose first component is exactly `tlz`, resolve the corresponding backend modules using the existing fallback behavior. Return `None` if neither backend can be imported. Otherwise return a `ModuleSpec` with the requested name and this loader, marking it as a package exactly when the selected backend module has a `__path__` attribute. Select cytoolz when available, even if only the toolz counterpart is a package. Names outside the `tlz` namespace must still return `None` without attempting backend imports. Keep the legacy callbacks unchanged. Deliver a unified diff without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_returns_none_for_unavailable_or_unowned_names",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[False-True-False-True-True]",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[True-False-True-False-True]",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[True-True-True-False-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 198
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_returns_none_for_unavailable_or_unowned_names",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[False-True-False-True-True]",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[True-False-True-False-True]",
+   "toolz/tests/test_tlz_spec_metadata.py::test_find_spec_uses_selected_backend_package_status[True-True-True-False-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

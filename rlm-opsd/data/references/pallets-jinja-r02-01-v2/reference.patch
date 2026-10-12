@@ -1,0 +1,31 @@
+--- a/src/jinja2/compiler.py
++++ b/src/jinja2/compiler.py
+@@ -250,9 +250,14 @@
+ 
+ 
+ class DependencyFinderVisitor(NodeVisitor):
+-    """A visitor that collects filter and test calls."""
+-
+-    def __init__(self) -> None:
++    """A visitor that collects filter and test calls.
++
++    By default, stop at block boundaries. Set ``include_blocks`` to
++    collect dependencies from all descendants, including nested blocks.
++    """
++
++    def __init__(self, include_blocks: bool = False) -> None:
++        self.include_blocks = include_blocks
+         self.filters: t.Set[str] = set()
+         self.tests: t.Set[str] = set()
+ 
+@@ -265,7 +270,9 @@
+         self.tests.add(node.name)
+ 
+     def visit_Block(self, node: nodes.Block) -> None:
+-        """Stop visiting at blocks."""
++        """Visit block contents only when collecting all dependencies."""
++        if self.include_blocks:
++            self.generic_visit(node)
+ 
+ 
+ class UndeclaredNameVisitor(NodeVisitor):

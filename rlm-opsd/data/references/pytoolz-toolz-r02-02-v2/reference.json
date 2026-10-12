@@ -1,0 +1,143 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -53,39 +53,47 @@\n         return types.ModuleType(spec.name)\n \n     def exec_module(self, module):\n-        toolz_mods = self._load_toolz(module.__name__)\n-        fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n-        slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n-        module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))\n-        package = fast_mod.__package__\n-        if package is not None:\n-            package, dot, submodules = package.partition('.')\n-            module.__package__ = ''.join(['tlz', dot, submodules])\n-        if not module.__doc__:\n-            module.__doc__ = fast_mod.__doc__\n+        namespace = module.__dict__\n+        original = namespace.copy()\n+        try:\n+            toolz_mods = self._load_toolz(module.__name__)\n+            fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n+            slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n+            module.__dict__.update(toolz.merge(fast_mod.__dict__, module.__dict__))\n+            package = fast_mod.__package__\n+            if package is not None:\n+                package, dot, submodules = package.partition('.')\n+                module.__package__ = ''.join(['tlz', dot, submodules])\n+            if not module.__doc__:\n+                module.__doc__ = fast_mod.__doc__\n \n-        # show file from toolz during introspection\n-        try:\n-            module.__file__ = slow_mod.__file__\n-        except AttributeError:\n-            pass\n+            # show file from toolz during introspection\n+            try:\n+                module.__file__ = slow_mod.__file__\n+            except AttributeError:\n+                pass\n \n-        for k, v in fast_mod.__dict__.items():\n-            tv = slow_mod.__dict__.get(k)\n-            try:\n-                hash(tv)\n-            except TypeError:\n-                tv = None\n-            if tv in self.always_from_toolz:\n-                module.__dict__[k] = tv\n-            elif (\n-                isinstance(v, types.ModuleType)\n-                and v.__package__ == fast_mod.__name__\n-            ):\n-                package, dot, submodules = v.__name__.partition('.')\n-                module_name = ''.join(['tlz', dot, submodules])\n-                submodule = import_module(module_name)\n-                module.__dict__[k] = submodule\n+            for k, v in fast_mod.__dict__.items():\n+                tv = slow_mod.__dict__.get(k)\n+                try:\n+                    hash(tv)\n+                except TypeError:\n+                    tv = None\n+                if tv in self.always_from_toolz:\n+                    module.__dict__[k] = tv\n+                elif (\n+                    isinstance(v, types.ModuleType)\n+                    and v.__package__ == fast_mod.__name__\n+                ):\n+                    package, dot, submodules = v.__name__.partition('.')\n+                    module_name = ''.join(['tlz', dot, submodules])\n+                    submodule = import_module(module_name)\n+                    module.__dict__[k] = submodule\n+        except BaseException:\n+            # Restore bindings only; imported modules and backends stay intact.\n+            namespace.clear()\n+            namespace.update(original)\n+            raise\n \n \n tlz_loader = TlzLoader()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "body",
+    "body_start",
+    "end",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5157 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 5,157-character context supported a direct solution without sub-calls. The reference execution located the loader implementation and constructed a patch spanning backend discovery and subsequent namespace population, where reasoning about exception scope and target-local restoration was necessary."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. The identity-preserving rollback requirement, BaseException coverage, exception identity, and explicit exclusion of external side effects define a coherent transactional change. It differs substantively from the caller-export preservation parent and the other accepted tasks. The supplied verification evidence exercises discovery failures and late population failures after metadata, overrides, and child substitution."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The loader, bootstrap, and existing loader tests fit in a focused context under 16,000 characters. The task requires reasoning about exceptions across discovery, namespace merging, metadata updates, overrides, and child imports, while distinguishing target-local state from external side effects."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "Discovery precedes namespace merging, metadata assignments, override selection, and owned-child imports. There is currently no exception boundary restoring the target after any of these stages fails."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader._load_toolz",
+    "why": "Backend discovery executes imports and can raise before population begins, so the transactional guarantee must encompass discovery without undoing its external side effects."
+   },
+   {
+    "path": "toolz/tests/test_tlz.py",
+    "symbol": "toolz/tests/test_tlz.py::test_tlz",
+    "why": "Existing assertions establish successful behavior for mirrored child identities, package metadata, documentation, slow-backend file selection, and the mandatory toolz.pipe override."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_transaction.py\n@@ -0,0 +1,157 @@\n+import sys\n+import types\n+\n+import pytest\n+import toolz\n+from tlz import _build_tlz as builder\n+\n+\n+def assert_bindings(module, before):\n+    assert set(module.__dict__) == set(before)\n+    for name, value in before.items():\n+        assert module.__dict__[name] is value\n+\n+\n+def target_module():\n+    module = types.ModuleType('tlz.transaction')\n+    module.__package__ = 'caller.package'\n+    module.__file__ = 'caller.py'\n+    module.__loader__ = object()\n+    module.__spec__ = object()\n+    module.keep = object()\n+    module.alias = object()\n+    module.first = object()\n+    return module\n+\n+\n+@pytest.mark.parametrize('error_type', [RuntimeError, KeyboardInterrupt, SystemExit])\n+def test_discovery_failure_restores_namespace(monkeypatch, error_type):\n+    loader = builder.TlzLoader()\n+    module = target_module()\n+    before = dict(module.__dict__)\n+    error = error_type('discovery failed')\n+    external = types.ModuleType('transaction_external')\n+\n+    def discover(fullname):\n+        assert fullname == 'tlz.transaction'\n+        module.__dict__.clear()\n+        module.__dict__.update({'__name__': fullname, 'introduced': object()})\n+        monkeypatch.setitem(sys.modules, external.__name__, external)\n+        raise error\n+\n+    monkeypatch.setattr(loader, '_load_toolz', discover)\n+    with pytest.raises(error_type) as caught:\n+        loader.exec_module(module)\n+    assert caught.value is error\n+    assert_bindings(module, before)\n+    assert sys.modules[external.__name__] is external\n+\n+\n+@pytest.mark.parametrize('failure_stage', ['child_import', 'hash'])\n+def test_late_failure_restores_only_target(monkeypatch, failure_stage):\n+    loader = builder.TlzLoader()\n+    module = target_module()\n+    before = dict(module.__dict__)\n+    fast = types.ModuleType('cytoolz.transaction', 'backend docs')\n+    slow = types.ModuleType('toolz.transaction', 'slow docs')\n+    fast.__package__ = fast.__name__\n+    slow.__package__ = slow.__name__\n+    fast.__file__ = 'fast.py'\n+    slow.__file__ = 'slow.py'\n+    fast.added = object()\n+    fast.alias = object()\n+    slow.alias = toolz.pipe\n+    child = types.ModuleType('cytoolz.transaction.first')\n+    child.__package__ = fast.__name__\n+    fast.first = child\n+    second = types.ModuleType('cytoolz.transaction.second')\n+    second.__package__ = fast.__name__\n+    fast.second = second\n+    mirrored = types.ModuleType('tlz.transaction.first')\n+    error = KeyboardInterrupt('late population failure')\n+    side_effect = object()\n+    calls = []\n+\n+    def fail():\n+        assert module.first is mirrored\n+        assert module.alias is toolz.pipe\n+        assert module.__package__ == 'tlz.transaction'\n+        assert module.__doc__ == 'backend docs'\n+        assert module.__file__ == 'slow.py'\n+        assert module.added is fast.added\n+        fast.import_side_effect = side_effect\n+        slow.import_side_effect = side_effect\n+        raise error\n+\n+    class BadHash:\n+        def __hash__(self):\n+            fail()\n+\n+    if failure_stage == 'hash':\n+        slow.second = BadHash()\n+\n+    def discover(fullname):\n+        assert fullname == module.__name__\n+        return {'cytoolz': fast, 'toolz': slow}\n+\n+    def import_child(fullname):\n+        calls.append(fullname)\n+        if fullname == mirrored.__name__:\n+            monkeypatch.setitem(sys.modules, fullname, mirrored)\n+            return mirrored\n+        assert fullname == 'tlz.transaction.second'\n+        fail()\n+\n+    monkeypatch.setattr(loader, '_load_toolz', discover)\n+    monkeypatch.setattr(builder, 'import_module', import_child)\n+    with pytest.raises(KeyboardInterrupt) as caught:\n+        loader.exec_module(module)\n+    assert caught.value is error\n+    assert_bindings(module, before)\n+    expected_calls = [mirrored.__name__]\n+    if failure_stage == 'child_import':\n+        expected_calls.append('tlz.transaction.second')\n+    assert calls == expected_calls\n+    assert sys.modules[mirrored.__name__] is mirrored\n+    assert fast.import_side_effect is side_effect\n+    assert slow.import_side_effect is side_effect\n+\n+\n+@pytest.mark.parametrize('local_doc', [None, 'caller docs'])\n+def test_success_keeps_population_policy(monkeypatch, local_doc):\n+    loader = builder.TlzLoader()\n+    module = target_module()\n+    module.__doc__ = local_doc\n+    retained = module.keep\n+    fast = types.ModuleType('cytoolz.transaction', 'backend docs')\n+    slow = types.ModuleType('toolz.transaction')\n+    fast.__package__ = fast.__name__\n+    slow.__file__ = 'slow.py'\n+    fast.keep = object()\n+    fast.added = object()\n+    fast.alias = object()\n+    slow.alias = toolz.pipe\n+    child = types.ModuleType('cytoolz.transaction.first')\n+    child.__package__ = fast.__name__\n+    fast.first = child\n+    mirrored = types.ModuleType('tlz.transaction.first')\n+    calls = []\n+\n+    def import_child(fullname):\n+        calls.append(fullname)\n+        assert fullname == mirrored.__name__\n+        return mirrored\n+\n+    monkeypatch.setattr(loader, '_load_toolz',\n+                        lambda fullname: {'cytoolz': fast, 'toolz': slow})\n+    monkeypatch.setattr(builder, 'import_module', import_child)\n+    loader.exec_module(module)\n+    assert module.keep is retained\n+    assert module.added is fast.added\n+    assert module.alias is toolz.pipe\n+    assert module.first is mirrored\n+    assert module.__package__ == 'tlz.transaction'\n+    assert module.__doc__ == (local_doc or 'backend docs')\n+    assert module.__file__ == 'slow.py'\n+    assert module.__name__ == 'tlz.transaction'\n+    assert calls == [mirrored.__name__]\n",
+  "include_failure_log": false,
+  "notes": "This is a missing-capability implementation against the supplied nontransactional baseline, verified by a newly written hidden-test patch rather than an injected regression. The tests use isolated synthetic backends and do not require cytoolz. Five failure cases check exact binding restoration and exception identity, including discovery failures and late failures after successful child substitution and metadata rewrites. They also check retention of backend mutations and sys.modules entries. Two success cases enforce the existing collision and metadata policies; in particular, unlike the original task, pre-existing override and child bindings must still be replaced on successful execution.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Give `TlzLoader.exec_module` an all-or-nothing guarantee for the target module's namespace. If backend discovery or any subsequent population step raises a `BaseException`, the target must regain exactly its entry-time names, each bound to the identical entry-time object, and the same exception object must propagate. This must also hold when metadata and overrides have already been assigned and an owned child has already been imported and substituted successfully. Rollback must be target-local: do not undo changes to backend namespaces, imported modules, or `sys.modules`. Successful execution must retain this snapshot's existing collision handling, backend preference, override policy, child mirroring, and metadata behavior. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Still supports direct solving, but shifts the reasoning to exception boundaries and state rollback across multiple stages of `exec_module`. Focused failure-injection fixtures are useful for separating target-local state from import-system side effects.",
+  "change_type": "failure_condition",
+  "description": "Make `tlz/_build_tlz.py::TlzLoader.exec_module` transactional with respect to the target module's namespace. If backend discovery or any later population step raises a `BaseException`, restore the target's exact entry-time bindings by identity, remove newly introduced names, and re-raise the same exception. Include a failure after an owned-child import has already succeeded and after metadata has been rewritten. Do not roll back backend namespaces, imported modules, or `sys.modules`, and leave successful execution behavior unchanged. Deliver a production-only unified diff.",
+  "expected_answer_change": "The implementation needs an entry-time namespace snapshot and an exception boundary covering discovery and population. Restoring only overwritten values is insufficient because backend-only names must also disappear. Verification should check restoration of metadata and ordinary bindings, exception identity, unchanged successful population, and retention of external import side effects.",
+  "why_substantive": "The original task changes successful collision handling. This variation changes failure semantics: the initial merge, metadata assignments, overrides, and completed child replacements must not leave a partially populated target when a later operation fails. It is also distinct from legacy `load_module` cache cleanup because the required rollback concerns an existing module object's dictionary, not removal of a cache entry."
+ },
+ "task_id": "pytoolz-toolz-r02-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[KeyboardInterrupt]",
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[RuntimeError]",
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[SystemExit]",
+   "toolz/tests/test_tlz_transaction.py::test_late_failure_restores_only_target[child_import]",
+   "toolz/tests/test_tlz_transaction.py::test_late_failure_restores_only_target[hash]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 199
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[KeyboardInterrupt]",
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[RuntimeError]",
+   "toolz/tests/test_tlz_transaction.py::test_discovery_failure_restores_namespace[SystemExit]",
+   "toolz/tests/test_tlz_transaction.py::test_late_failure_restores_only_target[child_import]",
+   "toolz/tests/test_tlz_transaction.py::test_late_failure_restores_only_target[hash]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

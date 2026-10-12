@@ -1,0 +1,152 @@
+{
+ "answer": "--- a/lark/lexer.py\n+++ b/lark/lexer.py\n@@ -370,13 +370,17 @@\n         # This function recursively tries less and less groups until it's successful.\n         mres = []\n         while terminals:\n-            pattern = u'|'.join(u'(?P<%s>%s)' % (t.name, t.pattern.to_regexp()) for t in terminals[:max_size])\n+            batch = terminals[:max_size]\n+            pattern = u'|'.join(u'(?P<%s>%s)' % (t.name, t.pattern.to_regexp()) for t in batch)\n             if self.use_bytes:\n                 pattern = pattern.encode('latin-1')\n             try:\n                 mre = self.re_.compile(pattern, self.g_regex_flags)\n             except AssertionError:  # Yes, this is what Python provides us.. :/\n-                return self._build_mres(terminals, max_size // 2)\n+                if len(batch) == 1:\n+                    raise\n+                # Keep earlier batches when only a later batch needs splitting.\n+                return mres + self._build_mres(terminals, len(batch) // 2)\n \n             mres.append(mre)\n             terminals = terminals[max_size:]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0015152031698050313,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 791973 chars; 19 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The assembled patch addresses both independent failure modes: it preserves previously compiled batches when a later batch must split, and propagates AssertionError when a singleton batch fails. The reference execution inspected the constructed final value before finishing. The supplied verified result supports the requested behavior, although the execution summary itself records no repository test execution.",
+   "inspect_locate": "The reference execution used 19 targeted searches without printing the whole context. Inspecting recursive scanner compilation alongside both matching APIs and embedded-literal scanner construction was useful for establishing ordering, termination, and integration requirements."
+  },
+  "notes": "This is a natural, precisely scoped hardening request with a clear production-only unified-diff format. Naming the affected public behavior does not reveal the defective implementation or prescribe the fix. Correctness requires reasoning about recursive batch splitting and match precedence, not merely locating Scanner. The embedded-literal, bytes, and flags requirements constrain the same repair rather than forming an unrelated quiz. It is substantively different from the accepted callback-dispatch task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must satisfy two independent invariants: compilation must terminate when a single terminal cannot compile, and successful batches must remain in terminal order even when a later batch requires further splitting. Checking the assembled diff against both matching APIs and the nested literal-scanner path prevents a locally plausible but incomplete repair.",
+   "inspect_locate": "The relevant evidence is confined to several separated parts of the repository: Scanner's recursive compilation, its two matching APIs, the construction of embedded-literal scanners in _create_unless, and BasicLexer's scanner initialization. Locating these paths establishes both the fallback's termination requirement and the order that compiled batches must preserve."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Scanner._build_mres",
+    "why": "The recursive fallback can discard already compiled batches and reduce a failing singleton to a zero-sized batch."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Scanner.match",
+    "why": "Matching returns the first successful result in compiled-batch order, so preserving that order is observable."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::Scanner.fullmatch",
+    "why": "Embedded-literal recognition relies on this separate first-successful-batch matching API."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::_create_unless",
+    "why": "Embedded literals are removed from the outer scanner and recognized using another Scanner supplied with the same regex engine."
+   },
+   {
+    "path": "lark/lexer.py",
+    "symbol": "lark/lexer.py::UnlessCallback.__call__",
+    "why": "The internal scanner's fullmatch result determines literal retagging without replacing or modifying other token data."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_scanner_group_limit.py\n@@ -0,0 +1,86 @@\n+import re\n+\n+import pytest\n+\n+from lark import TextSlice\n+from lark.common import LexerConf\n+from lark.lexer import BasicLexer, PatternRE, PatternStr, Scanner, TerminalDef, Token\n+\n+\n+class GroupLimitedRE:\n+    error = re.error\n+\n+    def __init__(self, limit):\n+        self.limit = limit\n+\n+    def compile(self, pattern, flags=0):\n+        compiled = re.compile(pattern, flags)\n+        if not compiled.groupindex:\n+            raise RuntimeError(\"attempted an empty scanner batch\")\n+        if len(compiled.groupindex) > self.limit:\n+            raise AssertionError(\"named group limit exceeded\")\n+        return compiled\n+\n+    def match(self, pattern, text, flags=0):\n+        return re.match(pattern, text, flags)\n+\n+\n+@pytest.mark.parametrize(\"use_bytes\", [False, True])\n+def test_split_preserves_prefix_and_first_match(use_bytes):\n+    terminals = [\n+        TerminalDef(\"A\", PatternRE(\"a+\")),\n+        TerminalDef(\"B\", PatternStr(\"b\")),\n+        TerminalDef(\"C\", PatternRE(r\"(?P<INNER>a+|c)\")),\n+        TerminalDef(\"D\", PatternStr(\"d\")),\n+    ]\n+    scanner = Scanner(terminals, re.I, GroupLimitedRE(2), use_bytes)\n+\n+    def text(value):\n+        return value.encode(\"ascii\") if use_bytes else value\n+\n+    assert scanner.match(TextSlice(text(\"!AAX\"), 1, 3), 1) == (text(\"AA\"), \"A\")\n+    assert scanner.fullmatch(text(\"AA\")) == \"A\"\n+    for value, name in [(\"a\", \"A\"), (\"b\", \"B\"), (\"c\", \"C\"), (\"d\", \"D\")]:\n+        assert scanner.match(TextSlice.cast_from(text(value)), 0) == (text(value), name)\n+        assert scanner.fullmatch(text(value)) == name\n+    assert scanner.match(TextSlice.cast_from(text(\"q\")), 0) is None\n+    assert scanner.fullmatch(text(\"q\")) is None\n+\n+\n+@pytest.mark.parametrize(\"with_prefix\", [False, True])\n+def test_unsplittable_terminal_propagates_assertion(with_prefix):\n+    terminals = []\n+    if with_prefix:\n+        terminals.extend([\n+            TerminalDef(\"A\", PatternStr(\"a\")),\n+            TerminalDef(\"B\", PatternStr(\"b\")),\n+        ])\n+    terminals.append(TerminalDef(\"BAD\", PatternRE(r\"(?P<I>x)(?P<J>y)\")))\n+    with pytest.raises(AssertionError, match=\"named group limit\"):\n+        Scanner(terminals, 0, GroupLimitedRE(2), False)\n+\n+\n+def test_embedded_literal_scanner_splits_and_retags():\n+    terminals = [\n+        TerminalDef(\"WORD\", PatternRE(\"[a-z]+\")),\n+        TerminalDef(\"K1\", PatternStr(\"if\")),\n+        TerminalDef(\"K2\", PatternStr(\"in\")),\n+        TerminalDef(\"K3\", PatternStr(\"int\")),\n+        TerminalDef(\"K4\", PatternStr(\"else\")),\n+        TerminalDef(\"K5\", PatternStr(\"end\")),\n+    ]\n+    lexer = BasicLexer(LexerConf(terminals, GroupLimitedRE(2), skip_validation=True))\n+    scanner = lexer.scanner\n+    assert scanner.allowed_types == {\"WORD\"}\n+    for literal, name in [(\"if\", \"K1\"), (\"in\", \"K2\"), (\"int\", \"K3\"), (\"else\", \"K4\"), (\"end\", \"K5\")]:\n+        matched = scanner.match(TextSlice.cast_from(literal), 0)\n+        assert matched == (literal, \"WORD\")\n+        token = Token(\"WORD\", literal, 4, 2, 3, 2, 3 + len(literal), 4 + len(literal))\n+        result = lexer.callback[\"WORD\"](token)\n+        assert result is token\n+        assert result.type == name\n+        assert result.value == literal\n+        assert (result.start_pos, result.line, result.column, result.end_line, result.end_column, result.end_pos) == (4, 2, 3, 2, 3 + len(literal), 4 + len(literal))\n+    token = Token(\"WORD\", \"identifier\")\n+    assert lexer.callback[\"WORD\"](token) is token\n+    assert token.type == \"WORD\"\n",
+  "include_failure_log": false,
+  "notes": "This task targets a defect already present in the supplied snapshot, so it uses new hidden acceptance tests rather than introducing a synthetic setup regression. The controlled regex wrapper delegates compilation to re and rejects patterns exceeding a named-group limit. Its empty-pattern guard makes the current zero-sized fallback fail promptly instead of hanging. The successful-splitting case deliberately makes a later batch exceed the limit after an earlier batch has compiled, exposing loss of the compiled prefix. The singleton cases expose nontermination; the embedded-literal case supplies integration coverage. A correct repair must retain compiled prefixes and re-raise an unsplittable singleton's AssertionError, which is substantively different from the original callback-dispatch change.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Harden `Scanner` against regex engines that raise `AssertionError` when a compiled pattern contains too many named groups. Oversized terminal batches should be split until they compile, without losing terminals or changing their order. Both `Scanner.match` and `Scanner.fullmatch` must continue choosing the first successful compiled batch, including when only a later batch requires further splitting. If a single terminal still cannot compile, propagate its `AssertionError`; do not retry with an empty batch or recurse indefinitely. The same fallback must work for the internal scanners used by `UnlessCallback` to recognize embedded literals, preserving their retagging behavior and token data. Support both string and byte patterns and retain the supplied regex flags. Return a unified diff against production files only, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from locating and reconciling callback dispatch to focused recursive-algorithm inspection and adversarial verification. Direct reading of Scanner is appropriate initially; tracing _create_unless establishes that the same fallback must work for internal literal scanners.",
+  "change_type": "failure_condition",
+  "description": "Repair regex-group-limit fallback in lark/lexer.py::Scanner._build_mres. Use a controlled regex-module wrapper that raises AssertionError when a combined pattern exceeds a configured number of named groups. Scanner construction must split oversized batches while preserving terminal order, and Scanner.match and Scanner.fullmatch must retain their existing first-match precedence across the resulting compiled batches. If compiling an individual terminal still raises AssertionError, propagate that failure rather than recursing indefinitely or attempting a zero-sized batch. Deliver a production-only unified diff, with verification covering successful splitting, an unsplittable terminal, and an embedded-literal UnlessCallback whose internal Scanner also requires splitting.",
+  "expected_answer_change": "The repair belongs in Scanner._build_mres and must establish a terminating fallback without changing terminal precedence. Verification depends on controlled compilation failures, successful matching across multiple compiled batches, and literal recognition through UnlessCallback\u2014not on dispatching literal user callbacks.",
+  "why_substantive": "This introduces a scanner-construction failure rather than a user-callback dispatch defect. The investigation follows recursive batch compilation and the two scanner matching APIs, including the nested scanner built by _create_unless. The accepted callback-dispatch patch does not repair the non-progressing recursion when max_size reaches one."
+ },
+ "task_id": "lark-parser-lark-r02-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_scanner_group_limit.py::test_split_preserves_prefix_and_first_match[False]",
+   "tests/test_scanner_group_limit.py::test_split_preserves_prefix_and_first_match[True]",
+   "tests/test_scanner_group_limit.py::test_unsplittable_terminal_propagates_assertion[False]",
+   "tests/test_scanner_group_limit.py::test_unsplittable_terminal_propagates_assertion[True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/lexer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_scanner_group_limit.py::test_split_preserves_prefix_and_first_match[False]",
+   "tests/test_scanner_group_limit.py::test_split_preserves_prefix_and_first_match[True]",
+   "tests/test_scanner_group_limit.py::test_unsplittable_terminal_propagates_assertion[False]",
+   "tests/test_scanner_group_limit.py::test_unsplittable_terminal_propagates_assertion[True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

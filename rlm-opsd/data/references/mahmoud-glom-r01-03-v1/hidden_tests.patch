@@ -1,0 +1,82 @@
+--- /dev/null
++++ b/glom/test/test_reflected_floordiv.py
+@@ -0,0 +1,79 @@
++import pytest
++
++from glom import Call, Fill, Path, PathAccessError, Spec, T, glom
++
++
++@pytest.mark.parametrize('numerator, denominator', [
++    (10, 3), (10, -3), (-10, 3), (-10, -3),
++    (10.5, 3), (10, -3.0), (-10.5, 3.0), (0, 2),
++])
++def test_reflected_python_semantics(numerator, denominator):
++    expression = numerator // T
++    expected = numerator // denominator
++    result = glom(denominator, expression)
++    assert result == expected
++    assert type(result) is type(expected)
++
++
++def test_spec_numerator_uses_original_target():
++    target = {'n': 29, 'd': 4}
++    expression = Spec('n') // (T['d'] + 1)
++    assert glom(target, expression) == 5
++    assert glom(target, expression * 3 - 2) == 13
++
++
++def test_accumulated_denominator_and_later_operands():
++    target = {'d': 4, 'offset': 3}
++    expression = (100 // (T['d'] + 1)) // 2 + T['offset']
++    assert glom(target, expression) == 13
++    assert glom(4, 100 // (10 // T)) == 50
++
++
++def test_reflected_fill_and_call_arguments():
++    target = {'n': 29, 'd': 4}
++    expression = Spec(T['n']) // (T['d'] + 1)
++    assert glom(target, Fill({'q': expression, 'next': [expression + 1]})) == {
++        'q': 5, 'next': [6]}
++    def collect(*args, **kwargs):
++        return args, kwargs
++    assert glom(target, Call(collect, args=(expression,),
++                             kwargs={'q': 10 // T['d']})) == ((5,), {'q': 2})
++
++
++@pytest.mark.parametrize('numerator, denominator, error_type', [
++    (10, 0, ZeroDivisionError),
++    (10.0, 0.0, ZeroDivisionError),
++    (10, 'bad', TypeError),
++    ('bad', 2, TypeError),
++])
++def test_reflected_error_metadata(numerator, denominator, error_type):
++    expression = (numerator // (T['d'] * 1)) + 7
++    with pytest.raises(PathAccessError) as caught:
++        glom({'d': denominator}, expression)
++    error = caught.value
++    assert type(error.exc) is error_type
++    assert error.part_idx == 2
++    assert error.path == Path(expression)
++    assert error.path.items() == Path(expression).items()
++    assert glom({'d': denominator}, expression, default='fallback') == 'fallback'
++
++
++@pytest.mark.parametrize('target', [7, -7, 7.5, -7.5])
++def test_forward_floor_division_remains_supported(target):
++    assert glom(target, T // 2) == target // 2
++    assert glom(target, T // (T + 1)) == target // (target + 1)
++    assert glom(target, (T // 2) + 3) == target // 2 + 3
++
++
++@pytest.mark.parametrize('build, expected', [
++    (lambda: 10 // T, '10 // T'),
++    (lambda: 10 // (T + 1), '10 // (T + 1)'),
++    (lambda: (10 // T) + 1, '(10 // T) + 1'),
++    (lambda: -(10 // T), '-(10 // T)'),
++    (lambda: T + (10 // T), 'T + (10 // T)'),
++    (lambda: T // 2, 'T // 2'),
++    (lambda: T + (T // 2), 'T + (T // 2)'),
++    (lambda: -(T // 2), '-(T // 2)'),
++])
++def test_floor_division_representation(build, expected):
++    assert repr(build()) == expected

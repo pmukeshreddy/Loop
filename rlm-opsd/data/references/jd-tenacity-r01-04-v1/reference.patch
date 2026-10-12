@@ -1,0 +1,237 @@
+--- a/tenacity/retry.py
++++ b/tenacity/retry.py
+@@ -15,6 +15,7 @@
+ # limitations under the License.
+ 
+ import abc
++import inspect
+ import re
+ import typing
+ 
+@@ -31,36 +32,51 @@
+     def __call__(self, retry_state: "RetryCallState") -> bool:
+         pass
+ 
+-    def __and__(self, other: "RetryBaseT") -> "retry_all":
+-        if isinstance(other, retry_base):
+-            return other.__rand__(self)
+-        # Plain callable: flatten if self is already a retry_all
+-        if isinstance(self, retry_all):
+-            return retry_all(*self.retries, other)
+-        return retry_all(self, other)
+-
+-    def __rand__(self, other: "RetryBaseT") -> "retry_all":
+-        # Flatten if other is already a retry_all
+-        if isinstance(other, retry_all):
+-            return retry_all(*other.retries, self)
+-        return retry_all(other, self)
+-
+-    def __or__(self, other: "RetryBaseT") -> "retry_any":
+-        if isinstance(other, retry_base):
+-            return other.__ror__(self)
+-        # Plain callable: flatten if self is already a retry_any
+-        if isinstance(self, retry_any):
+-            return retry_any(*self.retries, other)
+-        return retry_any(self, other)
+-
+-    def __ror__(self, other: "RetryBaseT") -> "retry_any":
+-        # Flatten if other is already a retry_any
+-        if isinstance(other, retry_any):
+-            return retry_any(*other.retries, self)
+-        return retry_any(other, self)
+-
+-
+-RetryBaseT = retry_base | typing.Callable[["RetryCallState"], bool]
++    def __and__(self, other: "RetryBaseT") -> "retry_base":
++        return _combine_retries(self, other, retry_all)
++
++    def __rand__(self, other: "RetryBaseT") -> "retry_base":
++        return _combine_retries(other, self, retry_all)
++
++    def __or__(self, other: "RetryBaseT") -> "retry_base":
++        return _combine_retries(self, other, retry_any)
++
++    def __ror__(self, other: "RetryBaseT") -> "retry_base":
++        return _combine_retries(other, self, retry_any)
++
++
++RetryBaseT = (
++    retry_base | typing.Callable[["RetryCallState"], bool | typing.Awaitable[bool]]
++)
++
++
++def _is_async_retry(retry: RetryBaseT) -> bool:
++    # A synchronous composite may conceal asynchronous strategies at any depth.
++    if isinstance(retry, (retry_any, retry_all)):
++        return any(_is_async_retry(child) for child in retry.retries)
++    return inspect.iscoroutinefunction(retry) or inspect.iscoroutinefunction(
++        getattr(retry, "__call__", None)
++    )
++
++
++def _combine_retries(
++    left: RetryBaseT,
++    right: RetryBaseT,
++    operator: type["retry_any"] | type["retry_all"],
++) -> retry_base:
++    if _is_async_retry(left) or _is_async_retry(right):
++        # Import lazily: the asyncio retry module itself imports retry_base.
++        from tenacity.asyncio.retry import retry_all as async_retry_all
++        from tenacity.asyncio.retry import retry_any as async_retry_any
++
++        if operator is retry_any:
++            return async_retry_any(left, right)
++        return async_retry_all(left, right)
++
++    # Flatten only the same operator, never across an AND/OR boundary.
++    left_retries = left.retries if isinstance(left, operator) else (left,)
++    right_retries = right.retries if isinstance(right, operator) else (right,)
++    return operator(*left_retries, *right_retries)
+ 
+ 
+ class _retry_never(retry_base):
+@@ -291,12 +307,6 @@
+     def __call__(self, retry_state: "RetryCallState") -> bool:
+         return any(r(retry_state) for r in self.retries)
+ 
+-    @override
+-    def __ror__(self, other: "RetryBaseT") -> "retry_any":
+-        if isinstance(other, retry_any):
+-            return retry_any(*other.retries, *self.retries)
+-        return retry_any(other, *self.retries)
+-
+ 
+ class retry_all(retry_base):
+     """Retries if all the retries condition are valid."""
+@@ -307,9 +317,3 @@
+     @override
+     def __call__(self, retry_state: "RetryCallState") -> bool:
+         return all(r(retry_state) for r in self.retries)
+-
+-    @override
+-    def __rand__(self, other: "RetryBaseT") -> "retry_all":
+-        if isinstance(other, retry_all):
+-            return retry_all(*other.retries, *self.retries)
+-        return retry_all(other, *self.retries)
+--- a/tenacity/asyncio/retry.py
++++ b/tenacity/asyncio/retry.py
+@@ -14,10 +14,14 @@
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
+ import abc
++import inspect
+ import typing
+ 
+-from tenacity import _utils, retry_base
++from tenacity import retry_base
+ from tenacity._utils import override
++from tenacity.retry import RetryBaseT
++from tenacity.retry import retry_all as sync_retry_all
++from tenacity.retry import retry_any as sync_retry_any
+ 
+ if typing.TYPE_CHECKING:
+     from tenacity import RetryCallState
+@@ -33,32 +37,40 @@
+ 
+     @override
+     def __and__(  # type: ignore[override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_all":
+         return retry_all(self, other)
+ 
+     @override
+     def __rand__(  # type: ignore[misc,override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_all":
+         return retry_all(other, self)
+ 
+     @override
+     def __or__(  # type: ignore[override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_any":
+         return retry_any(self, other)
+ 
+     @override
+     def __ror__(  # type: ignore[misc,override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_any":
+         return retry_any(other, self)
+ 
+ 
+-RetryBaseT = (
+-    async_retry_base | typing.Callable[["RetryCallState"], typing.Awaitable[bool]]
+-)
++async def _evaluate_retry(retry: RetryBaseT, retry_state: "RetryCallState") -> bool:
++    # Do not call synchronous composites directly: their any/all would test
++    # coroutine objects for truth instead of awaiting their results.
++    if isinstance(retry, sync_retry_any):
++        return await retry_any(*retry.retries)(retry_state)
++    if isinstance(retry, sync_retry_all):
++        return await retry_all(*retry.retries)(retry_state)
++    result = retry(retry_state)
++    if inspect.isawaitable(result):
++        return await result
++    return result
+ 
+ 
+ class retry_if_exception(async_retry_base):
+@@ -103,21 +115,19 @@
+ class retry_any(async_retry_base):
+     """Retries if any of the retries condition is valid."""
+ 
+-    def __init__(self, *retries: retry_base | async_retry_base) -> None:
++    def __init__(self, *retries: RetryBaseT) -> None:
+         self.retries = retries
+ 
+     @override
+     async def __call__(self, retry_state: "RetryCallState") -> bool:  # type: ignore[override]
+-        result = False
+-        for r in self.retries:
+-            result = result or await _utils.wrap_to_async_func(r)(retry_state)
+-            if result:
+-                break
+-        return result
++        for retry in self.retries:
++            if await _evaluate_retry(retry, retry_state):
++                return True
++        return False
+ 
+     @override
+     def __ror__(  # type: ignore[misc,override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_any":
+         if isinstance(other, retry_any):
+             return retry_any(*other.retries, *self.retries)
+@@ -127,21 +137,19 @@
+ class retry_all(async_retry_base):
+     """Retries if all the retries condition are valid."""
+ 
+-    def __init__(self, *retries: retry_base | async_retry_base) -> None:
++    def __init__(self, *retries: RetryBaseT) -> None:
+         self.retries = retries
+ 
+     @override
+     async def __call__(self, retry_state: "RetryCallState") -> bool:  # type: ignore[override]
+-        result = True
+-        for r in self.retries:
+-            result = result and await _utils.wrap_to_async_func(r)(retry_state)
+-            if not result:
+-                break
+-        return result
++        for retry in self.retries:
++            if not await _evaluate_retry(retry, retry_state):
++                return False
++        return True
+ 
+     @override
+     def __rand__(  # type: ignore[misc,override]
+-        self, other: "retry_base | async_retry_base"
++        self, other: "RetryBaseT"
+     ) -> "retry_all":
+         if isinstance(other, retry_all):
+             return retry_all(*other.retries, *self.retries)

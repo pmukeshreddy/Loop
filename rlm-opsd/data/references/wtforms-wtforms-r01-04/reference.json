@@ -1,0 +1,177 @@
+{
+ "answer": {
+  "local": {
+   "data": "2025-04-06T07:08:00",
+   "no_raw_value": "2025-04-06 07:08:00",
+   "submitted_value": "2025-04-06T07:08",
+   "type": "datetime"
+  },
+  "month": {
+   "data": "2025-04-01",
+   "no_raw_value": "2025-04",
+   "submitted_value": "2025-04",
+   "type": "date"
+  },
+  "week": {
+   "data": "2025-01-06",
+   "no_raw_value": "2025-W01",
+   "submitted_value": "2025-W01",
+   "type": "date"
+  }
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"local\": {\n    \"type\": \"datetime\",\n    \"data\": \"2025-04-06T07:08:00\",\n    \"submitted_value\": \"2025-04-06T07:08\",\n    \"no_raw_value\": \"2025-04-06T07:08:00\"\n  },\n  \"month\": {\n    \"type\": \"date\",\n    \"data\": \"2025-04-01\",\n    \"submitted_value\": \"2025-04\",\n    \"no_raw_value\": \"2025-04\"\n  },\n  \"week\": {\n    \"type\": \"date\",\n    \"data\": \"2025-01-06\",\n    \"submitted_value\": \"2025-W01\",\n    \"no_raw_value\": \"2025-W01\"\n  }\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.889614718037595,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 0,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 7501 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference solved the bounded, 7,501-character context without searches or sub-calls. The requested values require combining default-format fallback parsing, stored date/datetime types, week-to-date construction, and raw-input precedence during rendering."
+  },
+  "notes": "A natural documentation question with concrete inputs and a precise output schema. It does not disclose the results or prescribe solver operations. The answer depends on repository-specific parsing and rendering behavior, and executable verification confirmed it. The task is distinct from the previously accepted hook-collection and CSRF tasks."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The complete datetime field family and its format-cleaning dependency total less than 8,000 characters. The answer needs direct reasoning about fallback parsing, stored types, Monday construction, and raw-input display precedence."
+  },
+  "context": {
+   "files": [
+    "src/wtforms/fields/datetime.py",
+    "src/wtforms/utils.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeField._value",
+    "why": "Raw input takes display precedence; without it, the first original format is used."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeLocalField.__init__",
+    "why": "The submitted T-separated minute-resolution value matches a later default format, not the preferred display format."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::MonthField",
+    "why": "Default year-month parsing produces a date with day one."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::WeekField.process_formdata",
+    "why": "Supplies Monday when the configured format contains no weekday directive."
+   }
+  ],
+  "expected_answer": {
+   "local": {
+    "data": "2025-04-06T07:08:00",
+    "no_raw_value": "2025-04-06 07:08:00",
+    "submitted_value": "2025-04-06T07:08",
+    "type": "datetime"
+   },
+   "month": {
+    "data": "2025-04-01",
+    "no_raw_value": "2025-04",
+    "submitted_value": "2025-04",
+    "type": "date"
+   },
+   "week": {
+    "data": "2025-01-06",
+    "no_raw_value": "2025-W01",
+    "submitted_value": "2025-W01",
+    "type": "date"
+   }
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The verifier can instantiate public fields through a Form with a multidict, read data.isoformat() and _value(), then clear raw_data and read _value() again. The focused source includes the full parsing and value-text logic.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "We need to document whether these datetime controls canonicalize their displayed values after a successful submission. Consider normally bound fields with their default formats, no validators or filters, and no initial Python data: a `DateTimeLocalField` submitted as `2025-04-06T07:08`, a `MonthField` submitted as `2025-04`, and a `WeekField` submitted as `2025-W01`. Each submission consists of one raw string. For each field, report the stored Python type's short name, the stored value as an ISO string, the value text used for rendering immediately after processing, and the value text used if `raw_data` is then cleared without reprocessing. Return a JSON object keyed by `local`, `month`, and `week`; each entry must have `type`, `data`, `submitted_value`, and `no_raw_value`.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r01-04",
+ "truth": {
+  "answer": {
+   "local": {
+    "data": "2025-04-06T07:08:00",
+    "no_raw_value": "2025-04-06 07:08:00",
+    "submitted_value": "2025-04-06T07:08",
+    "type": "datetime"
+   },
+   "month": {
+    "data": "2025-04-01",
+    "no_raw_value": "2025-04",
+    "submitted_value": "2025-04",
+    "type": "date"
+   },
+   "week": {
+    "data": "2025-01-06",
+    "no_raw_value": "2025-W01",
+    "submitted_value": "2025-W01",
+    "type": "date"
+   }
+  },
+  "kind": "oracle",
+  "normalized": "{\"local\": {\"data\": \"2025-04-06T07:08:00\", \"no_raw_value\": \"2025-04-06 07:08:00\", \"submitted_value\": \"2025-04-06T07:08\", \"type\": \"datetime\"}, \"month\": {\"data\": \"2025-04-01\", \"no_raw_value\": \"2025-04\", \"submitted_value\": \"2025-04\", \"type\": \"date\"}, \"week\": {\"data\": \"2025-01-06\", \"no_raw_value\": \"2025-W01\", \"submitted_value\": \"2025-W01\", \"type\": \"date\"}}",
+  "output_tail": "{\"answer\": {\"local\": {\"type\": \"datetime\", \"data\": \"2025-04-06T07:08:00\", \"submitted_value\": \"2025-04-06T07:08\", \"no_raw_value\": \"2025-04-06 07:08:00\"}, \"month\": {\"type\": \"date\", \"data\": \"2025-04-01\", \"submitted_value\": \"2025-04\", \"no_raw_value\": \"2025-04\"}, \"week\": {\"type\": \"date\", \"data\": \"2025-01-06\", \"submitted_value\": \"2025-W01\", \"no_raw_value\": \"2025-W01\"}}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"local\": {\"data\": \"2025-04-06T07:08:00\", \"no_raw_value\": \"2025-04-06 07:08:00\", \"submitted_value\": \"2025-04-06T07:08\", \"type\": \"datetime\"}, \"month\": {\"data\": \"2025-04-01\", \"no_raw_value\": \"2025-04\", \"submitted_value\": \"2025-04\", \"type\": \"date\"}, \"week\": {\"data\": \"2025-01-06\", \"no_raw_value\": \"2025-W01\", \"submitted_value\": \"2025-W01\", \"type\": \"date\"}}",
+   "predicted": "{\"local\": {\"data\": \"2025-04-06T07:08:00\", \"no_raw_value\": \"2025-04-06 07:08:00\", \"submitted_value\": \"2025-04-06T07:08\", \"type\": \"datetime\"}, \"month\": {\"data\": \"2025-04-01\", \"no_raw_value\": \"2025-04\", \"submitted_value\": \"2025-04\", \"type\": \"date\"}, \"week\": {\"data\": \"2025-01-06\", \"no_raw_value\": \"2025-W01\", \"submitted_value\": \"2025-W01\", \"type\": \"date\"}}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,39 @@
+--- a/sqlparse/formatter.py
++++ b/sqlparse/formatter.py
+@@ -7,6 +7,8 @@
+ 
+ """SQL formatter"""
+ 
++import re
++
+ from sqlparse import filters
+ from sqlparse.exceptions import SQLParseError
+ 
+@@ -27,6 +29,13 @@
+     if ofrmt not in [None, 'sql', 'python', 'php']:
+         raise SQLParseError('Unknown output format: '
+                             f'{ofrmt!r}')
++
++    if 'output_varname' in options:
++        varname = options['output_varname']
++        if (not isinstance(varname, str)
++                or re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', varname) is None):
++            raise SQLParseError('Invalid value for output_varname: '
++                                f'{varname!r}')
+ 
+     strip_comments = options.get('strip_comments', False)
+     if strip_comments not in [True, False]:
+@@ -193,9 +202,11 @@
+     if options.get('output_format'):
+         frmt = options['output_format']
+         if frmt.lower() == 'php':
+-            fltr = filters.OutputPHPFilter()
++            fltr = filters.OutputPHPFilter(
++                varname=options.get('output_varname', 'sql'))
+         elif frmt.lower() == 'python':
+-            fltr = filters.OutputPythonFilter()
++            fltr = filters.OutputPythonFilter(
++                varname=options.get('output_varname', 'sql'))
+         else:
+             fltr = None
+         if fltr is not None:

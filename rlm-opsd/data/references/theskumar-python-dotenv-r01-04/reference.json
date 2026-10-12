@@ -1,0 +1,225 @@
+{
+ "answer": [
+  {
+   "error": false,
+   "key": "APP NAME",
+   "line": 1,
+   "value": "blue\nroom"
+  },
+  {
+   "error": true,
+   "key": null,
+   "line": 2,
+   "value": null
+  },
+  {
+   "error": false,
+   "key": "TOKEN",
+   "line": 4,
+   "value": "#live"
+  },
+  {
+   "error": false,
+   "key": "EMPTY",
+   "line": 5,
+   "value": ""
+  },
+  {
+   "error": false,
+   "key": "TAIL",
+   "line": 6,
+   "value": null
+  }
+ ],
+ "answer_format": "ordered_list",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "[\n  {\"key\": null, \"value\": null, \"line\": 1, \"error\": true},\n  {\"key\": null, \"value\": null, \"line\": 2, \"error\": true},\n  {\"key\": \"TOKEN\", \"value\": \"#live\", \"line\": 4, \"error\": false},\n  {\"key\": \"EMPTY\", \"value\": \"# note\", \"line\": 5, \"error\": false},\n  {\"key\": \"TAIL\", \"value\": null, \"line\": 6, \"error\": false}\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 0,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5835 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution computed and checked the ordered bindings from a single 5,835-character parser context, without searches or sub-calls. The input requires reasoning about BOM handling, escape decoding, comment handling, error recovery, and original starting-line tracking."
+  },
+  "notes": "A natural, repository-dependent parser diagnostic with precisely specified input and output. It neither leaks the answer nor prescribes solver operations. The checks exercise related parser behavior rather than bundling unrelated questions, and the task is distinct from the accepted environment-loading and interpolation tasks."
+ },
+ "spec": {
+  "answer_format": "ordered_list",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The complete parser is approximately 5,800 characters. This concrete diagnostic requires directly simulating BOM removal, quote decoding, whitespace consumption, error recovery, and statement-start line tracking, without repository-wide investigation."
+  },
+  "context": {
+   "files": [
+    "src/dotenv/parser.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/parser.py",
+    "symbol": "src/dotenv/parser.py::Reader",
+    "why": "Removes the leading BOM and marks the original statement position before whitespace is consumed."
+   },
+   {
+    "path": "src/dotenv/parser.py",
+    "symbol": "src/dotenv/parser.py::parse_binding",
+    "why": "Controls whitespace-sensitive comments, bare keys, and recoverable invalid statements."
+   },
+   {
+    "path": "src/dotenv/parser.py",
+    "symbol": "src/dotenv/parser.py::parse_value",
+    "why": "Decodes the double-quoted backslash-n without adding a physical source line."
+   }
+  ],
+  "expected_answer": [
+   {
+    "error": false,
+    "key": "APP NAME",
+    "line": 1,
+    "value": "blue\nroom"
+   },
+   {
+    "error": true,
+    "key": null,
+    "line": 2,
+    "value": null
+   },
+   {
+    "error": false,
+    "key": "TOKEN",
+    "line": 4,
+    "value": "#live"
+   },
+   {
+    "error": false,
+    "key": "EMPTY",
+    "line": 5,
+    "value": ""
+   },
+   {
+    "error": false,
+    "key": "TAIL",
+    "line": 6,
+    "value": null
+   }
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "An independent verifier can decode the JSON string, call parse_stream with StringIO, and project each Binding to the four requested fields.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "For a parser diagnostic, determine every binding emitted by `dotenv.parser.parse_stream` for the following file contents, specified as a JSON string to make the BOM and line endings exact: `\"\\ufeffexport 'APP NAME'=\\\"blue\\\\nroom\\\"\\n\\nBROKEN: value\\nTOKEN=#live # note\\nEMPTY= # note\\nTAIL\\n\"`. Return a JSON array in emission order, with exactly `key`, `value`, `line`, and `error` in each object; `line` is the binding's original starting line. Include error bindings rather than filtering them out.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "theskumar-python-dotenv-r01-04",
+ "truth": {
+  "answer": [
+   {
+    "error": false,
+    "key": "APP NAME",
+    "line": 1,
+    "value": "blue\nroom"
+   },
+   {
+    "error": true,
+    "key": null,
+    "line": 2,
+    "value": null
+   },
+   {
+    "error": false,
+    "key": "TOKEN",
+    "line": 4,
+    "value": "#live"
+   },
+   {
+    "error": false,
+    "key": "EMPTY",
+    "line": 5,
+    "value": ""
+   },
+   {
+    "error": false,
+    "key": "TAIL",
+    "line": 6,
+    "value": null
+   }
+  ],
+  "kind": "oracle",
+  "normalized": [
+   "{\"error\": false, \"key\": \"APP NAME\", \"line\": 1, \"value\": \"blue\\nroom\"}",
+   "{\"error\": true, \"key\": null, \"line\": 2, \"value\": null}",
+   "{\"error\": false, \"key\": \"TOKEN\", \"line\": 4, \"value\": \"#live\"}",
+   "{\"error\": false, \"key\": \"EMPTY\", \"line\": 5, \"value\": \"\"}",
+   "{\"error\": false, \"key\": \"TAIL\", \"line\": 6, \"value\": null}"
+  ],
+  "output_tail": "{\"answer\": [{\"key\": \"APP NAME\", \"value\": \"blue\\nroom\", \"line\": 1, \"error\": false}, {\"key\": null, \"value\": null, \"line\": 2, \"error\": true}, {\"key\": \"TOKEN\", \"value\": \"#live\", \"line\": 4, \"error\": false}, {\"key\": \"EMPTY\", \"value\": \"\", \"line\": 5, \"error\": false}, {\"key\": \"TAIL\", \"value\": null, \"line\": 6, \"error\": false}]}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "{\"error\": false, \"key\": \"APP NAME\", \"line\": 1, \"value\": \"blue\\nroom\"}",
+    "{\"error\": true, \"key\": null, \"line\": 2, \"value\": null}",
+    "{\"error\": false, \"key\": \"TOKEN\", \"line\": 4, \"value\": \"#live\"}",
+    "{\"error\": false, \"key\": \"EMPTY\", \"line\": 5, \"value\": \"\"}",
+    "{\"error\": false, \"key\": \"TAIL\", \"line\": 6, \"value\": null}"
+   ],
+   "predicted": [
+    "{\"error\": false, \"key\": \"APP NAME\", \"line\": 1, \"value\": \"blue\\nroom\"}",
+    "{\"error\": true, \"key\": null, \"line\": 2, \"value\": null}",
+    "{\"error\": false, \"key\": \"TOKEN\", \"line\": 4, \"value\": \"#live\"}",
+    "{\"error\": false, \"key\": \"EMPTY\", \"line\": 5, \"value\": \"\"}",
+    "{\"error\": false, \"key\": \"TAIL\", \"line\": 6, \"value\": null}"
+   ]
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,151 @@
+{
+ "answer": "--- a/mkdocs/config/config_options.py\n+++ b/mkdocs/config/config_options.py\n@@ -703,6 +703,11 @@\n         )\n \n     def run_validation(self, value: object) -> str:\n+        if isinstance(value, os.PathLike):\n+            try:\n+                value = os.fspath(value)\n+            except TypeError as e:\n+                raise ValidationError(str(e)) from e\n         value = super().run_validation(value)\n         if self.config_dir and not os.path.isabs(value):\n             value = os.path.join(self.config_dir, value)\n@@ -839,6 +844,15 @@\n \n         if not theme_config['name'] and 'custom_dir' not in theme_config:\n             raise ValidationError(\"At least one of 'name' or 'custom_dir' must be defined.\")\n+\n+        if 'custom_dir' in theme_config:\n+            custom_dir = theme_config['custom_dir']\n+            if isinstance(custom_dir, os.PathLike):\n+                try:\n+                    custom_dir = os.fspath(custom_dir)\n+                except TypeError as e:\n+                    raise ValidationError(str(e)) from e\n+            theme_config['custom_dir'] = Type(str).run_validation(custom_dir)\n \n         # Ensure custom_dir is an absolute path\n         if 'custom_dir' in theme_config and not os.path.isabs(theme_config['custom_dir']):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.00046482542604358413,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "co",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1077824 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['co', 'files']; hand-copied literals 2"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production-only diff combines changes in the two normalization paths, was constructed programmatically, and was inspected after construction. The supplied verification tests cover filesystem subclasses, list items, placeholders, theme directories, and bytes-valued PathLike rejection.",
+   "inspect_locate": "The execution used 18 targeted searches to connect filesystem-option validation, ListOfPaths delegation, theme custom-directory handling, and directory placeholders without printing the whole repository context.",
+   "persistent_state": "Variables co and files were reused across the six-turn execution, providing some evidence of retained working state, although this behavior was not independently marked as established."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format. Its requirements describe the desired API behavior rather than disclose a defective implementation or prescribe solver operations. The two affected validation paths belong to one coherent compatibility change, and the task is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must consistently cover both filesystem-option and theme paths, preserve string behavior, and be checked against exact source context.",
+   "inspect_locate": "Filesystem options, their list wrapper, theme validation, and YAML path placeholders use different normalization paths that must be located and connected.",
+   "persistent_state": "The investigation must retain the shared path-normalization contract while checking scalar options, container delegation, and theme construction, then reuse the exact source excerpts when assembling coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::FilesystemObject.run_validation",
+    "why": "Currently delegates to Type(str) before path resolution, rejecting valid PathLike objects."
+   },
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::ListOfPaths",
+    "why": "Uses a FilesystemObject child and should inherit the new scalar behavior without an independent conversion policy."
+   },
+   {
+    "path": "mkdocs/config/config_options.py",
+    "symbol": "mkdocs/config/config_options.py::Theme.run_validation",
+    "why": "Has a separate custom_dir validation path requiring consistent conversion and error handling."
+   },
+   {
+    "path": "mkdocs/utils/yaml.py",
+    "symbol": "mkdocs/utils/yaml.py::ConfigDirPlaceholder",
+    "why": "Provides a repository-specific, late-bound PathLike implementation that should work through the public configuration options."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/mkdocs/tests/test_pathlike_config.py\n@@ -0,0 +1,62 @@\n+import os\n+from pathlib import Path\n+\n+import pytest\n+\n+from mkdocs.config.base import LegacyConfig\n+from mkdocs.config import config_options as c\n+from mkdocs.utils.yaml import ConfigDirPlaceholder\n+\n+\n+@pytest.mark.parametrize(\"factory\", [c.FilesystemObject, c.Dir, c.File])\n+def test_pathlike_filesystem_option(factory, tmp_path):\n+    target = tmp_path / \"target\"\n+    if factory is c.Dir:\n+        target.mkdir()\n+    else:\n+        target.write_text(\"content\")\n+    cfg = LegacyConfig(((\"path\", factory(exists=True)),), config_file_path=str(tmp_path / \"mkdocs.yml\"))\n+    cfg.load_dict({\"path\": Path(\"target\")})\n+    errors, warnings = cfg.validate()\n+    assert errors == []\n+    assert warnings == []\n+    assert cfg[\"path\"] == str(target)\n+    assert isinstance(cfg[\"path\"], str)\n+\n+\n+def test_list_of_paths_accepts_lazy_placeholder(tmp_path):\n+    (tmp_path / \"assets\").mkdir()\n+    cfg = LegacyConfig(((\"paths\", c.ListOfPaths()),), config_file_path=str(tmp_path / \"mkdocs.yml\"))\n+    raw = ConfigDirPlaceholder(cfg, \"assets\")\n+    cfg.load_dict({\"paths\": [raw, Path(\"assets\")]})\n+    errors, warnings = cfg.validate()\n+    assert errors == []\n+    assert warnings == []\n+    assert cfg[\"paths\"] == [str(tmp_path / \"assets\")] * 2\n+\n+\n+def test_theme_accepts_pathlike_custom_dir(tmp_path):\n+    (tmp_path / \"custom\").mkdir()\n+    cfg = LegacyConfig(((\"theme\", c.Theme()),), config_file_path=str(tmp_path / \"mkdocs.yml\"))\n+    cfg.load_dict({\"theme\": {\"name\": None, \"custom_dir\": Path(\"custom\")}})\n+    errors, warnings = cfg.validate()\n+    assert errors == []\n+    assert warnings == []\n+    assert cfg[\"theme\"].dirs[0] == str(tmp_path / \"custom\")\n+    assert isinstance(cfg[\"theme\"].dirs[0], str)\n+\n+\n+class BytesPath(os.PathLike):\n+    def __fspath__(self):\n+        return b\"assets\"\n+\n+\n+@pytest.mark.parametrize(\"theme\", [False, True])\n+def test_bytes_pathlike_is_validation_error(theme, tmp_path):\n+    (tmp_path / \"assets\").mkdir()\n+    option = c.Theme() if theme else c.Dir()\n+    cfg = LegacyConfig(((\"value\", option),), config_file_path=str(tmp_path / \"mkdocs.yml\"))\n+    value = {\"name\": None, \"custom_dir\": BytesPath()} if theme else BytesPath()\n+    cfg.load_dict({\"value\": value})\n+    errors, _ = cfg.validate()\n+    assert [key for key, _ in errors] == [\"value\"]\n",
+  "include_failure_log": false,
+  "notes": "Acceptance covers filesystem-option subclasses, container delegation, lazy placeholders, theme normalization, and bytes-valued PathLike rejection. No change to generic Type(str) acceptance is requested.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Support string-valued os.PathLike objects wherever FilesystemObject and its subclasses accept a path, including items accepted through ListOfPaths, and in Theme's custom_dir setting. This should accept pathlib.Path and MkDocs' directory-placeholder objects. Resolve each object with os.fspath during validation, then apply the same relative-path resolution and existence checks used for string input; validated filesystem-option values and the theme's directory entries must be strings. A PathLike returning bytes must produce a normal configuration ValidationError rather than escaping validation as a TypeError. Existing behavior for string inputs and rejection of unrelated non-path values must remain unchanged. Deliver a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mkdocs-mkdocs-r02-02",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "mkdocs/tests/test_pathlike_config.py::test_bytes_pathlike_is_validation_error[True]",
+   "mkdocs/tests/test_pathlike_config.py::test_list_of_paths_accepts_lazy_placeholder",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[Dir]",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[File]",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[FilesystemObject]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 1,
+    "passed": 720
+   },
+   "patch_files": [
+    "mkdocs/config/config_options.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "mkdocs/tests/test_pathlike_config.py::test_bytes_pathlike_is_validation_error[True]",
+   "mkdocs/tests/test_pathlike_config.py::test_list_of_paths_accepts_lazy_placeholder",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[Dir]",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[File]",
+   "mkdocs/tests/test_pathlike_config.py::test_pathlike_filesystem_option[FilesystemObject]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 720,
+  "stability_runs": 3
+ }
+}

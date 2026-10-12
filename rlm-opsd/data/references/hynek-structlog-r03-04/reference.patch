@@ -1,0 +1,129 @@
+--- a/src/structlog/contextvars.py
++++ b/src/structlog/contextvars.py
+@@ -66,21 +66,34 @@
+     return rv
+ 
+ 
+-def get_merged_contextvars(bound_logger: BindableLogger) -> dict[str, Any]:
++def get_merged_contextvars(
++    bound_logger: BindableLogger, *, overwrite: bool = False
++) -> dict[str, Any]:
+     """
+     Return a copy of the current context-local context merged with the context
+     from *bound_logger*.
+ 
++    If *overwrite* is ``True``, context-local values take precedence over
++    logger-bound values. Otherwise, logger-bound values take precedence.
++
+     .. versionadded:: 21.2.0
+     """
+     ctx = get_contextvars()
+-    ctx.update(structlog.get_context(bound_logger))
++    if overwrite:
++        for key, value in structlog.get_context(bound_logger).items():
++            ctx.setdefault(key, value)
++    else:
++        ctx.update(structlog.get_context(bound_logger))
+ 
+     return ctx
+ 
+ 
+ def merge_contextvars(
+-    logger: WrappedLogger, method_name: str, event_dict: EventDict
++    logger: WrappedLogger,
++    method_name: str,
++    event_dict: EventDict,
++    *,
++    overwrite: bool = False,
+ ) -> EventDict:
+     """
+     A processor that merges in a global (context-local) context.
+@@ -88,6 +101,10 @@
+     Use this as your first processor in :func:`structlog.configure` to ensure
+     context-local context is included in all log calls.
+ 
++    If *overwrite* is ``True``, ambient context values take precedence over
++    event dictionary values. Otherwise, event dictionary values take
++    precedence.
++
+     .. versionadded:: 20.1.0
+     .. versionchanged:: 21.1.0 See toplevel note.
+     """
+@@ -95,7 +112,11 @@
+ 
+     for k in ctx:
+         if k.name.startswith(STRUCTLOG_KEY_PREFIX) and ctx[k] is not Ellipsis:
+-            event_dict.setdefault(k.name[STRUCTLOG_KEY_PREFIX_LEN:], ctx[k])
++            key = k.name[STRUCTLOG_KEY_PREFIX_LEN:]
++            if overwrite:
++                event_dict[key] = ctx[k]
++            else:
++                event_dict.setdefault(key, ctx[k])
+ 
+     return event_dict
+ 
+--- a/src/structlog/threadlocal.py
++++ b/src/structlog/threadlocal.py
+@@ -239,29 +239,46 @@
+     return _get_context().copy()
+ 
+ 
+-def get_merged_threadlocal(bound_logger: BindableLogger) -> Context:
++def get_merged_threadlocal(
++    bound_logger: BindableLogger, *, overwrite: bool = False
++) -> Context:
+     """
+     Return a copy of the current thread-local context merged with the context
+     from *bound_logger*.
+ 
++    If *overwrite* is ``True``, thread-local values take precedence over
++    logger-bound values. Otherwise, logger-bound values take precedence.
++
+     .. versionadded:: 21.2.0
+     .. deprecated:: 22.1.0
+     """
+     _deprecated()
+     ctx = _get_context().copy()
+-    ctx.update(structlog.get_context(bound_logger))
++    if overwrite:
++        for key, value in structlog.get_context(bound_logger).items():
++            ctx.setdefault(key, value)
++    else:
++        ctx.update(structlog.get_context(bound_logger))
+ 
+     return ctx
+ 
+ 
+ def merge_threadlocal(
+-    logger: WrappedLogger, method_name: str, event_dict: EventDict
++    logger: WrappedLogger,
++    method_name: str,
++    event_dict: EventDict,
++    *,
++    overwrite: bool = False,
+ ) -> EventDict:
+     """
+     A processor that merges in a global (thread-local) context.
+ 
+     Use this as your first processor in :func:`structlog.configure` to ensure
+     thread-local context is included in all log calls.
++
++    If *overwrite* is ``True``, ambient context values take precedence over
++    event dictionary values. Otherwise, event dictionary values take
++    precedence.
+ 
+     .. versionadded:: 19.2.0
+ 
+@@ -273,7 +290,11 @@
+     """
+     _deprecated()
+     context = _get_context().copy()
+-    context.update(event_dict)
++    if overwrite:
++        for key, value in event_dict.items():
++            context.setdefault(key, value)
++    else:
++        context.update(event_dict)
+ 
+     return context
+ 

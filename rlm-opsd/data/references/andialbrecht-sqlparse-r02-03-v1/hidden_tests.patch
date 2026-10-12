@@ -1,0 +1,111 @@
+--- /dev/null
++++ b/tests/test_clause_boundary_whitespace.py
+@@ -0,0 +1,108 @@
++import pytest
++
++import sqlparse
++from sqlparse import sql, tokens as T
++
++
++def walk(node):
++    yield node
++    for child in node.get_sublists():
++        yield from walk(child)
++
++
++@pytest.mark.parametrize('spacing', [' ', '   ', '\t', '\n', '\r\n', ' \t\n '])
++@pytest.mark.parametrize('clause,boundary,tail', [
++    ('WHERE', 'ORDER BY', 'x'),
++    ('WHERE', 'GROUP BY', 'x'),
++    ('WHERE', 'UNION ALL', 'SELECT y FROM u'),
++    ('QUALIFY', 'ORDER BY', 'x'),
++    ('QUALIFY', 'UNION ALL', 'SELECT y FROM u'),
++])
++@pytest.mark.parametrize('nested', [False, True])
++def test_compound_boundaries(spacing, clause, boundary, tail, nested):
++    spelling = spacing.join(boundary.lower().split())
++    prefix = clause.lower() + ' x > 0 \t'
++    inner = 'SELECT x FROM t ' + prefix + spelling + ' ' + tail
++    source = 'SELECT * FROM (' + inner + ') AS q' if nested else inner
++    stmt, = sqlparse.parse(source)
++    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis)) if nested else stmt
++    cls = sql.Where if clause == 'WHERE' else sql.Qualify
++    groups = [t for t in container.tokens if isinstance(t, cls)]
++    assert len(groups) == 1
++    group = groups[0]
++    assert str(group) == prefix
++    index = container.token_index(group)
++    terminator = container.tokens[index + 1]
++    assert terminator.ttype is T.Keyword
++    assert terminator.value == spelling
++    assert terminator.normalized == spelling.upper()
++    assert str(stmt) == source
++    assert stmt.get_type() == 'SELECT'
++    for node in walk(stmt):
++        for child in node.tokens:
++            assert child.parent is node
++
++
++@pytest.mark.parametrize('nested', [False, True])
++def test_where_then_qualify(nested):
++    inner = 'SELECT x FROM t WHERE x > 0 QUALIFY n = 1 OrDeR\tBy x'
++    source = '(' + inner + ')' if nested else inner
++    stmt, = sqlparse.parse(source)
++    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis)) if nested else stmt
++    where = [t for t in container.tokens if isinstance(t, sql.Where)]
++    qualify = [t for t in container.tokens if isinstance(t, sql.Qualify)]
++    assert len(where) == len(qualify) == 1
++    assert str(where[0]) == 'WHERE x > 0 '
++    assert str(qualify[0]) == 'QUALIFY n = 1 '
++    assert container.tokens[container.token_index(qualify[0]) + 1].value == 'OrDeR\tBy'
++    assert str(stmt) == source
++
++
++@pytest.mark.parametrize('clause,terminator,tail', [
++    ('WHERE', 'LIMIT', '2'),
++    ('WHERE', 'HAVING', 'x > 1'),
++    ('WHERE', 'RETURNING', 'x'),
++    ('WHERE', 'INTO', 'u'),
++    ('QUALIFY', 'LIMIT', '2'),
++    ('QUALIFY', 'UNION', 'SELECT y FROM u'),
++    ('QUALIFY', 'EXCEPT', 'SELECT y FROM u'),
++    ('QUALIFY', 'INTERSECT', 'SELECT y FROM u'),
++])
++def test_single_word_boundaries(clause, terminator, tail):
++    source = 'SELECT x FROM t ' + clause + ' x > 0 ' + terminator + ' ' + tail
++    stmt, = sqlparse.parse(source)
++    cls = sql.Where if clause == 'WHERE' else sql.Qualify
++    group, = [t for t in stmt.tokens if isinstance(t, cls)]
++    assert str(group) == clause + ' x > 0 '
++    assert stmt.tokens[stmt.token_index(group) + 1].value == terminator
++    assert str(stmt) == source
++
++
++@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])
++def test_no_boundary_and_quoted_boundary(clause):
++    body = clause + " x = 'ORDER\tBY' AND y = 'UNION\nALL' "
++    source = '(SELECT x FROM t ' + body + ')'
++    stmt, = sqlparse.parse(source)
++    container = next(n for n in walk(stmt) if isinstance(n, sql.Parenthesis))
++    cls = sql.Where if clause == 'WHERE' else sql.Qualify
++    group, = [t for t in container.tokens if isinstance(t, cls)]
++    assert str(group) == body
++    assert container.tokens[-1].match(T.Punctuation, ')')
++    assert str(stmt) == source
++
++
++def test_token_matching_remains_exact():
++    token = sql.Token(T.Keyword, 'oRdEr\tbY')
++    assert token.value == 'oRdEr\tbY'
++    assert token.normalized == 'ORDER\tBY'
++    assert not token.match(T.Keyword, 'ORDER BY')
++    assert token.match(T.Keyword, 'ORDER\tBY')
++    assert not sql.Token(T.Name, 'ORDER\tBY').match(T.Keyword, 'ORDER\tBY')
++
++
++def test_qualify_keeps_non_boundary_compounds():
++    source = 'SELECT x FROM t QUALIFY n = 1 GROUP\tBY x'
++    stmt, = sqlparse.parse(source)
++    group, = [t for t in stmt.tokens if isinstance(t, sql.Qualify)]
++    assert str(group) == 'QUALIFY n = 1 GROUP\tBY x'
++    assert str(stmt) == source

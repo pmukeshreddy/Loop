@@ -1,0 +1,121 @@
+--- /dev/null
++++ b/tests/test_wildcard_arithmetic_errors.py
+@@ -0,0 +1,118 @@
++import operator
++
++import pytest
++
++from glom import Call, Fill, Path, PathAccessError, T, glom
++
++
++def assert_arithmetic_error(target, spec, part_idx, exc_type, wrapped=None):
++    with pytest.raises(PathAccessError) as caught:
++        glom(target, spec)
++    error = caught.value
++    assert error.path == Path(spec)
++    assert error.part_idx == part_idx
++    assert isinstance(error.exc, exc_type)
++    if wrapped is not None:
++        assert error.exc is wrapped
++
++
++@pytest.mark.parametrize('op', [
++    operator.add, operator.sub, operator.mul, operator.truediv,
++    operator.floordiv, operator.mod, operator.pow, operator.and_,
++    operator.or_, operator.xor,
++])
++def test_binary_arithmetic_is_not_a_missing_path(op):
++    base = T['rows'].__star__()['n']
++    spec = op(base, T['d']) + 1
++    target = {'rows': [{'n': 8, 'd': 2}, {'n': object(), 'd': 2}]}
++    assert_arithmetic_error(target, spec, 3, TypeError)
++
++
++@pytest.mark.parametrize('op', [operator.neg, operator.invert])
++def test_unary_arithmetic_is_not_a_missing_path(op):
++    spec = op(T['rows'].__star__()['n']) + 1
++    target = {'rows': [{'n': 8}, {'n': 'bad'}]}
++    assert_arithmetic_error(target, spec, 3, TypeError)
++
++
++@pytest.mark.parametrize('op', [
++    operator.truediv, operator.floordiv, operator.mod,
++])
++def test_zero_division_propagates_after_success(op):
++    spec = op(T['rows'].__star__()['n'], T['d']) + 1
++    target = {'rows': [{'n': 8, 'd': 2}, {'n': 8, 'd': 0}]}
++    assert_arithmetic_error(target, spec, 3, ZeroDivisionError)
++
++
++def test_negative_power_of_zero_propagates():
++    spec = T['rows'].__star__()['n'] ** T['d']
++    assert_arithmetic_error({'rows': [{'n': 0, 'd': -1}]},
++                            spec, 3, ZeroDivisionError)
++
++
++@pytest.mark.parametrize('star', ['__star__', '__starstar__'])
++def test_missing_fields_and_access_type_errors_still_skip(star):
++    base = getattr(T['rows'], star)()['n']['v']
++    spec = base / T['d']
++    target = {'rows': [
++        {'n': {'v': 8}, 'd': 2}, {'d': 2},
++        {'n': {'v': 9}}, {'n': None, 'd': 2},
++    ]}
++    assert glom(target, spec) == [4.0]
++
++
++@pytest.mark.parametrize('first', ['__star__', '__starstar__'])
++@pytest.mark.parametrize('second', ['__star__', '__starstar__'])
++def test_nested_wildcards_keep_the_outer_path(first, second):
++    base = getattr(T['groups'], first)()['rows']
++    base = getattr(base, second)()['n']
++    spec = (base / T['d']) + 1
++    target = {'groups': [{'rows': [
++        {'n': 8, 'd': 2}, {'n': 7}, {'d': 2}, {'n': 1, 'd': 0},
++    ]}]}
++    assert_arithmetic_error(target, spec, 5, ZeroDivisionError)
++
++
++@pytest.mark.parametrize('wrap', [
++    lambda spec: spec,
++    lambda spec: Fill({'values': spec}),
++    lambda spec: Call(list, args=(spec,)),
++])
++def test_wrappers_do_not_turn_arithmetic_errors_into_partial_results(wrap):
++    spec = T['rows'].__star__()['n'] / T['d']
++    target = {'rows': [{'n': 4, 'd': 2}, {'n': 1, 'd': 0}]}
++    with pytest.raises(PathAccessError) as caught:
++        glom(target, wrap(spec))
++    assert caught.value.path == Path(spec)
++    assert caught.value.part_idx == 3
++    assert isinstance(caught.value.exc, ZeroDivisionError)
++
++
++def test_original_exception_is_retained():
++    original = TypeError('division failed')
++
++    class Bomb:
++        def __truediv__(self, other):
++            raise original
++
++    spec = T['rows'].__star__()['n'] / 2
++    assert_arithmetic_error({'rows': [{'n': Bomb()}]}, spec, 3,
++                            TypeError, original)
++
++
++def test_floor_division_executes_for_valid_branches():
++    spec = T['rows'].__star__()['n'] // T['d']
++    target = {'rows': [
++        {'n': -7, 'd': 2}, {'n': 7.5, 'd': 2}, {'n': 8}, {'d': 2},
++    ]}
++    assert glom(target, spec) == [-4, 3.0]
++
++
++def test_operand_arithmetic_error_keeps_its_own_provenance():
++    operand = T['d'] / 0
++    spec = T['rows'].__star__()['n'] / operand
++    with pytest.raises(PathAccessError) as caught:
++        glom({'rows': [{'n': 8, 'd': 2}]}, spec)
++    assert caught.value.path == Path(operand)
++    assert caught.value.part_idx == 1
++    assert isinstance(caught.value.exc, ZeroDivisionError)

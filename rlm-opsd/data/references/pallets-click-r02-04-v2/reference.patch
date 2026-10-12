@@ -1,0 +1,21 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -1077,9 +1077,17 @@
+         self.deprecated = deprecated
+ 
+     def to_info_dict(self, ctx: Context) -> dict[str, t.Any]:
++        params = []
++
++        for param in self.get_params(ctx):
++            info = param.to_info_dict()
++            default = param.get_default(ctx, call=False)
++            info["default"] = None if default is UNSET else default
++            params.append(info)
++
+         return {
+             "name": self.name,
+-            "params": [param.to_info_dict() for param in self.get_params(ctx)],
++            "params": params,
+             "help": self.help,
+             "epilog": self.epilog,
+             "short_help": self.short_help,

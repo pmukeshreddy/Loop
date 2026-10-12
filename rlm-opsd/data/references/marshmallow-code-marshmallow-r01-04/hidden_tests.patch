@@ -1,0 +1,52 @@
+--- /dev/null
++++ b/tests/test_orderedset_move_to_end.py
+@@ -0,0 +1,49 @@
++import pytest
++
++from marshmallow.orderedset import OrderedSet
++
++
++def test_move_to_each_endpoint_preserves_structure():
++    s = OrderedSet(["a", "b", "c"])
++    assert s.move_to_end("a") is None
++    assert list(s) == ["b", "c", "a"]
++    assert list(reversed(s)) == ["a", "c", "b"]
++    assert len(s) == 3
++    assert s == OrderedSet(["b", "c", "a"])
++    assert s.move_to_end("c", last=False) is None
++    assert list(s) == ["c", "b", "a"]
++    assert list(reversed(s)) == ["a", "b", "c"]
++    assert s.pop(last=False) == "c"
++    assert s.pop() == "a"
++    assert list(s) == ["b"]
++
++
++def test_repeated_moves_and_subsequent_mutations():
++    s = OrderedSet(["a", "b", "c"])
++    s.move_to_end("b")
++    s.move_to_end("b")
++    assert list(s) == ["a", "c", "b"]
++    s.move_to_end("c", last=False)
++    s.move_to_end("c", last=False)
++    assert list(s) == ["c", "a", "b"]
++    s.discard("a")
++    s.add("a")
++    assert list(s) == ["c", "b", "a"]
++
++
++def test_missing_empty_and_singleton_cases():
++    s = OrderedSet(["a", "b"])
++    with pytest.raises(KeyError):
++        s.move_to_end("missing")
++    assert list(s) == ["a", "b"]
++    assert list(reversed(s)) == ["b", "a"]
++    empty = OrderedSet()
++    with pytest.raises(KeyError):
++        empty.move_to_end("missing", last=False)
++    assert list(empty) == []
++    single = OrderedSet(["x"])
++    assert single.move_to_end("x") is None
++    assert single.move_to_end("x", last=False) is None
++    assert list(single) == ["x"]
++    assert single.pop() == "x"
++    assert not single

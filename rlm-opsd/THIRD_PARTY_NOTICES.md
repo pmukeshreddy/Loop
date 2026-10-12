@@ -25,23 +25,31 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-# BANKING77 task data
+# Source repositories for generated DeepSWE tasks
 
-Generated `linear_aggregation` and `quadratic_pairs` contexts contain utterances
-from BANKING77 by PolyAI. Source: [PolyAI task-specific datasets](https://github.com/PolyAI-LDN/task-specific-datasets/tree/57ec275d8078af65b7731c2a98be812d844a6d6b/banking_data),
-revision `57ec275d8078af65b7731c2a98be812d844a6d6b`, `train.csv` and `test.csv`.
-Dataset license: [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/),
-with the [source license text](https://github.com/PolyAI-LDN/task-specific-datasets/blob/57ec275d8078af65b7731c2a98be812d844a6d6b/LICENSE).
+Generated task contexts contain file text from the following permissively
+licensed repositories at the pinned commits in `configs/tasks.yaml`
+(recorded with tree digests in each pool's build report). Each repository
+remains under its own license; task contexts reproduce its files unmodified,
+except where a task's documented setup patch introduces a defect.
 
-Credit: Iñigo Casanueva, Tadas Temčinas, Daniela Gerz, Matthew Henderson, and Ivan
-Vulić. 2020. [Efficient Intent Detection with Dual Sentence Encoders](https://arxiv.org/abs/2003.04807).
+| Repository | License |
+|---|---|
+| pallets/click, pallets/jinja, andialbrecht/sqlparse, lepture/mistune, pytoolz/toolz, theskumar/python-dotenv, mahmoud/glom, alecthomas/voluptuous, wtforms/wtforms | BSD-3-Clause |
+| mkdocs/mkdocs | BSD-2-Clause |
+| marshmallow-code/marshmallow, pyparsing/pyparsing, jmespath/jmespath.py, lark-parser/lark, python-hyper/h11, tkem/cachetools, python-attrs/attrs, python-jsonschema/jsonschema | MIT |
+| jd/tenacity | Apache-2.0 |
+| hynek/structlog | Apache-2.0 OR MIT |
 
-Project changes: select configured intents; remove ambiguous normalized-text
-labels; deduplicate repeated text; sample/repeat utterances; add synthetic user
-IDs and dates; serialize and shuffle records. Utterance wording is preserved.
-Labels stay in the offline verification corpus and are omitted from contexts.
-Source checksums and import counts are recorded in
-[M2 progress](docs/PROGRESS.md) and each pool's build report.
+None of these repositories is an upstream project of the DeepSWE-113
+evaluation tasks.
+
+# DeepSWE-113 decontamination index
+
+The local held-out index includes the instructions and upstream repository
+names of the 113 DeepSWE tasks under `../data/deep-swe/tasks` (Apache-2.0 task
+specifications by Datacurve AI). They are used only for exclusion checks and
+never enter generation prompts or training data.
 
 # OOLONG-Pairs public question index
 

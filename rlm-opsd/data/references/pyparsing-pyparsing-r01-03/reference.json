@@ -1,0 +1,117 @@
+{
+ "answer": "--- a/pyparsing/actions.py\n+++ b/pyparsing/actions.py\n@@ -114,6 +114,11 @@\n     - as an explicit dict with ``**`` operator, when an attribute\n       name is also a Python reserved word, as in ``**{\"class\":\"Customer\", \"align\":\"right\"}``\n     - a list of name-value tuples, as in ``((\"ns1:class\", \"Customer\"), (\"ns2:align\", \"right\"))``\n+\n+    Positional name-value pairs and keyword arguments may be combined in\n+    the same call. All constraints are checked, positional pairs first,\n+    followed by keyword arguments in insertion order. Repeated attribute\n+    names are checked separately.\n \n     For attribute names with a namespace prefix, you must use the second\n     form.  Attribute names are matched insensitive to upper/lower case.\n@@ -173,10 +178,8 @@\n        1,3 2,3 1,1\n     \"\"\"\n     attrs_list: list[tuple[str, str]] = []\n-    if args:\n-        attrs_list.extend(args)\n-    else:\n-        attrs_list.extend(attr_dict.items())\n+    attrs_list.extend(args)\n+    attrs_list.extend(attr_dict.items())\n \n     def pa(s: str, l: int, tokens: ParseResults) -> None:\n         for attrName, attrValue in attrs_list:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8133 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The execution used the single 8,133-character actions module without sub-calls. The change required local reasoning about constraint collection, preservation of repeated names, evaluation order, and the existing validation loop."
+  },
+  "notes": "This is a natural, precisely scoped API enhancement with a clear unified-diff output requirement. Naming the public function and specifying its desired behavior do not disclose the implementation fix. The verified patch combines positional and keyword constraints without collapsing duplicates and leaves the existing validation and diagnostics intact. The supplied tests exercise mixed calls, missing and incorrect values, ANY_VALUE, duplicate names, HTML-tag integration, and failure ordering. The task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The explicit context is the approximately 8 KB actions module. The implementation requires understanding how the validator collects constraints and reports failures, but all relevant decisions are local."
+  },
+  "context": {
+   "files": [
+    "pyparsing/actions.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/actions.py",
+    "symbol": "pyparsing/actions.py::with_attribute",
+    "why": "Its current mutually exclusive collection branches discard keyword constraints whenever positional pairs are present."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_with_attribute_mixed_constraints.py\n@@ -0,0 +1,48 @@\n+import pytest\n+import pyparsing as pp\n+\n+\n+def test_mixed_constraints_accept_matching_fields():\n+    validate = pp.with_attribute((\"role\", \"grid\"), id=\"main\")\n+    validate(\"\", 0, pp.ParseResults.from_dict({\"role\": \"grid\", \"id\": \"main\"}))\n+\n+\n+@pytest.mark.parametrize(\"attrs\", [\n+    {\"role\": \"grid\"},\n+    {\"role\": \"grid\", \"id\": \"wrong\"},\n+    {\"id\": \"main\"},\n+    {\"role\": \"wrong\", \"id\": \"main\"},\n+])\n+def test_mixed_constraints_reject_missing_or_wrong_fields(attrs):\n+    validate = pp.with_attribute((\"role\", \"grid\"), id=\"main\")\n+    with pytest.raises(pp.ParseException):\n+        validate(\"\", 0, pp.ParseResults.from_dict(attrs))\n+\n+\n+def test_any_value_still_requires_presence_in_mixed_call():\n+    validate = pp.with_attribute((\"enabled\", pp.with_attribute.ANY_VALUE), id=\"main\")\n+    validate(\"\", 0, pp.ParseResults.from_dict({\"enabled\": \"\", \"id\": \"main\"}))\n+    with pytest.raises(pp.ParseException):\n+        validate(\"\", 0, pp.ParseResults.from_dict({\"id\": \"main\"}))\n+\n+\n+def test_duplicate_names_are_not_overridden():\n+    validate = pp.with_attribute((\"role\", \"grid\"), role=\"chart\")\n+    with pytest.raises(pp.ParseException):\n+        validate(\"\", 0, pp.ParseResults.from_dict({\"role\": \"grid\"}))\n+\n+\n+def test_mixed_constraints_on_html_start_tag():\n+    open_tag, _ = pp.make_html_tags(\"div\")\n+    open_tag.add_parse_action(pp.with_attribute((\"role\", \"grid\"), id=\"main\"))\n+    result = open_tag.parse_string('<div role=\"grid\" id=\"main\">', parse_all=True)\n+    assert result.id == \"main\"\n+    with pytest.raises(pp.ParseException):\n+        open_tag.parse_string('<div role=\"grid\" id=\"other\">', parse_all=True)\n+\n+\n+def test_positional_failure_is_reported_before_keyword_failure():\n+    validate = pp.with_attribute((\"role\", \"grid\"), id=\"main\")\n+    with pytest.raises(pp.ParseException) as exc:\n+        validate(\"\", 0, pp.ParseResults([]))\n+    assert \"no matching attribute 'role'\" in str(exc.value)\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests exercise both direct validation and the public HTML-tag integration. They do not require any new private API.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Extend with_attribute to accept positional attribute/value pairs and keyword attribute constraints in the same call. Every supplied constraint must be enforced: process positional pairs first, followed by keyword arguments in their insertion order. Repeated attribute names must remain separate constraints rather than overriding one another. Keep the existing ANY_VALUE presence-only behavior, ParseException diagnostics, and behavior of positional-only and keyword-only calls. Return a unified diff against actions.py without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pyparsing-pyparsing-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_with_attribute_mixed_constraints.py::test_duplicate_names_are_not_overridden",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_on_html_start_tag",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_reject_missing_or_wrong_fields[attrs0]",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_reject_missing_or_wrong_fields[attrs1]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2055
+   },
+   "patch_files": [
+    "pyparsing/actions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_with_attribute_mixed_constraints.py::test_duplicate_names_are_not_overridden",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_on_html_start_tag",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_reject_missing_or_wrong_fields[attrs0]",
+   "tests/test_with_attribute_mixed_constraints.py::test_mixed_constraints_reject_missing_or_wrong_fields[attrs1]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 2046,
+  "stability_runs": 3
+ }
+}

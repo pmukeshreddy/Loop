@@ -1,0 +1,13 @@
+--- a/voluptuous/validators.py
++++ b/voluptuous/validators.py
+@@ -276,7 +276,9 @@
+         return self._exec(self._compiled, value, path)
+ 
+     def __call__(self, v):
+-        return self._exec((Schema(val) for val in self.validators), v)
++        return self._exec(
++            (Schema(val, required=self.required) for val in self.validators), v
++        )
+ 
+     def __repr__(self):
+         return '%s(%s, msg=%r)' % (

@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -613,6 +613,8 @@\n         # https://tools.ietf.org/html/rfc7231#section-4.3.2 . But it's just as\n         # easy to get them right.)\n         method_for_choosing_headers = cast(bytes, self._request_method)\n+        if method_for_choosing_headers == b\"HEAD\":\n+            method_for_choosing_headers = b\"GET\"\n         framing_type, _ = _body_framing(method_for_choosing_headers, response)\n         if framing_type in (\"chunked\", \"http/1.0\"):\n             # This response has a body of unknown length.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0035819754502130073,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "index",
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 1570,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 324402 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch was constructed from the source and inspected before submission. Independent test verification confirms the HEAD framing regression is repaired; the localized change preserves HEAD body suppression and leaves GET's framing selection unchanged.",
+   "inspect_locate": "The reference execution searched and inspected the repository context to locate outbound response-header preparation. The repair requires distinguishing header-framing selection from actual body framing, rather than changing HEAD handling globally."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a clear unified-diff deliverable. The question describes observable symptoms without revealing the defective symbol or fix. HTTP-version normalization and Transfer-Encoding precedence constrain the repair coherently. It is substantively different from the parent EOF-handling task and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled against the exact source and checked against two distinct requirements: HEAD must advertise the established response headers while its actual body remains empty. The HTTP-version-dependent normalization and Transfer-Encoding precedence provide additional checks against an overly broad framing change.",
+   "inspect_locate": "The repository context contains substantial unrelated receive-side and protocol-state code. The relevant evidence connects public send behavior, response-header preparation, two uses of the shared framing function, header rewriting, and the HEAD and automatic transfer-encoding tests."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": "h11/tests/test_connection.py::test_HEAD_framing_headers",
+    "why": "Checks identical GET and HEAD framing headers for unframed responses to HTTP/1.1 and HTTP/1.0 peers, and checks Transfer-Encoding precedence when Content-Length is also supplied."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+    "why": "Establishes the existing GET normalization rules: chunked framing for HTTP/1.1, removal of framing headers for HTTP/1.0, and removal of Content-Length overridden by Transfer-Encoding."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.send_with_data_passthrough",
+    "why": "Prepares outgoing response headers before processing the event and selecting the subsequent body writer."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._clean_up_response_headers_for_sending",
+    "why": "Contains the mutated header-framing decision and the peer-version-dependent normalization and connection-close handling."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::_body_framing",
+    "why": "HEAD selects a zero-length body before framing headers are considered, while ordinary responses use Transfer-Encoding precedence and fallback framing."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._get_io_object",
+    "why": "Actual body reader and writer selection uses the stored request method, independently of the method used to choose advertised response headers."
+   },
+   {
+    "path": "h11/_headers.py",
+    "symbol": "h11/_headers.py::set_comma_header",
+    "why": "Replaces or removes framing headers while preserving unrelated headers and normalizing newly inserted header names."
+   }
+  ],
+  "expected_answer": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -627,7 +627,9 @@\n         # https://tools.ietf.org/html/rfc7231#section-4.3.2 . But it's just as\n         # easy to get them right.)\n         method_for_choosing_headers = cast(bytes, self._request_method)\n+        if method_for_choosing_headers == b\"HEAD\":\n+            method_for_choosing_headers = b\"GET\"\n         framing_type, _ = _body_framing(method_for_choosing_headers, response)\n         if framing_type in (\"chunked\", \"http/1.0\"):\n             # This response has a body of unknown length.\n",
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "Apply this setup patch to the intact snapshot, not on top of the original receive-side defect. The predicted newly failing test is h11/tests/test_connection.py::test_HEAD_framing_headers; the automatic transfer-encoding test supplies passing comparison evidence. The repair differs from the original EOF-dispatch repair and must not alter the stored request method or the shared framing function's zero-length HEAD-body rule.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "HEAD responses no longer advertise the same framing headers as equivalent GET responses. The attached pytest output shows the regression; responses supplied with both Content-Length and Transfer-Encoding also retain headers that GET responses normalize away. Restore the established outbound behavior for HTTP/1.1 and HTTP/1.0 peers, preserving the empty response body for HEAD and leaving GET behavior unchanged. Submit a unified diff against the repository files, without modifying tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -627,9 +627,7 @@\n         # https://tools.ietf.org/html/rfc7231#section-4.3.2 . But it's just as\n         # easy to get them right.)\n         method_for_choosing_headers = cast(bytes, self._request_method)\n-        if method_for_choosing_headers == b\"HEAD\":\n-            method_for_choosing_headers = b\"GET\"\n         framing_type, _ = _body_framing(method_for_choosing_headers, response)\n         if framing_type in (\"chunked\", \"http/1.0\"):\n             # This response has a body of unknown length.\n"
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises inspect_locate across a different caller chain: send_with_data_passthrough, response-header cleanup, _body_framing, and header rewriting. Persistent state concerns the request method and peer HTTP version rather than EOF and reader progress. Verification must preserve the intentional separation between wire headers and body framing.",
+  "change_type": "dependency",
+  "description": "Move the regression to outbound response-header preparation. Start from the intact repository and introduce a setup mutation deleting the HEAD-to-GET substitution in h11/_connection.py::Connection._clean_up_response_headers_for_sending. Report that responses to HEAD requests now advertise different framing headers from equivalent GET responses, especially when the application supplies both Content-Length and Transfer-Encoding. Ask for a unified diff restoring the established outbound behavior without changing tests. Investigate h11/tests/test_connection.py::test_HEAD_framing_headers and test_automatic_transfer_encoding_in_response, h11/_connection.py::_body_framing, and h11/_headers.py::set_comma_header.",
+  "expected_answer_change": "The repair must restore use of a GET-equivalent method only when selecting response headers for HEAD. Actual body framing must continue to use HEAD and select content-length zero. HTTP/1.1 responses of unknown length must advertise chunked framing and discard overridden Content-Length; HTTP/1.0 peers must receive no transfer-encoding header and the established connection-close handling. The verified diff targets _clean_up_response_headers_for_sending, with test_HEAD_framing_headers as central evidence.",
+  "why_substantive": "The failure originates in the sending caller of the shared framing function, not in receive-side EOF handling. The investigation must distinguish choosing advertised headers from choosing the actual body writer: HEAD needs GET-equivalent header normalization but must still have a zero-length body. The original EOF repair has no effect on this regression."
+ },
+ "task_id": "python-hyper-h11-r01-01-v2",
+ "truth": {
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_HEAD_framing_headers"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 78
+   },
+   "patch_files": [
+    "h11/_connection.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "h11/tests/test_connection.py::test_HEAD_framing_headers"
+  ],
+  "ground_truth_symbols": [
+   "h11/_connection.py::Connection._clean_up_response_headers_for_sending"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 77,
+  "stability_runs": 3
+ }
+}

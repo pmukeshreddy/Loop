@@ -1,0 +1,87 @@
+--- /dev/null
++++ b/voluptuous/tests/test_combinator_reuse.py
+@@ -0,0 +1,84 @@
++import pytest
++
++from voluptuous import (
++    ALLOW_EXTRA,
++    REMOVE_EXTRA,
++    PREVENT_EXTRA,
++    All,
++    Any,
++    MultipleInvalid,
++    Schema,
++    SomeOf,
++    Union,
++)
++
++
++@pytest.mark.parametrize(
++    'factory',
++    [
++        pytest.param(Any, id='any'),
++        pytest.param(All, id='all'),
++        pytest.param(
++            lambda validator: SomeOf(validators=[validator], min_valid=1),
++            id='someof',
++        ),
++    ],
++)
++def test_shared_ordinary_combinator(factory):
++    shared = factory({'x': int})
++    data = {'x': 1, 'extra': 2}
++    first = Schema(shared, extra=ALLOW_EXTRA)
++    assert first(data) == data
++    second = Schema(shared, extra=REMOVE_EXTRA)
++    assert first(data) == data
++    third = Schema(shared, extra=PREVENT_EXTRA)
++    for _ in range(6):
++        assert first(data) == data
++        assert second(data) == {'x': 1}
++        with pytest.raises(MultipleInvalid):
++            third(data)
++        assert shared({'x': 1}) == {'x': 1}
++        assert first(data) == data
++        assert second(data) == {'x': 1}
++
++
++@pytest.mark.parametrize('nested', [False, True])
++def test_shared_discriminant_union(nested):
++    def select(value, alternatives):
++        return filter(lambda alt: alt['kind'] == value['kind'], alternatives)
++
++    shared = Union(
++        {'kind': 'A', 'x': int},
++        {'kind': 'B', 'y': int},
++        discriminant=select,
++    )
++    definition = {'payload': shared} if nested else shared
++    def wrap(value):
++        return {'payload': value} if nested else value
++
++    initial = {'kind': 'A', 'x': 1, 'extra': 2}
++    first = Schema(definition, extra=ALLOW_EXTRA)
++    assert first(wrap(initial)) == wrap(initial)
++    second = Schema(definition, extra=REMOVE_EXTRA)
++    assert first(wrap(initial)) == wrap(initial)
++    third = Schema(definition, extra=PREVENT_EXTRA)
++    for i in range(6):
++        kind = 'A' if i % 2 == 0 else 'B'
++        key = 'x' if kind == 'A' else 'y'
++        data = {'kind': kind, key: i, 'extra': 2}
++        cleaned = {'kind': kind, key: i}
++        assert first(wrap(data)) == wrap(data)
++        assert second(wrap(data)) == wrap(cleaned)
++        with pytest.raises(MultipleInvalid):
++            third(wrap(data))
++        assert shared(cleaned) == cleaned
++        assert second(wrap(data)) == wrap(cleaned)
++        assert first(wrap(data)) == wrap(data)
++        invalid = {'kind': kind, key: 'bad'}
++        with pytest.raises(MultipleInvalid) as exc:
++            first(wrap(invalid))
++        assert exc.value.errors[0].path == (
++            ['payload', key] if nested else [key]
++        )
++        assert second(wrap(data)) == wrap(cleaned)
++        assert first(wrap(data)) == wrap(data)

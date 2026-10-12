@@ -1,0 +1,199 @@
+{
+  "task_id": "hynek-structlog-r02-04",
+  "family": "persistent_state",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 706015,
+    "context_lengths": [
+      132,
+      1005,
+      519,
+      54740,
+      7432,
+      11402,
+      8732,
+      4554,
+      4989,
+      7230,
+      6802,
+      2493,
+      4535,
+      10499,
+      2666,
+      3845,
+      1062,
+      4964,
+      4492,
+      6064,
+      8971,
+      23020,
+      2899,
+      6915,
+      4330,
+      1923,
+      4767,
+      7850,
+      1113,
+      2945,
+      7395,
+      14044,
+      2427,
+      1670,
+      1242,
+      2010,
+      9472,
+      10042,
+      965,
+      5664,
+      37212,
+      935,
+      30968,
+      41937,
+      5805,
+      9253,
+      16618,
+      10151,
+      795,
+      8617,
+      252,
+      522,
+      1557,
+      1000,
+      23821,
+      18411,
+      7303,
+      13305,
+      9121,
+      35544,
+      5648,
+      1706,
+      11072,
+      12244,
+      1531,
+      50696,
+      6614,
+      13855,
+      33229,
+      10307,
+      2198,
+      12420,
+      3547
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:300])\nprint(context[-1][:300])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nhits=[p for p,s in files.items() if 'make_filtering_bound_logger' in s]\nprint(hits)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:300])\nprint(context[-1][:300])\nfiles={s.split('\\n',1)[0][8:]:s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nhits=[p for p,s in files.items() if 'make_filtering_bound_logger' in s]\nprint(hits)"
+      ],
+      "stdout_raw_chars": 1058,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 73\n# File: .git_archival.txt\nnode: 8174a86a2f14b5bd295eded733ff5fffc12aa173\nnode-date: 2026-06-06T09:18:48+02:00\ndescribe-name: 26.1.0\n\n# File: src/structlog/_native.py\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\n\"\"\"\nstructlog's native high-performance \n# File: tox.ini\n[tox]\nrequires =\n    tox>=4.51.0\n    tox-uv\nenv_list =\n    pre-commit,\n    3.1{0-5}-{tests,mypy}\n    3.1{0,3}-tests-{colorama,be,rich},\n    typing-{mypy,pyright,ty,pyrefly},\n    docs-{sponsors,build,doctests},\n    coverage-{combine,report}\n\n\n[testenv]\npackage = wheel\nwheel_build_env \n['CHANGELOG.md', 'docs/api.rst', 'docs/bound-loggers.md', 'docs/getting-started.md', 'docs/glossary.md', 'docs/performance.md', 'docs/processors.md', 'docs/recipes.md', 'src/structlog/__init__.py', 'src/structlog/_config.py', 'src/structlog/_native.py', 'src/structlog/typing.py', 'tests/test_native.py']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nnative=files['src/structlog/_native.py']\nprint(len(native))\nprint(native[:3900])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "native=files['src/structlog/_native.py']\nprint(len(native))\nprint(native[:3900])"
+      ],
+      "stdout_raw_chars": 3906,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "9439\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\n\"\"\"\nstructlog's native high-performance loggers.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport asyncio\nimport collections\nimport contextvars\nimport sys\nimport threading\n\nfrom collections.abc import Callable\nfrom typing import Any\n\nfrom ._base import BoundLoggerBase\nfrom ._log_levels import (\n    CRITICAL,\n    DEBUG,\n    ERROR,\n    INFO,\n    LEVEL_TO_NAME,\n    NAME_TO_LEVEL,\n    NOTSET,\n    WARNING,\n)\nfrom .contextvars import _ASYNC_CALLING_STACK, _ASYNC_CALLING_THREAD\nfrom .typing import FilteringBoundLogger\n\n\ndef _nop(self: Any, event: str, *args: Any, **kw: Any) -> Any:\n    return None\n\n\nasync def _anop(self: Any, event: str, *args: Any, **kw: Any) -> Any:\n    return None\n\n\ndef exception(\n    self: FilteringBoundLogger, event: str, *args: Any, **kw: Any\n) -> Any:\n    kw.setdefault(\"exc_info\", True)\n\n    return self.error(event, *args, **kw)\n\n\nasync def aexception(\n    self: FilteringBoundLogger, event: str, *args: Any, **kw: Any\n) -> Any:\n    \"\"\"\n    .. versionchanged:: 23.3.0\n       Callsite parameters are now also collected under asyncio.\n    \"\"\"\n    # Exception info has to be extracted this early, because it is no longer\n    # available once control is passed to the executor.\n    if kw.get(\"exc_info\", True) is True:\n        kw[\"exc_info\"] = sys.exc_info()\n\n    # Capture thread-specific info before handing off to the executor.\n    thread_token = _ASYNC_CALLING_THREAD.set(\n        (threading.get_ident(), threading.current_thread().name)\n    )\n    scs_token = _ASYNC_CALLING_STACK.set(sys._getframe().f_back)  # type: ignore[arg-type]\n    ctx = contextvars.copy_context()\n\n    try:\n        runner = await asyncio.get_running_loop().run_in_executor(\n            None,\n            lambda: ctx.run(lambda: self.error(event, *args, **kw)),\n        )\n    finally:\n        _ASYNC_CALLING_STACK.reset(scs_token)\n        _ASYNC_CALLING_THREAD.reset(thread_token)\n\n    return runner\n\n\ndef make_filtering_bound_logger(\n    min_level: int | str,\n) -> type[FilteringBoundLogger]:\n    \"\"\"\n    Create a new `FilteringBoundLogger` that only logs *min_level* or higher.\n\n    The logger is optimized such that log levels below *min_level* only consist\n    of a ``return None``.\n\n    All familiar log methods are present, with async variants of each that are\n    prefixed by an ``a``. Therefore, the async version of ``log.info(\"hello\")``\n    is ``await log.ainfo(\"hello\")``.\n\n    Additionally it has a ``log(self, level: int, **kw: Any)`` method to mirror\n    `logging.Logger.log` and `structlog.stdlib.BoundLogger.log`.\n\n    Compared to using *structlog*'s standard library integration and the\n    `structlog.stdlib.filter_by_level` processor:\n\n    - It's faster because once the logger is built at program start; it's a\n      static class.\n    - For the same reason you can't change the log level once configured. Use\n      the dynamic approach of `standard-library` instead, if you need this\n      feature.\n    - You *can* have (much) more fine-grained filtering by :ref:`writing a\n      simple processor <finer-filtering>`.\n\n    Args:\n        min_level:\n            The log level as an integer. You can use the constants from\n            `logging` like ``logging.INFO`` or pass the values directly. See\n            `this table from the logging docs\n            <https://docs.python.org/3/library/logging.html#levels>`_ for\n            possible values.\n\n            If you pass a string, it must be one of: ``critical``, ``error``,\n            ``warning``, ``info``, ``debug``, ``notset`` (upper/lower case\n            doesn't matter).\n\n    .. versionadded:: 20.2.0\n    .. versionchanged:: 21.1.0 The returned loggers are now pickleable.\n    .. versionadded::\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(native[3900:7800])\nprint(native[7800:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(native[3900:7800])\nprint(native[7800:])"
+      ],
+      "stdout_raw_chars": 5541,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": " 20.1.0 The ``log()`` method.\n    .. versionadded:: 22.2.0\n       Async variants ``alog()``, ``adebug()``, ``ainfo()``, and so forth.\n    .. versionchanged:: 25.1.0 *min_level* can now be a string.\n    \"\"\"\n    if isinstance(min_level, str):\n        min_level = NAME_TO_LEVEL[min_level.lower()]\n\n    return LEVEL_TO_FILTERING_LOGGER[min_level]\n\n\ndef _maybe_interpolate(event: str, args: tuple[Any, ...]) -> str:\n    \"\"\"\n    Interpolate the event string with the given arguments.\n\n    If there's exactly one argument and it's a mapping, use it for dict-based\n    interpolation. Otherwise, use the arguments for positional interpolation.\n    \"\"\"\n    if not args:\n        return event\n\n    if (\n        len(args) == 1\n        and isinstance(args[0], collections.abc.Mapping)\n        and args[0]\n    ):\n        return event % args[0]\n\n    return event % args\n\n\ndef _make_filtering_bound_logger(min_level: int) -> type[FilteringBoundLogger]:\n    \"\"\"\n    Create a new `FilteringBoundLogger` that only logs *min_level* or higher.\n\n    The logger is optimized such that log levels below *min_level* only consist\n    of a ``return None``.\n    \"\"\"\n\n    def make_method(\n        level: int,\n    ) -> tuple[Callable[..., Any], Callable[..., Any]]:\n        if level < min_level:\n            return _nop, _anop\n\n        name = LEVEL_TO_NAME[level]\n\n        def meth(self: Any, event: str, *args: Any, **kw: Any) -> Any:\n            return self._proxy_to_logger(\n                name, _maybe_interpolate(event, args), **kw\n            )\n\n        async def ameth(self: Any, event: str, *args: Any, **kw: Any) -> Any:\n            \"\"\"\n            .. versionchanged:: 23.3.0\n               Callsite parameters are now also collected under asyncio.\n            \"\"\"\n            event = _maybe_interpolate(event, args)\n\n            # Capture thread-specific info before handing off to the executor.\n            thread_token = _ASYNC_CALLING_THREAD.set(\n                (threading.get_ident(), threading.current_thread().name)\n            )\n            scs_token = _ASYNC_CALLING_STACK.set(sys._getframe().f_back)  # type: ignore[arg-type]\n            ctx = contextvars.copy_context()\n\n            try:\n                await asyncio.get_running_loop().run_in_executor(\n                    None,\n                    lambda: ctx.run(\n                        lambda: self._proxy_to_logger(name, event, **kw)\n                    ),\n                )\n            finally:\n                _ASYNC_CALLING_STACK.reset(scs_token)\n                _ASYNC_CALLING_THREAD.reset(thread_token)\n\n        meth.__name__ = name\n        ameth.__name__ = f\"a{name}\"\n\n        return meth, ameth\n\n    def log(self: Any, level: int, event: str, *args: Any, **kw: Any) -> Any:\n        if level < min_level:\n            return None\n        name = LEVEL_TO_NAME[level]\n\n        return self._proxy_to_logger(\n            name, _maybe_interpolate(event, args), **kw\n        )\n\n    async def alog(\n        self: Any, level: int, event: str, *args: Any, **kw: Any\n    ) -> Any:\n        \"\"\"\n        .. versionchanged:: 23.3.0\n           Callsite parameters are now also collected under asyncio.\n        \"\"\"\n        if level < min_level:\n            return None\n        name = LEVEL_TO_NAME[level]\n        event = _maybe_interpolate(event, args)\n\n        # Capture thread-specific info before handing off to the executor.\n        thread_token = _ASYNC_CALLING_THREAD.set(\n            (threading.get_ident(), threading.current_thread().name)\n        )\n        scs_token = _ASYNC_CALLING_STACK.set(sys._getframe().f_back)  # type: ignore[arg-type]\n        ctx = contextvars.copy_context()\n\n        try:\n            runner = await asyncio.get_running_loop().run_in_executor(\n                None,\n                lambda: ctx.run(\n                    lambda: self._proxy_to_logger(name, event, **kw)\n                ),\n            )\n        finally:\n           \n _ASYNC_CALLING_STACK.reset(scs_token)\n            _ASYNC_CALLING_THREAD.reset(thread_token)\n\n        return runner\n\n    meths: dict[str, Callable[..., Any]] = {\"log\": log, \"alog\": alog}\n    for lvl, name in LEVEL_TO_NAME.items():\n        meths[name], meths[f\"a{name}\"] = make_method(lvl)\n\n    meths[\"exception\"] = exception\n    meths[\"aexception\"] = aexception\n    meths[\"fatal\"] = meths[\"critical\"]\n    meths[\"afatal\"] = meths[\"acritical\"]\n    meths[\"warn\"] = meths[\"warning\"]\n    meths[\"awarn\"] = meths[\"awarning\"]\n    meths[\"msg\"] = meths[\"info\"]\n    meths[\"amsg\"] = meths[\"ainfo\"]\n\n    # Introspection\n    meths[\"is_enabled_for\"] = lambda self, level: level >= min_level\n    meths[\"get_effective_level\"] = lambda self: min_level\n\n    return type(\n        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n        (BoundLoggerBase,),\n        meths,\n    )\n\n\n# Pre-create all possible filters to make them pickleable.\nBoundLoggerFilteringAtNotset = _make_filtering_bound_logger(NOTSET)\nBoundLoggerFilteringAtDebug = _make_filtering_bound_logger(DEBUG)\nBoundLoggerFilteringAtInfo = _make_filtering_bound_logger(INFO)\nBoundLoggerFilteringAtWarning = _make_filtering_bound_logger(WARNING)\nBoundLoggerFilteringAtError = _make_filtering_bound_logger(ERROR)\nBoundLoggerFilteringAtCritical = _make_filtering_bound_logger(CRITICAL)\n\nLEVEL_TO_FILTERING_LOGGER = {\n    CRITICAL: BoundLoggerFilteringAtCritical,\n    ERROR: BoundLoggerFilteringAtError,\n    WARNING: BoundLoggerFilteringAtWarning,\n    INFO: BoundLoggerFilteringAtInfo,\n    DEBUG: BoundLoggerFilteringAtDebug,\n    NOTSET: BoundLoggerFilteringAtNotset,\n}\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\ntest=files['tests/test_native.py']\nsummary=llm_query(\"Identify relevant existing tests and constraints for changing make_filtering_bound_logger to allow arbitrary integer minima while keeping standard classes, string handling, aliases, unsupported numeric dispatch and pickle behavior unchanged. Summarize only relevant facts.\\n\"+test)\nprint(summary)\nprint(files['src/structlog/_log_levels.py'][:2300])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "test=files['tests/test_native.py']\nsummary=llm_query(\"Identify relevant existing tests and constraints for changing make_filtering_bound_logger to allow arbitrary integer minima while keeping standard classes, string handling, aliases, unsupported numeric dispatch and pickle behavior unchanged. Summarize only relevant facts.\\n\"+test)\nprint(summary)\nprint(files['src/structlog/_log_levels.py'][:2300])"
+      ],
+      "stdout_raw_chars": 4208,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "### Relevant existing coverage\n\n- **Threshold semantics:** `test_is_enabled_for` and `test_get_effective_level` require numeric comparison and reporting of the minimum. With minimum `20`, level `20` is enabled and `19` is not.\n- **Inclusive filtering, sync and async:** `test_exact_level`, `test_one_below`, and their async counterparts verify that named methods log at the minimum and suppress levels below it. The corresponding `test_log_*` / `test_alog_*` tests verify the same for numeric dispatch.\n- **Filtered-method implementation:** `test_log_level_str` checks method identity: for `\"wArNiNg\"`, `info is _nop`, while `warning is not _nop`. Preserve this behavior, not merely equivalent output.\n- **String handling:** `test_log_level_str` explicitly covers case-insensitive standard level names.\n- **Pickling standard classes:** `test_pickle` is parameterized over every key in `LEVEL_TO_NAME`. It pickles the **returned class**, not an instance, and requires the round trip to return an equal class.\n- **Method-contract regressions:** Existing tests require filtered methods still to demand an `event` argument, accept interpolation arguments without evaluating them when filtered, and preserve sync/async interpolation and non-string-event behavior. Exception methods retain their existing error-level dispatch and `exc_info` handling.\n\n### Constraints and coverage gaps\n\n- Allowing arbitrary integer **minima** must not imply allowing arbitrary integer **dispatch levels** in `log()` / `alog()`. Preserve existing unsupported-level behavior, including any distinction between a filtered call and a call that reaches dispatch.\n- Keep standard minima mapped to the existing standard classes; the supplied tests check their pickle round trips but do **not** explicitly test factory class identity.\n- Preserve string lookup and aliases independently of the new integer-minimum path. The supplied tests cover mixed-case `\"warning\"`, but contain **no explicit alias or invalid-string tests**.\n- The supplied tests contain **no arbitrary-minimum tests**, **no unsupported numeric-dispatch tests**, and **no pickle tests for nonstandard minima or logger instances**. Those behaviors cannot be inferred from this test excerpt alone.\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\n\"\"\"\nExtracted log level data used by both stdlib and native log level filters.\n\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Any\n\nfrom .typing import EventDict\n\n\n# Adapted from the stdlib\nCRITICAL = 50\nFATAL = CRITICAL\nERROR = 40\nWARNING = 30\nWARN = WARNING\nINFO = 20\nDEBUG = 10\nNOTSET = 0\n\nNAME_TO_LEVEL = {\n    \"critical\": CRITICAL,\n    \"exception\": ERROR,\n    \"error\": ERROR,\n    \"warn\": WARNING,\n    \"warning\": WARNING,\n    \"info\": INFO,\n    \"debug\": DEBUG,\n    \"notset\": NOTSET,\n}\n\nLEVEL_TO_NAME = {\n    v: k\n    for k, v in NAME_TO_LEVEL.items()\n    if k not in (\"warn\", \"exception\", \"notset\")\n}\n\n# Keep around for backwards-compatability in case someone imported them.\n_LEVEL_TO_NAME = LEVEL_TO_NAME\n_NAME_TO_LEVEL = NAME_TO_LEVEL\n\n\ndef map_method_name(method_name: str) -> str:\n    # warn is just a deprecated alias in the stdlib.\n    if method_name == \"warn\":\n        return \"warning\"\n\n    # Calling exception(\"\") is the same as error(\"\", exc_info=True)\n    if method_name == \"exception\":\n        return \"error\"\n\n    return method_name\n\n\ndef add_log_level(\n    logger: Any, method_name: str, event_dict: EventDict\n) -> EventDict:\n    \"\"\"\n    Add the log level to the event dict under the ``level`` key.\n\n    Since that's just the log method name, this processor works with non-stdlib\n    logging as well. Therefore it's importable both from `structlog.processors`\n    as well as from `structlog.stdlib`.\n\n    .. versionadded:: 15.0.0\n    .. versionchanged:: 20.2.0\n       Importable from `structlog.processors` (additionally to\n       `structlog.stdlib`).\n    .. versionchanged:: 24.1.0\n       Added mapping from \"exception\" to \"error\"\n    \"\"\"\n\n    event_dict[\"level\"] = map_method_name(method_name)\n\n    return event_dict\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 11316,
+          "output_chars": 2233,
+          "latency_s": 16.89997616600158,
+          "turn_index": 3,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\npath='src/structlog/_native.py'\nnew=native.replace(\n'''            `logging` like ``logging.INFO`` or pass the values directly. See\n            `this table from the logging docs\n            <https://docs.python.org/3/library/logging.html#levels>`_ for\n            possible values.\n''',\n'''            `logging` like ``logging.INFO`` or pass any integer directly,\n            including negative values. Standard log levels are enabled when\n            they are greater than or equal to this value.\n''')\nnew=new.replace('''    return LEVEL_TO_FILTERING_LOGGER[min_level]\n''','''    try:\n        return LEVEL_TO_FILTERING_LOGGER[min_level]\n    except KeyError:\n        if not isinstance(min_level, int):\n            raise\n\n    # Serialize creation so concurrent calls also return the same class.\n    with _FILTERING_LOGGER_LOCK:\n        if min_level not in LEVEL_TO_FILTERING_LOGGER:\n            cls = _make_filtering_bound_logger(min_level)\n            # Pickle resolves classes by their module-global name.\n            globals()[cls.__name__] = cls\n            LEVEL_TO_FILTERING_LOGGER[min_level] = cls\n\n        return LEVEL_TO_FILTERING_LOGGER[min_level]\n''',1)\nnew=new.replace('''    return type(\n        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n''','''    if min_level == NOTSET:\n        name = \"Notset\"\n    elif min_level in LEVEL_TO_NAME:\n        name = LEVEL_TO_NAME[min_level].capitalize()\n    elif min_level < 0:\n        name = f\"Minus{-min_level}\"\n    else:\n        name = str(min_level)\n\n    return type(\n        f\"BoundLoggerFilteringAt{name}\",\n''')\nnew=new.replace('# Pre-create all possible filters to make them pickleable.',\n                    '# Pre-create the standard filters to keep their names and identities.')\nnew += '\\n# Protect creation and publication of filters for nonstandard levels.\\n_FILTERING_LOGGER_LOCK = threading.Lock()\\n'\nast.parse(new)\npatch=''.join(difflib.unified_diff(native.splitlines(keepends=True), new.splitlines(keepends=True), fromfile='a/'+path,tofile='b/'+path))\nprint(patch)\nprint(\"Original verified:\", native == files[path], \"changed:\", native != new)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\npath='src/structlog/_native.py'\nnew=native.replace(\n'''            `logging` like ``logging.INFO`` or pass the values directly. See\n            `this table from the logging docs\n            <https://docs.python.org/3/library/logging.html#levels>`_ for\n            possible values.\n''',\n'''            `logging` like ``logging.INFO`` or pass any integer directly,\n            including negative values. Standard log levels are enabled when\n            they are greater than or equal to this value.\n''')\nnew=new.replace('''    return LEVEL_TO_FILTERING_LOGGER[min_level]\n''','''    try:\n        return LEVEL_TO_FILTERING_LOGGER[min_level]\n    except KeyError:\n        if not isinstance(min_level, int):\n            raise\n\n    # Serialize creation so concurrent calls also return the same class.\n    with _FILTERING_LOGGER_LOCK:\n        if min_level not in LEVEL_TO_FILTERING_LOGGER:\n            cls = _make_filtering_bound_logger(min_level)\n            # Pickle resolves classes by their module-global name.\n            globals()[cls.__name__] = cls\n            LEVEL_TO_FILTERING_LOGGER[min_level] = cls\n\n        return LEVEL_TO_FILTERING_LOGGER[min_level]\n''',1)\nnew=new.replace('''    return type(\n        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n''','''    if min_level == NOTSET:\n        name = \"Notset\"\n    elif min_level in LEVEL_TO_NAME:\n        name = LEVEL_TO_NAME[min_level].capitalize()\n    elif min_level < 0:\n        name = f\"Minus{-min_level}\"\n    else:\n        name = str(min_level)\n\n    return type(\n        f\"BoundLoggerFilteringAt{name}\",\n''')\nnew=new.replace('# Pre-create all possible filters to make them pickleable.',\n                    '# Pre-create the standard filters to keep their names and identities.')\nnew += '\\n# Protect creation and publication of filters for nonstandard levels.\\n_FILTERING_LOGGER_LOCK = threading.Lock()\\n'\nast.parse(new)\npatch=''.join(difflib.unified_diff(native.splitlines(keepends=True), new.splitlines(keepends=True), fromfile='a/'+path,tofile='b/'+path))\nprint(patch)\nprint(\"Original verified:\", native == files[path], \"changed:\", native != new)"
+      ],
+      "stdout_raw_chars": 2817,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/structlog/_native.py\n+++ b/src/structlog/_native.py\n@@ -110,10 +110,9 @@\n     Args:\n         min_level:\n             The log level as an integer. You can use the constants from\n-            `logging` like ``logging.INFO`` or pass the values directly. See\n-            `this table from the logging docs\n-            <https://docs.python.org/3/library/logging.html#levels>`_ for\n-            possible values.\n+            `logging` like ``logging.INFO`` or pass any integer directly,\n+            including negative values. Standard log levels are enabled when\n+            they are greater than or equal to this value.\n \n             If you pass a string, it must be one of: ``critical``, ``error``,\n             ``warning``, ``info``, ``debug``, ``notset`` (upper/lower case\n@@ -129,7 +128,21 @@\n     if isinstance(min_level, str):\n         min_level = NAME_TO_LEVEL[min_level.lower()]\n \n-    return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    try:\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    except KeyError:\n+        if not isinstance(min_level, int):\n+            raise\n+\n+    # Serialize creation so concurrent calls also return the same class.\n+    with _FILTERING_LOGGER_LOCK:\n+        if min_level not in LEVEL_TO_FILTERING_LOGGER:\n+            cls = _make_filtering_bound_logger(min_level)\n+            # Pickle resolves classes by their module-global name.\n+            globals()[cls.__name__] = cls\n+            LEVEL_TO_FILTERING_LOGGER[min_level] = cls\n+\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n \n \n def _maybe_interpolate(event: str, args: tuple[Any, ...]) -> str:\n@@ -261,14 +274,23 @@\n     meths[\"is_enabled_for\"] = lambda self, level: level >= min_level\n     meths[\"get_effective_level\"] = lambda self: min_level\n \n+    if min_level == NOTSET:\n+        name = \"Notset\"\n+    elif min_level in LEVEL_TO_NAME:\n+        name = LEVEL_TO_NAME[min_level].capitalize()\n+    elif min_level < 0:\n+        name = f\"Minus{-min_level}\"\n+    else:\n+        name = str(min_level)\n+\n     return type(\n-        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n+        f\"BoundLoggerFilteringAt{name}\",\n         (BoundLoggerBase,),\n         meths,\n     )\n \n \n-# Pre-create all possible filters to make them pickleable.\n+# Pre-create the standard filters to keep their names and identities.\n BoundLoggerFilteringAtNotset = _make_filtering_bound_logger(NOTSET)\n BoundLoggerFilteringAtDebug = _make_filtering_bound_logger(DEBUG)\n BoundLoggerFilteringAtInfo = _make_filtering_bound_logger(INFO)\n@@ -284,3 +306,6 @@\n     DEBUG: BoundLoggerFilteringAtDebug,\n     NOTSET: BoundLoggerFilteringAtNotset,\n }\n+\n+# Protect creation and publication of filters for nonstandard levels.\n+_FILTERING_LOGGER_LOCK = threading.Lock()\n\nOriginal verified: True changed: True\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/structlog/_native.py\n+++ b/src/structlog/_native.py\n@@ -110,10 +110,9 @@\n     Args:\n         min_level:\n             The log level as an integer. You can use the constants from\n-            `logging` like ``logging.INFO`` or pass the values directly. See\n-            `this table from the logging docs\n-            <https://docs.python.org/3/library/logging.html#levels>`_ for\n-            possible values.\n+            `logging` like ``logging.INFO`` or pass any integer directly,\n+            including negative values. Standard log levels are enabled when\n+            they are greater than or equal to this value.\n \n             If you pass a string, it must be one of: ``critical``, ``error``,\n             ``warning``, ``info``, ``debug``, ``notset`` (upper/lower case\n@@ -129,7 +128,21 @@\n     if isinstance(min_level, str):\n         min_level = NAME_TO_LEVEL[min_level.lower()]\n \n-    return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    try:\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n+    except KeyError:\n+        if not isinstance(min_level, int):\n+            raise\n+\n+    # Serialize creation so concurrent calls also return the same class.\n+    with _FILTERING_LOGGER_LOCK:\n+        if min_level not in LEVEL_TO_FILTERING_LOGGER:\n+            cls = _make_filtering_bound_logger(min_level)\n+            # Pickle resolves classes by their module-global name.\n+            globals()[cls.__name__] = cls\n+            LEVEL_TO_FILTERING_LOGGER[min_level] = cls\n+\n+        return LEVEL_TO_FILTERING_LOGGER[min_level]\n \n \n def _maybe_interpolate(event: str, args: tuple[Any, ...]) -> str:\n@@ -261,14 +274,23 @@\n     meths[\"is_enabled_for\"] = lambda self, level: level >= min_level\n     meths[\"get_effective_level\"] = lambda self: min_level\n \n+    if min_level == NOTSET:\n+        name = \"Notset\"\n+    elif min_level in LEVEL_TO_NAME:\n+        name = LEVEL_TO_NAME[min_level].capitalize()\n+    elif min_level < 0:\n+        name = f\"Minus{-min_level}\"\n+    else:\n+        name = str(min_level)\n+\n     return type(\n-        f\"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}\",\n+        f\"BoundLoggerFilteringAt{name}\",\n         (BoundLoggerBase,),\n         meths,\n     )\n \n \n-# Pre-create all possible filters to make them pickleable.\n+# Pre-create the standard filters to keep their names and identities.\n BoundLoggerFilteringAtNotset = _make_filtering_bound_logger(NOTSET)\n BoundLoggerFilteringAtDebug = _make_filtering_bound_logger(DEBUG)\n BoundLoggerFilteringAtInfo = _make_filtering_bound_logger(INFO)\n@@ -284,3 +306,6 @@\n     DEBUG: BoundLoggerFilteringAtDebug,\n     NOTSET: BoundLoggerFilteringAtNotset,\n }\n+\n+# Protect creation and publication of filters for nonstandard levels.\n+_FILTERING_LOGGER_LOCK = threading.Lock()\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 100.50087808299577
+  }
+}

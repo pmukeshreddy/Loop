@@ -1,0 +1,159 @@
+{
+ "answer": [
+  "tests/test_make.py::TestKeywordOnlyAttributes::test_attr_level_kw_only_and_class_level_kw_only",
+  "tests/test_make.py::TestKeywordOnlyAttributes::test_kw_only_inheritance",
+  "tests/test_next_gen.py::TestProps::test_define_props_custom"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_next_gen.py::TestDefine::test_kw_only\",\n  \"tests/test_next_gen.py::TestDefine::test_kw_only_inheritance\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0006167229291093222,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 41,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "index",
+    "m",
+    "names",
+    "p",
+    "trees"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 41 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution computed the final collection of exact pytest node IDs in code and inspected it before finishing. The resulting three-test set matches the independently verified impact tests.",
+   "inspect_locate": "The reference execution used 38 searches across repository context to distinguish affected modern-decorator tests from classic attr.s tests and explicit overrides. This investigation is relevant to predicting the impact of the default change.",
+   "recursive_decomposition": "Not established: the execution made no sub-calls. The task remains suitable without this behavior, and the supplied behaviors_established accurately excludes it."
+  },
+  "notes": "This is a natural, repository-dependent change-impact request. It specifies a precise change and output format without revealing the failing tests or prescribing solver operations. Determining which existing tests depend on the old default requires reasoning about decorator aliases, explicit overrides, and inheritance behavior. The accepted task listed for this repository concerns a different regression."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The independently identified failures must be combined into one deduplicated set of exact parametrized pytest node IDs.",
+   "inspect_locate": "Relevant tests are scattered among modern decorator, inheritance, constructor-signature, and class-property tests. Many keyword-only tests exercise classic attr.s or explicitly override the flag and therefore remain unaffected.",
+   "recursive_decomposition": "Impact separates into independent investigations of inherited fields, explicit field-level kw_only overrides, effective ClassProps, and callers that pass force_kw_only themselves."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_next_gen.py",
+    "symbol": "src/attr/_next_gen.py::define",
+    "why": "The changed default is forwarded unchanged into the classic builder."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::attrs",
+    "why": "kw_only and force_kw_only jointly select YES or FORCE policy."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_transform_attrs",
+    "why": "FORCE changes both inherited fields and explicit field-level keyword-only exclusions."
+   },
+   {
+    "path": "tests/test_next_gen.py",
+    "symbol": "tests/test_next_gen.py::TestProps.test_define_props_custom",
+    "why": "An existing assertion distinguishes the effective YES policy from FORCE."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The probe changes only the signature default, not the documentation. Ground truth is the set of newly failing existing tests across the suite.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/attr/_next_gen.py\n+++ b/src/attr/_next_gen.py\n@@ -46,7 +46,7 @@\n     on_setattr=None,\n     field_transformer=None,\n     match_args=True,\n-    force_kw_only=False,\n+    force_kw_only=True,\n ):\n     r\"\"\"\n     A class decorator that adds :term:`dunder methods` according to\n",
+  "question": "We are considering changing the default of force_kw_only in attr.define from False to True. No other default or implementation would change; explicit force_kw_only arguments would still take precedence. This also affects attrs.define, mutable, and frozen through their existing exports and aliases. Which existing tests would newly fail after that change? Return a JSON list of complete pytest node IDs, including parameter suffixes.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_make.py::TestKeywordOnlyAttributes::test_attr_level_kw_only_and_class_level_kw_only",
+   "tests/test_make.py::TestKeywordOnlyAttributes::test_kw_only_inheritance",
+   "tests/test_next_gen.py::TestProps::test_define_props_custom"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_make.py::TestKeywordOnlyAttributes::test_attr_level_kw_only_and_class_level_kw_only",
+    "tests/test_make.py::TestKeywordOnlyAttributes::test_kw_only_inheritance",
+    "tests/test_next_gen.py::TestProps::test_define_props_custom"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_make.py::TestKeywordOnlyAttributes::test_attr_level_kw_only_and_class_level_kw_only",
+    "tests/test_make.py::TestKeywordOnlyAttributes::test_kw_only_inheritance",
+    "tests/test_next_gen.py::TestProps::test_define_props_custom"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_make.py::TestKeywordOnlyAttributes::test_attr_level_kw_only_and_class_level_kw_only",
+   "tests/test_make.py::TestKeywordOnlyAttributes::test_kw_only_inheritance",
+   "tests/test_next_gen.py::TestProps::test_define_props_custom"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,126 @@
+{
+ "answer": "--- a/src/jinja2/visitor.py\n+++ b/src/jinja2/visitor.py\n@@ -20,7 +20,10 @@\n \n     Per default the visitor functions for the nodes are ``'visit_'`` +\n     class name of the node.  So a `TryFinally` node visit function would\n-    be `visit_TryFinally`.  This behavior can be changed by overriding\n+    be `visit_TryFinally`.  Handlers are looked up along the node type's\n+    method resolution order, from the concrete class through `Node`, so\n+    a handler for a base class can handle a whole family of nodes.\n+    This behavior can be changed by overriding\n     the `get_visitor` function.  If no visitor function exists for a node\n     (return value `None`) the `generic_visit` visitor is used instead.\n     \"\"\"\n@@ -30,7 +33,15 @@\n         exists for this node.  In that case the generic visit function is\n         used instead.\n         \"\"\"\n-        return getattr(self, f\"visit_{type(node).__name__}\", None)\n+        for cls in type(node).__mro__:\n+            if cls is object:\n+                break\n+            visitor = getattr(self, f\"visit_{cls.__name__}\", None)\n+            if visitor is not None:\n+                return visitor\n+            if cls is Node:\n+                break\n+        return None\n \n     def visit(self, node: Node, *args: t.Any, **kwargs: t.Any) -> t.Any:\n         \"\"\"Visit a node.\"\"\"\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5270 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference solved the change within a focused 5,270-character, two-file context without sub-calls. The implementation requires reasoning about node-MRO precedence, inherited visitor handlers, overridable dispatch, and transformer behavior, making direct solving appropriate."
+  },
+  "notes": "This is a natural, narrowly scoped feature request with explicit dispatch semantics and a precise production-only unified-diff deliverable. Naming the public dispatch hook specifies the requested feature rather than leaking a hidden defect. The patch preserves generic traversal and custom dispatch while adding family-handler lookup, and the supplied tests cover the principal requirements. The task is distinct from the previously accepted globals, filtering, and diagnostic changes."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The complete visitor dispatch and transformer behavior are available in a small focused module, with the optimizer as an existing consumer. Implementing inheritance-aware dispatch requires reasoning about precedence and preserving overridable dispatch, but no repository-wide investigation."
+  },
+  "context": {
+   "files": [
+    "src/jinja2/visitor.py",
+    "src/jinja2/optimizer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/visitor.py",
+    "symbol": "src/jinja2/visitor.py::NodeVisitor.get_visitor",
+    "why": "The current default dispatch checks only the concrete node class."
+   },
+   {
+    "path": "src/jinja2/visitor.py",
+    "symbol": "src/jinja2/visitor.py::NodeTransformer.generic_visit",
+    "why": "Family handlers must participate in existing list and scalar replacement behavior."
+   },
+   {
+    "path": "src/jinja2/optimizer.py",
+    "symbol": "src/jinja2/optimizer.py::Optimizer",
+    "why": "An existing transformer consumer must retain its generic constant-folding behavior when it defines no family handler."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_visitor_family_dispatch.py\n@@ -0,0 +1,67 @@\n+from jinja2 import nodes\n+from jinja2.visitor import NodeTransformer\n+from jinja2.visitor import NodeVisitor\n+\n+\n+def test_nearest_node_family_handler():\n+    class FamilyVisitor(NodeVisitor):\n+        def visit_Node(self, node):\n+            return (\"node\", type(node).__name__)\n+\n+        def visit_Expr(self, node):\n+            return (\"expr\", type(node).__name__)\n+\n+    visitor = FamilyVisitor()\n+    assert visitor.visit(nodes.Const(1)) == (\"expr\", \"Const\")\n+    assert visitor.visit(nodes.Add(nodes.Const(1), nodes.Const(2))) == (\"expr\", \"Add\")\n+    assert visitor.visit(nodes.Output([])) == (\"node\", \"Output\")\n+\n+\n+def test_specific_and_inherited_visitor_handlers():\n+    class Parent(NodeVisitor):\n+        def visit_Expr(self, node):\n+            return \"expr\"\n+\n+        def visit_Const(self, node):\n+            return \"const\"\n+\n+    class Child(Parent):\n+        pass\n+\n+    assert Child().visit(nodes.Const(1)) == \"const\"\n+\n+\n+def test_custom_dispatch_remains_authoritative():\n+    class Custom(NodeVisitor):\n+        def get_visitor(self, node):\n+            return lambda current: \"custom\"\n+\n+        def visit_Const(self, node):\n+            return \"specific\"\n+\n+    assert Custom().visit(nodes.Const(1)) == \"custom\"\n+\n+\n+def test_transformer_family_replacement():\n+    class Rewrite(NodeTransformer):\n+        def visit_Expr(self, node):\n+            return nodes.Const(9)\n+\n+    tree = nodes.Output([nodes.Add(nodes.Const(1), nodes.Const(2))])\n+    assert Rewrite().visit(tree) is tree\n+    assert len(tree.nodes) == 1\n+    assert isinstance(tree.nodes[0], nodes.Const)\n+    assert tree.nodes[0].value == 9\n+\n+\n+def test_default_generic_traversal_is_unchanged():\n+    class Record(NodeVisitor):\n+        def __init__(self):\n+            self.names = []\n+\n+        def visit_Name(self, node):\n+            self.names.append(node.name)\n+\n+    visitor = Record()\n+    visitor.visit(nodes.Output([nodes.Name(\"x\", \"load\")]))\n+    assert visitor.names == [\"x\"]\n",
+  "include_failure_log": false,
+  "notes": "The acceptance tests use existing node classes; they do not require defining new AST node types.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Allow AST visitors to handle node families without defining a method for every concrete node type. The default `NodeVisitor.get_visitor` should look for `visit_<ClassName>` handlers along the node type's Python MRO, from the concrete class through `Node`, stopping before object, and return the first available handler. Thus `visit_Expr` can handle an expression when there is no more-specific handler, while `visit_Node` is the final family fallback. If no handler exists, retain the existing generic traversal. Visitor methods inherited by the visitor itself must still work, and subclasses overriding `get_visitor` must remain authoritative. This dispatch must also work for `NodeTransformer` without changing its replacement semantics. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r02-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_visitor_family_dispatch.py::test_nearest_node_family_handler",
+   "tests/test_visitor_family_dispatch.py::test_transformer_family_replacement"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 914
+   },
+   "patch_files": [
+    "src/jinja2/visitor.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_visitor_family_dispatch.py::test_nearest_node_family_handler",
+   "tests/test_visitor_family_dispatch.py::test_transformer_family_replacement"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

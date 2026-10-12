@@ -1,0 +1,47 @@
+--- /dev/null
++++ b/tests/test_preserve_nulls.py
+@@ -0,0 +1,44 @@
++import pytest
++
++import jmespath
++from jmespath import Options
++
++
++@pytest.mark.parametrize(
++    "expression,data,default_result,preserved_result",
++    [
++        ("rows[*].v", {"rows": [{"v": 1}, {}, {"v": None}]},
++         [1], [1, None, None]),
++        ("rows[].v", {"rows": [[{"v": 1}, {}], [{"v": None}]]},
++         [1], [1, None, None]),
++        ("rows[:].v", {"rows": [{"v": 1}, {}, {"v": None}]},
++         [1], [1, None, None]),
++        ("obj.*.v", {"obj": {"a": {"v": 1}, "b": {}, "c": {"v": None}}},
++         [1], [1, None, None]),
++        ("rows[?keep].v",
++         {"rows": [{"keep": True, "v": 1}, {"keep": True},
++                   {"keep": True, "v": None}, {"keep": False, "v": 2}]},
++         [1], [1, None, None]),
++        ("rows[*].v", {"rows": None}, None, None),
++        ("obj.*.v", {"obj": []}, None, None),
++        ("rows[?keep].v", {"rows": {}}, None, None),
++        ("rows[*].v", {"rows": []}, [], []),
++        ("rows[?keep].v", {"rows": [{"keep": False}]}, [], []),
++        ("[a, b]", {"a": 1}, [1, None], [1, None]),
++        ("{a: a, b: b}", {"a": 1},
++         {"a": 1, "b": None}, {"a": 1, "b": None}),
++        ("map(&v, rows)", {"rows": [{"v": 1}, {}]},
++         [1, None], [1, None]),
++        ("rows[*].children[*].v",
++         {"rows": [{"children": [{"v": 1}, {}]}, {}, {"children": []}]},
++         [[1], []], [[1, None], None, []]),
++    ],
++)
++def test_preserve_nulls(expression, data, default_result, preserved_result):
++    compiled = jmespath.compile(expression)
++    assert jmespath.search(expression, data) == default_result
++    assert compiled.search(data, options=Options(preserve_nulls=False)) == default_result
++    options = Options(preserve_nulls=True)
++    assert jmespath.search(expression, data, options=options) == preserved_result
++    assert compiled.search(data, options=options) == preserved_result
++    assert compiled.search(data) == default_result

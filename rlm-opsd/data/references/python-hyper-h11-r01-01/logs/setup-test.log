@@ -1,0 +1,36 @@
+.......F.........................F...................................... [ 92%]
+......                                                                   [100%]
+=================================== FAILURES ===================================
+_____________________ test_client_talking_to_http10_server _____________________
+h11/tests/test_connection.py:253: in test_client_talking_to_http10_server
+    assert receive_and_get(c, b"") == [EndOfMessage(), ConnectionClosed()]
+           ^^^^^^^^^^^^^^^^^^^^^^^
+h11/tests/helpers.py:37: in receive_and_get
+    return get_all_events(conn)
+           ^^^^^^^^^^^^^^^^^^^^
+h11/tests/helpers.py:25: in get_all_events
+    event = conn.next_event()
+            ^^^^^^^^^^^^^^^^^
+h11/_connection.py:496: in next_event
+    exc._reraise_as_remote_protocol_error()
+h11/_util.py:77: in _reraise_as_remote_protocol_error
+    raise self
+h11/_connection.py:480: in next_event
+    self._process_event(self.their_role, cast(Event, event))
+h11/_connection.py:284: in _process_event
+    self._cstate.process_event(role, type(event), server_switch_event)
+h11/_state.py:291: in process_event
+    self._fire_event_triggered_transitions(role, _event_type)
+h11/_state.py:309: in _fire_event_triggered_transitions
+    raise LocalProtocolError(
+E   h11._util.RemoteProtocolError: can't handle event type ConnectionClosed when role=SERVER and state=SEND_BODY
+_________ test_special_exceptions_for_lost_connection_in_message_body __________
+h11/tests/test_connection.py:1104: in test_special_exceptions_for_lost_connection_in_message_body
+    assert "received 5 bytes" in str(excinfo.value)
+E   assert 'received 5 bytes' in "can't handle event type ConnectionClosed when role=CLIENT and state=SEND_BODY"
+E    +  where "can't handle event type ConnectionClosed when role=CLIENT and state=SEND_BODY" = str(RemoteProtocolError("can't handle event type ConnectionClosed when role=CLIENT and state=SEND_BODY"))
+E    +    where RemoteProtocolError("can't handle event type ConnectionClosed when role=CLIENT and state=SEND_BODY") = <ExceptionInfo RemoteProtocolError("can't handle event type ConnectionClosed when role=CLIENT and state=SEND_BODY") tblen=7>.value
+=========================== short test summary info ============================
+FAILED h11/tests/test_connection.py::test_client_talking_to_http10_server - h...
+FAILED h11/tests/test_connection.py::test_special_exceptions_for_lost_connection_in_message_body
+2 failed, 76 passed in 0.19s

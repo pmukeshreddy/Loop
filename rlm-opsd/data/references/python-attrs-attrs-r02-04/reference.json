@@ -1,0 +1,160 @@
+{
+ "answer": [
+  "tests/test_next_gen.py::TestNextGen::test_converts_and_validates_by_default",
+  "tests/test_setattr.py::TestSetAttr::test_setattr_converter_piped"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_next_gen.py::TestDefine::test_on_setattr_default\",\n  \"tests/test_setattr.py::TestOnSetAttr::test_default\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0007326482917238565,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 17,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "n",
+    "p",
+    "results",
+    "t",
+    "testfiles"
+   ],
+   "subcall_errors": 7,
+   "subcall_max_prompt_chars": 24733,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 39,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "39 sub-calls (7 failed); 1 call sites on selected context, 0 on the whole context; max prompt 24733 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 17 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "The execution made scoped sub-calls over selected test material. Separating initialization conversion, explicit hooks, and default assignment behavior is relevant to identifying only newly failing tests.",
+   "combine_verify_finish": "The execution computed and checked a final collection of exact node IDs, and executable impact verification confirmed the two-test result.",
+   "inspect_locate": "The execution used 17 targeted searches to locate the shared default hook, its consumers, and relevant tests across the repository without printing the whole context."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. It specifies the proposed change without revealing the affected tests, requires repository-specific reasoning, and states a clear output format. The related accepted repair task concerns diagnosing and fixing a regression rather than predicting failures from this specific policy change, so it is not an evident duplicate."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining failures requires semantic review of separate groups of assignment, decorator-default, converter, and inheritance tests. Direct converter use, initialization conversion, explicit hooks, and default mutation have to be distinguished across a substantial amount of test text.",
+   "combine_verify_finish": "Findings from the different test groups must be combined into one exact, deduplicated set of parametrized pytest node IDs.",
+   "inspect_locate": "The shared default hook is imported by the modern decorator and consumed by builder optimizations, generated initialization, and assignment dispatch. Tests using that policy are distributed among several modules."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_DEFAULT_ON_SETATTR",
+    "why": "The proposed change replaces this shared policy value."
+   },
+   {
+    "path": "src/attr/_next_gen.py",
+    "symbol": "src/attr/_next_gen.py::define",
+    "why": "Installs the shared default for mutable classes without explicit hooks."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.__init__",
+    "why": "Elides standard hooks according to the presence of converters and validators."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.add_setattr",
+    "why": "Combines field overrides with the class policy for subsequent assignments."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Initialization conversion is generated separately and remains active."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the complete existing suite to compute newly failing node IDs. Do not infer the answer from references to converters alone: explicit hooks and constructor conversion are intentionally unaffected.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -57,7 +57,7 @@\n # Unique object for unequivocal getattr() defaults.\n _SENTINEL = object()\n \n-_DEFAULT_ON_SETATTR = setters.pipe(setters.convert, setters.validate)\n+_DEFAULT_ON_SETATTR = setters.validate\n \n \n class _Nothing(enum.Enum):\n",
+  "question": "We are considering replacing the shared default assignment hook, _DEFAULT_ON_SETATTR, with setters.validate instead of the current convert-then-validate pipeline. Mutable classes using the default attrs.define policy would validate later assignments without converting them first. Initialization-time conversion and explicitly supplied on_setattr hooks would remain unchanged. Which existing tests would newly fail with exactly this change? Return a JSON list of pytest node IDs, including parameter suffixes where applicable.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r02-04",
+ "truth": {
+  "answer": [
+   "tests/test_next_gen.py::TestNextGen::test_converts_and_validates_by_default",
+   "tests/test_setattr.py::TestSetAttr::test_setattr_converter_piped"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_next_gen.py::TestNextGen::test_converts_and_validates_by_default",
+    "tests/test_setattr.py::TestSetAttr::test_setattr_converter_piped"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_next_gen.py::TestNextGen::test_converts_and_validates_by_default",
+    "tests/test_setattr.py::TestSetAttr::test_setattr_converter_piped"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_next_gen.py::TestNextGen::test_converts_and_validates_by_default",
+   "tests/test_setattr.py::TestSetAttr::test_setattr_converter_piped"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,95 @@
+--- /dev/null
++++ b/tests/test_dependency_inventory.py
+@@ -0,0 +1,92 @@
++import ast
++
++import pytest
++
++from jinja2 import Environment
++from jinja2 import nodes
++from jinja2.compiler import DependencyFinderVisitor
++
++
++SOURCE = (
++    "{{ value|root_f }}{{ value is root_t }}"
++    "{% block outer %}"
++    "{{ value|outer_f }}{{ value is outer_t }}"
++    "{% block inner %}"
++    "{{ value|inner_f }}{{ value is inner_t }}"
++    "{% endblock %}"
++    "{% endblock %}"
++)
++
++
++@pytest.mark.parametrize("mode", [None, False, True])
++def test_inventory_modes(mode):
++    tree = Environment().parse(SOURCE)
++    visitor = (
++        DependencyFinderVisitor()
++        if mode is None
++        else DependencyFinderVisitor(include_blocks=mode)
++    )
++    visitor.visit(tree)
++    expected = {"root"}
++    if mode is True:
++        expected.update(("outer", "inner"))
++    assert visitor.filters == {f"{name}_f" for name in expected}
++    assert visitor.tests == {f"{name}_t" for name in expected}
++
++
++def test_block_entry_boundaries():
++    tree = Environment().parse(SOURCE)
++    block = next(tree.find_all(nodes.Block))
++    default = DependencyFinderVisitor()
++    default.visit(block)
++    assert default.filters == set()
++    assert default.tests == set()
++    whole = DependencyFinderVisitor(include_blocks=True)
++    whole.visit(block)
++    assert whole.filters == {"outer_f", "inner_f"}
++    assert whole.tests == {"outer_t", "inner_t"}
++
++
++@pytest.mark.parametrize("include_blocks", [False, True])
++def test_expression_children(include_blocks):
++    tree = Environment().parse(
++        "{{ (x|lower) is equalto(y|upper) }}"
++        "{{ x|default(y is defined) }}"
++    )
++    visitor = DependencyFinderVisitor(include_blocks=include_blocks)
++    visitor.visit(tree)
++    assert visitor.filters == {"lower", "upper", "default"}
++    assert visitor.tests == {"equalto", "defined"}
++
++
++def test_compilation_dependency_scopes():
++    env = Environment(optimized=False)
++    for prefix in ("root", "outer", "inner"):
++        env.filters[f"{prefix}_f"] = lambda value: value
++        env.tests[f"{prefix}_t"] = lambda value: True
++    module = ast.parse(env.compile(SOURCE, raw=True))
++    functions = {
++        node.name: node
++        for node in module.body
++        if isinstance(node, ast.FunctionDef)
++    }
++    for function, prefix in (
++        ("root", "root"),
++        ("block_outer", "outer"),
++        ("block_inner", "inner"),
++    ):
++        dependencies = set()
++        for node in ast.walk(functions[function]):
++            if (
++                isinstance(node, ast.Subscript)
++                and isinstance(node.value, ast.Attribute)
++                and isinstance(node.value.value, ast.Name)
++                and node.value.value.id == "environment"
++                and node.value.attr in {"filters", "tests"}
++            ):
++                assert isinstance(node.slice, ast.Constant)
++                dependencies.add((node.value.attr, node.slice.value))
++        assert dependencies == {
++            ("filters", f"{prefix}_f"),
++            ("tests", f"{prefix}_t"),
++        }

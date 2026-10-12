@@ -1,0 +1,208 @@
+{
+ "answer": "--- a/jmespath/parser.py\n+++ b/jmespath/parser.py\n@@ -238,6 +238,9 @@\n                         self._lookahead_token(0), 'syntax error')\n                 self._advance()\n             elif current_token == 'number':\n+                if parts[index] is not None:\n+                    self._raise_parse_error_for_token(\n+                        self._lookahead_token(0), 'syntax error')\n                 parts[index] = self._lookahead_token(0)['value']\n                 self._advance()\n             else:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.003231781815315493,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 10 targeted searches within a 49-document repository context without printing the whole context. Locating the shared slice parser, token metadata, and error propagation was useful for applying one validation rule consistently across root-level and nested slices while preserving existing indexing and projection behavior."
+  },
+  "notes": "This is a natural, precisely scoped parser-validation change with a clear unified-diff deliverable. The question specifies externally observable requirements without revealing the defective internal symbol or prescribing the fix. The verified patch distinguishes an omitted component from a zero-valued component and uses existing parse-error handling. The task is materially different from the parent and previously accepted collection-projection repair: it concerns duplicate number tokens and diagnostics, not evaluation or projection construction."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The repository-wide context must be narrowed to bracket dispatch, slice grammar, number tokenization, and parse-error propagation. The investigation concerns grammatical validation and token positions rather than collection evaluation; only small sections of the parser, lexer, and exceptions module are relevant."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._parse_index_expression",
+    "why": "Bracket lookahead determines whether parsing enters the slice loop or ordinary indexing. An adjacent-number start component is already rejected through the indexing path."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._parse_slice_expression",
+    "why": "The loop accepts repeated number tokens and overwrites the current component, allowing malformed stop and step components to compile."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._raise_parse_error_for_token",
+    "why": "Constructs the repository's parse exception using the offending token's position, value, and type."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._do_parse",
+    "why": "Attaches the complete expression to parse errors before propagating them."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer.tokenize",
+    "why": "Whitespace is skipped, while positive and negative integers remain distinct number tokens with their original source positions."
+   },
+   {
+    "path": "jmespath/exceptions.py",
+    "symbol": "jmespath/exceptions.py::ParseError",
+    "why": "Defines the observable diagnostic attributes, including uppercase token types."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_slice_component_validation.py\n@@ -0,0 +1,72 @@\n+import pytest\n+\n+import jmespath\n+from jmespath import exceptions\n+\n+\n+@pytest.mark.parametrize('prefix', ['', 'foo', 'items[0].foo'])\n+@pytest.mark.parametrize('suffix, offending', [\n+    ('[1 2:3]', 2),\n+    ('[-1 -2:3]', -2),\n+    ('[0 0:3]', 0),\n+    ('[1:2 3]', 3),\n+    ('[:1 2]', 2),\n+    ('[:0 0]', 0),\n+    ('[1:-2 -3]', -3),\n+    ('[1:2\\t3:4]', 3),\n+    ('[::1 2]', 2),\n+    ('[1::2 3]', 3),\n+    ('[::-1 -2]', -2),\n+    ('[::0 1]', 1),\n+    ('[:1\\n2]', 2),\n+    ('[::1\\r2]', 2),\n+])\n+def test_duplicate_slice_number_reports_offending_token(prefix, suffix,\n+                                                       offending):\n+    expression = prefix + suffix\n+    with pytest.raises(exceptions.ParseError) as caught:\n+        jmespath.compile(expression)\n+    error = caught.value\n+    assert not isinstance(error, exceptions.LexerError)\n+    assert error.expression == expression\n+    assert error.lex_position == len(prefix) + suffix.rindex(str(offending))\n+    assert error.token_value == offending\n+    assert error.token_type == 'NUMBER'\n+\n+\n+@pytest.mark.parametrize('prefix', ['', 'foo'])\n+@pytest.mark.parametrize('suffix, expected', [\n+    ('[:2]', [0, 1]),\n+    ('[1::2]', [1, 3]),\n+    ('[::-1]', [4, 3, 2, 1, 0]),\n+    ('[:]', [0, 1, 2, 3, 4]),\n+    ('[::]', [0, 1, 2, 3, 4]),\n+    ('[1:]', [1, 2, 3, 4]),\n+    ('[-4:-1]', [1, 2, 3]),\n+    ('[3:0:-2]', [3, 1]),\n+    ('[ 1 : 4 : 2 ]', [1, 3]),\n+    ('[ : : -1 ]', [4, 3, 2, 1, 0]),\n+    ('[0:0]', []),\n+    ('[:0]', []),\n+    ('[0::2]', [0, 2, 4]),\n+    ('[0]', 0),\n+    ('[-1]', 4),\n+])\n+def test_valid_slice_components_and_indices(prefix, suffix, expected):\n+    values = [0, 1, 2, 3, 4]\n+    data = {'foo': values} if prefix else values\n+    assert jmespath.compile(prefix + suffix).search(data) == expected\n+\n+\n+def test_slice_projection_is_preserved():\n+    data = {'foo': [{'a': 1}, {'a': 2}, {'a': 3}]}\n+    assert jmespath.compile('foo[:2].a').search(data) == [1, 2]\n+    assert jmespath.compile('foo[::-1].a').search(data) == [3, 2, 1]\n+\n+\n+def test_valid_expression_still_compiles_after_rejection():\n+    with pytest.raises(exceptions.ParseError):\n+        jmespath.compile('foo[:0 1]')\n+    assert jmespath.compile('foo[:2]').search({'foo': [4, 5, 6]}) == [4, 5]\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task for a validation gap already present in the supplied snapshot, so verification uses a new hidden-test file rather than injecting another regression. The supplied parser already contains the slice-projection wrapper from the original repair; do not remove it or reintroduce the original defect. Contrary to the suggestion's initial description, foo[1 2:3] is already rejected by this snapshot because slice dispatch only examines two tokens. The hidden tests preserve that behavior and exercise the genuinely accepted malformed stop and step cases. A reference repair can reject a number when the current component is already non-None, before assigning or advancing; zero must count as an occupied component. The resulting answer differs from the original projection-construction repair.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Tighten slice syntax validation in `jmespath.compile`. Expressions such as `foo[1:2 3]` and `foo[::1 2]` currently compile even though a slice component contains two integers. Each start, stop, or step component must contain at most one number token; reject a second number in the same component with `jmespath.exceptions.ParseError`. The error must retain the full expression and identify the second number's value, `NUMBER` token type, and zero-based starting column. Apply this consistently to root-level slices and slices following another expression, including whitespace-separated negative numbers and zero bounds. Malformed forms such as `foo[1 2:3]` must remain rejected. Preserve valid omitted components, whitespace around components, negative bounds and steps, ordinary indexing, and slice projections. Return a unified diff against non-test repository files, leaving tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused grammar and state-machine investigation rather than tracing collection evaluation backward through visitors. Reading the lexer and slice-parser loop directly is useful to establish why whitespace does not make these inputs lexical errors and where grammatical validation belongs.",
+  "change_type": "failure_condition",
+  "description": "With the accepted slice-projection repair already applied, investigate malformed slice expressions that compile successfully: `foo[1 2:3]` and `foo[1:2 3]` silently overwrite a slice component. Deliver a unified diff against non-test files that rejects multiple number tokens within a single slice component while preserving omitted components, negative bounds, negative steps, and ordinary indexing. Relevant symbols are `Parser._parse_index_expression`, `Parser._parse_slice_expression`, and `Parser._raise_parse_error_for_token` in `jmespath/parser.py`, together with `Lexer.tokenize` in `jmespath/lexer.py` and `ParseError` in `jmespath/exceptions.py`.",
+  "expected_answer_change": "The patch must track whether each slice component has already consumed a number and reject a second number before the next colon or closing bracket. Verification should distinguish malformed adjacent-number cases from valid forms such as `foo[:2]`, `foo[1::2]`, and `foo[::-1]`, and confirm that errors retain the expression and offending token position through `Parser._do_parse`.",
+  "why_substantive": "The original defect concerns projection AST construction for valid slices. This variation concerns acceptance of invalid slice grammar: whitespace separates number tokens, and the slice parser repeatedly assigns to the same component without checking whether it already contains a number. Restoring a projection wrapper does not address this failure."
+ },
+ "task_id": "jmespath-jmespath-py-r01-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_valid_expression_still_compiles_after_rejection"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 34,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1065
+   },
+   "patch_files": [
+    "jmespath/parser.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:-2 -3]--3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2 3]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1:2\\t3:4]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[1::2 3]-3-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:0 0]-0-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1 2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[:1\\n2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::-1 -2]--2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::0 1]-1-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1 2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-foo]",
+   "tests/test_slice_component_validation.py::test_duplicate_slice_number_reports_offending_token[[::1\\r2]-2-items[0].foo]",
+   "tests/test_slice_component_validation.py::test_valid_expression_still_compiles_after_rejection"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,13 @@
+--- a/src/cachetools/keys.py
++++ b/src/cachetools/keys.py
+@@ -26,7 +26,9 @@
+         return _HashedTuple(add(other, self))
+ 
+     def __getstate__(self):
+-        return self.__dict__
++        # Recompute the cached hash after unpickling: hashes may differ
++        # between processes with different hash seeds.
++        return {}
+ 
+ 
+ # A sentinel for separating args from kwargs.  Using the class itself

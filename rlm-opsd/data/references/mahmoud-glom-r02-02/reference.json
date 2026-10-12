@@ -1,0 +1,261 @@
+{
+ "answer": {
+  "and": [
+   "default",
+   "recovered",
+   "default"
+  ],
+  "check_false": [
+   "default",
+   "default",
+   "default"
+  ],
+  "check_raise": [
+   "CheckError",
+   "CheckError",
+   "CheckError"
+  ],
+  "check_type": [
+   "default",
+   "PathAccessError",
+   "default"
+  ],
+  "coalesce": [
+   "default",
+   "recovered",
+   "default"
+  ],
+  "match": [
+   "default",
+   "recovered",
+   "default"
+  ],
+  "or": [
+   "default",
+   "recovered",
+   "default"
+  ],
+  "switch": [
+   "default",
+   "recovered",
+   "default"
+  ]
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"coalesce\": [\"default\", \"recovered\", \"default\"],\n  \"match\": [\"default\", \"recovered\", \"default\"],\n  \"and\": [\"default\", \"recovered\", \"default\"],\n  \"or\": [\"default\", \"recovered\", \"default\"],\n  \"switch\": [\"recovered\", \"recovered\", \"recovered\"],\n  \"check_type\": [\"default\", \"default\", \"default\"],\n  \"check_false\": [\"default\", \"default\", \"default\"],\n  \"check_raise\": [\"CheckError\", \"CheckError\", \"CheckError\"]\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.002723036395044813,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 9,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "nodes"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "combine_verify_finish",
+  "results": {
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 405797 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution constructed and inspected the final matrix programmatically. Combining twenty-four outcomes in a fixed order with consistent normalization is necessary to produce the requested deliverable.",
+   "inspect_locate": "The reference execution used nine targeted searches without printing the whole context. The matrix requires distinguishing default handling across multiple specifiers and Check failure paths, rather than locating a single answer-bearing definition."
+  },
+  "notes": "A coherent, repository-dependent compatibility investigation with explicit inputs, fallback variants, and output normalization. The question neither leaks the outcomes nor prescribes solver operations. Executable verification establishes the snapshot-specific differences, and the task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a fixed compatibility matrix of twenty-four outcomes. Findings must be combined in the specified default order, normalized consistently, and checked for exactly the requested rows and outcome labels.",
+   "inspect_locate": "Default handling is spread across Coalesce, Match, boolean specifiers, Switch, Check, and the shared argument evaluator. Similar-looking defaults take different paths in this snapshot."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Coalesce.glomit",
+    "why": "Evaluates an exhausted fallback through arg_val."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::arg_val",
+    "why": "Distinguishes ordinary literal defaults from explicit specifiers."
+   },
+   {
+    "path": "glom/matching.py",
+    "symbol": "glom/matching.py::_Bool.glomit",
+    "why": "Provides the default-handling wrapper inherited by And and Or."
+   },
+   {
+    "path": "glom/matching.py",
+    "symbol": "glom/matching.py::Match.glomit",
+    "why": "Handles matching failures while retaining the original target for fallback evaluation."
+   },
+   {
+    "path": "glom/matching.py",
+    "symbol": "glom/matching.py::Switch.glomit",
+    "why": "Uses a default only after every key spec fails."
+   },
+   {
+    "path": "glom/matching.py",
+    "symbol": "glom/matching.py::Check.glomit",
+    "why": "Type failures evaluate defaults against the extracted target, explicit False returns a literal default, and validator exceptions are accumulated as errors."
+   }
+  ],
+  "expected_answer": {
+   "and": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "check_false": [
+    "default",
+    "default",
+    "default"
+   ],
+   "check_raise": [
+    "CheckError",
+    "CheckError",
+    "CheckError"
+   ],
+   "check_type": [
+    "default",
+    "PathAccessError",
+    "default"
+   ],
+   "coalesce": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "match": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "or": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "switch": [
+    "default",
+    "recovered",
+    "default"
+   ]
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The independent verifier should instantiate each specifier/default combination separately. Normalize by identity with the supplied default before checking the returned string. Classify failures using the public glom exception types.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "I need a compatibility matrix for fallback handling before consolidating our validation specs. Use the target `{'candidate': 'bad', 'fallback': 'recovered'}`. For each row below, supply its default successively as the literal string `'fallback'`, `Spec(T['fallback'])`, and a callable that returns its argument's `'fallback'` entry.\n\nThe rows are: `coalesce`, a Coalesce whose only subspec is Regex('ok'); `match`, Match of that Regex; `and`, And with that Regex as its only child; `or`, Or with that Regex as its only child; `switch`, Switch with one case pairing that Regex with Val('unused'); `check_type`, Check of the path 'candidate' with type=int; `check_false`, Check of that path with a validator returning the singleton False; and `check_raise`, Check of that path with a validator raising ValueError('rejected'). In every case, pass the selected fallback through the specifier's default argument, not the top-level glom default.\n\nReturn a JSON object mapping these eight row names to three-element arrays in the default order above. Normalize a successful return of the original default object to `\"default\"`, a successful return of the string 'recovered' to `\"recovered\"`, and failures to the public glom exception class name. Report this snapshot's behavior, including any differences among Check's failure paths.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mahmoud-glom-r02-02",
+ "truth": {
+  "answer": {
+   "and": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "check_false": [
+    "default",
+    "default",
+    "default"
+   ],
+   "check_raise": [
+    "CheckError",
+    "CheckError",
+    "CheckError"
+   ],
+   "check_type": [
+    "default",
+    "PathAccessError",
+    "default"
+   ],
+   "coalesce": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "match": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "or": [
+    "default",
+    "recovered",
+    "default"
+   ],
+   "switch": [
+    "default",
+    "recovered",
+    "default"
+   ]
+  },
+  "kind": "oracle",
+  "normalized": "{\"and\": [\"default\", \"recovered\", \"default\"], \"check_false\": [\"default\", \"default\", \"default\"], \"check_raise\": [\"CheckError\", \"CheckError\", \"CheckError\"], \"check_type\": [\"default\", \"PathAccessError\", \"default\"], \"coalesce\": [\"default\", \"recovered\", \"default\"], \"match\": [\"default\", \"recovered\", \"default\"], \"or\": [\"default\", \"recovered\", \"default\"], \"switch\": [\"default\", \"recovered\", \"default\"]}",
+  "output_tail": "{\"answer\": {\"and\": [\"default\", \"recovered\", \"default\"], \"check_false\": [\"default\", \"default\", \"default\"], \"check_raise\": [\"CheckError\", \"CheckError\", \"CheckError\"], \"check_type\": [\"default\", \"PathAccessError\", \"default\"], \"coalesce\": [\"default\", \"recovered\", \"default\"], \"match\": [\"default\", \"recovered\", \"default\"], \"or\": [\"default\", \"recovered\", \"default\"], \"switch\": [\"default\", \"recovered\", \"default\"]}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"and\": [\"default\", \"recovered\", \"default\"], \"check_false\": [\"default\", \"default\", \"default\"], \"check_raise\": [\"CheckError\", \"CheckError\", \"CheckError\"], \"check_type\": [\"default\", \"PathAccessError\", \"default\"], \"coalesce\": [\"default\", \"recovered\", \"default\"], \"match\": [\"default\", \"recovered\", \"default\"], \"or\": [\"default\", \"recovered\", \"default\"], \"switch\": [\"default\", \"recovered\", \"default\"]}",
+   "predicted": "{\"and\": [\"default\", \"recovered\", \"default\"], \"check_false\": [\"default\", \"default\", \"default\"], \"check_raise\": [\"CheckError\", \"CheckError\", \"CheckError\"], \"check_type\": [\"default\", \"PathAccessError\", \"default\"], \"coalesce\": [\"default\", \"recovered\", \"default\"], \"match\": [\"default\", \"recovered\", \"default\"], \"or\": [\"default\", \"recovered\", \"default\"], \"switch\": [\"default\", \"recovered\", \"default\"]}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 200,
+  "stability_runs": 3
+ }
+}

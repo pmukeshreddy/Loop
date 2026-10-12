@@ -1,0 +1,92 @@
+--- a/src/marshmallow/fields.py
++++ b/src/marshmallow/fields.py
+@@ -579,17 +579,32 @@
+ 
+             if isinstance(nested, Schema):
+                 self._schema = copy.copy(nested)
+-                # Respect only and exclude and many passed from parent and re-initialize fields
++                # Field.__deepcopy__ is shallow, so isolate the field tree and
++                # discard cached nested schemas before applying new options.
++                self._schema.declared_fields = {
++                    name: self._copy_field(field)
++                    for name, field in nested.declared_fields.items()
++                }
+                 set_class = typing.cast("type[set]", self._schema.set_class)
+-                if self.only is not None:
+-                    if self._schema.only is not None:
+-                        original = self._schema.only
+-                    else:  # only=None -> all fields
+-                        original = self._schema.fields.keys()
+-                    self._schema.only = set_class(self.only) & set_class(original)
+-                if self.exclude:
+-                    original = self._schema.exclude
+-                    self._schema.exclude = set_class(self.exclude) | set_class(original)
++                original_only = self._schema.only
++                original_exclude = self._schema.exclude
++                self._schema.only = self.only
++                self._schema.exclude = set_class(self.exclude)
++                # Apply dotted selections to child fields before intersecting
++                # the flattened top-level selection with the instance's only.
++                self._schema._normalize_nested_options()
++                if original_only is not None:
++                    if self._schema.only is None:
++                        self._schema.only = set_class(original_only)
++                    else:
++                        self._schema.only = set_class(self._schema.only) & set_class(
++                            original_only
++                        )
++                elif self._schema.only is not None:
++                    self._schema.only = set_class(self._schema.only) & set_class(
++                        nested.fields
++                    )
++                self._schema.exclude |= set_class(original_exclude)
+                 if self.many is not None:
+                     self._schema.many = self.many
+                 self._schema._init_fields()
+@@ -611,6 +626,28 @@
+                     dump_only=self._nested_normalized_option("dump_only"),
+                 )
+         return self._schema
++
++    @staticmethod
++    def _copy_field(field: Field) -> Field:
++        """Copy a bound field tree without sharing nested schema caches."""
++        field = copy.copy(field)
++        field.parent = None
++        field.name = None
++        field.root = None
++        if isinstance(field, Nested):
++            field._schema = None
++        elif isinstance(field, List):
++            field.inner = Nested._copy_field(field.inner)
++        elif isinstance(field, Tuple):
++            field.tuple_fields = [
++                Nested._copy_field(child) for child in field.tuple_fields
++            ]
++        elif isinstance(field, Mapping):
++            if field.key_field is not None:
++                field.key_field = Nested._copy_field(field.key_field)
++            if field.value_field is not None:
++                field.value_field = Nested._copy_field(field.value_field)
++        return field
+ 
+     def _nested_normalized_option(self, option_name: str) -> list[str]:
+         nested_field = f"{self.name}."
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -972,11 +972,10 @@
+         for key, options in iter(nested_options.items()):
+             new_options = self.set_class(options)
+             original_options = getattr(self.declared_fields[key], option_name, ())
+-            if original_options:
+-                if set_operation == "union":
+-                    new_options |= self.set_class(original_options)
+-                if set_operation == "intersection":
+-                    new_options &= self.set_class(original_options)
++            if set_operation == "union" and original_options:
++                new_options |= self.set_class(original_options)
++            if set_operation == "intersection" and original_options is not None:
++                new_options &= self.set_class(original_options)
+             setattr(self.declared_fields[key], option_name, new_options)
+ 
+     def _init_fields(self) -> None:

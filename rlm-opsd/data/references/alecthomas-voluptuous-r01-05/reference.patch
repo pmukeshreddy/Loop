@@ -1,0 +1,27 @@
+--- a/voluptuous/humanize.py
++++ b/voluptuous/humanize.py
+@@ -32,6 +32,8 @@
+     Invalid and MultipleInvalid do not include the offending value in error messages,
+     and MultipleInvalid.__str__ only provides the first error.
+     """
++    if max_sub_error_length < 0:
++        raise ValueError('max_sub_error_length must be non-negative')
+     if isinstance(validation_error, MultipleInvalid):
+         return '\n'.join(
+             sorted(
+@@ -42,9 +44,12 @@
+     else:
+         offending_item_summary = repr(_nested_getitem(data, validation_error.path))
+         if len(offending_item_summary) > max_sub_error_length:
+-            offending_item_summary = (
+-                offending_item_summary[: max_sub_error_length - 3] + '...'
+-            )
++            if max_sub_error_length < 3:
++                offending_item_summary = '.' * max_sub_error_length
++            else:
++                offending_item_summary = (
++                    offending_item_summary[: max_sub_error_length - 3] + '...'
++                )
+         return '%s. Got %s' % (validation_error, offending_item_summary)
+ 
+ 

@@ -1,0 +1,42 @@
+--- a/src/mistune/plugins/task_lists.py
++++ b/src/mistune/plugins/task_lists.py
+@@ -8,16 +8,20 @@
+ __all__ = ["task_lists"]
+ 
+ 
+-TASK_LIST_ITEM = re.compile(r"^(\[[ xX]\])\s+")
++TASK_LIST_ITEM = re.compile(r"^(\[[ xX-]\])\s+")
+ 
+ 
+ def task_lists_hook(md: "Markdown", state: "BlockState") -> Iterable[Dict[str, Any]]:
+     return _rewrite_all_list_items(state.tokens)
+ 
+ 
+-def render_task_list_item(renderer: "BaseRenderer", text: str, checked: bool = False) -> str:
++def render_task_list_item(
++    renderer: "BaseRenderer", text: str, checked: bool = False, indeterminate: bool = False
++) -> str:
+     checkbox = '<input class="task-list-item-checkbox" type="checkbox" disabled'
+-    if checked:
++    if indeterminate:
++        checkbox += ' aria-checked="mixed" data-indeterminate="true"/>'
++    elif checked:
+         checkbox += " checked/>"
+     else:
+         checkbox += "/>"
+@@ -38,6 +42,7 @@
+ 
+         - [ ] unchecked task
+         - [x] checked task
++        - [-] indeterminate task
+ 
+     :param md: Markdown instance
+     """
+@@ -66,4 +71,6 @@
+             first_child["text"] = text[m.end() :]
+ 
+             tok["type"] = "task_list_item"
+-            tok["attrs"] = {"checked": mark != "[ ]"}
++            tok["attrs"] = {"checked": mark in ("[x]", "[X]")}
++            if mark == "[-]":
++                tok["attrs"]["indeterminate"] = True

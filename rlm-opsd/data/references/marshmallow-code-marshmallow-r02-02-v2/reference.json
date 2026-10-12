@@ -1,0 +1,207 @@
+{
+ "answer": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -508,7 +508,9 @@\n     ##### Serialization/Deserialization API #####\n \n     @staticmethod\n-    def _call_and_store(getter_func, data, *, field_name, error_store, index=None):\n+    def _call_and_store(\n+        getter_func, data, *, field_name, error_store, index=None, preserve_falsy=False\n+    ):\n         \"\"\"Call ``getter_func`` with ``data`` as its argument, and store any `ValidationErrors`.\n \n         :param getter_func: Function for getting the serialized/deserialized\n@@ -517,13 +519,17 @@\n         :param field_name: Field name.\n         :param index: Index of the item being validated, if validating a collection,\n             otherwise `None`.\n+        :param preserve_falsy: Retain falsy exception partial data during field\n+            deserialization, but not during decorated field validation.\n         \"\"\"\n         try:\n             value = getter_func(data)\n         except ValidationError as error:\n             error_store.store_error(error.messages, field_name, index=index)\n-            # When a Nested field fails validation, the marshalled data is stored\n-            # on the ValidationError's valid_data attribute\n+            # Failed fields may still provide partial data, including empty\n+            # containers. Decorated validators retain their truthiness behavior.\n+            if preserve_falsy:\n+                return error.valid_data if error.valid_data is not None else missing\n             return error.valid_data or missing\n         return value\n \n@@ -683,6 +689,7 @@\n                     field_name=field_name,\n                     error_store=error_store,\n                     index=index,\n+                    preserve_falsy=True,\n                 )\n                 if value is not missing:\n                     key = field_obj.attribute or attr_name\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 3,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "test_hits"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 30405,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 16 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines an opt-in preservation mode with its deserialization call site, retaining the default behavior for decorated validators. The execution constructed and inspected the final patch, although it did not itself run repository tests.",
+   "inspect_locate": "The reference execution used 16 targeted searches without printing the entire context. Locating the fix required connecting container partial-result construction, schema deserialization and alias handling, and the shared exception-handling path used by decorated validators."
+  },
+  "notes": "This is a natural, repository-dependent repair with precise behavioral constraints and a clear production-only unified-diff format. The question describes the observable defect without identifying the defective internal symbol or prescribing the implementation. Preserving decorated-validator semantics makes the change more than a simple truthiness replacement. The task is materially distinct from its parent and the accepted tasks: it concerns schema-level exception partial results, not propagation of container deserialization context."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production patch must reconcile deserialization-time partial-result preservation with the existing decorated-validator behavior. Its hunks need to be checked together so that preserving empty or falsy field results does not inadvertently change rejection handling at the other call sites.",
+   "inspect_locate": "The relevant evidence is scattered across the large fields and schema modules: containers construct partial results, schema loading consumes field exceptions and assigns output aliases, and decorated validators reuse the exception-handling machinery with different removal semantics."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::List._deserialize",
+    "why": "Raises ValidationError with the accumulated result even when every element fails and the result is empty."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Tuple._deserialize",
+    "why": "The error path exposes an accumulated list, including an empty list, separately from the successful tuple result."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Mapping._deserialize",
+    "why": "Dict delegates here; invalid keys or values can leave an explicitly supplied empty mapping as partial data."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._call_and_store",
+    "why": "Its truthiness fallback collapses legitimate falsy partial results to the missing sentinel, and it is shared with decorated-validator handling."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._deserialize",
+    "why": "Consumes the stored field result, assigns the internal output key, and handles record indices for many=True."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_field_validators",
+    "why": "Uses the same exception-handling helper but relies on its existing truthiness semantics to decide whether rejected fields are removed."
+   },
+   {
+    "path": "src/marshmallow/exceptions.py",
+    "symbol": "src/marshmallow/exceptions.py::ValidationError.__init__",
+    "why": "Stores valid_data unchanged and defaults it to None, permitting the distinction between absent partial data and a supplied falsy result."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_schema_partial_result_preservation.py\n@@ -0,0 +1,106 @@\n+import pytest\n+\n+from marshmallow import Schema, ValidationError, fields, validates\n+\n+\n+@pytest.mark.parametrize(\n+    \"factory,raw,partial\",\n+    [\n+        (lambda: fields.List(fields.Int()), [\"bad\"], []),\n+        (lambda: fields.Tuple((fields.Int(),)), [\"bad\"], []),\n+        (lambda: fields.Dict(values=fields.Int()), {\"a\": \"bad\"}, {}),\n+        (lambda: fields.Dict(keys=fields.Int()), {\"bad\": 1}, {}),\n+        (lambda: fields.List(fields.Int()), [\"bad\", \"2\"], [2]),\n+    ],\n+)\n+@pytest.mark.parametrize(\"aliased\", [False, True])\n+@pytest.mark.parametrize(\"many\", [False, True])\n+def test_container_partial_survives_schema(factory, raw, partial, aliased, many):\n+    field = factory()\n+    with pytest.raises(ValidationError) as direct:\n+        field.deserialize(raw)\n+    assert direct.value.valid_data == partial\n+\n+    external = \"external_items\" if aliased else \"items\"\n+    internal = \"stored_items\" if aliased else \"items\"\n+    if aliased:\n+        field.data_key = external\n+        field.attribute = internal\n+    schema = Schema.from_dict({\"items\": field, \"ok\": fields.Int()})()\n+    record = {external: raw, \"ok\": \"7\"}\n+    payload = [record, {\"ok\": \"8\"}] if many else record\n+    with pytest.raises(ValidationError) as loaded:\n+        schema.load(payload, many=many)\n+\n+    expected = {internal: partial, \"ok\": 7}\n+    messages = {external: direct.value.messages}\n+    assert loaded.value.valid_data == ([expected, {\"ok\": 8}] if many else expected)\n+    assert loaded.value.messages == ({0: messages} if many else messages)\n+    assert loaded.value.data == payload\n+\n+\n+@pytest.mark.parametrize(\"partial\", [0, False, \"\", [], {}, None, [1]])\n+@pytest.mark.parametrize(\"many\", [False, True])\n+def test_custom_partial_uses_none_as_absence(partial, many):\n+    class RejectingField(fields.Field):\n+        def _deserialize(self, value, attr, data, **kwargs):\n+            raise ValidationError(\"Rejected.\", valid_data=partial)\n+\n+    field = RejectingField(data_key=\"external\", attribute=\"stored\")\n+    with pytest.raises(ValidationError) as direct:\n+        field.deserialize(\"input\")\n+    assert direct.value.valid_data is partial\n+\n+    schema = Schema.from_dict({\"item\": field, \"ok\": fields.Int()})()\n+    record = {\"external\": \"input\", \"ok\": \"3\"}\n+    payload = [record, {\"ok\": \"4\"}] if many else record\n+    with pytest.raises(ValidationError) as loaded:\n+        schema.load(payload, many=many)\n+\n+    expected = {\"ok\": 3}\n+    if partial is not None:\n+        expected[\"stored\"] = partial\n+    result = loaded.value.valid_data\n+    assert result == ([expected, {\"ok\": 4}] if many else expected)\n+    first = result[0] if many else result\n+    if partial is not None:\n+        assert type(first[\"stored\"]) is type(partial)\n+    else:\n+        assert \"stored\" not in first\n+    messages = {\"external\": [\"Rejected.\"]}\n+    assert loaded.value.messages == ({0: messages} if many else messages)\n+\n+\n+@pytest.mark.parametrize(\"partial\", [None, 0, False, \"\", [], {}, [9]])\n+@pytest.mark.parametrize(\"many\", [False, True])\n+def test_decorated_rejection_keeps_existing_removal_semantics(partial, many):\n+    class RejectedSchema(Schema):\n+        item = fields.Int()\n+        ok = fields.Int()\n+\n+        @validates(\"item\")\n+        def reject(self, value, **kwargs):\n+            raise ValidationError(\"Rejected.\", valid_data=partial)\n+\n+    record = {\"item\": \"5\", \"ok\": \"6\"}\n+    payload = [record, {\"ok\": \"7\"}] if many else record\n+    with pytest.raises(ValidationError) as loaded:\n+        RejectedSchema().load(payload, many=many)\n+\n+    expected = {\"ok\": 6}\n+    if partial:\n+        expected[\"item\"] = 5\n+    assert loaded.value.valid_data == ([expected, {\"ok\": 7}] if many else expected)\n+    messages = {\"item\": [\"Rejected.\"]}\n+    assert loaded.value.messages == ({0: messages} if many else messages)\n+\n+\n+def test_successful_decorated_validator_does_not_remove_value():\n+    class AcceptedSchema(Schema):\n+        item = fields.Int()\n+\n+        @validates(\"item\")\n+        def accept(self, value, **kwargs):\n+            return None\n+\n+    assert AcceptedSchema().load({\"item\": \"5\"}) == {\"item\": 5}\n",
+  "include_failure_log": false,
+  "notes": "This is an existing production defect verified through a new acceptance-test file, so no setup patch is needed. The tests compare direct container errors with schema-level errors, exercise aliases and many=True, distinguish False from 0 by checking result types, and guard decorated-validator semantics. A global replacement of the shared helper's truthiness fallback with a None check is insufficient because it changes removal behavior for decorated rejections carrying falsy partial data. One valid implementation is to make non-None preservation opt-in at the field-deserialization call site while retaining the helper's existing default behavior for decorated validators. This produces a production change in schema.py rather than the seed task's child-argument forwarding changes in fields.py.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Repair the discrepancy between direct field deserialization and `Schema.load()` when validation fails with an empty partial result. An all-invalid `List`, `Tuple`, or `Dict` can expose an empty `ValidationError.valid_data` directly, but the corresponding field disappears from the schema-level partial record.\n\nDuring field deserialization, retain every exception partial result that is not `None`, including empty containers and custom-field results such as `0` and `False`. An exception whose `valid_data` is `None` must still leave that field out of the partial record. Preserve successful sibling fields, use the configured `attribute` for partial output and `data_key` for error messages, and keep collection records and error indices aligned under `many=True`. Existing nonempty partial results and error messages must remain unchanged.\n\nKeep `@validates` rejection behavior unchanged: a rejected field with falsy exception partial data is still removed, while truthy exception partial data leaves the already-loaded value in place rather than replacing it. Successful decorated validators must not remove values. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises cross-layer inspect_locate by following ValidationError.valid_data from container aggregation through Schema._call_and_store and Schema._deserialize. combine_verify_finish compares direct-field and schema-level outcomes, including aliases and collection indices. Unlike the seed, persistent state tracks the distinction between missing, None, and falsy values rather than four forwarding sites.",
+  "change_type": "dependency",
+  "description": "Repair the loss of empty partial container results at the schema boundary. Direct List, Tuple, and Dict deserialization can raise ValidationError with valid_data=[] or valid_data={}, but src/marshmallow/schema.py::Schema._call_and_store currently uses 'error.valid_data or missing'. Change the schema loading path to preserve any explicitly supplied non-None partial result, while continuing to omit fields whose exception has valid_data=None. Deliver a production patch and regression tests comparing direct field errors with Schema.load errors for all-invalid List and Dict fields, including data_key and attribute aliases and many=True records. Include custom fields whose exceptions supply valid_data=0 or False to verify that preservation depends on None rather than truthiness. Do not change decorated field-validator removal behavior.",
+  "expected_answer_change": "The answer depends on replacing the truthiness fallback in Schema._call_and_store with an explicit None check. Schema._deserialize must then retain empty or falsy partial results under the configured internal output key while errors remain under the external data_key. Exceptions with valid_data=None must still return the missing sentinel.",
+  "why_substantive": "The investigation moves from child argument propagation to the caller that consumes container failures. Containers already retain empty partial results, but Schema._call_and_store discards them. The required fix is in a different module and must distinguish absence of partial data from a legitimate falsy partial result."
+ },
+ "task_id": "marshmallow-code-marshmallow-r02-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-0]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-False]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-partial4]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-0]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-False]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-partial4]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 26,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1237
+   },
+   "patch_files": [
+    "src/marshmallow/schema.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-False-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[False-True-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-False-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw0-partial0]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw1-partial1]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw2-partial2]",
+   "tests/test_schema_partial_result_preservation.py::test_container_partial_survives_schema[True-True-<lambda>-raw3-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-0]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-False]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[False-partial4]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-0]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-False]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-partial3]",
+   "tests/test_schema_partial_result_preservation.py::test_custom_partial_uses_none_as_absence[True-partial4]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,82 @@
+--- /dev/null
++++ b/glom/test/test_glommer_clone.py
+@@ -0,0 +1,79 @@
++import pytest
++
++from glom import Glommer, S, UnregisteredTarget
++from glom.core import TargetRegistry
++
++
++class Base:
++    pass
++
++
++class Sub(Base):
++    pass
++
++
++class Leaf(Sub):
++    pass
++
++
++def test_clone_fuzzy_cache_isolation():
++    source = Glommer(register_default_types=False)
++    source.register(Base, get=lambda obj, key: 'base')
++    assert source.glom(Leaf(), 'field') == 'base'
++    cloned = source.clone()
++    assert cloned.glom(Leaf(), 'field') == 'base'
++    assert cloned.scope[TargetRegistry] is not source.scope[TargetRegistry]
++    cloned.register(Sub, get=lambda obj, key: 'sub')
++    assert cloned.glom(Leaf(), 'field') == 'sub'
++    assert source.glom(Leaf(), 'field') == 'base'
++    source.register(Base, get=lambda obj, key: 'changed')
++    assert source.glom(Leaf(), 'field') == 'changed'
++    assert cloned.glom(Base(), 'field') == 'base'
++
++
++def test_clone_exact_and_disabled():
++    source = Glommer(register_default_types=False)
++    source.register(Base, get=lambda obj, key: 'base')
++    source.register(Sub, get=False, exact=True)
++    cloned = source.clone()
++    for instance in (source, cloned):
++        with pytest.raises(UnregisteredTarget):
++            instance.glom(Sub(), 'field')
++        assert instance.glom(Leaf(), 'field') == 'base'
++    cloned.register(Sub, get=lambda obj, key: 'enabled')
++    assert cloned.glom(Sub(), 'field') == 'enabled'
++    with pytest.raises(UnregisteredTarget):
++        source.glom(Sub(), 'field')
++    assert source.glom(Leaf(), 'field') == 'base'
++
++
++def test_clone_operation_discovery():
++    source = Glommer(register_default_types=False)
++    source.register(Base, get=getattr)
++    registry = source.scope[TargetRegistry]
++    registry.register_op('label', auto_func=lambda typ: lambda obj: typ.__name__)
++    assert registry.get_handler('label', Leaf())(Leaf()) == 'Base'
++    cloned = source.clone()
++    creg = cloned.scope[TargetRegistry]
++    class Later(Base):
++        pass
++    cloned.register(Later)
++    assert creg.get_handler('label', Later())(Later()) == 'Later'
++    assert registry.get_handler('label', Later())(Later()) == 'Base'
++    creg.register(Base, label=lambda obj: 'clone')
++    assert registry.get_handler('label', Base())(Base()) == 'Base'
++    registry.register(Base, label=lambda obj: 'source')
++    assert creg.get_handler('label', Base())(Base()) == 'clone'
++
++
++def test_clone_scope_values():
++    shared = []
++    source = Glommer(scope={'shared': shared})
++    cloned = source.clone()
++    assert cloned.glom(None, S['shared']) is shared
++    cloned.glom(None, S['shared']).append(1)
++    assert source.glom(None, S['shared']) == [1]
++    replacement = []
++    cloned.scope['shared'] = replacement
++    assert cloned.glom(None, S['shared']) is replacement
++    assert source.glom(None, S['shared']) is shared

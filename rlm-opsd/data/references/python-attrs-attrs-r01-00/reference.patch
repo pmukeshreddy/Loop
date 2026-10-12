@@ -1,0 +1,14 @@
+--- a/src/attr/_make.py
++++ b/src/attr/_make.py
+@@ -2098,6 +2098,11 @@
+     Unless *attr_name* has an on_setattr hook, use normal assignment after
+     conversion. Otherwise relegate to _setattr_with_converter.
+     """
++    if has_on_setattr:
++        return _setattr_with_converter(
++            attr_name, value_var, has_on_setattr, converter
++        )
++
+     return f"self.{attr_name} = {converter._fmt_converter_call(attr_name, value_var)}"
+ 
+ 

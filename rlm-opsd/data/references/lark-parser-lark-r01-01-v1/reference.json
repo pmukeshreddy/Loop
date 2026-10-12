@@ -1,0 +1,137 @@
+{
+ "answer": "--- a/lark/parse_tree_builder.py\n+++ b/lark/parse_tree_builder.py\n@@ -78,7 +78,9 @@\n             elif isinstance(c, Token):\n                 return c\n             elif hasattr(c, '__lark_meta__'):\n-                return c.__lark_meta__()\n+                meta = c.__lark_meta__()\n+                if meta is not None:\n+                    return meta\n \n def make_propagate_positions(option):\n     if callable(option):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 14504 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The single-file context supports a focused implementation change. The reference execution used no sub-calls and produced a minimal patch that makes a None-returning metadata hook continue the boundary scan rather than terminate it. Understanding both scan directions, filter precedence, and range propagation is necessary to preserve the requested behavior."
+  },
+  "notes": "This is a natural, precisely scoped feature request with a clear unified-diff output format. Naming the component and specifying the new hook contract does not disclose the implementation fix. The preservation requirements constrain relevant existing behavior rather than add unrelated checks. It is substantively distinct from the parent task: this change concerns optional custom metadata during boundary selection, whereas the parent repairs callback-wrapper ordering."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only lark/parse_tree_builder.py, under 16,000 characters. The change requires understanding the forward and reverse metadata scans, callable filtering, and the distinction between existing regular ranges and propagated container ranges; repository-wide localization or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "lark/parse_tree_builder.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "lark/parse_tree_builder.py",
+    "symbol": "lark/parse_tree_builder.py::PropagatePositions._pp_get_meta",
+    "why": "The custom metadata hook currently returns directly from the boundary scan, including when its result is None."
+   },
+   {
+    "path": "lark/parse_tree_builder.py",
+    "symbol": "lark/parse_tree_builder.py::PropagatePositions.__call__",
+    "why": "Forward and reverse scans supply independent boundaries; existing regular attributes are preserved while container attributes are updated."
+   },
+   {
+    "path": "lark/parse_tree_builder.py",
+    "symbol": "lark/parse_tree_builder.py::ParseTreeBuilder._init_builders",
+    "why": "The existing callback-wrapper ordering is a preservation constraint, not the defect addressed by this task."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_optional_custom_positions.py\n@@ -0,0 +1,101 @@\n+import unittest\n+from functools import partial\n+from types import SimpleNamespace\n+\n+from lark import Token, Tree\n+from lark.parse_tree_builder import PropagatePositions\n+\n+\n+FIELDS = ('line', 'column', 'start_pos', 'end_line', 'end_column', 'end_pos')\n+\n+\n+def coords(obj, prefix=''):\n+    return tuple(getattr(obj, prefix + name) for name in FIELDS)\n+\n+\n+def metadata(values, container=None):\n+    meta = SimpleNamespace(empty=False, **dict(zip(FIELDS, values)))\n+    if container is not None:\n+        meta.__dict__.update(('container_' + name, value) for name, value in zip(FIELDS, container))\n+    return meta\n+\n+\n+class CustomChild:\n+    def __init__(self, position):\n+        self.position = position\n+\n+    def __lark_meta__(self):\n+        return self.position\n+\n+\n+class ExcludedChild:\n+    def __lark_meta__(self):\n+        raise AssertionError('Excluded metadata hook must not be invoked')\n+\n+\n+class TestOptionalCustomPositions(unittest.TestCase):\n+    def build(self, children, node_filter=None, seed=None):\n+        builder = partial(Tree, 'root', meta=seed)\n+        return PropagatePositions(builder, node_filter=node_filter)(children)\n+\n+    def test_boundary_search(self):\n+        start = (2, 3, 10, 2, 5, 12)\n+        end = (4, 7, 30, 4, 9, 32)\n+        for custom in (False, True):\n+            if custom:\n+                first, last = CustomChild(metadata(start)), CustomChild(metadata(end))\n+            else:\n+                first = Token('X', 'ab', start_pos=10, line=2, column=3, end_line=2, end_column=5, end_pos=12)\n+                last = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)\n+            for left, right in ((1, 0), (0, 1), (2, 2)):\n+                with self.subTest(custom=custom, left=left, right=right):\n+                    children = ([CustomChild(None)] * left + [first, last]\n+                                + [CustomChild(None)] * right)\n+                    result = self.build(children)\n+                    expected = start[:3] + end[3:]\n+                    self.assertFalse(result.meta.empty)\n+                    self.assertEqual(coords(result.meta), expected)\n+                    self.assertEqual(coords(result.meta, 'container_'), expected)\n+                    self.assertEqual(result.children, children)\n+\n+    def test_all_unpositioned(self):\n+        for children in ([], [CustomChild(None)], [CustomChild(None), Tree('empty', []), None, object(), CustomChild(None)]):\n+            with self.subTest(count=len(children)):\n+                result = self.build(children)\n+                self.assertTrue(result.meta.empty)\n+                for name in FIELDS + tuple('container_' + name for name in FIELDS):\n+                    self.assertFalse(hasattr(result.meta, name))\n+\n+    def test_callable_filter(self):\n+        first = CustomChild(metadata((2, 3, 10, 2, 5, 12)))\n+        last = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)\n+        children = [ExcludedChild(), CustomChild(None), first, CustomChild(None), last, CustomChild(None), ExcludedChild()]\n+        result = self.build(children, node_filter=lambda c: not isinstance(c, ExcludedChild))\n+        expected = (2, 3, 10, 4, 9, 32)\n+        self.assertEqual(coords(result.meta), expected)\n+        self.assertEqual(coords(result.meta, 'container_'), expected)\n+\n+    def test_filter_excludes_positioned_children(self):\n+        ignored = CustomChild(metadata((1, 1, 0, 9, 9, 99)))\n+        selected = Token('X', 'cd', start_pos=30, line=4, column=7, end_line=4, end_column=9, end_pos=32)\n+        children = [CustomChild(None), ignored, selected, ignored, CustomChild(None)]\n+        result = self.build(children, node_filter=lambda c: c is not ignored)\n+        self.assertEqual(coords(result.meta), coords(selected))\n+        self.assertEqual(coords(result.meta, 'container_'), coords(selected))\n+\n+    def test_existing_regular_range_and_container_range(self):\n+        regular = (3, 4, 20, 3, 6, 22)\n+        container = (2, 1, 10, 4, 8, 40)\n+        provider = CustomChild(metadata(regular, container))\n+        seed = metadata((3, 5, 21, 3, 6, 22))\n+        result = self.build([CustomChild(None), provider, CustomChild(None)], seed=seed)\n+        self.assertIs(result.meta, seed)\n+        self.assertEqual(coords(result.meta), (3, 5, 21, 3, 6, 22))\n+        self.assertEqual(coords(result.meta, 'container_'), container)\n+\n+    def test_custom_container_range_on_new_tree(self):\n+        regular = (3, 4, 20, 3, 6, 22)\n+        container = (2, 1, 10, 4, 8, 40)\n+        result = self.build([CustomChild(None), CustomChild(metadata(regular, container)), CustomChild(None)])\n+        self.assertEqual(coords(result.meta), container)\n+        self.assertEqual(coords(result.meta, 'container_'), container)\n",
+  "include_failure_log": false,
+  "notes": "Apply the hidden-test patch to the pristine snapshot, without the original task's setup patch. Run tests/test_optional_custom_positions.py explicitly as well as the existing suite. The new tests cover token and custom-provider boundaries with leading, trailing, and repeated unpositioned children; wholly unpositioned lists; callable filtering before hook invocation; and regular/container range preservation. The intended repair is confined to handling a None result from the custom metadata hook, so it differs from the original wrapper-order repair.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Extend `PropagatePositions` in `lark/parse_tree_builder.py` to accept custom children whose `__lark_meta__()` hook returns `None`, meaning that the child has no source position. Unpositioned custom children at either end of a child list must not hide the first or last eligible positioned child, whether that child is a token or another custom metadata provider. A newly built tree with no eligible positioned children must retain empty metadata and acquire no range attributes. Callable `node_filter` behavior must remain intact: excluded children must not supply boundaries or have their metadata hooks invoked. Preserve the existing handling of supplied metadata objects, container ranges, and already populated regular ranges, and leave the callback-wrapper ordering in `ParseTreeBuilder._init_builders` unchanged. Return a unified diff against the repository files without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "A focused direct read of PropagatePositions._pp_get_meta and PropagatePositions.__call__ replaces repository-wide regression localization. Verification requires a small matrix of custom metadata providers, token boundaries, and callable filters rather than the original punctuation and inlining tests.",
+  "change_type": "constraint",
+  "description": "Extend position propagation to support custom children whose __lark_meta__() hook returns None to mean 'this child has no source position'. In lark/parse_tree_builder.py, repair PropagatePositions._pp_get_meta so such a child does not prevent later eligible children from supplying the start or end boundary. Require coverage of unpositioned custom children at both boundaries, an entirely unpositioned child list, and a callable node_filter that excludes selected children. Preserve the existing wrapper ordering in ParseTreeBuilder._init_builders and the ordinary-versus-container range behavior in PropagatePositions.__call__.",
+  "expected_answer_change": "The patch must change the __lark_meta__ branch of PropagatePositions._pp_get_meta to continue searching when the hook returns None, while still returning a supplied metadata object and honoring node_filter. Acceptance tests must establish that forward and reverse scans find the next positioned child and that an all-unpositioned result retains empty metadata.",
+  "why_substantive": "The original repair ensures position propagation receives unfiltered children. This variation changes the metadata-provider contract: propagation already receives the correct children, but an unpositioned custom object prematurely terminates its boundary search. Reordering callback wrappers cannot solve it."
+ },
+ "task_id": "lark-parser-lark-r01-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_boundary_search",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_callable_filter",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_custom_container_range_on_new_tree",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_existing_regular_range_and_container_range",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_filter_excludes_positioned_children"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/parse_tree_builder.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_boundary_search",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_callable_filter",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_custom_container_range_on_new_tree",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_existing_regular_range_and_container_range",
+   "tests/test_optional_custom_positions.py::TestOptionalCustomPositions::test_filter_excludes_positioned_children"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

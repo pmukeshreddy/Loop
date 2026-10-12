@@ -1,0 +1,57 @@
+--- a/h11/tests/test_connection.py
++++ b/h11/tests/test_connection.py
+@@ -266,7 +266,54 @@
+     conn.receive_data(b"0\r\n\r\n")
+     assert conn.next_event() == EndOfMessage()
+ 
+ 
++@pytest.mark.parametrize("header_separate", [False, True])
++@pytest.mark.parametrize("split_payload", [False, True])
++def test_chunk_boundaries_fragmented_header(
++    header_separate: bool, split_payload: bool
++) -> None:
++    conn = Connection(our_role=SERVER)
++    conn.receive_data(
++        b"POST / HTTP/1.1\r\n"
++        b"Host: example.com\r\n"
++        b"Transfer-Encoding: chunked\r\n\r\n"
++    )
++    assert conn.next_event() == Request(
++        method="POST",
++        target="/",
++        headers=[("Host", "example.com"), ("Transfer-Encoding", "chunked")],
++    )
++    assert conn.next_event() is NEED_DATA
++
++    for _ in range(2):
++        if header_separate:
++            conn.receive_data(b"5\r\n")
++            assert conn.next_event() is NEED_DATA
++            assert conn.next_event() is NEED_DATA
++        parts = [b"he", b"l", b"lo"] if split_payload else [b"hello"]
++        for index, part in enumerate(parts):
++            prefix = b"5\r\n" if index == 0 and not header_separate else b""
++            conn.receive_data(prefix + part)
++            assert conn.next_event() == Data(
++                data=part,
++                chunk_start=index == 0,
++                chunk_end=index == len(parts) - 1,
++            )
++            assert conn.next_event() is NEED_DATA
++
++        conn.receive_data(b"\r")
++        assert conn.next_event() is NEED_DATA
++        conn.receive_data(b"\n")
++        assert conn.next_event() is NEED_DATA
++
++    conn.receive_data(b"0\r\nX-Checksum: ok\r\n")
++    assert conn.next_event() is NEED_DATA
++    conn.receive_data(b"\r\n")
++    assert conn.next_event() == EndOfMessage(headers=[("X-Checksum", "ok")])
++    assert conn.their_state is DONE
++    assert conn.next_event() is NEED_DATA
++
++
+ def test_client_talking_to_http10_server() -> None:
+     c = Connection(CLIENT)
+     c.send(Request(method="GET", target="/", headers=[("Host", "example.com")]))

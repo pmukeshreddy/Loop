@@ -1,0 +1,142 @@
+{
+ "answer": [
+  "tests/test_search.py::TestPythonSpecificCases::test_can_compare_strings"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\"tests/test_compliance.py::TestCompliance::test_compliance\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p",
+    "review"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 7348,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 7348 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 15 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "A bounded sub-call reviewed selected compliance cases with their enclosing inputs and expectations, helping determine whether ordering operands were strings, numbers, or already unsupported values.",
+   "combine_verify_finish": "The reviewed results were incorporated into a programmatically constructed final set of pytest node IDs, and the final variable was checked before submission. The result agrees with the independently verified impact set.",
+   "inspect_locate": "The execution used 15 targeted searches across 49 repository documents without printing the whole context. Establishing the exact failure set required distinguishing string-ordering tests from numeric comparisons, equality checks, and unaffected sorting behavior."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. It specifies the intended semantic change without revealing the failing test or implementation symbol. Although only one test newly fails, establishing that it is the complete set requires repository-dependent examination of ordinary tests and data-driven compliance cases. The task is distinct from the existing boolean-signature and expression-reference ordering tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Candidate cases must be understood together with their enclosing input data, projections, filter predicates, and expected results. Bounded semantic reviews of the selected case groups are useful because numeric ordering, string ordering, and already-rejected operands have different outcomes.",
+   "combine_verify_finish": "The final result is an exact set of pytest node IDs assembled from independently judged cases, requiring deduplication and agreement with the compliance parametrization.",
+   "inspect_locate": "Relevant expressions occur in data-driven compliance cases as well as ordinary Python tests. Locating an ordering operator alone does not establish the operand types."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::_is_comparable",
+    "why": "This predicate is the extension point changed by the proposal."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.visit_comparator",
+    "why": "Only ordering uses the comparability predicate; equality and inequality use a separate path."
+   },
+   {
+    "path": "tests/test_compliance.py",
+    "symbol": "tests/test_compliance.py::_compliance_tests",
+    "why": "The input data and expression are jointly parametrized, and their collected node IDs are the requested deliverable."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Use the normal full-suite collection with no JMESPATH_TEST override. The probe intentionally does not change the independent built-in function key validators.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/jmespath/visitor.py\n+++ b/jmespath/visitor.py\n@@ -37,10 +37,10 @@\n     # but enough people are relying on this behavior that\n     # it's been added back.  This should eventually become\n     # part of the official spec.\n-    return _is_actual_number(x) or isinstance(x, string_type)\n+    return _is_actual_number(x)\n \n \n def _is_actual_number(x):\n     # We need to handle python's quirkiness with booleans,\n",
+  "question": "We plan to remove this snapshot's extension that permits string operands for the ordering operators `<`, `<=`, `>`, and `>=`. After the change, an ordering comparison must return null unless both operands are actual numbers; boolean handling, equality, inequality, and built-in sorting functions remain unchanged. Which existing tests would newly fail? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r03-01",
+ "truth": {
+  "answer": [
+   "tests/test_search.py::TestPythonSpecificCases::test_can_compare_strings"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_search.py::TestPythonSpecificCases::test_can_compare_strings"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_search.py::TestPythonSpecificCases::test_can_compare_strings"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_search.py::TestPythonSpecificCases::test_can_compare_strings"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

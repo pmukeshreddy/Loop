@@ -1,0 +1,170 @@
+{
+ "answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -259,6 +259,11 @@\n     It allows for a custom multiplier and an ability to restrict the upper\n     limit of the random interval to some maximum value.\n \n+    The keyword-only ``jitter_mode`` defaults to ``\"full\"``, which samples\n+    uniformly between the minimum and the exponential upper bound. With\n+    ``\"equal\"``, the lower bound is the greater of the minimum and half the\n+    exponential upper bound. Other modes raise ``ValueError``.\n+\n     Example::\n \n         wait_random_exponential(multiplier=0.5,  # initial window 0.5s\n@@ -270,9 +275,25 @@\n \n     \"\"\"\n \n+    def __init__(\n+        self,\n+        multiplier: float = 1,\n+        max: _utils.time_unit_type = _utils.MAX_WAIT,\n+        exp_base: float = 2,\n+        min: _utils.time_unit_type = 0,\n+        *,\n+        jitter_mode: typing.Literal[\"full\", \"equal\"] = \"full\",\n+    ) -> None:\n+        if jitter_mode not in (\"full\", \"equal\"):\n+            raise ValueError(\"jitter_mode must be 'full' or 'equal'\")\n+        super().__init__(multiplier=multiplier, max=max, exp_base=exp_base, min=min)\n+        self.jitter_mode = jitter_mode\n+\n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n         high = super().__call__(retry_state=retry_state)\n+        if self.jitter_mode == \"equal\":\n+            return random.uniform(max(self.min, high / 2), high)\n         return random.uniform(self.min, high)\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 11564 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 11,564-character context supports a direct implementation. The reference execution used no sub-calls and produced a patch that preserves the inherited exponential calculation and duration conversion while adding constructor validation and the equal-jitter sampling branch."
+  },
+  "notes": "This is a natural, precisely scoped feature request with an explicit production-only unified-diff format. Correct implementation depends on the repository's constructor signature, inherited bounds behavior, and public alias. The specified sampling formula defines the requested feature rather than leaking a hidden defect or failing test. The task is substantively different from its parent\u2019s exponential-index impact analysis and from the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused wait.py context is under 16,000 characters. Implementing this option requires understanding the subclass's inherited constructor, the superclass's capped exponential calculation, and the sampling endpoint, but this short inheritance chain can be read directly without delegation."
+  },
+  "context": {
+   "files": [
+    "tenacity/wait.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_random_exponential",
+    "why": "Currently inherits its constructor and samples from self.min to the deterministic exponential upper endpoint."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exponential.__init__",
+    "why": "Defines the four existing constructor arguments, their order and defaults, and conversion of duration bounds."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exponential.__call__",
+    "why": "Supplies the unchanged one-based, bounded upper endpoint, including early saturation and overflow handling."
+   },
+   {
+    "path": "tenacity/__init__.py",
+    "symbol": "tenacity/__init__.py::wait_full_jitter",
+    "why": "Exports wait_random_exponential under the additional public alias whose identity and default behavior must be preserved."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_random_exponential_jitter_mode.py\n@@ -0,0 +1,80 @@\n+import datetime\n+from unittest import mock\n+\n+import pytest\n+\n+import tenacity\n+\n+\n+class TestWaitConditions:\n+    @pytest.mark.parametrize(\n+        \"kwargs, attempt, low, high\",\n+        [\n+            ({\"multiplier\": 0.5, \"max\": 60}, 1, 0.25, 0.5),\n+            ({\"multiplier\": 0.5, \"max\": 60}, 2, 0.5, 1),\n+            ({\"multiplier\": 0.5, \"max\": 60}, 7, 16, 32),\n+            ({\"multiplier\": 0.5, \"max\": 60}, 8, 30, 60),\n+            ({\"multiplier\": 0.5, \"max\": 60}, 10000, 30, 60),\n+            ({\"multiplier\": 2, \"exp_base\": 3}, 3, 9, 18),\n+            ({\"multiplier\": 10, \"max\": 5}, 1, 2.5, 5),\n+            ({\"min\": 5}, 1, 5, 5),\n+            ({\"min\": 5}, 4, 5, 8),\n+            ({\"min\": 5}, 5, 8, 16),\n+        ],\n+    )\n+    def test_equal_intervals(self, kwargs, attempt, low, high):\n+        policy = tenacity.wait_random_exponential(**kwargs, jitter_mode=\"equal\")\n+        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})\n+        state.attempt_number = attempt\n+        sample = (low + high) / 2\n+        with mock.patch(\"tenacity.wait.random.uniform\", return_value=sample) as uniform:\n+            assert policy(state) == sample\n+        uniform.assert_called_once_with(low, high)\n+\n+    @pytest.mark.parametrize(\n+        \"attempt, low, high\", [(1, 3, 3), (4, 4, 8), (10, 5, 10)]\n+    )\n+    def test_equal_timedelta_bounds(self, attempt, low, high):\n+        policy = tenacity.wait_random_exponential(\n+            max=datetime.timedelta(seconds=10),\n+            min=datetime.timedelta(seconds=3),\n+            jitter_mode=\"equal\",\n+        )\n+        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})\n+        state.attempt_number = attempt\n+        sample = (low + high) / 2\n+        with mock.patch(\"tenacity.wait.random.uniform\", return_value=sample) as uniform:\n+            assert policy(state) == sample\n+        uniform.assert_called_once_with(low, high)\n+\n+    @pytest.mark.parametrize(\n+        \"factory\", [tenacity.wait_random_exponential, tenacity.wait_full_jitter]\n+    )\n+    @pytest.mark.parametrize(\"mode\", [None, \"full\"])\n+    def test_full_mode_compatibility(self, factory, mode):\n+        kwargs = {} if mode is None else {\"jitter_mode\": mode}\n+        policy = factory(2, 40, 3, 5, **kwargs)\n+        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})\n+        state.attempt_number = 3\n+        with mock.patch(\"tenacity.wait.random.uniform\", return_value=11) as uniform:\n+            assert policy(state) == 11\n+        uniform.assert_called_once_with(5, 18)\n+\n+    def test_public_alias_identity(self):\n+        assert tenacity.wait_full_jitter is tenacity.wait_random_exponential\n+\n+    @pytest.mark.parametrize(\"mode\", [\"\", \"FULL\", \"decorrelated\"])\n+    def test_invalid_mode_rejected_at_construction(self, mode):\n+        with pytest.raises(ValueError):\n+            tenacity.wait_random_exponential(jitter_mode=mode)\n+\n+    def test_mode_is_keyword_only(self):\n+        with pytest.raises(TypeError):\n+            tenacity.wait_random_exponential(1, 60, 2, 0, \"equal\")\n+\n+    def test_equal_default_constructor_arguments(self):\n+        policy = tenacity.wait_random_exponential(jitter_mode=\"equal\")\n+        state = tenacity.RetryCallState(tenacity.Retrying(), None, (), {})\n+        with mock.patch(\"tenacity.wait.random.uniform\", return_value=0.75) as uniform:\n+            assert policy(state) == 0.75\n+        uniform.assert_called_once_with(0.5, 1)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work on the unmodified snapshot, not the original exponent-shift probe. Acceptance tests are placed in a new test file as required, rather than editing tests/test_tenacity.py. They deterministically check uniform sampling arguments and returned samples, constructor compatibility, mode validation, keyword-only enforcement, duration bounds, and alias behavior. The focused solver context needs only wait.py: the question explicitly states the alias contract, and no export change is necessary. Existing tests should remain passing.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add an equal-jitter option to `tenacity.wait_random_exponential`. Introduce a keyword-only `jitter_mode` argument accepting `\"full\"` and `\"equal\"`, with `\"full\"` as the default. Unsupported modes must raise `ValueError` during construction. Keep the existing `multiplier`, `max`, `exp_base`, and `min` arguments compatible, including their defaults, positional order, and duration conversion.\n\nFull mode must preserve the current sampling behavior. For equal mode, let `high` be the existing `wait_exponential` result for the supplied retry state, then return a uniform sample between `max(self.min, high / 2)` and `high`. Do not change the one-based exponential growth, bounds handling, early cap calculation, or overflow behavior. This must work for uncapped growth, maximum saturation, minimum-dominated waits, and timedelta bounds. The public `tenacity.wait_full_jitter` alias must remain an alias of this class and continue using full jitter by default.\n\nDeliver a unified diff against the production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises focused inspection of `wait_random_exponential`, its superclass constructor and call method, and public exports, followed by implementation and deterministic verification. Broad subdivision of the original numeric test tables is less useful because the evidence path is a short inheritance-and-alias chain.",
+  "change_type": "constraint",
+  "description": "Extend `tenacity/wait.py::wait_random_exponential` with a keyword-only `jitter_mode` option accepting `\"full\"` (the default) and `\"equal\"`. Preserve all existing constructor arguments and full-jitter behavior. In equal mode, obtain `high` from `wait_exponential.__call__` using the unchanged one-based exponent, then sample uniformly from `max(self.min, high / 2)` to `high`. Reject unsupported modes at construction. Add deterministic tests in `tests/test_tenacity.py::TestWaitConditions` that mock `random.uniform` and check its arguments for uncapped growth, maximum saturation, minimum-dominated waits, and timedelta bounds. Verify that `tenacity/__init__.py::wait_full_jitter`, which aliases this class, retains default full-jitter behavior.",
+  "expected_answer_change": "The solution depends on adding a compatible subclass constructor, validating the mode, and selecting the appropriate lower sampling endpoint. Existing full-jitter tests should remain unchanged and pass; new tests must establish equal-jitter intervals without relying on probabilistic failures.",
+  "why_substantive": "This introduces a new sampling policy rather than shifting exponential growth. The investigation must separate inherited deterministic bounds from the subclass's sampling interval, examine constructor inheritance, and account for the public alias. The answer is an implementation and new acceptance tests, not the original failing-test set."
+ },
+ "task_id": "jd-tenacity-r02-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_default_constructor_arguments",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs0-1-0.25-0.5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs1-2-0.5-1]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs2-7-16-32]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs3-8-30-60]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs4-10000-30-60]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs5-3-9-18]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs6-1-2.5-5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs7-1-5-5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs8-4-5-8]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs9-5-8-16]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[1-3-3]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[10-5-10]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[4-4-8]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_full_mode_compatibility[full-wait_random_exponential0]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_full_mode_compatibility[full-wait_random_exponential1]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[FULL]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[decorrelated]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 19,
+   "full_suite": {
+    "failed": 0,
+    "passed": 207
+   },
+   "patch_files": [
+    "tenacity/wait.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_default_constructor_arguments",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs0-1-0.25-0.5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs1-2-0.5-1]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs2-7-16-32]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs3-8-30-60]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs4-10000-30-60]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs5-3-9-18]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs6-1-2.5-5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs7-1-5-5]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs8-4-5-8]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_intervals[kwargs9-5-8-16]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[1-3-3]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[10-5-10]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_equal_timedelta_bounds[4-4-8]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_full_mode_compatibility[full-wait_random_exponential0]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_full_mode_compatibility[full-wait_random_exponential1]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[FULL]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[]",
+   "tests/test_random_exponential_jitter_mode.py::TestWaitConditions::test_invalid_mode_rejected_at_construction[decorrelated]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

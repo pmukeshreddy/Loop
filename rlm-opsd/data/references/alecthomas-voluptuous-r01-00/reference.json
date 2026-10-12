@@ -1,0 +1,129 @@
+{
+ "answer": [
+  "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"voluptuous/schema_builder.py::Schema._compile_mapping\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 10,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 203554 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 10 targeted code searches without printing the whole context. Locating the cause required connecting the public Schema.required failure to schema compilation dispatch and the shared combinator compilation hook, rather than stopping at the symptomatic callers."
+  },
+  "notes": "This is a natural, repository-dependent regression investigation with a precise symbol-list output format. The question does not reveal the defective function or fix. The verified location matches the removal of required-state restoration in the shared compilation hook, and there are no existing accepted tasks indicating duplication."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "The failing assertion concerns a public Schema setting, but its cause lies in a validator's compilation hook. The investigation must connect the attached failure, the schema constructor, dispatch, and the shared combinator compiler."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/tests/tests.py",
+    "symbol": "voluptuous/tests/tests.py::test_new_required_test",
+    "why": "Checks that constructing a required parent schema containing All preserves its public required setting."
+   },
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::Schema._compile",
+    "why": "Dispatches combinators through their compilation protocol using the enclosing Schema."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__",
+    "why": "Temporarily changes the parent setting while compiling child validators."
+   }
+  ],
+  "expected_answer": [
+   "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup removes only the restoration of the parent required flag. Run the existing suite and attach the resulting failure output.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in required-key configuration after a validator-compilation cleanup. Identify the function containing the change responsible for the failure, rather than the callers where the symptom appears. Return a JSON list of `path::Qualname` entries.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/voluptuous/validators.py\n+++ b/voluptuous/validators.py\n@@ -270,7 +270,6 @@\n         for v in self.validators:\n             schema.required = self.required\n             self._compiled.append(schema._compile(v))\n-        schema.required = old_required\n         return self._run\n \n     def _run(self, path: typing.List[typing.Hashable], value):\n"
+ },
+ "suggestion": null,
+ "task_id": "alecthomas-voluptuous-r01-00",
+ "truth": {
+  "answer": [
+   "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "voluptuous/tests/tests.py::test_new_required_test"
+  ],
+  "ground_truth_symbols": [
+   "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 167,
+  "stability_runs": 3
+ }
+}

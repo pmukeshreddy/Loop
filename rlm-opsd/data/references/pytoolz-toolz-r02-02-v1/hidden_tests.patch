@@ -1,0 +1,110 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_child_ownership.py
+@@ -0,0 +1,107 @@
++import importlib
++import types
++
++import pytest
++import toolz
++
++
++builder = importlib.import_module('tlz._build_tlz')
++
++
++def make_case(monkeypatch, backend):
++    loader = builder.TlzLoader()
++    fast = types.ModuleType(backend + '.audit')
++    slow = types.ModuleType('toolz.audit') if backend == 'cytoolz' else fast
++    fast.__package__ = fast.__name__
++    fast.__doc__ = 'backend documentation'
++    fast.__file__ = 'fast.py'
++    slow.__file__ = 'slow.py'
++    target = types.ModuleType('tlz.audit')
++    target.__package__ = 'caller.package'
++    target.__file__ = 'caller.py'
++    backends = {backend: fast}
++    if backend == 'cytoolz':
++        backends['toolz'] = slow
++    monkeypatch.setattr(loader, '_load_toolz', lambda fullname: backends)
++    return loader, fast, slow, target
++
++
++@pytest.mark.parametrize('backend', ['cytoolz', 'toolz'])
++@pytest.mark.parametrize('prebound', [False, True])
++@pytest.mark.parametrize('name, package, mirrored', [
++    ('{parent}.child', '{parent}', True),
++    ('{parent}.branch.child', '{parent}', True),
++    ('foreign.child', '{parent}', False),
++    ('{parent}_extra.child', '{parent}', False),
++    ('{parent}', '{parent}', False),
++    ('{parent}.', '{parent}', False),
++    ('{parent}.child', 'foreign', False),
++    ('{parent}.branch.child', '{parent}.branch', False),
++])
++def test_child_ownership(monkeypatch, backend, prebound, name, package, mirrored):
++    loader, fast, slow, target = make_case(monkeypatch, backend)
++    export = types.ModuleType(name.format(parent=fast.__name__))
++    export.__package__ = package.format(parent=fast.__name__)
++    fast.export = export
++    sentinel = object()
++    if prebound:
++        target.export = sentinel
++    expected_imports = []
++    mirrored_export = types.ModuleType('tlz.audit.child')
++
++    def fake_import(fullname):
++        expected = 'tlz' + export.__name__[len(backend):]
++        assert mirrored
++        assert fullname == expected
++        expected_imports.append(fullname)
++        return mirrored_export
++
++    monkeypatch.setattr(builder, 'import_module', fake_import)
++    loader.exec_module(target)
++    if mirrored:
++        assert target.export is mirrored_export
++        assert expected_imports == ['tlz' + export.__name__[len(backend):]]
++    else:
++        assert target.export is (sentinel if prebound else export)
++        assert expected_imports == []
++    assert target.__name__ == 'tlz.audit'
++    assert target.__package__ == 'tlz.audit'
++    assert target.__file__ == slow.__file__
++    assert target.__doc__ == fast.__doc__
++
++
++@pytest.mark.parametrize('local_doc', [None, 'caller documentation'])
++def test_child_policy_preserves_other_policies(monkeypatch, local_doc):
++    loader, fast, slow, target = make_case(monkeypatch, 'cytoolz')
++    target.__doc__ = local_doc
++    child = types.ModuleType(fast.__name__ + '.child')
++    child.__package__ = fast.__name__
++    fast.child = child
++    fast.alias = child
++    slow.alias = toolz.pipe
++    fast.plain = object()
++    fast.unhashable = []
++    slow.unhashable = []
++    sentinel = object()
++    target.child = sentinel
++    target.alias = sentinel
++    target.plain = sentinel
++    mirrored_child = types.ModuleType('tlz.audit.child')
++    calls = []
++
++    def fake_import(fullname):
++        calls.append(fullname)
++        assert fullname == 'tlz.audit.child'
++        return mirrored_child
++
++    monkeypatch.setattr(builder, 'import_module', fake_import)
++    loader.exec_module(target)
++    assert calls == ['tlz.audit.child']
++    assert target.child is mirrored_child
++    assert target.alias is toolz.pipe
++    assert target.plain is sentinel
++    assert target.unhashable is fast.unhashable
++    assert target.__doc__ == (local_doc or fast.__doc__)
++    assert target.__file__ == 'slow.py'
++    assert target.__package__ == 'tlz.audit'
++    assert target.__name__ == 'tlz.audit'

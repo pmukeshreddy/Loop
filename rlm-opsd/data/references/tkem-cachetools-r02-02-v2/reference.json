@@ -1,0 +1,226 @@
+{
+ "answer": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -117,6 +117,13 @@\n     # KeyError on cache miss.  This is not the case if __missing__ is\n     # implemented for a Cache subclass, so we have to roll our own,\n     # somewhat less elegant versions.\n+\n+    def peek(self, key, default=None):\n+        \"\"\"Return a visible value without affecting eviction priority.\"\"\"\n+        if key in self:\n+            return self.__data[key]\n+        else:\n+            return default\n \n     def get(self, key, default=None):\n         if key in self:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0031829078295961323,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed and inspected the final diff in code. The inherited implementation combines membership-based visibility with direct stored-value access, preserving falsey values and avoiding missing hooks and eviction-priority updates across the named policies.",
+   "inspect_locate": "The reference execution performed ten targeted searches without printing the entire context. The change requires distinguishing shared storage access from policy-specific reads and checking that timed membership tests enforce visibility without cleanup or recency updates."
+  },
+  "notes": "This is a natural, precisely scoped API addition with repository-dependent semantics and a clear patch format. The small resulting diff does not make the investigation trivial: its correctness depends on the membership and read behavior of multiple cache policies. It neither reveals the implementation nor prescribes solver operations, and it is substantively distinct from the parent replacement-write task and existing accepted tasks. The execution summary records no repository execution, so behavioral validation rests on the supplied executable-verification premise rather than on the reference run itself."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must reconcile shared value access, policy-neutral observation, timed visibility, and missing-hook behavior. Its exact context and inherited effects across all seven cache classes should be checked before returning the patch.",
+   "inspect_locate": "The repository contains several cache policies alongside unrelated decorator implementations. Implementing this observation API requires locating the shared storage layer and tracing how the ordinary and timed policies distinguish membership checks from reads that update priority."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::Cache",
+    "why": "Owns stored values and provides shared mapping operations; its indexing path can invoke a subclass's missing hook."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::Cache.get",
+    "why": "Existing get dispatches through policy-specific indexing, so its behavior differs from the requested observation API."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::LRUCache.__getitem__",
+    "why": "Successful indexing updates recency, which peek must leave unchanged."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::LFUCache.__getitem__",
+    "why": "Successful indexing increments frequency, requiring eviction tests with a unique least-used entry."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TTLCache.__contains__",
+    "why": "Defines timed visibility without reordering entries, including the strict deadline boundary."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.__contains__",
+    "why": "Defines TLRU visibility separately from its recency-changing value-access path."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::_TimedCache",
+    "why": "Several seemingly observational operations trigger expiration, so retained expired storage must be checked through explicit expire results rather than len or currsize."
+   },
+   {
+    "path": "tests/__init__.py",
+    "symbol": "tests/__init__.py::CacheTestMixin.test_missing",
+    "why": "Establishes the existing convention that missing hooks are reserved for indexing rather than default-returning mapping operations."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_peek.py\n@@ -0,0 +1,148 @@\n+import pytest\n+\n+from cachetools import Cache, FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, TLRUCache\n+\n+\n+POLICIES = [Cache, FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, TLRUCache]\n+\n+\n+class Timer:\n+    def __init__(self):\n+        self.now = 0\n+\n+    def __call__(self):\n+        return self.now\n+\n+\n+def make_cache(policy, maxsize=3, timer=None, **kwargs):\n+    if timer is None:\n+        timer = Timer()\n+    if issubclass(policy, TTLCache):\n+        return policy(maxsize, ttl=10, timer=timer, **kwargs)\n+    if issubclass(policy, TLRUCache):\n+        return policy(maxsize, ttu=lambda k, v, now: now + 10, timer=timer, **kwargs)\n+    return policy(maxsize, **kwargs)\n+\n+\n+@pytest.mark.parametrize(\"policy\", POLICIES, ids=lambda p: p.__name__)\n+def test_peek_values_and_missing(policy):\n+    calls = []\n+\n+    class MissingCache(policy):\n+        def __missing__(self, key):\n+            calls.append(key)\n+            self[key] = \"generated\"\n+            return \"generated\"\n+\n+    cache = make_cache(MissingCache, maxsize=4)\n+    default = object()\n+    value = object()\n+    assert cache.peek(\"absent\") is None\n+    assert cache.peek(key=\"absent\", default=default) is default\n+    assert calls == []\n+    assert \"absent\" not in cache\n+    cache[\"value\"] = value\n+    cache[\"none\"] = None\n+    cache[\"false\"] = False\n+    assert cache.peek(\"value\", default) is value\n+    assert cache.peek(\"none\", default) is None\n+    assert cache.peek(\"false\", default) is False\n+    assert calls == []\n+    assert cache[\"absent\"] == \"generated\"\n+    assert calls == [\"absent\"]\n+    assert cache.peek(\"absent\") == \"generated\"\n+    assert calls == [\"absent\"]\n+\n+\n+@pytest.mark.parametrize(\"policy\", POLICIES, ids=lambda p: p.__name__)\n+def test_peek_preserves_weighted_storage(policy):\n+    calls = []\n+\n+    def size(value):\n+        calls.append(value)\n+        return len(value)\n+\n+    cache = make_cache(policy, maxsize=5, getsizeof=size)\n+    value = [1, 2, 3]\n+    cache[\"a\"] = value\n+    cache[\"b\"] = [4, 5]\n+    calls.clear()\n+    assert cache.peek(\"a\") is value\n+    assert cache.peek(\"missing\") is None\n+    assert calls == []\n+    assert len(cache) == 2\n+    assert cache.currsize == 5\n+\n+\n+@pytest.mark.parametrize(\"policy\", [FIFOCache, LRUCache, TTLCache, TLRUCache])\n+def test_peek_preserves_eviction_order(policy):\n+    cache = make_cache(policy, maxsize=2)\n+    cache[\"a\"] = 1\n+    cache[\"b\"] = 2\n+    for _ in range(5):\n+        assert cache.peek(\"a\") == 1\n+    cache[\"c\"] = 3\n+    assert \"a\" not in cache\n+    assert \"b\" in cache\n+    assert \"c\" in cache\n+\n+\n+def test_peek_preserves_lfu_frequency():\n+    cache = LFUCache(2)\n+    cache[\"a\"] = 1\n+    cache[\"b\"] = 2\n+    assert cache.get(\"b\") == 2\n+    for _ in range(5):\n+        assert cache.peek(\"a\") == 1\n+    cache[\"c\"] = 3\n+    assert \"a\" not in cache\n+    assert \"b\" in cache\n+    assert \"c\" in cache\n+\n+\n+@pytest.mark.parametrize(\"policy\", [LRUCache, LFUCache, TTLCache, TLRUCache])\n+@pytest.mark.parametrize(\"access\", [\"get\", \"index\", \"replace\"])\n+def test_peek_does_not_change_existing_access_semantics(policy, access):\n+    cache = make_cache(policy, maxsize=2)\n+    cache[\"a\"] = 1\n+    cache[\"b\"] = 2\n+    if access == \"get\":\n+        assert cache.get(\"a\") == 1\n+    elif access == \"index\":\n+        assert cache[\"a\"] == 1\n+    else:\n+        cache[\"a\"] = 10\n+    assert cache.peek(\"b\") == 2\n+    cache[\"c\"] = 3\n+    assert \"a\" in cache\n+    assert \"b\" not in cache\n+    assert \"c\" in cache\n+\n+\n+@pytest.mark.parametrize(\"policy\", [TTLCache, TLRUCache])\n+def test_peek_expired_entries_are_retained(policy):\n+    timer = Timer()\n+    calls = []\n+\n+    class MissingCache(policy):\n+        def __missing__(self, key):\n+            calls.append(key)\n+            return \"generated\"\n+\n+    cache = make_cache(MissingCache, timer=timer)\n+    cache[\"old\"] = \"old value\"\n+    timer.now = 5\n+    cache[\"live\"] = \"live value\"\n+    timer.now = 10\n+    default = object()\n+    assert cache.peek(\"old\") is None\n+    assert cache.peek(\"old\", default) is default\n+    assert cache.peek(\"missing\", default) is default\n+    assert cache.peek(\"live\", default) == \"live value\"\n+    assert calls == []\n+    assert list(cache.expire()) == [(\"old\", \"old value\")]\n+    assert cache.peek(\"live\") == \"live value\"\n+    timer.now = 15\n+    assert cache.peek(\"live\", default) is default\n+    assert list(cache.expire()) == [(\"live\", \"live value\")]\n+    assert calls == []\n",
+  "include_failure_log": false,
+  "notes": "Implementation task with no injected defect. Acceptance coverage is placed in a new tests/test_peek.py file rather than modifying existing test modules, as required for hidden-test artifacts. The tests share value/default/missing-hook and weighted-storage checks across all seven classes, exercise deterministic eviction consequences, preserve existing read and replacement-write semantics, and use fake timers to prove exact-deadline invisibility and physical retention through subsequent expire() results. LFU assertions avoid frequency ties. A shared Cache implementation can satisfy the requested behavior without altering existing policy hooks.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add a public `peek(key, default=None)` method to `Cache`, available on `FIFOCache`, `LRUCache`, `LFUCache`, `RRCache`, `TTLCache`, and `TLRUCache` as well. It should return the stored value when the key is currently visible, or the supplied default otherwise, without invoking `__missing__`, inserting or removing entries, or changing eviction priority. Stored values such as `None` and `False` must be returned unchanged rather than treated as misses.\n\nFor the timed policies, respect their existing expiration boundary: an entry at or past its deadline is not visible. Peeking at either a live or expired entry must not trigger expiration cleanup, refresh its deadline, or change recency; expired storage must remain available for a subsequent explicit `expire()` call to remove and report. Keep ordinary indexing, `get`, and replacement writes behaving exactly as they do now.\n\nReturn a unified diff against `src/cachetools/__init__.py`, with no test changes.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Expands inspect_locate into cross-policy API design and layered dispatch analysis. Selective investigations of ordinary and timed policies are useful because their visibility rules differ; combine_verify_finish integrates those findings into one consistent API and test suite.",
+  "change_type": "deliverable",
+  "description": "Add a public peek(key, default=None) operation that returns a stored, currently visible value without changing eviction priority and without invoking __missing__. Implement it in src/cachetools/__init__.py for Cache and ensure correct behavior for FIFOCache, LRUCache, LFUCache, RRCache, TTLCache, and TLRUCache. Expired timed entries must return the default without triggering expiration cleanup or changing recency. Add shared coverage in tests/__init__.py::CacheTestMixin, policy-specific eviction coverage in tests/test_lru.py::LRUCacheTest and tests/test_lfu.py::LFUCacheTest, and deterministic fake-timer coverage for both timed policies. Preserve all existing read and replacement-write behavior.",
+  "expected_answer_change": "The verified answer is an implementation and acceptance tests. It depends on bypassing policy-specific __getitem__ hooks while honoring TTLCache.__contains__ and TLRUCache.__contains__ visibility rules. Tests must distinguish peek from get and direct indexing, demonstrate that missing hooks are not called, and prove that peeking at expired entries does not remove their retained storage.",
+  "why_substantive": "This introduces a separate observation API rather than changing assignment semantics or reporting failing tests. Ordinary Cache.get delegates to self[key], so it cannot supply the required priority-neutral behavior. Timed visibility, physical retention, and subclasses with __missing__ require additional investigation beyond the original three assignment implementations."
+ },
+ "task_id": "tkem-cachetools-r02-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-TTLCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-TTLCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-TTLCache]",
+   "tests/test_peek.py::test_peek_expired_entries_are_retained[TLRUCache]",
+   "tests/test_peek.py::test_peek_expired_entries_are_retained[TTLCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[FIFOCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[LRUCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[TLRUCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[TTLCache]",
+   "tests/test_peek.py::test_peek_preserves_lfu_frequency",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[Cache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[FIFOCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[LFUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[LRUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[RRCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[TLRUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[TTLCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[Cache]",
+   "tests/test_peek.py::test_peek_values_and_missing[FIFOCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[LFUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[LRUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[RRCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[TLRUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[TTLCache]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 33,
+   "full_suite": {
+    "failed": 0,
+    "passed": 371
+   },
+   "patch_files": [
+    "src/cachetools/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[get-TTLCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[index-TTLCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-LFUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-LRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-TLRUCache]",
+   "tests/test_peek.py::test_peek_does_not_change_existing_access_semantics[replace-TTLCache]",
+   "tests/test_peek.py::test_peek_expired_entries_are_retained[TLRUCache]",
+   "tests/test_peek.py::test_peek_expired_entries_are_retained[TTLCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[FIFOCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[LRUCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[TLRUCache]",
+   "tests/test_peek.py::test_peek_preserves_eviction_order[TTLCache]",
+   "tests/test_peek.py::test_peek_preserves_lfu_frequency",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[Cache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[FIFOCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[LFUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[LRUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[RRCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[TLRUCache]",
+   "tests/test_peek.py::test_peek_preserves_weighted_storage[TTLCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[Cache]",
+   "tests/test_peek.py::test_peek_values_and_missing[FIFOCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[LFUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[LRUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[RRCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[TLRUCache]",
+   "tests/test_peek.py::test_peek_values_and_missing[TTLCache]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

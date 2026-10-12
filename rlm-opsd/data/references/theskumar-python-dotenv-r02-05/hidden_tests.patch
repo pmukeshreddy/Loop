@@ -1,0 +1,50 @@
+--- /dev/null
++++ b/tests/test_cli_follow_symlinks_option.py
+@@ -0,0 +1,47 @@
++import os
++import sys
++
++import pytest
++from click.testing import CliRunner
++
++from dotenv.cli import cli
++
++
++@pytest.mark.skipif(sys.platform == "win32", reason="requires Unix symlinks")
++@pytest.mark.parametrize("command", ["set", "unset"])
++@pytest.mark.parametrize(
++    "flag,follow",
++    [([], False), (["--follow-symlinks"], True), (["--no-follow-symlinks"], False)],
++)
++def test_mutation_symlink_policy(tmp_path, command, flag, follow):
++    target = tmp_path / "target.env"
++    target.write_text("a=old\nb=keep\n")
++    link = tmp_path / ".env"
++    link.symlink_to(target)
++    tail = ["a", "new"] if command == "set" else ["a"]
++    result = CliRunner().invoke(
++        cli, ["--file", str(link), command, *flag, *tail]
++    )
++    assert result.exit_code == 0, result.output
++    expected = "a='new'\nb=keep\n" if command == "set" else "b=keep\n"
++    assert link.is_symlink() is follow
++    if follow:
++        assert target.read_text() == expected
++    else:
++        assert target.read_text() == "a=old\nb=keep\n"
++        assert link.read_text() == expected
++
++
++@pytest.mark.skipif(sys.platform == "win32", reason="requires Unix symlinks")
++@pytest.mark.parametrize("flag,follow", [([], False), (["--follow-symlinks"], True)])
++def test_set_dangling_symlink_policy(tmp_path, flag, follow):
++    target = tmp_path / "missing.env"
++    link = tmp_path / ".env"
++    link.symlink_to(target)
++    result = CliRunner().invoke(
++        cli, ["--file", str(link), "set", *flag, "a", "new"]
++    )
++    assert result.exit_code == 0, result.output
++    assert link.is_symlink() is follow
++    assert target.exists() is follow
++    assert (target if follow else link).read_text() == "a='new'\n"

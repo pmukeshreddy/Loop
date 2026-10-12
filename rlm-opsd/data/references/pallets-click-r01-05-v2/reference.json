@@ -1,0 +1,175 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -2470,6 +2470,10 @@\n         if value is None and not ctx._default_map_has(self.name):\n             value = self.default\n \n+        return self._get_default_value(value, call=call)\n+\n+    def _get_default_value(self, value: t.Any, call: bool = True) -> t.Any:\n+        \"\"\"Resolve a default without consulting the context's default map.\"\"\"\n         if call and callable(value):\n             value = value()\n \n@@ -2509,7 +2513,9 @@\n \n         if value is UNSET:\n             default_map_value = ctx.lookup_default(self.name)\n-            if default_map_value is not None or ctx._default_map_has(self.name):\n+            if default_map_value is not UNSET and (\n+                default_map_value is not None or ctx._default_map_has(self.name)\n+            ):\n                 value = default_map_value\n                 source = ParameterSource.DEFAULT_MAP\n \n@@ -2519,7 +2525,12 @@\n                     value = self.type.split_envvar_value(value)\n \n         if value is UNSET:\n-            default_value = self.get_default(ctx)\n+            if default_map_value is UNSET:\n+                # The factory declined for this acquisition. Do not consult it\n+                # again, or remove it from the map for later acquisitions.\n+                default_value = self._get_default_value(self.default)\n+            else:\n+                default_value = self.get_default(ctx)\n             if default_value is not UNSET:\n                 value = default_value\n                 source = ParameterSource.DEFAULT\n@@ -3215,7 +3226,9 @@\n             flags, fixing negative boolean flags like\n             ``flag_value=False, default=True``.\n         \"\"\"\n-        raw = super().get_default(ctx, call=False)\n+        return super().get_default(ctx, call=call)\n+\n+    def _get_default_value(self, raw: t.Any, call: bool = True) -> t.Any:\n         value = self._resolve_lazy_default(raw)\n         # Only invoke the value as a callable when the lazy resolver passed it through\n         # unchanged. If the resolver substituted ``True`` -> :attr:`flag_value`, the\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008234355765840925,
+  "facts": {
+   "code_blocks": 9,
+   "context_searches": 33,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "new",
+    "old",
+    "paths",
+    "test"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 19594,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 10,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 33 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff reconciles acquisition-local fallback, single factory evaluation, DEFAULT provenance, callable declared defaults, and lazy flag defaults. The execution constructed the final patch programmatically and inspected it before returning it.",
+   "inspect_locate": "The reference execution used 33 code searches and a targeted sub-call to connect default-map lookup, parameter acquisition, inherited contexts, and Option's lazy default resolution. These branches must be understood together to distinguish a stored UNSET entry from a callable returning UNSET."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise unified-diff output requirement. It specifies observable behavior without revealing the implementation or prescribing solver operations. Although it shares the default-map acquisition area with its parent, sentinel-based declining and declared-default fallback are substantively different from repeated-option string splitting and programmatic dispatch."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must reconcile single evaluation per acquisition with declared-default fallback, correct provenance, explicit None, and lazy flag defaults. Its exact hunks and the combined behavior need checking before delivering the diff.",
+   "inspect_locate": "The relevant branches are scattered through the large core module: context inheritance and map lookup, parameter acquisition and declared-default lookup, and option-specific lazy default resolution. The distinction between a stored sentinel and a factory returning the sentinel requires tracing those branches together."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context._default_map_has",
+    "why": "Rejects a stored UNSET but considers a callable entry present without evaluating its result."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context.lookup_default",
+    "why": "Evaluates map factories and can return UNSET from an otherwise present entry."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.consume_value",
+    "why": "After acquiring UNSET from the map, falls through to default lookup and can acquire the same map factory again."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.get_default",
+    "why": "Consults the default map before the declared default, explaining why the fallback repeats acquisition rather than using the declaration."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.get_default",
+    "why": "Applies lazy default derivation while distinguishing declared callables from callable flag activation values."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_declining_default_map.py\n@@ -0,0 +1,119 @@\n+import pytest\n+\n+import click\n+from click.core import UNSET\n+\n+\n+def make_param(kind, **kwargs):\n+    if kind == \"option\":\n+        return click.Option([\"--item\"], type=int, **kwargs)\n+    return click.Argument([\"item\"], type=int, required=False, **kwargs)\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"option\", \"argument\"])\n+@pytest.mark.parametrize(\"inherited\", [False, True])\n+@pytest.mark.parametrize(\"callable_default\", [False, True])\n+def test_factory_can_decline(kind, inherited, callable_default):\n+    calls = {\"map\": 0, \"default\": 0}\n+\n+    def factory():\n+        calls[\"map\"] += 1\n+        return UNSET if calls[\"map\"] == 1 else 99\n+\n+    def declared():\n+        calls[\"default\"] += 1\n+        return 17\n+\n+    param = make_param(kind, default=declared if callable_default else 17)\n+    cmd = click.Command(\"leaf\", params=[param], add_help_option=False)\n+    mapping = {\"item\": factory}\n+    parent = click.Context(click.Group(\"root\"), default_map={\"leaf\": mapping})\n+    extra = {\"parent\": parent} if inherited else {\"default_map\": mapping}\n+\n+    with cmd.make_context(\"leaf\", [], **extra) as ctx:\n+        assert ctx.params[\"item\"] == 17\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.DEFAULT\n+    assert calls == {\"map\": 1, \"default\": int(callable_default)}\n+    assert mapping[\"item\"] is factory\n+\n+    with cmd.make_context(\"leaf\", [], **extra) as ctx:\n+        assert ctx.params[\"item\"] == 99\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.DEFAULT_MAP\n+    assert calls == {\"map\": 2, \"default\": int(callable_default)}\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"option\", \"argument\"])\n+@pytest.mark.parametrize(\"value\", [UNSET, None, 23])\n+@pytest.mark.parametrize(\"as_factory\", [False, True])\n+def test_map_results(kind, value, as_factory):\n+    calls = []\n+\n+    def factory():\n+        calls.append(True)\n+        return value\n+\n+    param = make_param(kind, default=17)\n+    cmd = click.Command(\"leaf\", params=[param], add_help_option=False)\n+    entry = factory if as_factory else value\n+    with cmd.make_context(\"leaf\", [], default_map={\"item\": entry}) as ctx:\n+        assert ctx.params[\"item\"] == (17 if value is UNSET else value)\n+        source = (\n+            click.ParameterSource.DEFAULT\n+            if value is UNSET\n+            else click.ParameterSource.DEFAULT_MAP\n+        )\n+        assert ctx.get_parameter_source(\"item\") is source\n+    assert len(calls) == int(as_factory)\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"option\", \"argument\"])\n+@pytest.mark.parametrize(\"use_cli\", [False, True])\n+def test_higher_precedence_skips_factory(kind, use_cli, monkeypatch):\n+    def factory():\n+        pytest.fail(\"default-map factory must not run\")\n+\n+    monkeypatch.setenv(\"CLICK_DECLINING_MAP_TEST\", \"31\")\n+    param = make_param(kind, default=17, envvar=\"CLICK_DECLINING_MAP_TEST\")\n+    cmd = click.Command(\"leaf\", params=[param], add_help_option=False)\n+    args = ([\"--item\", \"41\"] if kind == \"option\" else [\"41\"]) if use_cli else []\n+    with cmd.make_context(\"leaf\", args, default_map={\"item\": factory}) as ctx:\n+        assert ctx.params[\"item\"] == (41 if use_cli else 31)\n+        source = (\n+            click.ParameterSource.COMMANDLINE\n+            if use_cli\n+            else click.ParameterSource.ENVIRONMENT\n+        )\n+        assert ctx.get_parameter_source(\"item\") is source\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"bool\", \"multi\", \"activation\", \"negative\"])\n+def test_declining_factory_keeps_lazy_flag_defaults(mode):\n+    calls = []\n+\n+    class Activation:\n+        def __init__(self):\n+            pytest.fail(\"a callable flag value must not be invoked\")\n+\n+    def factory():\n+        calls.append(True)\n+        return UNSET\n+\n+    if mode == \"bool\":\n+        param = click.Option([\"--item\"], is_flag=True)\n+        expected = False\n+    elif mode == \"multi\":\n+        param = click.Option([\"--item\"], flag_value=\"on\", multiple=True)\n+        expected = ()\n+    elif mode == \"negative\":\n+        param = click.Option([\"--item\"], flag_value=False, default=True)\n+        expected = True\n+    else:\n+        param = click.Option(\n+            [\"--item\"], flag_value=Activation, default=True, type=click.UNPROCESSED\n+        )\n+        expected = Activation\n+    cmd = click.Command(\"leaf\", params=[param], add_help_option=False)\n+    with cmd.make_context(\"leaf\", [], default_map={\"item\": factory}) as ctx:\n+        assert ctx.params[\"item\"] == expected\n+        assert ctx.get_parameter_source(\"item\") is click.ParameterSource.DEFAULT\n+    assert calls == [True]\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains this defect, so this is an implementation task verified by a new hidden-test file rather than an injected regression. The tests exercise stateful factories across separate acquisitions, inherited maps, callable declared defaults, stored and returned UNSET, explicit None, precedence, and lazy flag defaults. No original string-normalization artifact is reused. The original accepted patch cannot satisfy these tests because it does not change sentinel fallback or repeated factory evaluation.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "A default_map factory needs a way to decline supplying a value. Support returning Click's internal UNSET sentinel for that purpose: during parameter acquisition, evaluate the map factory once, then use the parameter's declared default with DEFAULT provenance if the result is UNSET. This must work for ordinary options and arguments, including default maps inherited by subcommand contexts. The decision is local to that acquisition; leave the map entry intact so a later acquisition can evaluate it again and accept a real value.\n\nKeep stored UNSET entries equivalent to missing entries, and preserve explicit None results as DEFAULT_MAP values. Callable declared defaults must still be evaluated when needed, while command-line or environment input must prevent evaluation of the map factory. Retain Option's lazy flag-default behavior, including not invoking a callable flag activation value merely because it becomes the default. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from value-shape normalization to sentinel and side-effect reasoning. Trace acquisition and fallback separately, distinguish a stored UNSET from a callable returning UNSET, and verify value, source, and evaluation count together. Focused branch analysis is more useful here than using the environment grouping path as the implementation template.",
+  "change_type": "failure_condition",
+  "description": "Repair a different callable default-map defect in src/click/core.py: when a map-entry factory returns the internal UNSET sentinel, Parameter.consume_value falls through to self.get_default(ctx), which reads and calls the same factory again instead of using the declared default. Treat a factory's UNSET result as an absent map value for that acquisition, fall back to the declared default with DEFAULT provenance, and evaluate the map factory only once. Apply this to ordinary options and arguments, including inherited maps. Preserve callable declared defaults, explicit None map results, command-line/environment precedence, and Option's lazy flag-default rules. Return a unified diff without changing tests.",
+  "expected_answer_change": "The repair depends on the interaction between Context.lookup_default, Context._default_map_has, Parameter.consume_value, Parameter.get_default, and Option._resolve_lazy_default. It must provide a declared-default fallback that does not re-read the map while preserving Option-specific default derivation. Verification should include a factory that returns UNSET first and a real value second, a callable declared fallback, explicit None, and higher-precedence input that prevents factory evaluation entirely.",
+  "why_substantive": "The defect is repeated acquisition of a missing-value result, not failure to split a present string. A stateful factory can currently supply a different value on its second call, causing both the value and provenance to be wrong. The accepted string-normalization patch does not address this failure."
+ },
+ "task_id": "pallets-click-r01-05-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[activation]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[bool]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[multi]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[negative]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-False-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-False-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-True-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-True-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-False-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-False-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-True-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-True-option]",
+   "tests/test_declining_default_map.py::test_map_results[True-Sentinel.UNSET-argument]",
+   "tests/test_declining_default_map.py::test_map_results[True-Sentinel.UNSET-option]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2019
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[activation]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[bool]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[multi]",
+   "tests/test_declining_default_map.py::test_declining_factory_keeps_lazy_flag_defaults[negative]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-False-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-False-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-True-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[False-True-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-False-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-False-option]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-True-argument]",
+   "tests/test_declining_default_map.py::test_factory_can_decline[True-True-option]",
+   "tests/test_declining_default_map.py::test_map_results[True-Sentinel.UNSET-argument]",
+   "tests/test_declining_default_map.py::test_map_results[True-Sentinel.UNSET-option]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

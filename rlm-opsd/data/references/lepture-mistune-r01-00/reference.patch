@@ -1,0 +1,13 @@
+--- a/src/mistune/inline_parser.py
++++ b/src/mistune/inline_parser.py
+@@ -113,6 +113,10 @@
+         before: Optional[str] = None,
+     ) -> None:
+         super().register(name, pattern, func, before=before)
++        # Registration can change the trigger set after the first parse.
++        self._fast_trigger_chars = None
++        self._fast_trigger_re = None
++        self._fast_trigger_re_chars = None
+ 
+     def parse_escape(self, m: Match[str], state: InlineState) -> int:
+         text = m.group(0)

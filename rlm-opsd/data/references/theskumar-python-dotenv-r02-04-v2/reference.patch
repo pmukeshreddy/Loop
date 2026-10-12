@@ -1,0 +1,56 @@
+--- a/src/dotenv/main.py
++++ b/src/dotenv/main.py
+@@ -160,34 +160,27 @@
+         source = io.StringIO("")
+         original_mode = None
+ 
+-    with tempfile.NamedTemporaryFile(
+-        mode="w",
+-        encoding=encoding,
+-        delete=False,
+-        prefix=".tmp_",
+-        dir=os.path.dirname(os.path.abspath(path)),
+-    ) as dest:
+-        dest_path = pathlib.Path(dest.name)
+-        error = None
+-
+-        try:
+-            with source:
++    dest_path: Optional[pathlib.Path] = None
++    try:
++        with source:
++            with tempfile.NamedTemporaryFile(
++                mode="w",
++                encoding=encoding,
++                delete=False,
++                prefix=".tmp_",
++                dir=os.path.dirname(os.path.abspath(path)),
++            ) as dest:
++                dest_path = pathlib.Path(dest.name)
+                 yield (source, dest)
+-        except BaseException as err:
+-            error = err
+-
+-    if error is None:
+-        try:
+-            if original_mode is not None:
+-                os.chmod(dest_path, original_mode)
+-
+-            os.replace(dest_path, path)
+-        except BaseException:
++
++        if original_mode is not None:
++            os.chmod(dest_path, original_mode)
++
++        os.replace(dest_path, path)
++    except BaseException:
++        if dest_path is not None:
+             dest_path.unlink(missing_ok=True)
+-            raise
+-    else:
+-        dest_path.unlink(missing_ok=True)
+-        raise error from None
++        raise
+ 
+ 
+ def set_key(

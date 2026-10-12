@@ -1,0 +1,194 @@
+{
+ "answer": "--- a/sqlparse/engine/grouping.py\n+++ b/sqlparse/engine/grouping.py\n@@ -346,21 +346,39 @@\n         tidx, token = tlist.token_next_by(t=T.Comment, idx=tidx)\n \n \n+def _group_clause(tlist, cls):\n+    \"\"\"Group a clause without crossing its container's boundaries.\"\"\"\n+    tidx, token = tlist.token_next_by(m=cls.M_OPEN)\n+    while token:\n+        # Parenthesis (and other delimited groups) exclude their delimiters\n+        # from the groupable range. Statements keep their trailing semicolon.\n+        end_idx = tlist.token_index(tlist._groupable_tokens[-1]) + 1\n+        for eidx in range(tidx + 1, end_idx):\n+            next_ = tlist.tokens[eidx]\n+            if next_.match(*cls.M_CLOSE):\n+                end_idx = eidx\n+                break\n+            if isinstance(tlist, (sql.Begin, sql.Parenthesis)):\n+                # Only direct punctuation tokens terminate a clause: strings\n+                # and nested groups may contain semicolons of their own.\n+                if next_.match(T.Punctuation, ';'):\n+                    end_idx = eidx\n+                    break\n+            if isinstance(tlist, sql.Begin) and next_.match(*sql.Begin.M_CLOSE):\n+                end_idx = eidx\n+                break\n+        tlist.group_tokens(cls, tidx, end_idx, include_end=False)\n+        tidx, token = tlist.token_next_by(m=cls.M_OPEN, idx=tidx)\n+\n+\n @recurse(sql.Where)\n def group_where(tlist):\n-    tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN)\n-    while token:\n-        eidx, end = tlist.token_next_by(m=sql.Where.M_CLOSE, idx=tidx)\n-\n-        if end is None:\n-            end = tlist._groupable_tokens[-1]\n-        else:\n-            end = tlist.tokens[eidx - 1]\n-        # TODO: convert this to eidx instead of end token.\n-        # i think above values are len(tlist) and eidx-1\n-        eidx = tlist.token_index(end)\n-        tlist.group_tokens(sql.Where, tidx, eidx)\n-        tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)\n+    _group_clause(tlist, sql.Where)\n+\n+\n+@recurse(sql.Qualify)\n+def group_qualify(tlist):\n+    _group_clause(tlist, sql.Qualify)\n \n \n @recurse()\n@@ -454,6 +472,7 @@\n         group_over,\n         group_functions,\n         group_where,\n+        group_qualify,\n         group_period,\n         group_arrays,\n         group_identifier,\n--- a/sqlparse/sql.py\n+++ b/sqlparse/sql.py\n@@ -559,7 +559,14 @@\n     M_OPEN = T.Keyword, 'WHERE'\n     M_CLOSE = T.Keyword, (\n         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',\n-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')\n+        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')\n+\n+\n+class Qualify(TokenList):\n+    \"\"\"A QUALIFY clause.\"\"\"\n+    M_OPEN = T.Keyword, 'QUALIFY'\n+    M_CLOSE = T.Keyword, (\n+        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')\n \n \n class Over(TokenList):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0021123934952441644,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 28,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "edited",
+    "files",
+    "g",
+    "new_s",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 2117,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 338952 chars; 28 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['edited', 'files', 'g', 'new_s', 's']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff was computed and inspected after construction. The supplied verification covers interacting requirements for sibling clauses, container-level semicolons, END preservation, keyword boundaries, round-tripping, and parent relationships.",
+   "inspect_locate": "The reference execution used 28 context searches without printing the whole repository. The change requires locating clause classes, recursive grouping passes, groupable token ranges, and procedural container handling rather than finding a single named implementation.",
+   "persistent_state": "Across seven turns, the reference execution reused repository text and edited-source variables to coordinate changes in sql.py and engine/grouping.py while preserving distinct Statement, Begin, and Parenthesis boundary conventions."
+  },
+  "notes": "This is a precise, repository-dependent implementation request with a clear production-only unified-diff format. Naming the requested public class specifies the API rather than revealing an existing defective implementation. Although it extends an accepted QUALIFY task, the procedural-block and container-level semicolon requirements are substantive: they require changing existing WHERE behavior and coordinating boundary handling across multiple container types, not merely renaming or rewording the original feature. The reference execution summary does not itself show repository test execution; executable correctness is supported by the supplied verification premise."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The resulting production diff must satisfy several interacting structural invariants: sibling clauses across internal statement boundaries, preservation of END and parenthesis delimiters, literal-semicolon handling, existing keyword termination, and consistent ancestry.",
+   "inspect_locate": "The clause structure depends on several distinct layers: lexical keyword recognition, statement splitting that retains procedural semicolons, BEGIN/END grouping, recursive clause grouping, and container-specific token ranges. The relevant definitions and dependencies must be located across these modules.",
+   "persistent_state": "The implementation must reconcile the grouping order, existing WHERE termination markers, and the different boundaries of Statement, Begin, and Parenthesis while retaining the exact production text needed for coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "sqlparse/engine/statement_splitter.py",
+    "symbol": "sqlparse/engine/statement_splitter.py::StatementSplitter.process",
+    "why": "Internal procedural semicolons are retained in the statement token stream, so clause grouping must handle these boundaries without splitting the block into separate Statements."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group",
+    "why": "BEGIN/END and parenthesis grouping precede clause grouping, making their existing containers the structural scope for clause boundaries."
+   },
+   {
+    "path": "sqlparse/engine/grouping.py",
+    "symbol": "sqlparse/engine/grouping.py::group_where",
+    "why": "The existing clause grouping searches keyword terminators and otherwise consumes the groupable tail; it currently does not respect internal statement semicolons."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Begin",
+    "why": "Begin includes its closing END and inherits the unrestricted TokenList groupable range, unlike Parenthesis."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Parenthesis._groupable_tokens",
+    "why": "This container already excludes its delimiters from its groupable tail, but internal punctuation semicolons require additional clause termination behavior."
+   },
+   {
+    "path": "sqlparse/sql.py",
+    "symbol": "sqlparse/sql.py::Where",
+    "why": "The existing keyword-boundary contract must be preserved while making QUALIFY a separate clause."
+   },
+   {
+    "path": "sqlparse/keywords.py",
+    "symbol": "sqlparse/keywords.py::KEYWORDS_SNOWFLAKE",
+    "why": "QUALIFY is already lexically recognized in the supplied snapshot."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_procedural_clause_boundaries.py\n@@ -0,0 +1,101 @@\n+import pytest\n+import sqlparse\n+from sqlparse import sql, tokens as T\n+\n+\n+def checked_parse(text):\n+    statements = sqlparse.parse(text)\n+    assert len(statements) == 1\n+    statement = statements[0]\n+    assert str(statement) == text\n+    def check_parents(group):\n+        for token in group.tokens:\n+            assert token.parent is group\n+            if token.is_group:\n+                check_parents(token)\n+    check_parents(statement)\n+    return statement\n+\n+\n+def children(group, cls):\n+    return [token for token in group.tokens if isinstance(token, cls)]\n+\n+\n+def test_sibling_clauses_in_begin():\n+    text = ('BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1; '\n+            'SELECT y FROM u QUALIFY m = 2; END;')\n+    statement = checked_parse(text)\n+    block, = children(statement, sql.Begin)\n+    where, = children(block, sql.Where)\n+    assert str(where) == 'WHERE x > 0 '\n+    assert [str(c) for c in children(block, sql.Qualify)] == [\n+        'QUALIFY n = 1', 'QUALIFY m = 2']\n+    assert sum(t.match(T.Punctuation, ';') for t in block.tokens) == 2\n+    assert block.tokens[-1].match(T.Keyword, 'END')\n+    assert not children(where, sql.Qualify)\n+\n+\n+@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])\n+@pytest.mark.parametrize('terminator', [';', ''])\n+def test_begin_tail_preserves_end(clause, terminator):\n+    statement = checked_parse(\n+        f'BEGIN SELECT x FROM t {clause} x = 1 {terminator} END;')\n+    block, = children(statement, sql.Begin)\n+    cls = sql.Where if clause == 'WHERE' else sql.Qualify\n+    grouped, = children(block, cls)\n+    assert str(grouped) == f'{clause} x = 1 ' + (\n+        '' if terminator else ' ')\n+    assert block.tokens[-1].match(T.Keyword, 'END')\n+    assert sum(t.match(T.Punctuation, ';') for t in block.tokens\n+               ) == bool(terminator)\n+\n+\n+def test_nested_parenthesis_statement_boundaries():\n+    text = (\"SELECT ((SELECT x FROM t WHERE x = ';' QUALIFY n = ';'; \"\n+            \"SELECT y FROM u WHERE y = 2 QUALIFY m = 2;))\")\n+    statement = checked_parse(text)\n+    outer, = children(statement, sql.Parenthesis)\n+    inner, = children(outer, sql.Parenthesis)\n+    assert [str(c) for c in children(inner, sql.Where)] == [\n+        \"WHERE x = ';' \", 'WHERE y = 2 ']\n+    assert [str(c) for c in children(inner, sql.Qualify)] == [\n+        \"QUALIFY n = ';'\", 'QUALIFY m = 2']\n+    assert sum(t.match(T.Punctuation, ';') for t in inner.tokens) == 2\n+    assert inner.tokens[0].match(T.Punctuation, '(')\n+    assert inner.tokens[-1].match(T.Punctuation, ')')\n+    assert statement.get_type() == 'SELECT'\n+\n+\n+@pytest.mark.parametrize('ending', [\n+    'ORDER BY x', 'LIMIT 1', 'UNION SELECT y FROM u',\n+    'UNION ALL SELECT y FROM u', 'EXCEPT SELECT y FROM u',\n+    'INTERSECT SELECT y FROM u'])\n+def test_keyword_boundary_precedes_semicolon(ending):\n+    statement = checked_parse(\n+        f'BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1 {ending}; END;')\n+    block, = children(statement, sql.Begin)\n+    where, = children(block, sql.Where)\n+    qualify, = children(block, sql.Qualify)\n+    assert str(where) == 'WHERE x > 0 '\n+    assert str(qualify) == 'QUALIFY n = 1 '\n+    assert block.tokens[-1].match(T.Keyword, 'END')\n+\n+\n+@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])\n+def test_parenthesis_tail_without_semicolon(clause):\n+    statement = checked_parse(f'SELECT (SELECT x FROM t {clause} x = 1)')\n+    paren, = children(statement, sql.Parenthesis)\n+    cls = sql.Where if clause == 'WHERE' else sql.Qualify\n+    grouped, = children(paren, cls)\n+    assert str(grouped) == f'{clause} x = 1'\n+    assert paren.tokens[-1].match(T.Punctuation, ')')\n+\n+\n+def test_statement_level_qualify():\n+    statement = checked_parse(\n+        'SELECT x FROM t WHERE x > 0 QUALIFY n = 1;')\n+    where, = children(statement, sql.Where)\n+    qualify, = children(statement, sql.Qualify)\n+    assert str(where) == 'WHERE x > 0 '\n+    assert str(qualify) == 'QUALIFY n = 1;'\n+    assert statement.get_type() == 'SELECT'\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot does not yet contain the accepted QUALIFY implementation. This task therefore requests the complete production capability, including the new procedural and parenthesis boundary behavior, rather than assuming an unmaterialized prerequisite. No setup patch is needed for implementation work. The original accepted diff alone cannot pass these acceptance tests: it absorbs internal semicolons and later SELECT clauses, and can consume a Begin block's closing END.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make WHERE and QUALIFY clauses individually navigable when a parsed BEGIN/END block contains multiple SELECT statements. Expose a public `sqlparse.sql.Qualify` TokenList subclass and support QUALIFY grouping at statement level and within nested groups; WHERE must end before a following QUALIFY.\n\nFor `BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1; SELECT y FROM u QUALIFY m = 2; END;`, the Begin must have one direct Where child and two separate direct Qualify children. Each internal semicolon must remain outside the clause it terminates, and the closing END must remain a direct child of Begin. A final clause must also leave END outside its range when there is no semicolon before END.\n\nApply the same semicolon boundary rule to WHERE and QUALIFY inside Parenthesis groups, including nested parentheses. Only a punctuation semicolon at the clause's container level terminates it: semicolons inside strings or nested groups must not do so. Enclosing parenthesis delimiters must remain outside the clauses.\n\nQUALIFY otherwise ends before ORDER BY, LIMIT, UNION, UNION ALL, EXCEPT, or INTERSECT, or at the end of the current container's content. Preserve WHERE's existing keyword boundaries, adding QUALIFY as a boundary. Whitespace preceding a boundary stays in the clause. At ordinary statement level, retain the existing end-of-range convention, including a trailing semicolon when no terminating keyword intervenes. Preserve SQL round-tripping, statement-type detection, and parent relationships.\n\nReturn a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Widens investigation from SELECT clause grouping to the splitter and procedural grouping dependency chain. Exercises inspect_locate and persistent_state to track which layer owns internal statement boundaries, followed by combine_verify_finish to check sibling clause structure, nested delimiters, literal semicolons, and ancestry together.",
+  "change_type": "dependency",
+  "description": "With the accepted QUALIFY implementation applied, support navigable WHERE and QUALIFY clauses in multiple SELECT statements inside a sql.Begin block. In `BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1; SELECT y FROM u QUALIFY m = 2; END;`, the clauses must stop before their statement's semicolon, both SELECT statements' QUALIFY clauses must remain separate direct children of Begin, and the closing END must remain a direct child of Begin. Apply the same semicolon boundary rule inside nested Parenthesis groups, without treating semicolons inside string tokens as boundaries. Preserve ordinary ORDER BY and set-operation termination, round-tripping, and parent relationships. Deliver a production-only unified diff. Relevant symbols are sqlparse/sql.py::Begin, Parenthesis._groupable_tokens, Where, and the added Qualify; sqlparse/engine/grouping.py::group_begin, group_where, group_qualify, and group; and sqlparse/engine/statement_splitter.py::StatementSplitter.process.",
+  "expected_answer_change": "The answer must account for StatementSplitter retaining internal semicolons in a procedural block, group_begin running before clause grouping, and Begin inheriting TokenList's unrestricted _groupable_tokens. The repair needs punctuation-aware clause termination and protection of the enclosing block's closing token, including the no-semicolon tail case, rather than merely adding keyword markers. Verification must establish two sibling Qualify groups instead of one clause containing the later SELECT.",
+  "why_substantive": "The seed deliberately consumes the remainder of a groupable range when there is no terminating keyword. A procedural Begin group can contain several semicolon-delimited statements and its own closing END, so that original rule can swallow subsequent statements and the block delimiter. This is a new structural-boundary problem, not another spelling of the original QUALIFY feature."
+ },
+ "task_id": "andialbrecht-sqlparse-r02-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[-QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[-WHERE]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[;-QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[;-WHERE]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[EXCEPT SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[INTERSECT SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[LIMIT 1]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[ORDER BY x]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[UNION ALL SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[UNION SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_nested_parenthesis_statement_boundaries",
+   "tests/test_procedural_clause_boundaries.py::test_parenthesis_tail_without_semicolon[QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_sibling_clauses_in_begin",
+   "tests/test_procedural_clause_boundaries.py::test_statement_level_qualify"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 523
+   },
+   "patch_files": [
+    "sqlparse/engine/grouping.py",
+    "sqlparse/sql.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[-QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[-WHERE]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[;-QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_begin_tail_preserves_end[;-WHERE]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[EXCEPT SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[INTERSECT SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[LIMIT 1]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[ORDER BY x]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[UNION ALL SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_keyword_boundary_precedes_semicolon[UNION SELECT y FROM u]",
+   "tests/test_procedural_clause_boundaries.py::test_nested_parenthesis_statement_boundaries",
+   "tests/test_procedural_clause_boundaries.py::test_parenthesis_tail_without_semicolon[QUALIFY]",
+   "tests/test_procedural_clause_boundaries.py::test_sibling_clauses_in_begin",
+   "tests/test_procedural_clause_boundaries.py::test_statement_level_qualify"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 508,
+  "stability_runs": 3
+ }
+}

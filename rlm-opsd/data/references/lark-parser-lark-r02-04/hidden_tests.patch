@@ -1,0 +1,31 @@
+--- /dev/null
++++ b/tests/test_token_transport.py
+@@ -0,0 +1,28 @@
++import copy
++import pickle
++
++import pytest
++from lark import Token
++
++
++class TaggedToken(Token):
++    pass
++
++
++@pytest.mark.parametrize("cls", [Token, TaggedToken])
++@pytest.mark.parametrize("transport", [copy.deepcopy, lambda t: pickle.loads(pickle.dumps(t))])
++@pytest.mark.parametrize("positions", [(7, 3, 2, 3, 6, 11), (None,) * 6])
++def test_token_transport(cls, transport, positions):
++    token = cls("NAME", "word", *positions)
++    result = transport(token)
++    assert result is not token
++    assert type(result) is cls
++    assert str(result) == str(token)
++    for field in ("type", "value", "start_pos", "line", "column", "end_line", "end_column", "end_pos"):
++        assert getattr(result, field) == getattr(token, field)
++
++
++def test_deepcopy_token_memo():
++    token = Token("NAME", "word", 7, 3, 2, 3, 6, 11)
++    result = copy.deepcopy([token, token])
++    assert result[0] is result[1]

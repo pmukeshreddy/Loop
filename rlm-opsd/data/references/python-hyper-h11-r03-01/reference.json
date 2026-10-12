@@ -1,0 +1,163 @@
+{
+ "answer": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -1,5 +1,6 @@\n # This contains the main Connection class. Everything in h11 revolves around\n # this.\n+from functools import partial\n from typing import (\n     Any,\n     Callable,\n@@ -23,7 +24,12 @@\n     Response,\n )\n from ._headers import get_comma_header, has_expect_100_continue, set_comma_header\n-from ._readers import READERS, ReadersType\n+from ._readers import (\n+    maybe_read_from_IDLE_client,\n+    maybe_read_from_SEND_RESPONSE_server,\n+    READERS,\n+    ReadersType,\n+)\n from ._receivebuffer import ReceiveBuffer\n from ._state import (\n     _SWITCH_CONNECT,\n@@ -162,14 +168,24 @@\n             exceeded, then :meth:`next_event` will raise\n             :exc:`RemoteProtocolError`.\n \n+        allow_obsolete_folding (bool):\n+            If ``True`` (the default), unfold obsolete header continuation\n+            lines beginning with space or tab. If ``False``, reject them with\n+            :exc:`RemoteProtocolError`. This applies to received request and\n+            response headers and chunked trailers, across all request/response\n+            cycles, and does not affect outgoing messages.\n+\n     \"\"\"\n \n     def __init__(\n         self,\n         our_role: Type[Sentinel],\n         max_incomplete_event_size: int = DEFAULT_MAX_INCOMPLETE_EVENT_SIZE,\n+        *,\n+        allow_obsolete_folding: bool = True,\n     ) -> None:\n         self._max_incomplete_event_size = max_incomplete_event_size\n+        self._allow_obsolete_folding = allow_obsolete_folding\n         # State and role tracking\n         if our_role not in (CLIENT, SERVER):\n             raise ValueError(f\"expected CLIENT or SERVER, not {our_role!r}\")\n@@ -331,11 +347,24 @@\n             framing_type, args = _body_framing(\n                 cast(bytes, self._request_method), cast(Union[Request, Response], event)\n             )\n+            if io_dict is READERS and framing_type == \"chunked\":\n+                return io_dict[SEND_BODY][framing_type](  # type: ignore[index]\n+                    *args, allow_obsolete_folding=self._allow_obsolete_folding\n+                )\n             return io_dict[SEND_BODY][framing_type](*args)  # type: ignore[index]\n         else:\n             # General case: the io_dict just has the appropriate reader/writer\n             # for this state\n-            return io_dict.get((role, state))  # type: ignore[return-value]\n+            io_object = io_dict.get((role, state))\n+            if io_dict is READERS and io_object in (\n+                maybe_read_from_IDLE_client,\n+                maybe_read_from_SEND_RESPONSE_server,\n+            ):\n+                return partial(\n+                    io_object,  # type: ignore[arg-type]\n+                    allow_obsolete_folding=self._allow_obsolete_folding,\n+                )\n+            return io_object  # type: ignore[return-value]\n \n     # This must be called after any action that might have caused\n     # self._cstate.states to change.\n--- a/h11/_readers.py\n+++ b/h11/_readers.py\n@@ -40,12 +40,16 @@\n obs_fold_re = re.compile(rb\"[ \\t]+\")\n \n \n-def _obsolete_line_fold(lines: Iterable[bytes]) -> Iterable[bytes]:\n+def _obsolete_line_fold(\n+    lines: Iterable[bytes], allow_obsolete_folding: bool = True\n+) -> Iterable[bytes]:\n     it = iter(lines)\n     last: Optional[bytes] = None\n     for line in it:\n         match = obs_fold_re.match(line)\n         if match:\n+            if not allow_obsolete_folding:\n+                raise LocalProtocolError(\"obsolete line folding is not allowed\")\n             if last is None:\n                 raise LocalProtocolError(\"continuation line at start of headers\")\n             if not isinstance(last, bytearray):\n@@ -62,9 +66,9 @@\n \n \n def _decode_header_lines(\n-    lines: Iterable[bytes],\n+    lines: Iterable[bytes], allow_obsolete_folding: bool = True\n ) -> Iterable[Tuple[bytes, bytes]]:\n-    for line in _obsolete_line_fold(lines):\n+    for line in _obsolete_line_fold(lines, allow_obsolete_folding):\n         matches = validate(header_field_re, line, \"illegal header line: {!r}\", line)\n         yield (matches[\"field_name\"], matches[\"field_value\"])\n \n@@ -72,7 +76,9 @@\n request_line_re = re.compile(request_line.encode(\"ascii\"))\n \n \n-def maybe_read_from_IDLE_client(buf: ReceiveBuffer) -> Optional[Request]:\n+def maybe_read_from_IDLE_client(\n+    buf: ReceiveBuffer, allow_obsolete_folding: bool = True\n+) -> Optional[Request]:\n     lines = buf.maybe_extract_lines()\n     if lines is None:\n         if buf.is_next_line_obviously_invalid_request_line():\n@@ -84,7 +90,9 @@\n         request_line_re, lines[0], \"illegal request line: {!r}\", lines[0]\n     )\n     return Request(\n-        headers=list(_decode_header_lines(lines[1:])), _parsed=True, **matches\n+        headers=list(_decode_header_lines(lines[1:], allow_obsolete_folding)),\n+        _parsed=True,\n+        **matches,\n     )\n \n \n@@ -92,7 +100,7 @@\n \n \n def maybe_read_from_SEND_RESPONSE_server(\n-    buf: ReceiveBuffer,\n+    buf: ReceiveBuffer, allow_obsolete_folding: bool = True\n ) -> Union[InformationalResponse, Response, None]:\n     lines = buf.maybe_extract_lines()\n     if lines is None:\n@@ -111,7 +119,7 @@\n         InformationalResponse if status_code < 200 else Response\n     )\n     return class_(\n-        headers=list(_decode_header_lines(lines[1:])),\n+        headers=list(_decode_header_lines(lines[1:], allow_obsolete_folding)),\n         _parsed=True,\n         status_code=status_code,\n         reason=reason,\n@@ -146,7 +154,8 @@\n \n \n class ChunkedReader:\n-    def __init__(self) -> None:\n+    def __init__(self, allow_obsolete_folding: bool = True) -> None:\n+        self._allow_obsolete_folding = allow_obsolete_folding\n         self._bytes_in_chunk = 0\n         # After reading a chunk, we have to throw away the trailing \\r\\n.\n         # This tracks the bytes that we need to match and throw away.\n@@ -158,7 +167,9 @@\n             lines = buf.maybe_extract_lines()\n             if lines is None:\n                 return None\n-            return EndOfMessage(headers=list(_decode_header_lines(lines)))\n+            return EndOfMessage(\n+                headers=list(_decode_header_lines(lines, self._allow_obsolete_folding))\n+            )\n         if self._bytes_to_discard:\n             data = buf.maybe_extract_at_most(len(self._bytes_to_discard))\n             if data is None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002199492757428694,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 17,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "new"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 323711 chars; 17 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "7 turns; variables reused across turns: ['files', 'new']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The patch coordinates constructor configuration, reader selection, and parsing behavior across files. The reference execution computed and inspected the assembled final diff before finishing.",
+   "inspect_locate": "The reference execution used 17 targeted context searches without printing the whole repository. The task requires locating both Connection configuration and the shared receive-side parsing paths for headers and trailers.",
+   "persistent_state": "The execution reused the files and new variables across seven turns. Retaining the discovered reader-selection and construction paths was useful for propagating the policy through state transitions and cycle resets."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise unified-diff deliverable. Its compatibility constraints are relevant to the change rather than artificial padding. The question specifies desired behavior without revealing implementation locations or prescribing solver operations, and it is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "A correct patch coordinates configuration and parsing changes across multiple exact source locations; the assembled hunks should be checked together for complete propagation and unchanged defaults.",
+   "inspect_locate": "The option enters through Connection, but folded headers are interpreted by shared reader code used for requests, informational responses, final responses, and chunk trailers.",
+   "persistent_state": "The implementation must retain the discovered reader-selection paths and propagate a connection-level policy through reader replacement, body-reader construction, and cycle resets."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._get_io_object",
+    "why": "Selects stateless header readers and constructs framing-specific body readers; policy must reach both paths."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::_obsolete_line_fold",
+    "why": "Recognizes the continuation syntax whose acceptance becomes configurable."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::_decode_header_lines",
+    "why": "Shared decoding path for all initial header blocks and chunked trailers."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection.next_event",
+    "why": "Provides remote-error translation and peer ERROR attribution."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": "h11/tests/test_io.py::test_readers_unusual",
+    "why": "Documents the folding and line-ending behavior that must remain the default."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/h11/tests/test_obsolete_folding_policy.py\n@@ -0,0 +1,84 @@\n+import h11\n+import pytest\n+\n+\n+def _client(allow):\n+    c = h11.Connection(h11.CLIENT, allow_obsolete_folding=allow)\n+    c.send(h11.Request(method=\"GET\", target=\"/\", headers=[(\"Host\", \"a\")]))\n+    c.send(h11.EndOfMessage())\n+    return c\n+\n+\n+@pytest.mark.parametrize(\"status\", [100, 200])\n+def test_strict_response_headers(status):\n+    c = _client(False)\n+    wire = (\n+        b\"HTTP/1.1 \" + str(status).encode(\"ascii\") + b\" \"\n+        b\"OK\\r\\nX-Test: first\\r\\n second\\r\\n\\r\\n\"\n+    )\n+    c.receive_data(wire)\n+    with pytest.raises(h11.RemoteProtocolError):\n+        c.next_event()\n+    assert c.their_state is h11.ERROR\n+    assert c.our_state is not h11.ERROR\n+\n+\n+@pytest.mark.parametrize(\"fragmented\", [False, True])\n+def test_strict_request_headers(fragmented):\n+    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)\n+    wire = b\"GET / HTTP/1.1\\r\\nHost: a\\r\\nX-Test: first\\r\\n\\tsecond\\r\\n\\r\\n\"\n+    if fragmented:\n+        for byte in wire[:-1]:\n+            c.receive_data(bytes([byte]))\n+            assert c.next_event() is h11.NEED_DATA\n+        c.receive_data(wire[-1:])\n+    else:\n+        c.receive_data(wire)\n+    with pytest.raises(h11.RemoteProtocolError):\n+        c.next_event()\n+    assert c.their_state is h11.ERROR\n+\n+\n+@pytest.mark.parametrize(\"allow\", [None, True])\n+def test_compatible_unfolding(allow):\n+    kwargs = {} if allow is None else {\"allow_obsolete_folding\": allow}\n+    c = h11.Connection(h11.SERVER, **kwargs)\n+    c.receive_data(b\"GET / HTTP/1.1\\r\\nHost: a\\r\\nX-Test: first\\r\\n second\\r\\n\\r\\n\")\n+    request = c.next_event()\n+    assert isinstance(request, h11.Request)\n+    assert list(request.headers) == [(b\"host\", b\"a\"), (b\"x-test\", b\"first second\")]\n+    assert isinstance(c.next_event(), h11.EndOfMessage)\n+\n+\n+def test_strict_chunked_trailers():\n+    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)\n+    c.receive_data(b\"POST / HTTP/1.1\\r\\nHost: a\\r\\nTransfer-Encoding: chunked\\r\\n\\r\\n\")\n+    assert isinstance(c.next_event(), h11.Request)\n+    c.receive_data(b\"1\\r\\nx\\r\\n0\\r\\nX-Test: first\\r\\n second\\r\\n\\r\\n\")\n+    assert c.next_event().data == b\"x\"\n+    with pytest.raises(h11.RemoteProtocolError):\n+        c.next_event()\n+    assert c.their_state is h11.ERROR\n+\n+\n+def test_policy_survives_cycle_reset():\n+    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)\n+    c.receive_data(b\"GET /one HTTP/1.1\\r\\nHost: a\\r\\n\\r\\n\")\n+    assert isinstance(c.next_event(), h11.Request)\n+    assert isinstance(c.next_event(), h11.EndOfMessage)\n+    c.send(h11.Response(status_code=204, headers=[]))\n+    c.send(h11.EndOfMessage())\n+    c.start_next_cycle()\n+    c.receive_data(b\"GET /two HTTP/1.1\\r\\nHost: a\\r\\nX-Test: first\\r\\n second\\r\\n\\r\\n\")\n+    with pytest.raises(h11.RemoteProtocolError):\n+        c.next_event()\n+\n+\n+def test_nonfolded_lf_headers_still_work():\n+    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)\n+    c.receive_data(b\"GET / HTTP/1.1\\nHost: a\\nX-Test: first\\n\\n\")\n+    request = c.next_event()\n+    assert isinstance(request, h11.Request)\n+    assert list(request.headers) == [(b\"host\", b\"a\"), (b\"x-test\", b\"first\")]\n+    assert isinstance(c.next_event(), h11.EndOfMessage)\n+    assert c.next_event() is h11.NEED_DATA\n",
+  "include_failure_log": false,
+  "notes": "The new test file uses only public h11 APIs. Existing direct reader calls must remain compatible. Rejecting a continuation before the entire header block arrives is also correct; the byte-at-a-time test only encounters a complete continuation line when the final block delimiter arrives.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add an optional Connection constructor keyword, `allow_obsolete_folding`, defaulting to `True`. When it is `False`, receiving an obsolete folded header\u2014a continuation line beginning with space or tab\u2014must raise RemoteProtocolError and put the peer role in ERROR. Apply this policy to request headers, informational and final response headers, and chunked trailers. The policy must survive start_next_cycle(). With the default or an explicit True, preserve the current unfolding behavior. This option must not change outgoing serialization, event-constructor validation, or the existing acceptance of LF-only header line endings. Deliver a unified diff against the repository files, without changing existing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r03-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "h11/tests/test_obsolete_folding_policy.py::test_compatible_unfolding[True]",
+   "h11/tests/test_obsolete_folding_policy.py::test_nonfolded_lf_headers_still_work",
+   "h11/tests/test_obsolete_folding_policy.py::test_policy_survives_cycle_reset",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_chunked_trailers",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_request_headers[False]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_request_headers[True]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_response_headers[100]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_response_headers[200]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 87
+   },
+   "patch_files": [
+    "h11/_connection.py",
+    "h11/_readers.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "h11/tests/test_obsolete_folding_policy.py::test_compatible_unfolding[True]",
+   "h11/tests/test_obsolete_folding_policy.py::test_nonfolded_lf_headers_still_work",
+   "h11/tests/test_obsolete_folding_policy.py::test_policy_survives_cycle_reset",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_chunked_trailers",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_request_headers[False]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_request_headers[True]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_response_headers[100]",
+   "h11/tests/test_obsolete_folding_policy.py::test_strict_response_headers[200]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

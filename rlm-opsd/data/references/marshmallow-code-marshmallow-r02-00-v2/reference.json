@@ -1,0 +1,180 @@
+{
+ "answer": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -1236,13 +1236,27 @@\n             pass_original = processor_kwargs.get(\"pass_original\", False)\n \n             if many and not pass_collection:\n-                if pass_original:\n-                    data = [\n-                        processor(item, original, many=many, **kwargs)\n-                        for item, original in zip_longest(data, original_data)\n-                    ]\n-                else:\n-                    data = [processor(item, many=many, **kwargs) for item in data]\n+                processed_data = []\n+                items = (\n+                    zip_longest(data, original_data)\n+                    if pass_original\n+                    else ((item, None) for item in data)\n+                )\n+                for index, (item, original) in enumerate(items):\n+                    try:\n+                        if pass_original:\n+                            processed_data.append(\n+                                processor(item, original, many=many, **kwargs)\n+                            )\n+                        else:\n+                            processed_data.append(processor(item, many=many, **kwargs))\n+                    except ValidationError as err:\n+                        if tag in (PRE_LOAD, POST_LOAD) and self.opts.index_errors:\n+                            raise ValidationError(\n+                                {index: err.normalized_messages()}\n+                            ) from err\n+                        raise\n+                data = processed_data\n             elif pass_original:\n                 data = processor(data, original_data, many=many, **kwargs)\n             else:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001058381572705211,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff was constructed and inspected in code. It covers both original-input dispatch branches, gates indexing on load-hook tags and index_errors, and preserves fail-fast propagation. The supplied executable verification supports the requested compatibility behavior.",
+   "inspect_locate": "The reference execution used 11 targeted searches without printing the full context. The change requires connecting load orchestration, shared processor dispatch, exception normalization, and original-input pairing to isolate item-level load errors without changing collection or dump hooks."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format. The behavioral requirements constrain the change without revealing its implementation location or prescribing solver operations. It is substantively different from the parent hook-ordering audit and the existing collection-validator task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact production diff. Its exception handling must be checked against both original-input dispatch branches and against single-item, collection, and dump behavior before the patch is assembled with matching source context.",
+   "inspect_locate": "The repository context is large, while the relevant evidence is concentrated in load orchestration, the shared load/dump processor dispatcher, decorator metadata, exception normalization, and compatibility tests. The implementation requires connecting those pieces to distinguish item-level load failures from other processor failures."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_processors",
+    "why": "Shared processor dispatch currently uses item list comprehensions, including zip_longest for original-input pairing, without retaining the failing item's index."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_load_processors",
+    "why": "Separates collection and item load dispatch while preserving collection-first ordering."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._do_load",
+    "why": "Normalizes pre_load and post_load exceptions into the final load error messages."
+   },
+   {
+    "path": "src/marshmallow/exceptions.py",
+    "symbol": "src/marshmallow/exceptions.py::ValidationError.normalized_messages",
+    "why": "Defines the required string, field-specific, dictionary, and field-specific dictionary error shapes."
+   },
+   {
+    "path": "tests/test_decorators.py",
+    "symbol": null,
+    "why": "Existing tests establish hook grouping, single-item error normalization, dump exceptions, and original-input pairing for appended post-load items."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_load_hook_index_errors.py\n@@ -0,0 +1,137 @@\n+import pytest\n+\n+from marshmallow import (\n+    Schema,\n+    ValidationError,\n+    fields,\n+    post_dump,\n+    post_load,\n+    pre_dump,\n+    pre_load,\n+)\n+\n+\n+ERROR_CASES = [\n+    (\"Rejected.\", \"_schema\", {\"_schema\": [\"Rejected.\"]}),\n+    (\"Rejected.\", \"foo\", {\"foo\": [\"Rejected.\"]}),\n+    ({\"foo\": \"Rejected.\"}, \"_schema\", {\"foo\": \"Rejected.\"}),\n+    ({\"foo\": [\"Rejected.\"]}, \"nested\", {\"nested\": {\"foo\": [\"Rejected.\"]}}),\n+]\n+\n+\n+@pytest.mark.parametrize(\"decorator\", [pre_load, post_load])\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"message,field_name,normalized\", ERROR_CASES)\n+@pytest.mark.parametrize(\"schema_many\", [True, False])\n+def test_item_load_errors(\n+    decorator, indexed, message, field_name, normalized, schema_many\n+):\n+    seen = []\n+\n+    class HookSchema(Schema):\n+        foo = fields.Int()\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @decorator\n+        def a_reject(self, item, **kwargs):\n+            seen.append(item[\"foo\"])\n+            if item[\"foo\"] == 2:\n+                raise ValidationError(message, field_name)\n+            return item\n+\n+        @decorator\n+        def z_later(self, item, **kwargs):\n+            seen.append(\"later\")\n+            return item\n+\n+    schema = HookSchema(many=schema_many)\n+    data = [{\"foo\": 1}, {\"foo\": 2}, {\"foo\": 3}]\n+    with pytest.raises(ValidationError) as exc:\n+        schema.load(data, **({} if schema_many else {\"many\": True}))\n+    assert exc.value.messages == ({1: normalized} if indexed else normalized)\n+    assert seen == [1, 2]\n+\n+\n+@pytest.mark.parametrize(\"decorator\", [pre_load, post_load])\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"message,field_name,normalized\", ERROR_CASES)\n+@pytest.mark.parametrize(\"collection\", [True, False])\n+def test_non_item_load_errors(\n+    decorator, indexed, message, field_name, normalized, collection\n+):\n+    class HookSchema(Schema):\n+        foo = fields.Int()\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @decorator(pass_collection=collection)\n+        def reject(self, data, **kwargs):\n+            raise ValidationError(message, field_name)\n+\n+    data = [{\"foo\": 2}] if collection else {\"foo\": 2}\n+    with pytest.raises(ValidationError) as exc:\n+        HookSchema().load(data, many=collection)\n+    assert exc.value.messages == normalized\n+\n+\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"reject_value\", [2, 3, None])\n+def test_post_load_original_pairing(indexed, reject_value):\n+    seen = []\n+\n+    class HookSchema(Schema):\n+        foo = fields.Int()\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @post_load(pass_collection=True)\n+        def append(self, data, **kwargs):\n+            return data + [{\"foo\": 3}]\n+\n+        @post_load(pass_original=True)\n+        def reject(self, item, original, **kwargs):\n+            seen.append((item[\"foo\"], original))\n+            if item[\"foo\"] == reject_value:\n+                raise ValidationError(\"Rejected.\", \"foo\")\n+            return item\n+\n+    raw = [{\"foo\": \"1\"}, {\"foo\": \"2\"}]\n+    schema = HookSchema(many=True)\n+    if reject_value is None:\n+        assert schema.load(raw) == [{\"foo\": 1}, {\"foo\": 2}, {\"foo\": 3}]\n+        assert seen == [(1, raw[0]), (2, raw[1]), (3, None)]\n+    else:\n+        with pytest.raises(ValidationError) as exc:\n+            schema.load(raw)\n+        index = reject_value - 1\n+        normalized = {\"foo\": [\"Rejected.\"]}\n+        assert exc.value.messages == ({index: normalized} if indexed else normalized)\n+        expected_pairs = [(1, raw[0]), (2, raw[1]), (3, None)]\n+        assert seen == expected_pairs[:reject_value]\n+\n+\n+@pytest.mark.parametrize(\"decorator\", [pre_dump, post_dump])\n+@pytest.mark.parametrize(\"indexed\", [True, False])\n+@pytest.mark.parametrize(\"message,field_name,normalized\", ERROR_CASES)\n+@pytest.mark.parametrize(\"collection\", [True, False])\n+def test_dump_error_compatibility(\n+    decorator, indexed, message, field_name, normalized, collection\n+):\n+    class HookSchema(Schema):\n+        foo = fields.Int()\n+\n+        class Meta:\n+            index_errors = indexed\n+\n+        @decorator(pass_collection=collection)\n+        def reject(self, data, **kwargs):\n+            raise ValidationError(message, field_name)\n+\n+    with pytest.raises(ValidationError) as exc:\n+        HookSchema().dump([{\"foo\": 1}, {\"foo\": 2}], many=True)\n+    assert exc.value.messages == ([message] if isinstance(message, str) else message)\n+    assert exc.value.field_name == field_name\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against an existing missing capability, so no artificial setup defect or ordering probe is used. Acceptance coverage is placed in a new test file as required by the task schema, rather than modifying tests/test_decorators.py. The indexed many-load cases fail on the supplied snapshot; compatibility cases cover disabled indexing, single loads, collection hooks, dump hooks, and original-input pairing. The required answer is a production repair diff, substantively different from the original task's test-ID set.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make item-level `pre_load` and `post_load` failures identify the rejected item when loading a collection. With effective `many=True` and `Meta.index_errors=True`, a hook's `ValidationError` must appear in the final load error messages under the failing item's zero-based index in that hook's current input collection. Normalize the hook error using the existing `ValidationError.normalized_messages()` semantics before placing it under the index. With `Meta.index_errors=False`, retain the existing unindexed normalized messages.\n\nKeep processing fail-fast: do not process subsequent items or invoke subsequent hooks after a hook raises. Preserve hook ordering, keyword arguments, collection-hook error shapes, single-item behavior, and all dump-hook behavior. Item-level `post_load(pass_original=True)` hooks must retain their existing original-input pairing, including receiving `None` for items added beyond the original collection's length.\n\nReturn a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises diagnosis, implementation, and acceptance-test design across dispatch and exception normalization. Selective inspection of the shared processor helper and its load and dump callers is useful because a broad change to that helper could inadvertently alter dump errors or collection-hook errors.",
+  "change_type": "deliverable",
+  "description": "Implement indexed error reporting for item-level pre_load and post_load hooks when many=True. Currently, a ValidationError raised for the second item is normalized by src/marshmallow/schema.py::Schema._do_load without an item index. Update the load-processing path so the first failing item hook reports its normalized error under that item's index when Meta.index_errors=True, while retaining unindexed errors when False. Preserve fail-fast processing, collection-hook error shapes, single-item behavior, original-input pairing, and dump-hook behavior. Add acceptance tests in tests/test_decorators.py for both load-hook tags, both index_errors settings, and string, field-specific, and dictionary errors.",
+  "expected_answer_change": "The implementation must distinguish item-level load dispatch from collection dispatch and dump dispatch, attach the failing processed-item index according to self.opts.index_errors, and preserve ValidationError.normalized_messages semantics from src/marshmallow/exceptions.py. For a second-item hook raising ValidationError('Rejected.', 'foo'), the expected messages are {1: {'foo': ['Rejected.']}} with indexing enabled and {'foo': ['Rejected.']} with indexing disabled. Existing test_decorator_error_handling and the parametrized load/dump error-handling tests supply compatibility controls.",
+  "why_substantive": "The deliverable becomes a repair with new acceptance tests, not a prediction about existing ordering tests. The defect concerns loss of item provenance across Schema._invoke_processors and Schema._do_load; neither reversing hook groups nor changing validator iteration solves it."
+ },
+ "task_id": "marshmallow-code-marshmallow-r02-00-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-_schema-normalized0-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-_schema-normalized0-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-foo-normalized1-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-foo-normalized1-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message2-_schema-normalized2-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message2-_schema-normalized2-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message3-nested-normalized3-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message3-nested-normalized3-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-_schema-normalized0-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-_schema-normalized0-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-foo-normalized1-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-foo-normalized1-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message2-_schema-normalized2-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message2-_schema-normalized2-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message3-nested-normalized3-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message3-nested-normalized3-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_post_load_original_pairing[2-True]",
+   "tests/test_load_hook_index_errors.py::test_post_load_original_pairing[3-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 18,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1290
+   },
+   "patch_files": [
+    "src/marshmallow/schema.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-_schema-normalized0-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-_schema-normalized0-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-foo-normalized1-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-Rejected.-foo-normalized1-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message2-_schema-normalized2-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message2-_schema-normalized2-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message3-nested-normalized3-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[False-message3-nested-normalized3-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-_schema-normalized0-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-_schema-normalized0-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-foo-normalized1-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-Rejected.-foo-normalized1-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message2-_schema-normalized2-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message2-_schema-normalized2-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message3-nested-normalized3-True-post_load]",
+   "tests/test_load_hook_index_errors.py::test_item_load_errors[True-message3-nested-normalized3-True-pre_load]",
+   "tests/test_load_hook_index_errors.py::test_post_load_original_pairing[2-True]",
+   "tests/test_load_hook_index_errors.py::test_post_load_original_pairing[3-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

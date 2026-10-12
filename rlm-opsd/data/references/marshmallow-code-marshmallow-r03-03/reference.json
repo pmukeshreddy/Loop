@@ -1,0 +1,166 @@
+{
+ "answer": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -962,6 +962,46 @@\n \n     def __apply_nested_option(self, option_name, field_names, set_operation) -> None:\n         \"\"\"Apply nested options to nested fields\"\"\"\n+\n+        def apply(field, options, *, child=False):\n+            # Fields are shallow-copied when a schema is constructed. Copy\n+            # container children before changing their selections so that\n+            # other schema instances and the declared fields stay untouched.\n+            if isinstance(field, ma_fields.List):\n+                field.inner = copy.deepcopy(field.inner)\n+                apply(field.inner, options, child=True)\n+                if isinstance(field.inner, ma_fields.Nested):\n+                    setattr(field, option_name, getattr(field.inner, option_name))\n+            elif isinstance(field, ma_fields.Tuple):\n+                field.tuple_fields = [\n+                    copy.deepcopy(inner) for inner in field.tuple_fields\n+                ]\n+                for inner in field.tuple_fields:\n+                    apply(inner, options, child=True)\n+            elif isinstance(field, ma_fields.Mapping):\n+                if field.value_field is not None:\n+                    field.value_field = copy.deepcopy(field.value_field)\n+                    apply(field.value_field, options, child=True)\n+                    if isinstance(field.value_field, ma_fields.Nested):\n+                        setattr(\n+                            field, option_name, getattr(field.value_field, option_name)\n+                        )\n+            elif not child or isinstance(field, ma_fields.Nested):\n+                # Scalar children do not consume dotted selections. Keep the\n+                # existing behavior for non-container top-level fields.\n+                new_options = self.set_class(options)\n+                original_options = getattr(field, option_name, ())\n+                if original_options or (\n+                    isinstance(field, ma_fields.Nested)\n+                    and set_operation == \"intersection\"\n+                    and original_options is not None\n+                ):\n+                    if set_operation == \"union\":\n+                        new_options |= self.set_class(original_options)\n+                    if set_operation == \"intersection\":\n+                        new_options &= self.set_class(original_options)\n+                setattr(field, option_name, new_options)\n+\n         # Split nested field names on the first dot.\n         nested_fields = [name.split(\".\", 1) for name in field_names if \".\" in name]\n         # Partition the nested field names by parent field.\n@@ -970,14 +1010,7 @@\n             nested_options[parent].append(nested_names)\n         # Apply the nested field options.\n         for key, options in iter(nested_options.items()):\n-            new_options = self.set_class(options)\n-            original_options = getattr(self.declared_fields[key], option_name, ())\n-            if original_options:\n-                if set_operation == \"union\":\n-                    new_options |= self.set_class(original_options)\n-                if set_operation == \"intersection\":\n-                    new_options &= self.set_class(original_options)\n-            setattr(self.declared_fields[key], option_name, new_options)\n+            apply(self.declared_fields[key], options)\n \n     def _init_fields(self) -> None:\n         \"\"\"Update self.fields, self.load_fields, and self.dump_fields based on schema options.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 20,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "f",
+    "fc",
+    "files",
+    "n",
+    "old",
+    "parts",
+    "s",
+    "sp"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 10349,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 20 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "9 turns; variables reused across turns: ['f', 'fc', 'files', 'n', 'old', 'parts', 's', 'sp']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was constructed programmatically and inspected after construction. The supplied acceptance cases cover Tuple selections, recursive wrappers, loading, dumping, and instance isolation.",
+   "inspect_locate": "The execution used 20 targeted searches without printing the whole context. The investigation spans schema-level selection normalization and container child handling, making repository inspection useful.",
+   "persistent_state": "Variables were reused across nine turns while coordinating selection rules, container topology, and production edits.",
+   "recursive_decomposition": "A sub-call was made, but its result did not reach the final answer. This behavior was not established by the reference execution."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise production-only unified-diff format. Its requirements form a coherent container-selection contract rather than unrelated checks. It does not prescribe solver operations or reveal an implementation. Although related to earlier List isolation and Nested selection tasks, it asks for distinct functionality: propagating dotted selections through Tuple and arbitrary value-container combinations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production patch must cover all named wrapper combinations and preserve exact source context across its edits.",
+   "inspect_locate": "Selection normalization happens in Schema, while selection exposure and copying happen separately in each container binding implementation.",
+   "persistent_state": "The investigation needs to retain the selection rules and wrapper topology while coordinating construction-time option exposure with binding-time copies.",
+   "recursive_decomposition": "Tuple's multiple children, enclosing List wrappers, and enclosing Dict value wrappers require independent propagation decisions. Their results must preserve Nested intersection/union semantics and instance isolation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema.__apply_nested_option",
+    "why": "The schema applies dotted selections to the declared outer field, not directly to each descendant."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Tuple._bind_to_schema",
+    "why": "Tuple copies and binds each child but currently has no selection propagation."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::List._bind_to_schema",
+    "why": "Existing List selection propagation recognizes only a direct Nested child."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Mapping._bind_to_schema",
+    "why": "Mapping separates key binding from value selection propagation."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestListNested",
+    "why": "Existing tests establish selection merging and cross-instance isolation expectations."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_tuple_nested_selection_acceptance.py\n@@ -0,0 +1,37 @@\n+from marshmallow import EXCLUDE, Schema, fields\n+\n+\n+class SelectionLeaf(Schema):\n+    name = fields.Str()\n+    age = fields.Int()\n+    city = fields.Str()\n+\n+\n+class SelectionBatch(Schema):\n+    pair = fields.Tuple((fields.Nested(SelectionLeaf, only=(\"name\", \"age\")), fields.Nested(SelectionLeaf)))\n+    wrapped = fields.List(fields.Dict(keys=fields.Str(), values=fields.Tuple((fields.Nested(SelectionLeaf),))))\n+    scalar = fields.Tuple((fields.Int(),))\n+\n+\n+PAIR = ({\"name\": \"A\", \"age\": 7, \"city\": \"X\"}, {\"name\": \"B\", \"age\": 8, \"city\": \"Y\"})\n+\n+\n+def test_tuple_only_and_loading():\n+    schema = SelectionBatch(only=(\"pair.age\",))\n+    assert schema.dump({\"pair\": PAIR}) == {\"pair\": ({\"age\": 7}, {\"age\": 8})}\n+    assert schema.load({\"pair\": [{\"age\": \"7\"}, {\"age\": \"8\"}]}) == {\"pair\": ({\"age\": 7}, {\"age\": 8})}\n+\n+\n+def test_tuple_exclude_preserves_child_only():\n+    schema = SelectionBatch(exclude=(\"pair.age\",))\n+    assert schema.dump({\"pair\": PAIR}) == {\"pair\": ({\"name\": \"A\"}, {\"name\": \"B\", \"city\": \"Y\"})}\n+\n+\n+def test_deep_wrappers_and_instance_isolation():\n+    payload = {\"wrapped\": [{\"slot\": (PAIR[0],)}], \"scalar\": (3,)}\n+    first = SelectionBatch(only=(\"wrapped.age\", \"scalar\"))\n+    second = SelectionBatch(only=(\"wrapped.name\",))\n+    assert first.dump(payload) == {\"wrapped\": [{\"slot\": ({\"age\": 7},)}], \"scalar\": (3,)}\n+    assert second.dump(payload) == {\"wrapped\": [{\"slot\": ({\"name\": \"A\"},)}]}\n+    assert first.load({\"wrapped\": [{\"slot\": [{\"age\": \"7\"}]}], \"scalar\": [\"3\"]}, unknown=EXCLUDE) == {\"wrapped\": [{\"slot\": ({\"age\": 7},)}], \"scalar\": (3,)}\n+    assert SelectionBatch(exclude=(\"wrapped.age\",)).dump(payload) == {\"wrapped\": [{\"slot\": ({\"name\": \"A\", \"city\": \"X\"},)}], \"scalar\": (3,)}\n",
+  "include_failure_log": false,
+  "notes": "Acceptance uses ordinary schema-class Nested declarations. It does not introduce a requirement to repair the separately documented dotted-selection limitation of Nested schema instances. The entire existing suite must remain passing.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Extend dotted only and exclude selections to Nested fields inside Tuple. A path such as 'pair.age' must apply the remaining selection to every Nested element of pair, using the same intersection for only and union for exclude that existing List-of-Nested fields use. This must also work when those Nested fields are reached through any combination of Tuple elements, List elements, and Dict values\u2014for example, a List of Dict values that are Tuples of Nested fields. Dict key fields must not receive these selections, and scalar children must retain their existing behavior. Preserve each Nested field's own selections and keep separately constructed schema instances isolated. Support both loading and dumping without changing the existing direction-option or partial-loading behavior. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r03-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_tuple_nested_selection_acceptance.py::test_deep_wrappers_and_instance_isolation",
+   "tests/test_tuple_nested_selection_acceptance.py::test_tuple_exclude_preserves_child_only",
+   "tests/test_tuple_nested_selection_acceptance.py::test_tuple_only_and_loading"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1191
+   },
+   "patch_files": [
+    "src/marshmallow/schema.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_tuple_nested_selection_acceptance.py::test_deep_wrappers_and_instance_isolation",
+   "tests/test_tuple_nested_selection_acceptance.py::test_tuple_exclude_preserves_child_only",
+   "tests/test_tuple_nested_selection_acceptance.py::test_tuple_only_and_loading"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

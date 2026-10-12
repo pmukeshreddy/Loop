@@ -1,0 +1,64 @@
+--- /dev/null
++++ b/tests/test_qualify.py
+@@ -0,0 +1,61 @@
++import pytest
++
++import sqlparse
++from sqlparse import sql, tokens as T
++
++
++def walk(node):
++    yield node
++    for child in getattr(node, 'tokens', ()):
++        yield from walk(child)
++
++
++@pytest.mark.parametrize('tail', [
++    'order by a',
++    'limit 2',
++    'union select 2',
++    'union all select 2',
++    'except select 2',
++    'intersect select 2',
++])
++def test_qualify_boundaries(tail):
++    source = 'select a from t where a > 0 qualify a = 1 ' + tail
++    stmt, = sqlparse.parse(source)
++    assert str(stmt) == source
++    where = stmt.token_next_by(i=sql.Where)[1]
++    clause = stmt.token_next_by(i=sql.Qualify)[1]
++    assert str(where) == 'where a > 0 '
++    assert isinstance(clause, sql.Qualify)
++    assert str(clause) == 'qualify a = 1 '
++    assert clause.parent is stmt
++    assert clause.token_first().match(T.Keyword, 'QUALIFY')
++    for node in walk(stmt):
++        for child in getattr(node, 'tokens', ()):
++            assert child.parent is node
++
++
++def test_qualify_at_end():
++    source = 'select a from t qualify a = 1'
++    stmt, = sqlparse.parse(source)
++    assert isinstance(stmt.tokens[-1], sql.Qualify)
++    assert str(stmt.tokens[-1]) == 'qualify a = 1'
++    assert str(stmt) == source
++    assert stmt.get_type() == 'SELECT'
++
++
++def test_nested_qualify():
++    source = ('select * from (select a from t where a > 0 '
++              'qualify a = 1) q qualify b = 2 order by b')
++    stmt, = sqlparse.parse(source)
++    assert str(stmt) == source
++    clauses = [node for node in walk(stmt) if isinstance(node, sql.Qualify)]
++    assert len(clauses) == 2
++    assert sorted(str(node) for node in clauses) == [
++        'qualify a = 1', 'qualify b = 2 ']
++    inner = next(node for node in clauses if str(node) == 'qualify a = 1')
++    assert isinstance(inner.parent, sql.Parenthesis)
++    assert inner.parent.tokens[-1].match(T.Punctuation, ')')
++    assert isinstance(stmt.token_next_by(i=sql.Qualify)[1], sql.Qualify)
++    for node in walk(stmt):
++        for child in getattr(node, 'tokens', ()):
++            assert child.parent is node

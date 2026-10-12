@@ -1,0 +1,189 @@
+{
+  "task_id": "hynek-structlog-r01-03",
+  "family": "combine_verify_finish",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 706015,
+    "context_lengths": [
+      132,
+      1005,
+      519,
+      54740,
+      7432,
+      11402,
+      8732,
+      4554,
+      4989,
+      7230,
+      6802,
+      2493,
+      4535,
+      10499,
+      2666,
+      3845,
+      1062,
+      4964,
+      4492,
+      6064,
+      8971,
+      23020,
+      2899,
+      6915,
+      4330,
+      1923,
+      4767,
+      7850,
+      1113,
+      2945,
+      7395,
+      14044,
+      2427,
+      1670,
+      1242,
+      2010,
+      9472,
+      10042,
+      965,
+      5664,
+      37212,
+      935,
+      30968,
+      41937,
+      5805,
+      9253,
+      16618,
+      10151,
+      795,
+      8617,
+      252,
+      522,
+      1557,
+      1000,
+      23821,
+      18411,
+      7303,
+      13305,
+      9121,
+      35544,
+      5648,
+      1706,
+      11072,
+      12244,
+      1531,
+      50696,
+      6614,
+      13855,
+      33229,
+      10307,
+      2198,
+      12420,
+      3547
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:250])\nfiles = {c.split('\\n',1)[0][8:]:c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint([p for p in files if 'stdlib' in p])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:250])\nfiles = {c.split('\\n',1)[0][8:]:c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint([p for p in files if 'stdlib' in p])"
+      ],
+      "stdout_raw_chars": 705,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 73\n# File: .git_archival.txt\nnode: 8174a86a2f14b5bd295eded733ff5fffc12aa173\nnode-date: 2026-06-06T09:18:48+02:00\ndescribe-name: 26.1.0\n\n# File: src/structlog/_native.py\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete \n# File: tox.ini\n[tox]\nrequires =\n    tox>=4.51.0\n    tox-uv\nenv_list =\n    pre-commit,\n    3.1{0-5}-{tests,mypy}\n    3.1{0,3}-tests-{colorama,be,rich},\n    typing-{mypy,pyright,ty,pyrefly},\n    docs-{sponsors,build,doctests},\n    coverage-{combine,re\n['src/structlog/stdlib.py', 'tests/test_stdlib.py']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re\ns = files['src/structlog/stdlib.py']\nstart=s.index('class ExtraAdder')\nend=s.find('\\nclass ',start+1)\nextra=s[start:end]\nprint(extra[:4000])\nt=files['tests/test_stdlib.py']\npos=[m.start() for m in re.finditer('ExtraAdder',t)]\nprint('test hits',len(pos))\nprint(t[max(0,pos[0]-300):pos[0]+900])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re\ns = files['src/structlog/stdlib.py']\nstart=s.index('class ExtraAdder')\nend=s.find('\\nclass ',start+1)\nextra=s[start:end]\nprint(extra[:4000])\nt=files['tests/test_stdlib.py']\npos=[m.start() for m in re.finditer('ExtraAdder',t)]\nprint('test hits',len(pos))\nprint(t[max(0,pos[0]-300):pos[0]+900])"
+      ],
+      "stdout_raw_chars": 5214,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "class ExtraAdder:\n    \"\"\"\n    Add extra attributes of `logging.LogRecord` objects to the event\n    dictionary.\n\n    This processor can be used for adding data passed in the ``extra``\n    parameter of the `logging` module's log methods to the event dictionary.\n\n    Args:\n        allow:\n            An optional collection of attributes that, if present in\n            `logging.LogRecord` objects, will be copied to event dictionaries.\n\n            If ``allow`` is None all attributes of `logging.LogRecord` objects\n            that do not exist on a standard `logging.LogRecord` object will be\n            copied to event dictionaries.\n\n    .. versionadded:: 21.5.0\n    \"\"\"\n\n    __slots__ = (\"_copier\",)\n\n    def __init__(self, allow: Collection[str] | None = None) -> None:\n        self._copier: Callable[[EventDict, logging.LogRecord], None]\n        if allow is not None:\n            # The contents of allow is copied to a new list so that changes to\n            # the list passed into the constructor does not change the\n            # behaviour of this processor.\n            self._copier = functools.partial(self._copy_allowed, [*allow])\n        else:\n            self._copier = self._copy_all\n\n    def __call__(\n        self, logger: logging.Logger, name: str, event_dict: EventDict\n    ) -> EventDict:\n        record: logging.LogRecord | None = event_dict.get(\"_record\")\n        if record is not None:\n            self._copier(event_dict, record)\n        return event_dict\n\n    @classmethod\n    def _copy_all(\n        cls, event_dict: EventDict, record: logging.LogRecord\n    ) -> None:\n        for key, value in record.__dict__.items():\n            if key not in _LOG_RECORD_KEYS:\n                event_dict[key] = value\n\n    @classmethod\n    def _copy_allowed(\n        cls,\n        allow: Collection[str],\n        event_dict: EventDict,\n        record: logging.LogRecord,\n    ) -> None:\n        for key in allow:\n            if key in record.__dict__:\n                event_dict[key] = record.__dict__[key]\n\n\nLOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\n\n\ndef render_to_log_args_and_kwargs(\n    _: logging.Logger, __: str, event_dict: EventDict\n) -> tuple[tuple[Any, ...], dict[str, Any]]:\n    \"\"\"\n    Render ``event_dict`` into positional and keyword arguments for\n    `logging.Logger` logging methods.\n    See `logging.Logger.debug` method for keyword arguments reference.\n\n    The ``event`` field is passed in the first positional argument, positional\n    arguments from ``positional_args`` field are passed in subsequent positional\n    arguments, keyword arguments are extracted from the *event_dict* and the\n    rest of the *event_dict* is added as ``extra``.\n\n    This allows you to defer formatting to `logging`.\n\n    .. versionadded:: 25.1.0\n    \"\"\"\n    args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))\n\n    kwargs = {\n        kwarg_name: event_dict.pop(kwarg_name)\n        for kwarg_name in LOG_KWARG_NAMES\n        if kwarg_name in event_dict\n    }\n    if event_dict:\n        kwargs[\"extra\"] = event_dict\n\n    return args, kwargs\n\n\ndef render_to_log_kwargs(\n    _: logging.Logger, __: str, event_dict: EventDict\n) -> EventDict:\n    \"\"\"\n    Render ``event_dict`` into keyword arguments for `logging.Logger` logging\n    methods.\n    See `logging.Logger.debug` method for keyword arguments reference.\n\n    The ``event`` field is translated into ``msg``, keyword arguments are\n    extracted from the *event_dict* and the rest of the *event_dict* is added as\n    ``extra``.\n\n    This allows you to defer formatting to `logging`.\n\n    .. versionadded:: 17.1.0\n    .. versionchanged:: 22.1.0\n       ``exc_info``, ``stack_info``, and ``stacklevel`` are passed as proper\n       kwargs and not put into ``extra``.\n    .. versionchanged:: 24.2.0\n       ``stackLevel`` corrected to ``stacklevel``.\n    \"\"\"\n    return {\n        \"msg\": event_dict.pop(\"event\"),\n        \"extra\": event_dict,\n        **{\n            kw: event_dict.pop(kw)\n            for kw in L\ntest hits 6\nONFIG\nfrom structlog._log_levels import CRITICAL, DEBUG, NAME_TO_LEVEL, WARN\nfrom structlog.dev import ConsoleRenderer\nfrom structlog.exceptions import DropEvent\nfrom structlog.processors import JSONRenderer, KeyValueRenderer\nfrom structlog.stdlib import (\n    AsyncBoundLogger,\n    BoundLogger,\n    ExtraAdder,\n    LoggerFactory,\n    PositionalArgumentsFormatter,\n    ProcessorFormatter,\n    _FixedFindCallerLogger,\n    add_log_level,\n    add_log_level_number,\n    add_logger_name,\n    filter_by_level,\n    get_logger,\n    recreate_defaults,\n    render_to_log_args_and_kwargs,\n    render_to_log_kwargs,\n)\nfrom structlog.testing import CapturedCall\nfrom structlog.typing import BindableLogger, EventDict\n\nfrom .additional_frame import additional_frame\nfrom .helpers import call_recorder, stub\n\n\ndef build_bl(logger=None, processors=None, context=None):\n    \"\"\"\n    Convenience function to build BoundLogger with sane defaults.\n    \"\"\"\n    return BoundLogger(logger or ReturnLogger(), processors, {})\n\n\ndef return_method_name(_, method_name, __):\n    \"\"\"\n    A final renderer that returns the name of the logging method.\n    \"\"\"\n    return method_name\n\n\nclass TestLoggerFactory:\n    def setup_method(s\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\ntest_start=t.index('class TestExtraAdder')\ntest_end=t.find('\\nclass ',test_start+1)\nprint(t[test_start:min(test_end,test_start+3400)])\nprint([p for p in files if 'changelog' in p.lower() or 'changes' in p.lower()])\nprint(s[start-200:start])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "test_start=t.index('class TestExtraAdder')\ntest_end=t.find('\\nclass ',test_start+1)\nprint(t[test_start:min(test_end,test_start+3400)])\nprint([p for p in files if 'changelog' in p.lower() or 'changes' in p.lower()])\nprint(s[start-200:start])"
+      ],
+      "stdout_raw_chars": 3619,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "class TestExtraAdder:\n    @pytest.mark.parametrize(\n        (\"allow\", \"misses\"),\n        [\n            (None, None),\n            ({}, None),\n            *[({key}, None) for key in extra_dict()],\n            ({\"missing\"}, {\"missing\"}),\n            ({\"missing\", \"keys\"}, {\"missing\"}),\n            ({\"this\", \"x_int\"}, None),\n        ],\n    )\n    def test_add_extra(\n        self,\n        make_log_record: Callable[[], logging.LogRecord],\n        extra_dict: dict[str, Any],\n        allow: Collection[str] | None,\n        misses: set[str] | None,\n    ):\n        \"\"\"\n        Extra attributes of a LogRecord object are added to the event dict.\n        \"\"\"\n        record: logging.LogRecord = make_log_record()\n        record.__dict__.update(extra_dict)\n        event_dict = {\"_record\": record, \"ed_key\": \"ed_value\"}\n        expected = self._copy_allowed(event_dict, extra_dict, allow)\n\n        if allow is None:\n            actual = ExtraAdder()(None, None, event_dict)\n            assert expected == actual\n        actual = ExtraAdder(allow)(None, None, event_dict)\n        assert expected == actual\n        if misses:\n            assert misses.isdisjoint(expected.keys())\n\n    def test_no_record(self):\n        \"\"\"\n        If the event_dict has no LogRecord, do nothing.\n        \"\"\"\n        actual = ExtraAdder()(None, None, {})\n\n        assert {} == actual\n\n    @pytest.mark.parametrize(\n        (\"allow\", \"misses\"),\n        [\n            (None, None),\n            ({}, None),\n            *[({key}, None) for key in extra_dict()],\n            ({\"missing\"}, {\"missing\"}),\n            ({\"missing\", \"keys\"}, {\"missing\"}),\n            ({\"this\", \"x_int\"}, None),\n        ],\n    )\n    def test_add_extra_e2e(\n        self,\n        extra_dict: dict[str, Any],\n        allow: Collection[str] | None,\n        misses: set[str] | None,\n    ):\n        \"\"\"\n        Values passed in the `extra` parameter of the `logging` module's log\n        methods pass through to log output.\n        \"\"\"\n        logger = logging.Logger(sys._getframe().f_code.co_name)\n        string_io = StringIO()\n        handler = logging.StreamHandler(string_io)\n        formatter = ProcessorFormatter(\n            foreign_pre_chain=[ExtraAdder(allow)],\n            processors=[JSONRenderer()],\n        )\n        handler.setFormatter(formatter)\n        handler.setLevel(0)\n        logger.addHandler(handler)\n        logger.setLevel(0)\n        logging.warning(\"allow = %s\", allow)  # noqa: LOG015\n\n        event_dict = {\"event\": \"Some text\"}\n        expected = self._copy_allowed(event_dict, extra_dict, allow)\n\n        logger.info(\"Some %s\", \"text\", extra=extra_dict)\n        actual = {\n            key: value\n            for key, value in json.loads(string_io.getvalue()).items()\n            if not key.startswith(\"_\")\n        }\n\n        assert expected == actual\n        if misses:\n            assert misses.isdisjoint(expected.keys())\n\n    @classmethod\n    def _copy_allowed(\n        cls,\n        event_dict: EventDict,\n        extra_dict: dict[str, Any],\n        allow: Collection[str] | None,\n    ) -> EventDict:\n        if allow is None:\n            return {**event_dict, **extra_dict}\n\n        return {\n            **event_dict,\n            **{\n                key: value for key, value in extra_dict.items() if key in allow\n            },\n        }\n\n\n@pytest.fixture(name=\"stdlib_logger\")\ndef _stdlib_logger():\n    logger = logging.get\n['CHANGELOG.md']\ner\"] = logger.name\n    else:\n        event_dict[\"logger\"] = record.name\n    return event_dict\n\n\n_LOG_RECORD_KEYS = logging.LogRecord(\n    \"name\", 0, \"pathname\", 0, \"msg\", (), None\n).__dict__.keys()\n\n\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\nclass_end=s.index('\\n\\nLOG_KWARG_NAMES',start)\nold_class=s[start:class_end]\nnew_class=old_class.replace(\n    '    .. versionadded:: 21.5.0',\n    '        overwrite:\\n'\n    '            Whether to overwrite existing event dictionary values. If False,\\n'\n    '            only attributes whose keys are absent from the event dictionary\\n'\n    '            are copied, even if an existing value is None, False, or empty.\\n'\n    '\\n'\n    '    .. versionadded:: 21.5.0'\n).replace(\n    '    def __init__(self, allow: Collection[str] | None = None) -> None:',\n    '    def __init__(\\n'\n    '        self, allow: Collection[str] | None = None, *, overwrite: bool = True\\n'\n    '    ) -> None:'\n).replace(\n    'self._copier = functools.partial(self._copy_allowed, [*allow])',\n    'self._copier = functools.partial(\\n'\n    '                self._copy_allowed, [*allow], overwrite=overwrite\\n'\n    '            )'\n).replace(\n    'self._copier = self._copy_all',\n    'self._copier = functools.partial(self._copy_all, overwrite=overwrite)'\n).replace(\n    '        cls, event_dict: EventDict, record: logging.LogRecord\\n',\n    '        cls,\\n'\n    '        event_dict: EventDict,\\n'\n    '        record: logging.LogRecord,\\n'\n    '        *,\\n'\n    '        overwrite: bool = True,\\n'\n).replace(\n    '            if key not in _LOG_RECORD_KEYS:',\n    '            if key not in _LOG_RECORD_KEYS and (\\n'\n    '                overwrite or key not in event_dict\\n'\n    '            ):'\n).replace(\n    '        record: logging.LogRecord,\\n    ) -> None:',\n    '        record: logging.LogRecord,\\n'\n    '        *,\\n'\n    '        overwrite: bool = True,\\n'\n    '    ) -> None:'\n).replace(\n    '            if key in record.__dict__:',\n    '            if key in record.__dict__ and (\\n'\n    '                overwrite or key not in event_dict\\n'\n    '            ):'\n)\nnew=s[:start]+new_class+s[class_end:]\nast.parse(new)\npatch=''.join(difflib.unified_diff(s.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/structlog/stdlib.py',tofile='b/src/structlog/stdlib.py'))\nassert new != s\nassert s == files['src/structlog/stdlib.py']\nassert 'record: logging.LogRecord | None = event_dict.get(\"_record\")' in new_class\nassert '[*allow]' in new_class\nassert new_class.count('overwrite or key not in event_dict') == 2\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\nclass_end=s.index('\\n\\nLOG_KWARG_NAMES',start)\nold_class=s[start:class_end]\nnew_class=old_class.replace(\n    '    .. versionadded:: 21.5.0',\n    '        overwrite:\\n'\n    '            Whether to overwrite existing event dictionary values. If False,\\n'\n    '            only attributes whose keys are absent from the event dictionary\\n'\n    '            are copied, even if an existing value is None, False, or empty.\\n'\n    '\\n'\n    '    .. versionadded:: 21.5.0'\n).replace(\n    '    def __init__(self, allow: Collection[str] | None = None) -> None:',\n    '    def __init__(\\n'\n    '        self, allow: Collection[str] | None = None, *, overwrite: bool = True\\n'\n    '    ) -> None:'\n).replace(\n    'self._copier = functools.partial(self._copy_allowed, [*allow])',\n    'self._copier = functools.partial(\\n'\n    '                self._copy_allowed, [*allow], overwrite=overwrite\\n'\n    '            )'\n).replace(\n    'self._copier = self._copy_all',\n    'self._copier = functools.partial(self._copy_all, overwrite=overwrite)'\n).replace(\n    '        cls, event_dict: EventDict, record: logging.LogRecord\\n',\n    '        cls,\\n'\n    '        event_dict: EventDict,\\n'\n    '        record: logging.LogRecord,\\n'\n    '        *,\\n'\n    '        overwrite: bool = True,\\n'\n).replace(\n    '            if key not in _LOG_RECORD_KEYS:',\n    '            if key not in _LOG_RECORD_KEYS and (\\n'\n    '                overwrite or key not in event_dict\\n'\n    '            ):'\n).replace(\n    '        record: logging.LogRecord,\\n    ) -> None:',\n    '        record: logging.LogRecord,\\n'\n    '        *,\\n'\n    '        overwrite: bool = True,\\n'\n    '    ) -> None:'\n).replace(\n    '            if key in record.__dict__:',\n    '            if key in record.__dict__ and (\\n'\n    '                overwrite or key not in event_dict\\n'\n    '            ):'\n)\nnew=s[:start]+new_class+s[class_end:]\nast.parse(new)\npatch=''.join(difflib.unified_diff(s.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/structlog/stdlib.py',tofile='b/src/structlog/stdlib.py'))\nassert new != s\nassert s == files['src/structlog/stdlib.py']\nassert 'record: logging.LogRecord | None = event_dict.get(\"_record\")' in new_class\nassert '[*allow]' in new_class\nassert new_class.count('overwrite or key not in event_dict') == 2\nprint(patch)"
+      ],
+      "stdout_raw_chars": 2423,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -899,20 +899,29 @@\n             that do not exist on a standard `logging.LogRecord` object will be\n             copied to event dictionaries.\n \n+        overwrite:\n+            Whether to overwrite existing event dictionary values. If False,\n+            only attributes whose keys are absent from the event dictionary\n+            are copied, even if an existing value is None, False, or empty.\n+\n     .. versionadded:: 21.5.0\n     \"\"\"\n \n     __slots__ = (\"_copier\",)\n \n-    def __init__(self, allow: Collection[str] | None = None) -> None:\n+    def __init__(\n+        self, allow: Collection[str] | None = None, *, overwrite: bool = True\n+    ) -> None:\n         self._copier: Callable[[EventDict, logging.LogRecord], None]\n         if allow is not None:\n             # The contents of allow is copied to a new list so that changes to\n             # the list passed into the constructor does not change the\n             # behaviour of this processor.\n-            self._copier = functools.partial(self._copy_allowed, [*allow])\n+            self._copier = functools.partial(\n+                self._copy_allowed, [*allow], overwrite=overwrite\n+            )\n         else:\n-            self._copier = self._copy_all\n+            self._copier = functools.partial(self._copy_all, overwrite=overwrite)\n \n     def __call__(\n         self, logger: logging.Logger, name: str, event_dict: EventDict\n@@ -924,10 +933,16 @@\n \n     @classmethod\n     def _copy_all(\n-        cls, event_dict: EventDict, record: logging.LogRecord\n+        cls,\n+        event_dict: EventDict,\n+        record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if key not in _LOG_RECORD_KEYS and (\n+                overwrite or key not in event_dict\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -936,9 +951,13 @@\n         allow: Collection[str],\n         event_dict: EventDict,\n         record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if key in record.__dict__ and (\n+                overwrite or key not in event_dict\n+            ):\n                 event_dict[key] = record.__dict__[key]\n \n \n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nline='            if key in record.__dict__ and (overwrite or key not in event_dict):'\nprint(len(line))\nnew=new.replace('            if key in record.__dict__ and (\\n                overwrite or key not in event_dict\\n            ):',line)\nast.parse(new)\npatch=''.join(difflib.unified_diff(s.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/structlog/stdlib.py',tofile='b/src/structlog/stdlib.py'))\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "line='            if key in record.__dict__ and (overwrite or key not in event_dict):'\nprint(len(line))\nnew=new.replace('            if key in record.__dict__ and (\\n                overwrite or key not in event_dict\\n            ):',line)\nast.parse(new)\npatch=''.join(difflib.unified_diff(s.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/structlog/stdlib.py',tofile='b/src/structlog/stdlib.py'))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 2394,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "79\n--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -899,20 +899,29 @@\n             that do not exist on a standard `logging.LogRecord` object will be\n             copied to event dictionaries.\n \n+        overwrite:\n+            Whether to overwrite existing event dictionary values. If False,\n+            only attributes whose keys are absent from the event dictionary\n+            are copied, even if an existing value is None, False, or empty.\n+\n     .. versionadded:: 21.5.0\n     \"\"\"\n \n     __slots__ = (\"_copier\",)\n \n-    def __init__(self, allow: Collection[str] | None = None) -> None:\n+    def __init__(\n+        self, allow: Collection[str] | None = None, *, overwrite: bool = True\n+    ) -> None:\n         self._copier: Callable[[EventDict, logging.LogRecord], None]\n         if allow is not None:\n             # The contents of allow is copied to a new list so that changes to\n             # the list passed into the constructor does not change the\n             # behaviour of this processor.\n-            self._copier = functools.partial(self._copy_allowed, [*allow])\n+            self._copier = functools.partial(\n+                self._copy_allowed, [*allow], overwrite=overwrite\n+            )\n         else:\n-            self._copier = self._copy_all\n+            self._copier = functools.partial(self._copy_all, overwrite=overwrite)\n \n     def __call__(\n         self, logger: logging.Logger, name: str, event_dict: EventDict\n@@ -924,10 +933,16 @@\n \n     @classmethod\n     def _copy_all(\n-        cls, event_dict: EventDict, record: logging.LogRecord\n+        cls,\n+        event_dict: EventDict,\n+        record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if key not in _LOG_RECORD_KEYS and (\n+                overwrite or key not in event_dict\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -936,9 +951,11 @@\n         allow: Collection[str],\n         event_dict: EventDict,\n         record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if key in record.__dict__ and (overwrite or key not in event_dict):\n                 event_dict[key] = record.__dict__[key]\n \n \n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -899,20 +899,29 @@\n             that do not exist on a standard `logging.LogRecord` object will be\n             copied to event dictionaries.\n \n+        overwrite:\n+            Whether to overwrite existing event dictionary values. If False,\n+            only attributes whose keys are absent from the event dictionary\n+            are copied, even if an existing value is None, False, or empty.\n+\n     .. versionadded:: 21.5.0\n     \"\"\"\n \n     __slots__ = (\"_copier\",)\n \n-    def __init__(self, allow: Collection[str] | None = None) -> None:\n+    def __init__(\n+        self, allow: Collection[str] | None = None, *, overwrite: bool = True\n+    ) -> None:\n         self._copier: Callable[[EventDict, logging.LogRecord], None]\n         if allow is not None:\n             # The contents of allow is copied to a new list so that changes to\n             # the list passed into the constructor does not change the\n             # behaviour of this processor.\n-            self._copier = functools.partial(self._copy_allowed, [*allow])\n+            self._copier = functools.partial(\n+                self._copy_allowed, [*allow], overwrite=overwrite\n+            )\n         else:\n-            self._copier = self._copy_all\n+            self._copier = functools.partial(self._copy_all, overwrite=overwrite)\n \n     def __call__(\n         self, logger: logging.Logger, name: str, event_dict: EventDict\n@@ -924,10 +933,16 @@\n \n     @classmethod\n     def _copy_all(\n-        cls, event_dict: EventDict, record: logging.LogRecord\n+        cls,\n+        event_dict: EventDict,\n+        record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if key not in _LOG_RECORD_KEYS and (\n+                overwrite or key not in event_dict\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -936,9 +951,11 @@\n         allow: Collection[str],\n         event_dict: EventDict,\n         record: logging.LogRecord,\n+        *,\n+        overwrite: bool = True,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if key in record.__dict__ and (overwrite or key not in event_dict):\n                 event_dict[key] = record.__dict__[key]\n \n \n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 57.84064758299792
+  }
+}

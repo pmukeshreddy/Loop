@@ -1,0 +1,213 @@
+{
+  "task_id": "jd-tenacity-r02-01",
+  "family": "recursive_decomposition",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 280980,
+    "context_lengths": [
+      173,
+      181,
+      11373,
+      21537,
+      1570,
+      73,
+      963,
+      21547,
+      4103,
+      133,
+      259,
+      225,
+      143,
+      104,
+      212,
+      435,
+      100,
+      184,
+      272,
+      229,
+      151,
+      171,
+      124,
+      358,
+      163,
+      135,
+      206,
+      451,
+      121,
+      160,
+      205,
+      339,
+      158,
+      283,
+      163,
+      506,
+      637,
+      512,
+      205,
+      252,
+      863,
+      166,
+      439,
+      292,
+      170,
+      475,
+      402,
+      397,
+      268,
+      143,
+      171,
+      204,
+      327,
+      182,
+      158,
+      234,
+      125,
+      165,
+      167,
+      148,
+      118,
+      155,
+      184,
+      252,
+      319,
+      445,
+      147,
+      233,
+      59,
+      29681,
+      4121,
+      1542,
+      9270,
+      4867,
+      1381,
+      2223,
+      1396,
+      10466,
+      4258,
+      2173,
+      11564,
+      3114,
+      20876,
+      3249,
+      89366,
+      2842,
+      2067
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:350])\nheaders=[x.split('\\n',1)[0] for x in context]\nprint('\\n'.join(f'{i} {h}' for i,h in enumerate(headers) if any(t in h.lower() for t in ['wait','test','log'])))\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:350])\nheaders=[x.split('\\n',1)[0] for x in context]\nprint('\\n'.join(f'{i} {h}' for i,h in enumerate(headers) if any(t in h.lower() for t in ['wait','test','log'])))"
+      ],
+      "stdout_raw_chars": 2265,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 87\n# File: .mergify.yml\nmerge_protections_settings:\n  auto_merge_conditions:\n    - or:\n      - author = jd\n      - \"#approved-reviews-by >= 1\"\n      - author = dependabot[bot]\n\n# File: releasenotes/notes/fix-retry-wrapper-attributes-f7a3a45b8e90f257.yaml\n---\nfixes:\n  - |\n    Restore the value of the `retry` attribute for wrapped functions. Also,\n    clarify that those attributes are write-only and statistics should be\n    r\n# File: tests/test_utils.py\nimport functools\n\nfrom tenacity import _utils\n\n\ndef test_is_coroutine_callable() -> None:\n    async def async_func() -> None:\n        pass\n\n    def sync_func() -> None:\n        pass\n\n    class AsyncClass:\n        async def __call__(self) -> None:\n            pass\n\n    class SyncClass:\n        def __call__(self) -> None:\n\n5 # File: doc/source/changelog.rst\n9 # File: releasenotes/notes/Fix-tests-for-typeguard-3.x-6eebfea546b6207e.yaml\n16 # File: releasenotes/notes/add-test-extra-55e869261b03e56d.yaml\n20 # File: releasenotes/notes/after_log-50f4d73b24ce9203.yaml\n24 # File: releasenotes/notes/before_sleep_log-improvements-d8149274dfb37d7c.yaml\n28 # File: releasenotes/notes/do_not_package_tests-fe5ac61940b0a5ed.yaml\n33 # File: releasenotes/notes/falsy-callable-wait-3c1e7d2a9b5f4e60.yaml\n40 # File: releasenotes/notes/fix-falsy-wait-regression-3b7e91c4a5d20f68.yaml\n47 # File: releasenotes/notes/fix-wait-chain-empty-strategies-d3a8f7c2b1e4f569.yaml\n48 # File: releasenotes/notes/fix-wait-typing-b26eecdb6cc0a1de.yaml\n50 # File: releasenotes/notes/logging-protocol-a4cf0f786f21e4ee.yaml\n51 # File: releasenotes/notes/make-logger-more-compatible-5da1ddf1bab77047.yaml\n61 # File: releasenotes/notes/support-timedelta-wait-unit-type-5ba1e9fc0fe45523.yaml\n64 # File: releasenotes/notes/wait-exponential-jitter-min-timedelta-a8e3c1f4b7d29e50.yaml\n65 # File: releasenotes/notes/wait-radd-int-6f1a3c9d84b2e057.yaml\n66 # File: releasenotes/notes/wait-random-exponential-min-2a4b7eed9f002436.yaml\n67 # File: releasenotes/notes/wait_exponential_jitter-6ffc81dddcbaa6d3.yaml\n80 # File: tenacity/wait.py\n81 # File: tests/test_after.py\n82 # File: tests/test_asyncio.py\n83 # File: tests/test_issue_478.py\n84 # File: tests/test_tenacity.py\n85 # File: tests/test_tornado.py\n86 # File: tests/test_utils.py\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re,ast,json\nfiles={h[8:]:s.split('\\n',1)[1] for h,s in zip(headers,context) if h.startswith('# File: ')}\nfor p,s in files.items():\n if p.startswith('tests/'):\n  hits=[(i+1,l) for i,l in enumerate(s.splitlines()) if re.search(r'exponential|backoff',l)]\n  if hits: print(p,hits)\nw=files['tenacity/wait.py']\npos=w.index('class wait_exponential(')\nprint(w[pos:pos+3600])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re,ast,json\nfiles={h[8:]:s.split('\\n',1)[1] for h,s in zip(headers,context) if h.startswith('# File: ')}\nfor p,s in files.items():\n if p.startswith('tests/'):\n  hits=[(i+1,l) for i,l in enumerate(s.splitlines()) if re.search(r'exponential|backoff',l)]\n  if hits: print(p,hits)\nw=files['tenacity/wait.py']\npos=w.index('class wait_exponential(')\nprint(w[pos:pos+3600])"
+      ],
+      "stdout_raw_chars": 6464,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "tests/test_tenacity.py [(340, '    def test_exponential(self) -> None:'), (341, '        r = Retrying(wait=tenacity.wait_exponential())'), (351, '    def test_exponential_with_max_wait(self) -> None:'), (352, '        r = Retrying(wait=tenacity.wait_exponential(max=40))'), (363, '    def test_exponential_skips_power_after_reaching_max(self) -> None:'), (369, '        r = Retrying(wait=tenacity.wait_exponential(max=40, exp_base=ExplodingPower(2)))'), (372, '    def test_exponential_caps_when_max_multiplier_ratio_underflows(self) -> None:'), (373, '        r = Retrying(wait=tenacity.wait_exponential(multiplier=1e300, max=1e-100))'), (376, '    def test_exponential_with_min_wait(self) -> None:'), (377, '        r = Retrying(wait=tenacity.wait_exponential(min=20))'), (388, '    def test_exponential_with_max_wait_and_multiplier(self) -> None:'), (389, '        r = Retrying(wait=tenacity.wait_exponential(max=50, multiplier=1))'), (400, '    def test_exponential_with_min_wait_and_multiplier(self) -> None:'), (401, '        r = Retrying(wait=tenacity.wait_exponential(min=20, multiplier=2))'), (412, '    def test_exponential_with_min_wait_andmax__wait(self) -> None:'), (418, '                r = Retrying(wait=tenacity.wait_exponential(min=min_, max=max_))'), (431, '        Retrying(wait=\"exponential_sleep\")  # type: ignore[arg-type]'), (632, '    def test_wait_random_exponential(self) -> None:'), (633, '        fn = tenacity.wait_random_exponential(0.5, 60.0)'), (648, '        fn = tenacity.wait_random_exponential(10, max_wait)'), (654, '        fn = tenacity.wait_random_exponential(min=min_wait)'), (659, '        fn = tenacity.wait_random_exponential()'), (662, '    def test_wait_random_exponential_statistically(self) -> None:'), (663, '        fn = tenacity.wait_random_exponential(0.5, 60.0)'), (681, '    def test_wait_exponential_jitter(self) -> None:'), (682, '        fn = tenacity.wait_exponential_jitter(max=60)'), (696, '            fn = tenacity.wait_exponential_jitter(10, 5)'), (701, '        fn = tenacity.wait_exponential_jitter()'), (704, '    def test_wait_exponential_jitter_min(self) -> None:'), (705, '        fn = tenacity.wait_exponential_jitter(initial=1, max=60, jitter=1, min=5)'), (714, '    def test_wait_exponential_jitter_timedelta(self) -> None:'), (717, '        fn = tenacity.wait_exponential_jitter('), (727, '    def test_wait_exponential_jitter_multiplier(self) -> None:'), (728, '        fn = tenacity.wait_exponential_jitter(multiplier=10, max=60, jitter=0)'), (734, '    def test_wait_exponential_jitter_initial_deprecated(self) -> None:'), (736, '            fn = tenacity.wait_exponential_jitter(initial=10, max=60, jitter=0)'), (740, '    def test_wait_exponential_jitter_initial_and_multiplier_raises(self) -> None:'), (742, '            tenacity.wait_exponential_jitter(initial=5, multiplier=10)')]\nclass wait_exponential(wait_base):\n    \"\"\"Wait strategy that applies exponential backoff.\n\n    It allows for a customized multiplier and an ability to restrict the\n    upper and lower limits to some maximum and minimum value.\n\n    The intervals are fixed (i.e. there is no jitter), so this strategy is\n    suitable for balancing retries against latency when a required resource is\n    unavailable for an unknown duration, but *not* suitable for resolving\n    contention between multiple processes for a shared resource. Use\n    wait_random_exponential for the latter case.\n    \"\"\"\n\n    def __init__(\n        self,\n        multiplier: float = 1,\n        max: _utils.time_unit_type = _utils.MAX_WAIT,\n        exp_base: float = 2,\n        min: _utils.time_unit_type = 0,\n    ) -> None:\n        self.multiplier = multiplier\n        self.min = _utils.to_seconds(min)\n        self.max = _utils.to_seconds(max)\n        self.exp_base = exp_base\n\n    @override\n    def __call__(self, retry_state: \"RetryCallState\") -> float:\n        exponent = retry_state.attempt_number - 1\n        if (\n            self.multiplier > 0\n            and self.max > 0\n            and self.exp_base > 1\n            and math.isfinite(self.max)\n            and exponent\n            > math.log(self.max, self.exp_base)\n            - math.log(self.multiplier, self.exp_base)\n        ):\n            return max(max(0, self.min), self.max)\n        try:\n            exp = self.exp_base**exponent\n            result = self.multiplier * exp\n        except OverflowError:\n            return self.max\n        return max(max(0, self.min), min(result, self.max))\n\n\nclass wait_random_exponential(wait_exponential):\n    \"\"\"Random wait with exponentially widening window.\n\n    An exponential backoff strategy used to mediate contention between multiple\n    uncoordinated processes for a shared resource in distributed systems. This\n    is the sense in which \"exponential backoff\" is meant in e.g. Ethernet\n    networking, and corresponds to the \"Full Jitter\" algorithm described in\n    this blog post:\n\n    https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/\n\n    Each retry occurs at a random time in a geometrically expanding interval.\n    It allows for a custom multiplier and an ability to restrict the upper\n    limit of the random interval to some maximum value.\n\n    Example::\n\n        wait_random_exponential(multiplier=0.5,  # initial window 0.5s\n                                max=60)          # max 60s timeout\n\n    When waiting for an unavailable resource to become available again, as\n    opposed to trying to resolve contention for a shared resource, the\n    wait_exponential strategy (which uses a fixed interval) may be preferable.\n\n    \"\"\"\n\n    @override\n    def __call__(self, retry_state: \"RetryCallState\") -> float:\n        high = super().__call__(retry_state=retry_state)\n        return random.uniform(self.min, high)\n\n\nclass wait_exponential_jitter(wait_base):\n    \"\"\"Wait strategy that applies exponential backoff and jitter.\n\n    It allows for a customized multiplier, maximum wait, jitter and minimum.\n\n    This implements the strategy described here:\n    https://cloud.google.com/storage/docs/retry-strategy\n\n    The wait time is max(min, min(multiplier * 2**n + random.uniform(0, jitter), maximum))\n    where n is the retry count.\n    \"\"\"\n\n    def __init__(\n        self,\n        initial: float = 1,\n        max: _utils.time_unit_type = _utils.MAX_WAIT,\n        exp_base: float = 2,\n        jitter: _utils.time_unit_type = 1,\n        min: _utils.time_unit_type = 0,\n        multiplier: float = 1,\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\ns=files['tests/test_tenacity.py']\ntree=ast.parse(s)\nclasses=[n for n in tree.body if isinstance(n,ast.ClassDef)]\nprint([(c.name,c.lineno,c.end_lineno) for c in classes])\nlines=s.splitlines()\nselected='\\n'.join(lines[300:744])\nassessment=llm_query(\"Review tests below against this change: wait_exponential uses exponent=attempt_number (instead of attempt_number-1), including early cap; wait_random_exponential inherits upper bound. wait_exponential_jitter likewise exponent attempt_number instead of attempt_number-1; everything else unchanged. List ONLY test methods that newly fail, and explain assertion mismatch briefly for each. Distinguish unaffected cap/overflow/exception tests. Include class names if visible.\\n\"+selected)\nprint(assessment)\nprint(w[w.index('    @override',w.index('class wait_exponential_jitter')):])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "s=files['tests/test_tenacity.py']\ntree=ast.parse(s)\nclasses=[n for n in tree.body if isinstance(n,ast.ClassDef)]\nprint([(c.name,c.lineno,c.end_lineno) for c in classes])\nlines=s.splitlines()\nselected='\\n'.join(lines[300:744])\nassessment=llm_query(\"Review tests below against this change: wait_exponential uses exponent=attempt_number (instead of attempt_number-1), including early cap; wait_random_exponential inherits upper bound. wait_exponential_jitter likewise exponent attempt_number instead of attempt_number-1; everything else unchanged. List ONLY test methods that newly fail, and explain assertion mismatch briefly for each. Distinguish unaffected cap/overflow/exception tests. Include class names if visible.\\n\"+selected)\nprint(assessment)\nprint(w[w.index('    @override',w.index('class wait_exponential_jitter')):])"
+      ],
+      "stdout_raw_chars": 4022,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "[('TestBase', 87, 111), ('TestRetryingName', 114, 178), ('TestStopConditions', 181, 282), ('TestWaitConditions', 285, 785), ('TestRetryConditions', 788, 1022), ('NoneReturnUntilAfterCount', 1025, 1040), ('NoIOErrorAfterCount', 1043, 1058), ('NoNameErrorAfterCount', 1061, 1076), ('NoNameErrorCauseAfterCount', 1079, 1101), ('NoIOErrorCauseAfterCount', 1104, 1126), ('NameErrorUntilCount', 1129, 1146), ('IOErrorUntilCount', 1149, 1164), ('CustomError', 1167, 1183), ('NoCustomErrorAfterCount', 1186, 1203), ('CapturingHandler', 1206, 1215), ('TestDecoratorWrapper', 1355, 1621), ('TestStatisticsKeys', 1624, 1667), ('TestEnabled', 1670, 1791), ('TestRetryWith', 1794, 1829), ('TestBeforeAfterAttempts', 1832, 1982), ('TestReraiseExceptions', 1985, 2051), ('TestStatistics', 2054, 2103), ('TestRetryErrorCallback', 2106, 2137), ('TestContextManager', 2140, 2192), ('TestInvokeAsCallable', 2195, 2262), ('TestRetryException', 2265, 2272), ('TestRetryTyping', 2275, 2326), ('TestMockingSleep', 2329, 2367), ('TestPickle', 2370, 2423)]\nClass names are not visible in the excerpt.\n\n- **`test_exponential`** — Attempts 1–8 now return `2, 4, 8, 16, 32, 64, 128, 256`, rather than `1, 2, 4, 8, 16, 32, 64, 128`.\n- **`test_exponential_with_max_wait`** — Attempts 1–6 now return `2, 4, 8, 16, 32, 40`, rather than `1, 2, 4, 8, 16, 32`. The assertions for attempts 7, 8, and 50 remain valid at the cap of `40`.\n- **`test_exponential_with_min_wait`** — First mismatch is attempt 5: actual `32`, expected `20`. Attempts 6–8 and 20 also double their expected values; attempts 1–4 remain at the minimum.\n- **`test_exponential_with_max_wait_and_multiplier`** — Attempts 1–6 now return `2, 4, 8, 16, 32, 50`, rather than `1, 2, 4, 8, 16, 32`. Later capped assertions remain valid.\n- **`test_exponential_with_min_wait_and_multiplier`** — First mismatch is attempt 4: actual `32`, expected `20`. Attempts 5–8 and 20 also double their expected values.\n- **`test_exponential_with_min_wait_andmax__wait`** — In both subtests, attempts 4–7 now return `16, 32, 64, 100`, rather than `10, 16, 32, 64`. Attempts 1–3 remain at the minimum; attempts 8, 9, and 20 remain capped at `100`.\n- **`test_wait_random_exponential`** — Attempts 1–7 now sample with upper bounds `1, 2, 4, 8, 16, 32, 60`, exceeding the asserted bounds `0.5, 1, 2, 4, 8, 16, 32`. Failure is probabilistic but overwhelmingly likely across 1,000 iterations. The capped and minimum-bound sections remain unaffected.\n- **`test_wait_random_exponential_statistically`** — Expected means for attempts 1–7 shift from `0.25, 0.5, 1, 2, 4, 8, 16` to `0.5, 1, 2, 4, 8, 16, 30`, outside the asserted tolerances with overwhelming probability. Attempts 8–9 retain mean `30`.\n- **`test_wait_exponential_jitter`** — Attempts 1–6 now have ranges `[2, 3]`, `[4, 5]`, `[8, 9]`, `[16, 17]`, `[32, 33]`, and `{60}`, rather than the asserted `[1, 2]`, `[2, 3]`, `[4, 5]`, `[8, 9]`, `[16, 17]`, and `[32, 33]`. Later cap assertions and the deprecated-constructor cap section remain valid.\n- **`test_wait_exponential_jitter_min`** — Attempt 3 now returns `[8, 9]`, not exactly `5`; attempt 4 returns `[16, 17]`, not `[8, 9]`. Attempts 1–2 remain at `5`.\n- **`test_wait_exponential_jitter_timedelta`** — Attempt 5 now returns `[32, 33]`, not `[16, 17]`. The attempt-1 minimum and attempt-7 cap assertions remain valid.\n- **`test_wait_exponential_jitter_multiplier`** — Attempts 1–3 now return `20, 40, 60`, rather than `10, 20, 40`; attempt 4 remains capped at `60`.\n- **`test_wait_exponential_jitter_initial_deprecated`** — The deprecation warning remains valid, but attempts 1–2 now return `20, 40`, rather than `10, 20`.\n    @override\n    def __call__(self, retry_state: \"RetryCallState\") -> float:\n        jitter = random.uniform(0, self.jitter)\n        try:\n            exp = self.exp_base ** (retry_state.attempt_number - 1)\n            result = self.multiplier * exp + jitter\n        except OverflowError:\n            result = self.max\n        return max(max(0, self.min), min(result, self.max))\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 20242,
+          "output_chars": 2609,
+          "latency_s": 18.35843066599773,
+          "turn_index": 2,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "```repl\nprint('\\n'.join(lines[630:743]))\nprint('\\n'.join(lines[360:376]))\n# identify all usages and alias imports in tests\nfor p,t in files.items():\n if p.startswith('tests/'):\n  matches=[(i+1,l) for i,l in enumerate(t.splitlines()) if re.search(r'wait=|wait\\(|wait\\.|from tenacity|import tenacity',l)]\n  # exclude primary known test file, display other wait usages\n  if p != 'tests/test_tenacity.py': print(p, matches)\nprint('remaining wait class tests:',[(n.name,n.lineno) for c in classes if c.name=='TestWaitConditions' for n in c.body if isinstance(n,ast.FunctionDef)])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print('\\n'.join(lines[630:743]))\nprint('\\n'.join(lines[360:376]))\n# identify all usages and alias imports in tests\nfor p,t in files.items():\n if p.startswith('tests/'):\n  matches=[(i+1,l) for i,l in enumerate(t.splitlines()) if re.search(r'wait=|wait\\(|wait\\.|from tenacity|import tenacity',l)]\n  # exclude primary known test file, display other wait usages\n  if p != 'tests/test_tenacity.py': print(p, matches)\nprint('remaining wait class tests:',[(n.name,n.lineno) for c in classes if c.name=='TestWaitConditions' for n in c.body if isinstance(n,ast.FunctionDef)])"
+      ],
+      "stdout_raw_chars": 8840,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "\n    def test_wait_random_exponential(self) -> None:\n        fn = tenacity.wait_random_exponential(0.5, 60.0)\n\n        for _ in range(1000):\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), 0, 0.5)\n            self._assert_inclusive_range(fn(make_retry_state(2, 0)), 0, 1.0)\n            self._assert_inclusive_range(fn(make_retry_state(3, 0)), 0, 2.0)\n            self._assert_inclusive_range(fn(make_retry_state(4, 0)), 0, 4.0)\n            self._assert_inclusive_range(fn(make_retry_state(5, 0)), 0, 8.0)\n            self._assert_inclusive_range(fn(make_retry_state(6, 0)), 0, 16.0)\n            self._assert_inclusive_range(fn(make_retry_state(7, 0)), 0, 32.0)\n            self._assert_inclusive_range(fn(make_retry_state(8, 0)), 0, 60.0)\n            self._assert_inclusive_range(fn(make_retry_state(9, 0)), 0, 60.0)\n\n        # max wait\n        max_wait = 5\n        fn = tenacity.wait_random_exponential(10, max_wait)\n        for _ in range(1000):\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), 0.00, max_wait)\n\n        # min wait\n        min_wait = 5\n        fn = tenacity.wait_random_exponential(min=min_wait)\n        for _ in range(1000):\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), min_wait, 5)\n\n        # Default arguments exist\n        fn = tenacity.wait_random_exponential()\n        fn(make_retry_state(0, 0))\n\n    def test_wait_random_exponential_statistically(self) -> None:\n        fn = tenacity.wait_random_exponential(0.5, 60.0)\n\n        attempt = [[fn(make_retry_state(i, 0)) for _ in range(4000)] for i in range(10)]\n\n        def mean(lst: list[float]) -> float:\n            return float(sum(lst)) / float(len(lst))\n\n        # skipping attempt 0\n        self._assert_inclusive_epsilon(mean(attempt[1]), 0.25, 0.02)\n        self._assert_inclusive_epsilon(mean(attempt[2]), 0.50, 0.04)\n        self._assert_inclusive_epsilon(mean(attempt[3]), 1, 0.08)\n        self._assert_inclusive_epsilon(mean(attempt[4]), 2, 0.16)\n        self._assert_inclusive_epsilon(mean(attempt[5]), 4, 0.32)\n        self._assert_inclusive_epsilon(mean(attempt[6]), 8, 0.64)\n        self._assert_inclusive_epsilon(mean(attempt[7]), 16, 1.28)\n        self._assert_inclusive_epsilon(mean(attempt[8]), 30, 2.56)\n        self._assert_inclusive_epsilon(mean(attempt[9]), 30, 2.56)\n\n    def test_wait_exponential_jitter(self) -> None:\n        fn = tenacity.wait_exponential_jitter(max=60)\n\n        for _ in range(1000):\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), 1, 2)\n            self._assert_inclusive_range(fn(make_retry_state(2, 0)), 2, 3)\n            self._assert_inclusive_range(fn(make_retry_state(3, 0)), 4, 5)\n            self._assert_inclusive_range(fn(make_retry_state(4, 0)), 8, 9)\n            self._assert_inclusive_range(fn(make_retry_state(5, 0)), 16, 17)\n            self._assert_inclusive_range(fn(make_retry_state(6, 0)), 32, 33)\n            self.assertEqual(fn(make_retry_state(7, 0)), 60)\n            self.assertEqual(fn(make_retry_state(8, 0)), 60)\n            self.assertEqual(fn(make_retry_state(9, 0)), 60)\n\n        with self.assertWarns(DeprecationWarning):\n            fn = tenacity.wait_exponential_jitter(10, 5)\n        for _ in range(1000):\n            self.assertEqual(fn(make_retry_state(1, 0)), 5)\n\n        # Default arguments exist\n        fn = tenacity.wait_exponential_jitter()\n        fn(make_retry_state(0, 0))\n\n    def test_wait_exponential_jitter_min(self) -> None:\n        fn = tenacity.wait_exponential_jitter(initial=1, max=60, jitter=1, min=5)\n        for _ in range(1000):\n            # Even for attempt 1 (base wait=1 + jitter 0..1 = 1..2), min=5 applies\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), 5, 5)\n            self._assert_inclusive_range(fn(make_retry_state(2, 0)), 5, 5)\n            self._assert_inclusive_range(fn(make_retry_state(3, 0)), 5, 5)\n            # For attempt 4, base wait=8 + jitter 0..1 = 8..9, above min\n            self._assert_inclusive_range(fn(make_retry_state(4, 0)), 8, 9)\n\n    def test_wait_exponential_jitter_timedelta(self) -> None:\n        from datetime import timedelta\n\n        fn = tenacity.wait_exponential_jitter(\n            max=timedelta(seconds=60),\n            jitter=timedelta(seconds=1),\n            min=timedelta(seconds=5),\n        )\n        for _ in range(1000):\n            self._assert_inclusive_range(fn(make_retry_state(1, 0)), 5, 5)\n            self._assert_inclusive_range(fn(make_retry_state(5, 0)), 16, 17)\n            self.assertEqual(fn(make_retry_state(7, 0)), 60)\n\n    def test_wait_exponential_jitter_multiplier(self) -> None:\n        fn = tenacity.wait_exponential_jitter(multiplier=10, max=60, jitter=0)\n        self.assertEqual(fn(make_retry_state(1, 0)), 10)\n        self.assertEqual(fn(make_retry_state(2, 0)), 20)\n        self.assertEqual(fn(make_retry_state(3, 0)), 40)\n        self.assertEqual(fn(make_retry_state(4, 0)), 60)\n\n    def test_wait_exponential_jitter_initial_deprecated(self) -> None:\n        with self.assertWarns(DeprecationWarning):\n            fn = tenacity.wait_exponential_jitter(initial=10, max=60, jitter=0)\n        self.assertEqual(fn(make_retry_state(1, 0)), 10)\n        self.assertEqual(fn(make_retry_state(2, 0)), 20)\n\n    def test_wait_exponential_jitter_initial_and_multiplier_raises(self) -> None:\n        with self.assertRaises(ValueError):\n            tenacity.wait_exponential_jitter(initial=5, multiplier=10)\n\n        self.assertEqual(r.wait(make_retry_state(50, 0)), 40)\n\n    def test_exponential_skips_power_after_reaching_max(self) -> None:\n        class ExplodingPower(float):\n            @override\n            def __pow__(self, exponent: float, modulo: int | None = None) -> float:\n                raise AssertionError(\"power should not be calculated above the maximum\")\n\n        r = Retrying(wait=tenacity.wait_exponential(max=40, exp_base=ExplodingPower(2)))\n        self.assertEqual(r.wait(make_retry_state(50, 0)), 40)\n\n    def test_exponential_caps_when_max_multiplier_ratio_underflows(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(multiplier=1e300, max=1e-100))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 1e-100)\n\n    def test_exponential_with_min_wait(self) -> None:\ntests/test_after.py [(5, 'from tenacity import ('), (9, 'from tenacity._utils import override')]\ntests/test_asyncio.py [(32, 'import tenacity'), (33, 'from tenacity import ('), (42, 'from tenacity import asyncio as tasyncio'), (43, 'from tenacity.wait import wait_fixed'), (87, '    async def test_wait_falsy_values_mean_no_wait(self) -> None:'), (93, '                wait=wait,  # type: ignore[arg-type]'), (159, '            wait=tenacity.wait_fixed(0.01), stop=tenacity.stop_after_attempt(3)'), (373, '                stop=stop_after_attempt(1), wait=wait_fixed(1)'), (650, '            wait=wait_fixed(1),')]\ntests/test_issue_478.py [(6, 'from tenacity import RetryCallState, retry')]\ntests/test_tornado.py [(22, 'import tenacity'), (23, 'from tenacity import RetryError, retry, stop_after_attempt, tornadoweb')]\ntests/test_utils.py [(3, 'from tenacity import _utils')]\nremaining wait class tests: [('test_no_sleep', 286), ('test_fixed_sleep', 290), ('test_incrementing_sleep', 296), ('test_random_sleep', 309), ('test_random_sleep_withoutmin_', 326), ('test_exponential', 340), ('test_exponential_with_max_wait', 351), ('test_exponential_skips_power_after_reaching_max', 363), ('test_exponential_caps_when_max_multiplier_ratio_underflows', 372), ('test_exponential_with_min_wait', 376), ('test_exponential_with_max_wait_and_multiplier', 388), ('test_exponential_with_min_wait_and_multiplier', 400), ('test_exponential_with_min_wait_andmax__wait', 412), ('test_legacy_explicit_wait_type', 430), ('test_wait_func', 433), ('test_wait_combine', 442), ('test_wait_exception', 454), ('test_wait_double_sum', 472), ('test_wait_triple_sum', 480), ('test_wait_arbitrary_sum', 492), ('test_wait_falsy_values_mean_no_wait', 509), ('test_wait_falsy_callable_is_called', 533), ('test_wait_radd_plain_callable', 550), ('test_wait_combine_passes_state_positionally', 560), ('test_wait_radd_rejects_non_zero_number', 569), ('_assert_range', 575), ('_assert_inclusive_range', 579), ('_assert_inclusive_epsilon', 583), ('test_wait_chain', 589), ('test_wait_chain_multiple_invocations', 607), ('test_wait_chain_requires_at_least_one_strategy', 624), ('test_wait_random_exponential', 632), ('test_wait_random_exponential_statistically', 662), ('test_wait_exponential_jitter', 681), ('test_wait_exponential_jitter_min', 704), ('test_wait_exponential_jitter_timedelta', 714), ('test_wait_exponential_jitter_multiplier', 727), ('test_wait_exponential_jitter_initial_deprecated', 734), ('test_wait_exponential_jitter_initial_and_multiplier_raises', 740), ('test_wait_retry_state_attributes', 744)]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint('\\n'.join(lines[339:430]))\nnames=re.findall(r'\\*\\*`(test_\\w+)`',assessment)\nnodes=[]\nfor c in classes:\n for n in c.body:\n  if isinstance(n,ast.FunctionDef) and n.name in names:\n   print(n.name,'decorators:',[ast.unparse(d) for d in n.decorator_list])\n   nodes.append('tests/test_tenacity.py::'+c.name+'::'+n.name)\nassert len(nodes)==len(names)==13\nassert len(nodes)==len(set(nodes))\nanswer_json=json.dumps(nodes,indent=2)\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print('\\n'.join(lines[339:430]))\nnames=re.findall(r'\\*\\*`(test_\\w+)`',assessment)\nnodes=[]\nfor c in classes:\n for n in c.body:\n  if isinstance(n,ast.FunctionDef) and n.name in names:\n   print(n.name,'decorators:',[ast.unparse(d) for d in n.decorator_list])\n   nodes.append('tests/test_tenacity.py::'+c.name+'::'+n.name)\nassert len(nodes)==len(names)==13\nassert len(nodes)==len(set(nodes))\nanswer_json=json.dumps(nodes,indent=2)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 6852,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "    def test_exponential(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential())\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 1)\n        self.assertEqual(r.wait(make_retry_state(2, 0)), 2)\n        self.assertEqual(r.wait(make_retry_state(3, 0)), 4)\n        self.assertEqual(r.wait(make_retry_state(4, 0)), 8)\n        self.assertEqual(r.wait(make_retry_state(5, 0)), 16)\n        self.assertEqual(r.wait(make_retry_state(6, 0)), 32)\n        self.assertEqual(r.wait(make_retry_state(7, 0)), 64)\n        self.assertEqual(r.wait(make_retry_state(8, 0)), 128)\n\n    def test_exponential_with_max_wait(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(max=40))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 1)\n        self.assertEqual(r.wait(make_retry_state(2, 0)), 2)\n        self.assertEqual(r.wait(make_retry_state(3, 0)), 4)\n        self.assertEqual(r.wait(make_retry_state(4, 0)), 8)\n        self.assertEqual(r.wait(make_retry_state(5, 0)), 16)\n        self.assertEqual(r.wait(make_retry_state(6, 0)), 32)\n        self.assertEqual(r.wait(make_retry_state(7, 0)), 40)\n        self.assertEqual(r.wait(make_retry_state(8, 0)), 40)\n        self.assertEqual(r.wait(make_retry_state(50, 0)), 40)\n\n    def test_exponential_skips_power_after_reaching_max(self) -> None:\n        class ExplodingPower(float):\n            @override\n            def __pow__(self, exponent: float, modulo: int | None = None) -> float:\n                raise AssertionError(\"power should not be calculated above the maximum\")\n\n        r = Retrying(wait=tenacity.wait_exponential(max=40, exp_base=ExplodingPower(2)))\n        self.assertEqual(r.wait(make_retry_state(50, 0)), 40)\n\n    def test_exponential_caps_when_max_multiplier_ratio_underflows(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(multiplier=1e300, max=1e-100))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 1e-100)\n\n    def test_exponential_with_min_wait(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(min=20))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(2, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(3, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(4, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(5, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(6, 0)), 32)\n        self.assertEqual(r.wait(make_retry_state(7, 0)), 64)\n        self.assertEqual(r.wait(make_retry_state(8, 0)), 128)\n        self.assertEqual(r.wait(make_retry_state(20, 0)), 524288)\n\n    def test_exponential_with_max_wait_and_multiplier(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(max=50, multiplier=1))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 1)\n        self.assertEqual(r.wait(make_retry_state(2, 0)), 2)\n        self.assertEqual(r.wait(make_retry_state(3, 0)), 4)\n        self.assertEqual(r.wait(make_retry_state(4, 0)), 8)\n        self.assertEqual(r.wait(make_retry_state(5, 0)), 16)\n        self.assertEqual(r.wait(make_retry_state(6, 0)), 32)\n        self.assertEqual(r.wait(make_retry_state(7, 0)), 50)\n        self.assertEqual(r.wait(make_retry_state(8, 0)), 50)\n        self.assertEqual(r.wait(make_retry_state(50, 0)), 50)\n\n    def test_exponential_with_min_wait_and_multiplier(self) -> None:\n        r = Retrying(wait=tenacity.wait_exponential(min=20, multiplier=2))\n        self.assertEqual(r.wait(make_retry_state(1, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(2, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(3, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(4, 0)), 20)\n        self.assertEqual(r.wait(make_retry_state(5, 0)), 32)\n        self.assertEqual(r.wait(make_retry_state(6, 0)), 64)\n        self.assertEqual(r.wait(make_retry_state(7, 0)), 128)\n        self.assertEqual(r.wait(make_retry_state(8, 0)), 256)\n        self.assertEqual(r.wait(make_retry_state(20, 0)), 1048576)\n\n    def test_exponential_with_min_wait_andmax__wait(self) -> None:\n        for min_, max_ in (\n            (10, 100),\n            (datetime.timedelta(seconds=10), datetime.timedelta(seconds=100)),\n        ):\n            with self.subTest():\n                r = Retrying(wait=tenacity.wait_exponential(min=min_, max=max_))\n                self.assertEqual(r.wait(make_retry_state(1, 0)), 10)\n                self.assertEqual(r.wait(make_retry_state(2, 0)), 10)\n                self.assertEqual(r.wait(make_retry_state(3, 0)), 10)\n                self.assertEqual(r.wait(make_retry_state(4, 0)), 10)\n                self.assertEqual(r.wait(make_retry_state(5, 0)), 16)\n                self.assertEqual(r.wait(make_retry_state(6, 0)), 32)\n                self.assertEqual(r.wait(make_retry_state(7, 0)), 64)\n                self.assertEqual(r.wait(make_retry_state(8, 0)), 100)\n                self.assertEqual(r.wait(make_retry_state(9, 0)), 100)\n                self.assertEqual(r.wait(make_retry_state(20, 0)), 100)\n\n    def test_legacy_explicit_wait_type(self) -> None:\ntest_exponential decorators: []\ntest_exponential_with_max_wait decorators: []\ntest_exponential_with_min_wait decorators: []\ntest_exponential_with_max_wait_and_multiplier decorators: []\ntest_exponential_with_min_wait_and_multiplier decorators: []\ntest_exponential_with_min_wait_andmax__wait decorators: []\ntest_wait_random_exponential decorators: []\ntest_wait_random_exponential_statistically decorators: []\ntest_wait_exponential_jitter decorators: []\ntest_wait_exponential_jitter_min decorators: []\ntest_wait_exponential_jitter_timedelta decorators: []\ntest_wait_exponential_jitter_multiplier decorators: []\ntest_wait_exponential_jitter_initial_deprecated decorators: []\n[\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated\"\n]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "[\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier\",\n  \"tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated\"\n]",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 144.23008787500294
+  }
+}

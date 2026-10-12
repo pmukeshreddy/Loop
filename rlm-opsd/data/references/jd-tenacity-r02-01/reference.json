@@ -1,0 +1,220 @@
+{
+ "answer": [
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential",
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait",
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait",
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier",
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier",
+  "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier",
+  "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_tenacity.py::TestWait::test_exponential\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_with_max\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_with_min\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_with_min_and_max\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_with_multiplier\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_with_exp_base\",\n  \"tests/test_tenacity.py::TestWait::test_random_exponential\",\n  \"tests/test_tenacity.py::TestWait::test_random_exponential_with_min\",\n  \"tests/test_tenacity.py::TestWait::test_exponential_jitter\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "assessment",
+    "c",
+    "classes",
+    "files",
+    "headers",
+    "lines",
+    "n",
+    "t",
+    "w"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 20242,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "1 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 20242 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 16 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "1 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "One selected-context sub-call examined a bounded portion of the repository. This supports delegated inspection, although its result did not flow into the final answer and therefore provides limited evidence of useful decomposition.",
+   "combine_verify_finish": "The final test-ID set was computed in code and inspected after construction, supporting consolidation and deduplication of the affected tests.",
+   "inspect_locate": "The execution used 16 targeted searches without printing the whole repository context. The impact analysis requires connecting the changed exponent calculations to direct wait-policy tests and inherited random-exponential behavior."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request with a clear output format. It specifies the proposed change rather than leaking the affected tests, and identifying the exact failure set requires repository-specific reasoning about numeric expectations, bounds, jitter, and inherited behavior. The verified answer matches the ground-truth impact set. Recursive decomposition is not established by the execution, but it is not listed among the established behaviors. The task is distinct from the existing accepted investigations."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The candidate tests contain many separate numeric tables, bounds checks, duration conversions, overflow cases, and statistical assertions. Their semantics require reading substantial test bodies, not merely matching names.",
+   "combine_verify_finish": "The exact failing-node set must merge those investigations, deduplicate tests that exercise several configurations internally, and preserve complete pytest node IDs.",
+   "inspect_locate": "Relevant assertions include direct strategy calls, inherited random-exponential behavior, and controller integrations rather than only tests named exponential.",
+   "recursive_decomposition": "Impact can be investigated independently for deterministic exponential waits, their random-exponential subclass, additive exponential jitter, and controller integrations, then combined."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exponential.__call__",
+    "why": "The exponent affects both ordinary backoff and the early cap decision."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_random_exponential.__call__",
+    "why": "Its sampling interval inherits the deterministic exponential result."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_exponential_jitter.__call__",
+    "why": "Uses a separate exponent calculation and adds randomness before clamping."
+   },
+   {
+    "path": "tests/test_tenacity.py",
+    "symbol": "tests/test_tenacity.py::TestWaitConditions",
+    "why": "Contains distinct deterministic, bounded, minimum, multiplier, random, statistical, and additive-jitter expectations."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the full existing suite to obtain the complete node set, including asynchronous tests. Unittest subtests do not create separate pytest node IDs. The many repeated random-bound checks should expose the changed sampling window; capped and underflow cases require separate judgment rather than inclusion by name.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -251,8 +251,8 @@\n \n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n-        exponent = retry_state.attempt_number - 1\n+        exponent = retry_state.attempt_number\n         if (\n             self.multiplier > 0\n             and self.max > 0\n             and self.exp_base > 1\n@@ -369,7 +369,7 @@\n     def __call__(self, retry_state: \"RetryCallState\") -> float:\n         jitter = random.uniform(0, self.jitter)\n         try:\n-            exp = self.exp_base ** (retry_state.attempt_number - 1)\n+            exp = self.exp_base ** retry_state.attempt_number\n             result = self.multiplier * exp + jitter\n         except OverflowError:\n             result = self.max\n",
+  "question": "Review the impact of moving exponential backoff one step earlier. In `wait_exponential` and `wait_exponential_jitter`, use `attempt_number` itself as the exponent instead of `attempt_number - 1`; the early cap calculation in `wait_exponential` must use that same new exponent. Leave multipliers, bounds, jitter placement, duration conversion, and overflow handling unchanged. `wait_random_exponential` would inherit the changed deterministic upper bound. Which existing tests would newly fail? Reply with a JSON list of complete pytest node IDs, without duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jd-tenacity-r02-01",
+ "truth": {
+  "answer": [
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential",
+    "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_max_wait_and_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_and_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_exponential_with_min_wait_andmax__wait",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_initial_deprecated",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_min",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_multiplier",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_exponential_jitter_timedelta",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential",
+   "tests/test_tenacity.py::TestWaitConditions::test_wait_random_exponential_statistically"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

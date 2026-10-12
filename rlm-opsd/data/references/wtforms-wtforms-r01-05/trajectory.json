@@ -1,0 +1,90 @@
+{
+  "task_id": "wtforms-wtforms-r01-05",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 6258,
+    "context_lengths": [
+      3130,
+      3128
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context), [len(x) for x in context])\nfor x in context:\n    print(x[:220])\nprint(\"middle\",context[0][1450:1800])\nprint(\"end\",context[-1][-400:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context), [len(x) for x in context])\nfor x in context:\n    print(x[:220])\nprint(\"middle\",context[0][1450:1800])\nprint(\"end\",context[-1][-400:])"
+      ],
+      "stdout_raw_chars": 1235,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 2 [3130, 3128]\n# File: src/wtforms/csrf/core.py\nfrom wtforms.fields import HiddenField\nfrom wtforms.validators import ValidationError\n\n__all__ = (\"CSRFTokenField\", \"CSRF\")\n\n\nclass CSRFTokenField(HiddenField):\n    \"\"\"\n    A subclass of \n# File: src/wtforms/csrf/session.py\n\"\"\"\nA provided CSRF implementation which puts CSRF data in a session.\n\nThis can be used fairly comfortably with many `request.session` type\nobjects, including the Werkzeug/Flask sessio\nmiddle and set up fields.\n\n        The default implementation creates a single field of\n        type :attr:`field_class` with name taken from the\n        ``csrf_field_name`` of the class meta.\n\n        :param form:\n            The form instance we're attaching to.\n        :return:\n            A sequence of `(field_name, unbound_field)` 2-tuples which\n    \nend \n        \"\"\"\n        Get the current time. Used for test mocking/overriding mainly.\n        \"\"\"\n        return datetime.now()\n\n    @property\n    def time_limit(self):\n        return getattr(self.form_meta, \"csrf_time_limit\", timedelta(minutes=30))\n\n    @property\n    def session(self):\n        return getattr(\n            self.form_meta.csrf_context, \"session\", self.form_meta.csrf_context\n        )\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfiles = {s.split(\"\\n\",1)[0][8:]:s.split(\"\\n\",1)[1] for s in context}\nprint(files[\"src/wtforms/csrf/session.py\"])\nprint(files[\"src/wtforms/csrf/core.py\"][:800])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "files = {s.split(\"\\n\",1)[0][8:]:s.split(\"\\n\",1)[1] for s in context}\nprint(files[\"src/wtforms/csrf/session.py\"])\nprint(files[\"src/wtforms/csrf/core.py\"][:800])"
+      ],
+      "stdout_raw_chars": 3894,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "\"\"\"\nA provided CSRF implementation which puts CSRF data in a session.\n\nThis can be used fairly comfortably with many `request.session` type\nobjects, including the Werkzeug/Flask session store, Django sessions, and\npotentially other similar objects which use a dict-like API for storing\nsession keys.\n\nThe basic concept is a randomly generated value is stored in the user's\nsession, and an hmac-sha1 of it (along with an optional expiration time,\nfor extra security) is used as the value of the csrf_token. If this token\nvalidates with the hmac of the random value + expiration time, and the\nexpiration time is not passed, the CSRF validation will pass.\n\"\"\"\n\nimport hmac\nimport os\nfrom datetime import datetime\nfrom datetime import timedelta\nfrom hashlib import sha1\n\nfrom ..validators import ValidationError\nfrom .core import CSRF\n\n__all__ = (\"SessionCSRF\",)\n\n\nclass SessionCSRF(CSRF):\n    TIME_FORMAT = \"%Y%m%d%H%M%S\"\n\n    def setup_form(self, form):\n        self.form_meta = form.meta\n        return super().setup_form(form)\n\n    def generate_csrf_token(self, csrf_token_field):\n        meta = self.form_meta\n        if meta.csrf_secret is None:\n            raise Exception(\n                \"must set `csrf_secret` on class Meta for SessionCSRF to work\"\n            )\n        if meta.csrf_context is None:\n            raise TypeError(\"Must provide a session-like object as csrf context\")\n\n        session = self.session\n\n        if \"csrf\" not in session:\n            session[\"csrf\"] = sha1(os.urandom(64)).hexdigest()\n\n        if self.time_limit:\n            expires = (self.now() + self.time_limit).strftime(self.TIME_FORMAT)\n            csrf_build = \"{}{}\".format(session[\"csrf\"], expires)\n        else:\n            expires = \"\"\n            csrf_build = session[\"csrf\"]\n\n        hmac_csrf = hmac.new(\n            meta.csrf_secret, csrf_build.encode(\"utf8\"), digestmod=sha1\n        )\n        return f\"{expires}##{hmac_csrf.hexdigest()}\"\n\n    def validate_csrf_token(self, form, field):\n        meta = self.form_meta\n        if not field.data or \"##\" not in field.data:\n            raise ValidationError(field.gettext(\"CSRF token missing.\"))\n\n        expires, hmac_csrf = field.data.split(\"##\", 1)\n\n        check_val = (self.session[\"csrf\"] + expires).encode(\"utf8\")\n\n        hmac_compare = hmac.new(meta.csrf_secret, check_val, digestmod=sha1)\n        if hmac_compare.hexdigest() != hmac_csrf:\n            raise ValidationError(field.gettext(\"CSRF failed.\"))\n\n        if self.time_limit:\n            now_formatted = self.now().strftime(self.TIME_FORMAT)\n            if now_formatted > expires:\n                raise ValidationError(field.gettext(\"CSRF token expired.\"))\n\n    def now(self):\n        \"\"\"\n        Get the current time. Used for test mocking/overriding mainly.\n        \"\"\"\n        return datetime.now()\n\n    @property\n    def time_limit(self):\n        return getattr(self.form_meta, \"csrf_time_limit\", timedelta(minutes=30))\n\n    @property\n    def session(self):\n        return getattr(\n            self.form_meta.csrf_context, \"session\", self.form_meta.csrf_context\n        )\n\nfrom wtforms.fields import HiddenField\nfrom wtforms.validators import ValidationError\n\n__all__ = (\"CSRFTokenField\", \"CSRF\")\n\n\nclass CSRFTokenField(HiddenField):\n    \"\"\"\n    A subclass of HiddenField designed for sending the CSRF token that is used\n    for most CSRF protection schemes.\n\n    Notably different from a normal field, this field always renders the\n    current token regardless of the submitted value, and also will not be\n    populated over to object data via populate_obj\n    \"\"\"\n\n    current_token = None\n\n    def __init__(self, *args, **kw):\n        self.csrf_impl = kw.pop(\"csrf_impl\")\n        super().__init__(*args, **kw)\n\n    def _value(self):\n        \"\"\"\n        We want to always return the current token on render, regardless of\n        whether a good or bad token was passed.\n \n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfrom datetime import datetime, timedelta\nimport json\nissue = datetime(2030,1,2,3,4,5)\nexpires_a = (issue + timedelta(minutes=30)).strftime(\"%Y%m%d%H%M%S\")\nexpires_b = \"\"\nobj = {\"expires_a\": expires_a, \"expires_b\": expires_b,\n       \"outcomes\": {\n           \"a_at_boundary\": None,\n           \"a_after_boundary\": \"CSRF token expired.\",\n           \"b_disabled_later\": None,\n           \"b_with_default_limit\": \"CSRF token expired.\",\n           \"a_disabled_later\": None,\n           \"tampered_expired_a\": \"CSRF failed.\",\n           \"empty_token\": \"CSRF token missing.\"\n       }}\nsource = files[\"src/wtforms/csrf/session.py\"]\nassert 'if now_formatted > expires:' in source\nassert source.index('if hmac_compare.hexdigest() != hmac_csrf:') < source.index('if now_formatted > expires:')\nassert issue.strftime(\"%Y%m%d%H%M%S\") > expires_b\nassert len(obj[\"outcomes\"]) == 7\nfor message in obj[\"outcomes\"].values():\n    assert message is None or f'field.gettext(\"{message}\")' in source\nanswer_json = json.dumps(obj)\nprint(answer_json)\n``` tool output?\n\n```repl\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "from datetime import datetime, timedelta\nimport json\nissue = datetime(2030,1,2,3,4,5)\nexpires_a = (issue + timedelta(minutes=30)).strftime(\"%Y%m%d%H%M%S\")\nexpires_b = \"\"\nobj = {\"expires_a\": expires_a, \"expires_b\": expires_b,\n       \"outcomes\": {\n           \"a_at_boundary\": None,\n           \"a_after_boundary\": \"CSRF token expired.\",\n           \"b_disabled_later\": None,\n           \"b_with_default_limit\": \"CSRF token expired.\",\n           \"a_disabled_later\": None,\n           \"tampered_expired_a\": \"CSRF failed.\",\n           \"empty_token\": \"CSRF token missing.\"\n       }}\nsource = files[\"src/wtforms/csrf/session.py\"]\nassert 'if now_formatted > expires:' in source\nassert source.index('if hmac_compare.hexdigest() != hmac_csrf:') < source.index('if now_formatted > expires:')\nassert issue.strftime(\"%Y%m%d%H%M%S\") > expires_b\nassert len(obj[\"outcomes\"]) == 7\nfor message in obj[\"outcomes\"].values():\n    assert message is None or f'field.gettext(\"{message}\")' in source\nanswer_json = json.dumps(obj)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 304,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_at_boundary\": null, \"a_after_boundary\": \"CSRF token expired.\", \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"a_disabled_later\": null, \"tampered_expired_a\": \"CSRF failed.\", \"empty_token\": \"CSRF token missing.\"}}\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "{\"expires_a\": \"20300102033405\", \"expires_b\": \"\", \"outcomes\": {\"a_at_boundary\": null, \"a_after_boundary\": \"CSRF token expired.\", \"b_disabled_later\": null, \"b_with_default_limit\": \"CSRF token expired.\", \"a_disabled_later\": null, \"tampered_expired_a\": \"CSRF failed.\", \"empty_token\": \"CSRF token missing.\"}}",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 45.75510754199786
+  }
+}

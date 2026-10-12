@@ -1,0 +1,92 @@
+........................................................................ [ 14%]
+.....x...............x.................................................. [ 28%]
+.........................................FFF............................ [ 42%]
+........................................................................ [ 56%]
+...................................................................F.... [ 70%]
+.........X.............................................................F [ 84%]
+F............................FFFFFF..................................... [ 99%]
+.....                                                                    [100%]
+=================================== FAILURES ===================================
+______________________________ test_forloops[FOR] ______________________________
+tests/test_grouping.py:597: in test_forloops
+    assert (len(p.tokens)) == 1
+E   AssertionError: assert 15 == 1
+E    +  where 15 = len([<Keyword 'FOR' at 0x10A15D2A0>, <Whitespace ' ' at 0x10A15E560>, <Identifier 'foo' at 0x109928C50>, <Whitespace ' ' at 0x10A15F220>, <Keyword 'in' at 0x10A15DC60>, <Whitespace ' ' at 0x10A15E440>, ...])
+E    +    where [<Keyword 'FOR' at 0x10A15D2A0>, <Whitespace ' ' at 0x10A15E560>, <Identifier 'foo' at 0x109928C50>, <Whitespace ' ' at 0x10A15F220>, <Keyword 'in' at 0x10A15DC60>, <Whitespace ' ' at 0x10A15E440>, ...] = <Statement 'FOR fo...' at 0x1099286D0>.tokens
+____________________________ test_forloops[FOREACH] ____________________________
+tests/test_grouping.py:597: in test_forloops
+    assert (len(p.tokens)) == 1
+E   AssertionError: assert 15 == 1
+E    +  where 15 = len([<Keyword 'FOREACH' at 0x10A166800>, <Whitespace ' ' at 0x10A1665C0>, <Identifier 'foo' at 0x109CC6850>, <Whitespace ' ' at 0x10A166680>, <Keyword 'in' at 0x10A1666E0>, <Whitespace ' ' at 0x10A166740>, ...])
+E    +    where [<Keyword 'FOREACH' at 0x10A166800>, <Whitespace ' ' at 0x10A1665C0>, <Identifier 'foo' at 0x109CC6850>, <Whitespace ' ' at 0x10A166680>, <Keyword 'in' at 0x10A1666E0>, <Whitespace ' ' at 0x10A166740>, ...] = <Statement 'FOREAC...' at 0x109CC40D0>.tokens
+_______________________________ test_nested_for ________________________________
+tests/test_grouping.py:603: in test_nested_for
+    assert len(p.tokens) == 1
+E   AssertionError: assert 19 == 1
+E    +  where 19 = len([<Keyword 'FOR' at 0x10A166560>, <Whitespace ' ' at 0x10A165FC0>, <Identifier 'foo' at 0x109947750>, <Whitespace ' ' at 0x10A166020>, <Keyword 'LOOP' at 0x10A1660E0>, <Whitespace ' ' at 0x10A166140>, ...])
+E    +    where [<Keyword 'FOR' at 0x10A166560>, <Whitespace ' ' at 0x10A165FC0>, <Identifier 'foo' at 0x109947750>, <Whitespace ' ' at 0x10A166020>, <Keyword 'LOOP' at 0x10A1660E0>, <Whitespace ' ' at 0x10A166140>, ...] = <Statement 'FOR fo...' at 0x109929550>.tokens
+_______________________ test_issue194_splitting_function _______________________
+tests/test_regressions.py:267: in test_issue194_splitting_function
+    assert len(statements) == 2
+E   AssertionError: assert 1 == 2
+E    +  where 1 = len(['CREATE FUNCTION a(x VARCHAR(20)) RETURNS VARCHAR(20)\n                BEGIN\n                 DECLARE y VARCHAR(20);... = y;\n                 END IF;\n                 RETURN x;\n                END;\n                SELECT * FROM a.b;'])
+__________________ test_split_multiple_for_loops_in_begin_end __________________
+tests/test_split.py:347: in test_split_multiple_for_loops_in_begin_end
+    assert len(stmts) == 2
+E   AssertionError: assert 1 == 2
+E    +  where 1 = len(['BEGIN\n    FOR x IN select_query LOOP\n        SELECT 1;\n    END LOOP;\n    FOR y IN select_query LOOP\n        SELECT 2;\n    END LOOP;\nEND;\nSELECT 3;'])
+_____________________ test_split_procedural_case_end_case ______________________
+tests/test_split.py:364: in test_split_procedural_case_end_case
+    assert len(stmts) == 2
+E   assert 1 == 2
+E    +  where 1 = len(["BEGIN\n    CASE val\n        WHEN 1 THEN SELECT 'one';\n        WHEN 2 THEN SELECT 'two';\n        ELSE SELECT 'other';\n    END CASE;\nEND;\nSELECT 3;"])
+_________________________ test_parse_endifloop[END IF] _________________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 3 == 1
+E    +  where 3 = len([<Keyword 'END' at 0x109CA2F80>, <Whitespace ' ' at 0x109CA2F20>, <Keyword 'IF' at 0x109CA2EC0>])
+E    +    where [<Keyword 'END' at 0x109CA2F80>, <Whitespace ' ' at 0x109CA2F20>, <Keyword 'IF' at 0x109CA2EC0>] = <Statement 'END IF' at 0x1095D45D0>.tokens
+________________________ test_parse_endifloop[END   IF] ________________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 5 == 1
+E    +  where 5 = len([<Keyword 'END' at 0x109CA3040>, <Whitespace ' ' at 0x109CA3100>, <Whitespace ' ' at 0x109CA30A0>, <Whitespace ' ' at 0x109CA3160>, <Keyword 'IF' at 0x109CA3220>])
+E    +    where [<Keyword 'END' at 0x109CA3040>, <Whitespace ' ' at 0x109CA3100>, <Whitespace ' ' at 0x109CA30A0>, <Whitespace ' ' at 0x109CA3160>, <Keyword 'IF' at 0x109CA3220>] = <Statement 'END ...' at 0x10A1ACD50>.tokens
+_______________________ test_parse_endifloop[END\t\nIF] ________________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 4 == 1
+E    +  where 4 = len([<Keyword 'END' at 0x109CA31C0>, <Whitespace ' ' at 0x109CA3340>, <Newline ' ' at 0x109CA32E0>, <Keyword 'IF' at 0x109CA33A0>])
+E    +    where [<Keyword 'END' at 0x109CA31C0>, <Whitespace ' ' at 0x109CA3340>, <Newline ' ' at 0x109CA32E0>, <Keyword 'IF' at 0x109CA33A0>] = <Statement 'END IF' at 0x10A1AC9D0>.tokens
+________________________ test_parse_endifloop[END LOOP] ________________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 3 == 1
+E    +  where 3 = len([<Keyword 'END' at 0x109CA3460>, <Whitespace ' ' at 0x109CA34C0>, <Keyword 'LOOP' at 0x109CA3580>])
+E    +    where [<Keyword 'END' at 0x109CA3460>, <Whitespace ' ' at 0x109CA34C0>, <Keyword 'LOOP' at 0x109CA3580>] = <Statement 'END LO...' at 0x10A1ADE50>.tokens
+_______________________ test_parse_endifloop[END   LOOP] _______________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 5 == 1
+E    +  where 5 = len([<Keyword 'END' at 0x109CA3520>, <Whitespace ' ' at 0x109CA36A0>, <Whitespace ' ' at 0x109CA3640>, <Whitespace ' ' at 0x109CA3700>, <Keyword 'LOOP' at 0x109CA37C0>])
+E    +    where [<Keyword 'END' at 0x109CA3520>, <Whitespace ' ' at 0x109CA36A0>, <Whitespace ' ' at 0x109CA3640>, <Whitespace ' ' at 0x109CA3700>, <Keyword 'LOOP' at 0x109CA37C0>] = <Statement 'END ...' at 0x109913950>.tokens
+______________________ test_parse_endifloop[END\t\nLOOP] _______________________
+tests/test_tokenize.py:168: in test_parse_endifloop
+    assert len(p.tokens) == 1
+E   AssertionError: assert 4 == 1
+E    +  where 4 = len([<Keyword 'END' at 0x109CA3820>, <Whitespace ' ' at 0x109CA3760>, <Newline ' ' at 0x109CA38E0>, <Keyword 'LOOP' at 0x109CA3880>])
+E    +    where [<Keyword 'END' at 0x109CA3820>, <Whitespace ' ' at 0x109CA3760>, <Newline ' ' at 0x109CA38E0>, <Keyword 'LOOP' at 0x109CA3880>] = <Statement 'END L...' at 0x1095D6150>.tokens
+=========================== short test summary info ============================
+FAILED tests/test_grouping.py::test_forloops[FOR] - AssertionError: assert 15...
+FAILED tests/test_grouping.py::test_forloops[FOREACH] - AssertionError: asser...
+FAILED tests/test_grouping.py::test_nested_for - AssertionError: assert 19 == 1
+FAILED tests/test_regressions.py::test_issue194_splitting_function - Assertio...
+FAILED tests/test_split.py::test_split_multiple_for_loops_in_begin_end - Asse...
+FAILED tests/test_split.py::test_split_procedural_case_end_case - assert 1 == 2
+FAILED tests/test_tokenize.py::test_parse_endifloop[END IF] - AssertionError:...
+FAILED tests/test_tokenize.py::test_parse_endifloop[END   IF] - AssertionErro...
+FAILED tests/test_tokenize.py::test_parse_endifloop[END\t\nIF] - AssertionErr...
+FAILED tests/test_tokenize.py::test_parse_endifloop[END LOOP] - AssertionErro...
+FAILED tests/test_tokenize.py::test_parse_endifloop[END   LOOP] - AssertionEr...
+FAILED tests/test_tokenize.py::test_parse_endifloop[END\t\nLOOP] - AssertionE...
+12 failed, 494 passed, 2 xfailed, 1 xpassed in 0.83s

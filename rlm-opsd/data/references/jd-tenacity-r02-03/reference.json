@@ -1,0 +1,140 @@
+{
+ "answer": "--- a/tenacity/asyncio/__init__.py\n+++ b/tenacity/asyncio/__init__.py\n@@ -16,6 +16,7 @@\n # limitations under the License.\n \n import functools\n+import inspect\n import sys\n import typing as t\n \n@@ -136,7 +137,9 @@\n                     retry_state.set_result(result)\n             elif isinstance(do, DoSleep):\n                 retry_state.prepare_for_next_attempt()\n-                await self.sleep(do)  # type: ignore[misc]\n+                sleep_result = self.sleep(do)\n+                if inspect.isawaitable(sleep_result):\n+                    await sleep_result\n             else:\n                 return do  # type: ignore[no-any-return]\n \n@@ -203,7 +206,9 @@\n                 return AttemptManager(retry_state=self._retry_state)\n             if isinstance(do, DoSleep):\n                 self._retry_state.prepare_for_next_attempt()\n-                await self.sleep(do)  # type: ignore[misc]\n+                sleep_result = self.sleep(do)\n+                if inspect.isawaitable(sleep_result):\n+                    await sleep_result\n             else:\n                 raise StopAsyncIteration\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.001968111609367215,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 280980 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files', 's']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production-only diff updates both sleep sites consistently, invokes each callback once, and conditionally awaits its result. The execution summary records that the constructed final value was inspected before submission.",
+   "inspect_locate": "The reference execution used 10 targeted searches to locate the separate direct-call and asynchronous-iteration sleep paths and distinguish sleep-result adaptation from existing callable-classification helpers.",
+   "persistent_state": "Across five turns, the solver reused repository-content variables while retaining the two execution paths and the requirement to inspect the callback's returned value rather than only its declared function type."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise callback semantics and output requirements. It specifies desired behavior without prescribing the implementation or solver workflow. The verified patch coordinates two execution paths while leaving retry scheduling unchanged. The task is distinct from the previously accepted disabled-decorator and asynchronous-policy-composition tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must coordinate both execution paths and any shared adaptation code, with exact hunk contexts and no accidental changes to retry scheduling or tests.",
+   "inspect_locate": "Sleep execution occurs separately in the callable controller and asynchronous iterator; the existing strategy-adaptation helper has a different contract for ordinary functions returning awaitables.",
+   "persistent_state": "The solver must retain both sleep call sites and the distinction between callable classification and returned-value adaptation while preparing a consistent implementation."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.__call__",
+    "why": "Direct invocation currently awaits the sleep callback's return value unconditionally."
+   },
+   {
+    "path": "tenacity/asyncio/__init__.py",
+    "symbol": "tenacity/asyncio/__init__.py::AsyncRetrying.__anext__",
+    "why": "Attempt iteration has a separate unconditional sleep-await site."
+   },
+   {
+    "path": "tenacity/_utils.py",
+    "symbol": "tenacity/_utils.py::wrap_to_async_func",
+    "why": "Existing adaptation classifies the callable rather than awaiting an arbitrary awaitable returned by an ordinary function."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_async_sleep_callbacks.py\n@@ -0,0 +1,56 @@\n+import asyncio\n+\n+import pytest\n+\n+from tenacity import AsyncRetrying, stop_after_attempt, wait_fixed\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"call\", \"iterate\"])\n+@pytest.mark.parametrize(\"kind\", [\"sync\", \"coroutine_factory\", \"awaitable\", \"async\"])\n+def test_sleep_callback_contract(mode, kind):\n+    async def scenario():\n+        calls = []\n+        awaited = []\n+\n+        async def complete():\n+            awaited.append(True)\n+\n+        class Completion:\n+            def __await__(self):\n+                return complete().__await__()\n+\n+        def ordinary_sleep(delay):\n+            calls.append(float(delay))\n+            if kind == \"coroutine_factory\":\n+                return complete()\n+            if kind == \"awaitable\":\n+                return Completion()\n+            return None\n+\n+        async def async_sleep(delay):\n+            calls.append(float(delay))\n+            await complete()\n+\n+        controller = AsyncRetrying(\n+            sleep=async_sleep if kind == \"async\" else ordinary_sleep,\n+            wait=wait_fixed(2),\n+            stop=stop_after_attempt(3),\n+            retry_error_callback=lambda rs: \"done\",\n+        )\n+        attempts = []\n+\n+        async def failing():\n+            attempts.append(True)\n+            raise ValueError(\"retry\")\n+\n+        if mode == \"call\":\n+            assert await controller(failing) == \"done\"\n+        else:\n+            async for attempt in controller:\n+                with attempt:\n+                    await failing()\n+        assert len(attempts) == 3\n+        assert calls == [2.0, 2.0]\n+        assert len(awaited) == (0 if kind == \"sync\" else 2)\n+\n+    asyncio.run(scenario())\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests use asyncio.run and do not require pytest-asyncio. A solution that only wraps synchronous callbacks with wrap_to_async_func will not satisfy the coroutine-factory and custom-awaitable cases. Return values outside None or awaitables are intentionally unspecified.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Allow `AsyncRetrying.sleep` to be either a synchronous callback returning `None` or a callback returning an awaitable. This must work for direct controller calls and `async for` attempt iteration. Invoke the sleep callback exactly once for each scheduled sleep; if its return value is awaitable, await it before continuing, even when the callback is an ordinary synchronous function. Support coroutine functions and custom awaitable objects as well. Preserve the existing wait durations, attempt counts, exhaustion behavior, and disabled-controller behavior. Return a unified diff containing production changes only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jd-tenacity-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_async_sleep_callbacks.py::test_sleep_callback_contract[sync-call]",
+   "tests/test_async_sleep_callbacks.py::test_sleep_callback_contract[sync-iterate]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 192
+   },
+   "patch_files": [
+    "tenacity/asyncio/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_async_sleep_callbacks.py::test_sleep_callback_contract[sync-call]",
+   "tests/test_async_sleep_callbacks.py::test_sleep_callback_contract[sync-iterate]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,65 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3551,29 +3551,44 @@
+ 
+         :meta private:
+         """
++        # Non-boolean flags select the first usable activation value, rather
++        # than the first non-empty environment variable.
++        if self.is_flag and not self.is_bool_flag:
++            if isinstance(self.envvar, str):
++                envvars = [self.envvar]
++            else:
++                envvars = list(self.envvar or ())
++
++            if (
++                self.allow_from_autoenv
++                and ctx.auto_envvar_prefix is not None
++                and self.name
++            ):
++                envvars.append(f"{ctx.auto_envvar_prefix}_{self.name.upper()}")
++
++            for envvar in envvars:
++                rv = os.environ.get(envvar)
++
++                # Missing and empty values decline this candidate.
++                if not rv:
++                    continue
++
++                # Preserve the exact-match rule before interpreting booleans.
++                if rv == self.flag_value:
++                    return self.flag_value
++
++                parsed = types.BoolParamType.str_to_bool(rv)
++                if parsed is not None:
++                    # False is accepted too, so it must stop the search.
++                    return self.flag_value if parsed else False
++
++            return None
++
+         rv = self.resolve_envvar_value(ctx)
+ 
+         # Absent environment variable or an empty string is interpreted as unset.
+         if rv is None:
+             return None
+-
+-        # Non-boolean flags are more liberal in what they accept. But a flag being a
+-        # flag, its envvar value still needs to be analyzed to determine if the flag is
+-        # activated or not.
+-        if self.is_flag and not self.is_bool_flag:
+-            # An exact match against ``flag_value`` (a non-bool flag always has one
+-            # explicitly set) returns it directly. Otherwise the value is analyzed as a
+-            # boolean: a truthy reading activates the flag and the function receives
+-            # ``flag_value``; a falsy reading produces ``False``; an unrecognized
+-            # reading falls through as ``None``. Folding the substitution here means
+-            # :meth:`consume_value` no longer has to repeat it in a source-checked
+-            # branch.
+-            if rv == self.flag_value:
+-                return self.flag_value
+-            parsed = types.BoolParamType.str_to_bool(rv)
+-            if parsed is None:
+-                return None
+-            return self.flag_value if parsed else False
+ 
+         # Split the envvar value if it is allowed to be repeated.
+         value_depth = (self.nargs != 1) + bool(self.multiple)

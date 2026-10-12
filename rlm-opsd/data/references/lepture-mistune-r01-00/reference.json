@@ -1,0 +1,137 @@
+{
+ "answer": "--- a/src/mistune/inline_parser.py\n+++ b/src/mistune/inline_parser.py\n@@ -113,6 +113,10 @@\n         before: Optional[str] = None,\n     ) -> None:\n         super().register(name, pattern, func, before=before)\n+        # Registration can change the trigger set after the first parse.\n+        self._fast_trigger_chars = None\n+        self._fast_trigger_re = None\n+        self._fast_trigger_re_chars = None\n \n     def parse_escape(self, m: Match[str], state: InlineState) -> int:\n         text = m.group(0)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 551726 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['files', 's']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 13 targeted code searches without printing the whole context. The investigation connects late plugin registration, generic scanner invalidation, and the inline ordinary-text fast path rather than merely locating Markdown.use.",
+   "persistent_state": "The reference execution reused repository-context variables across six turns. Retaining the warm-up, registration, and subsequent-render sequence\u2014and distinguishing generic scanner state from inline trigger caches\u2014is relevant to diagnosing this regression."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a precise production-only unified-diff requirement. The question describes the symptom and compatibility constraints without identifying the defective method or prescribing cache invalidation. Executable verification confirms that resetting the inline trigger caches on registration fixes the reproducer. No duplicate or cosmetic variation is present."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The symptom starts at Markdown.use, but explaining it requires connecting plugin registration, the generic grammar scanner, and the inline parser's ordinary-text fast path.",
+   "persistent_state": "The investigation must retain the distinction between the generic scanner cache and the inline trigger caches while following the warm-up render, registration, and subsequent render through different files."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "tests/test_misc.py",
+    "symbol": "tests/test_misc.py::TestMiscCases.test_inline_plugin_refreshes_fast_trigger_cache",
+    "why": "Warms up an instance, installs a new @ rule, and verifies that its renderer is reached."
+   },
+   {
+    "path": "src/mistune/markdown.py",
+    "symbol": "src/mistune/markdown.py::Markdown.use",
+    "why": "The public late-installation entry point invokes the plugin on the existing parsers."
+   },
+   {
+    "path": "src/mistune/core.py",
+    "symbol": "src/mistune/core.py::Parser.register",
+    "why": "Registration already refreshes the generic scanner cache, so that cache alone does not explain the symptom."
+   },
+   {
+    "path": "src/mistune/inline_parser.py",
+    "symbol": "src/mistune/inline_parser.py::InlineParser._find_fast_text_end",
+    "why": "The fast path can consume newly registered syntax as ordinary text before the grammar scanner gets a chance to match it."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup patch removes only the inline-specific cache refresh. The existing late-plugin regression test should fail deterministically.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Installing an inline plugin with Markdown.use after the Markdown instance has already rendered a document now leaves the plugin's syntax as literal text. The attached pytest output contains a reproducer. Repair this regression while retaining the existing inline fast paths and normal plugin registration behavior. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/mistune/inline_parser.py\n+++ b/src/mistune/inline_parser.py\n@@ -126,11 +126,8 @@\n         before: Optional[str] = None,\n     ) -> None:\n         super().register(name, pattern, func, before=before)\n-        self._fast_trigger_chars = None\n-        self._fast_trigger_re = None\n-        self._fast_trigger_re_chars = None\n \n     def parse_escape(self, m: Match[str], state: InlineState) -> int:\n         text = m.group(0)\n"
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_misc.py::TestMiscCases::test_inline_plugin_refreshes_fast_trigger_cache"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1155
+   },
+   "patch_files": [
+    "src/mistune/inline_parser.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_misc.py::TestMiscCases::test_inline_plugin_refreshes_fast_trigger_cache"
+  ],
+  "ground_truth_symbols": [
+   "src/mistune/inline_parser.py::InlineParser.register"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1154,
+  "stability_runs": 3
+ }
+}

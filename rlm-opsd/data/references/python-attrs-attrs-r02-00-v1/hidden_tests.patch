@@ -1,0 +1,145 @@
+--- /dev/null
++++ b/tests/test_setters_pipe_graphs.py
+@@ -0,0 +1,142 @@
++# SPDX-License-Identifier: MIT
++
++import sys
++
++import pytest
++
++import attr
++from attr import setters
++
++
++@pytest.fixture
++def subject():
++    @attr.s
++    class Subject:
++        value = attr.ib()
++
++    instance = Subject(0)
++    return instance, attr.fields(Subject).value
++
++
++def test_nested_order_and_forwarding(subject):
++    instance, attribute = subject
++    calls = []
++
++    def hook(label):
++        def apply(inst, attrib, value):
++            assert inst is instance
++            assert attrib is attribute
++            calls.append((label, value))
++            return value + label
++
++        return apply
++
++    a, b, c = hook("a"), hook("b"), hook("c")
++    pipeline = setters.pipe([a, ([], b)], (), c)
++    assert calls == []
++    assert pipeline(instance, attribute, "") == "abc"
++    assert calls == [("a", ""), ("b", "a"), ("c", "ab")]
++
++
++def test_empty_pipelines(subject):
++    instance, attribute = subject
++    value = object()
++    assert setters.pipe()(instance, attribute, value) is value
++    assert setters.pipe([], ([], ()))(instance, attribute, value) is value
++
++
++def test_variadic_callables(subject):
++    instance, attribute = subject
++    add = lambda inst, attrib, value: value + 2
++    double = lambda inst, attrib, value: value * 2
++    assert setters.pipe(add, double)(instance, attribute, 3) == 10
++
++
++def test_shared_sequences_and_snapshot(subject):
++    instance, attribute = subject
++    add = lambda inst, attrib, value: value + "a"
++    finish = lambda inst, attrib, value: value + "z"
++    shared = [add, ()]
++    branch = (shared, [shared])
++    root = [branch, branch]
++    pipeline = setters.pipe(root, finish)
++    assert pipeline(instance, attribute, "") == "aaaaz"
++
++    shared[:] = [setters.NO_OP, shared]
++    root[:] = [None, root]
++    for _ in range(2):
++        assert pipeline(instance, attribute, "") == "aaaaz"
++
++
++@pytest.mark.parametrize("kind", ["list", "tuple", "mixed"])
++def test_ten_thousand_levels(kind, subject):
++    instance, attribute = subject
++    calls = []
++
++    def hook(inst, attrib, value):
++        assert inst is instance
++        assert attrib is attribute
++        calls.append(value)
++        return value + 1
++
++    nested = hook
++    for level in range(10000):
++        if kind == "list" or (kind == "mixed" and level % 2):
++            nested = [nested]
++        else:
++            nested = (nested,)
++    limit = sys.getrecursionlimit()
++    pipeline = setters.pipe(nested)
++    assert calls == []
++    assert sys.getrecursionlimit() == limit
++    assert pipeline(instance, attribute, 4) == 5
++    assert calls == [4]
++
++
++@pytest.mark.parametrize("kind", ["self", "indirect", "mixed", "deep"])
++def test_cycles_are_rejected_at_creation(kind):
++    calls = []
++
++    def hook(inst, attrib, value):
++        calls.append(value)
++        return value
++
++    root = [hook]
++    if kind == "self":
++        root.append(root)
++    elif kind == "indirect":
++        other = [root]
++        root.append(other)
++    elif kind == "mixed":
++        root.append((root,))
++    else:
++        nested = root
++        for _ in range(10000):
++            nested = (nested,)
++        root.append(nested)
++    with pytest.raises(ValueError):
++        setters.pipe(root)
++    assert calls == []
++
++
++@pytest.mark.parametrize("leaf", [None, setters.NO_OP, 42, "hook", {}])
++def test_invalid_leaves_are_rejected_at_creation(leaf):
++    calls = []
++
++    def hook(inst, attrib, value):
++        calls.append(value)
++        return value
++
++    with pytest.raises(TypeError):
++        setters.pipe(hook, leaf)
++    with pytest.raises(TypeError):
++        setters.pipe([hook, ([], [leaf])])
++    assert calls == []
++
++
++def test_deep_invalid_leaf_is_still_type_error():
++    nested = setters.NO_OP
++    for _ in range(10000):
++        nested = [nested]
++    with pytest.raises(TypeError):
++        setters.pipe(nested)

@@ -1,0 +1,137 @@
+{
+ "answer": [
+  "src/click/core.py::Context._default_map_has"
+ ],
+ "answer_format": "set",
+ "answer_type": "symbols",
+ "baseline": {
+  "answer": "[\"src/click/core.py::Context.lookup_default\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0012253750736762998,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "funcs",
+    "idx",
+    "logs",
+    "q"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1202897 chars; 9 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used nine targeted searches without printing the whole repository context. The investigation connects failures in default selection and provenance to the shared map-presence predicate used by the default-acquisition paths, distinguishing the defective function from its callers."
+  },
+  "notes": "This is a natural, repository-dependent regression investigation with a precise symbol-list output format. The question describes observable symptoms without naming the defective symbol, failing tests, or fix. The verified defect directly explains both symptoms. Although an accepted task also concerns default_map, its factory-returned UNSET fallback behavior is distinct from this regression in handling an explicitly stored None."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "symbols",
+  "behavior_rationale": {
+   "inspect_locate": "Failures in default acquisition must be connected to the shared presence predicate through lookup_default, Parameter.get_default, and Parameter.consume_value. The affected behavior is a small fraction of the large core module and default/context tests."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Context._default_map_has",
+    "why": "The injected presence check incorrectly excludes a legitimate explicitly configured None."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.get_default",
+    "why": "Uses map presence to decide whether a None result should fall back to the declared default."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.consume_value",
+    "why": "Uses the same predicate to distinguish a map-sourced None from an absent map value and assign provenance."
+   },
+   {
+    "path": "tests/test_defaults.py",
+    "symbol": null,
+    "why": "Contains existing default-map acquisition coverage that supplies executable failure evidence."
+   }
+  ],
+  "expected_answer": [
+   "src/click/core.py::Context._default_map_has"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "Only the presence predicate is changed. The sentinel case remains intact, so the regression specifically concerns explicit None values.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions when a default_map explicitly contains None: declared defaults are unexpectedly used instead, and provenance no longer identifies the map. Identify the function containing the regression responsible, not its callers. Return a JSON list of path::Qualname entries.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "test_failure_investigation",
+  "setup_patch": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -809,7 +809,8 @@\n             and self.default_map is not None\n             and name in self.default_map\n             and self.default_map[name] is not UNSET\n+            and self.default_map[name] is not None\n         )\n \n     @t.overload\n"
+ },
+ "suggestion": null,
+ "task_id": "pallets-click-r02-01",
+ "truth": {
+  "answer": [
+   "src/click/core.py::Context._default_map_has"
+  ],
+  "kind": "defect_symbols"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "src/click/core.py::Context._default_map_has"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "src/click/core.py::Context._default_map_has"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [
+   "tests/test_defaults.py::test_default_map_source[args2-default_map2-None-DEFAULT_MAP]",
+   "tests/test_defaults.py::test_default_map_with_callable_flag_value[default_map4-args4-None]"
+  ],
+  "ground_truth_symbols": [
+   "src/click/core.py::Context._default_map_has"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "defect_symbols",
+  "pass_to_pass_count": 1989,
+  "stability_runs": 3
+ }
+}

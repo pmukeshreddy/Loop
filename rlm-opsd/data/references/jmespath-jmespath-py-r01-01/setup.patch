@@ -1,0 +1,16 @@
+--- a/jmespath/parser.py
++++ b/jmespath/parser.py
+@@ -363,12 +363,10 @@
+     def _project_if_slice(self, left, right):
+         index_expr = ast.index_expression([left, right])
+         if right['type'] == 'slice':
+-            return ast.projection(
+-                index_expr,
+-                self._parse_projection_rhs(self.BINDING_POWER['star']))
++            return index_expr
+         else:
+             return index_expr
+ 
+     def _parse_comparator(self, left, comparator):
+         right = self._expression(self.BINDING_POWER[comparator])
+         return ast.comparator(comparator, left, right)

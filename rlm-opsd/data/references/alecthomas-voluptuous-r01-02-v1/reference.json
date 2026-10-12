@@ -1,0 +1,151 @@
+{
+ "answer": "--- a/voluptuous/validators.py\n+++ b/voluptuous/validators.py\n@@ -257,23 +257,28 @@\n         self.discriminant = discriminant\n \n     def __voluptuous_compile__(self, schema: Schema) -> typing.Callable:\n-        self._compiled = []\n+        # Keep compilation state local to the parent Schema, rather than on\n+        # this validator, which may be shared by multiple schemas.\n+        compiled = []\n         old_required = schema.required\n-        self.schema = schema\n-        for v in self.validators:\n-            schema.required = self.required\n-            self._compiled.append(schema._compile(v))\n-        schema.required = old_required\n-        return self._run\n-\n-    def _run(self, path: typing.List[typing.Hashable], value):\n-        if self.discriminant is not None:\n-            self._compiled = [\n-                self.schema._compile(v)\n-                for v in self.discriminant(value, self.validators)\n-            ]\n-\n-        return self._exec(self._compiled, value, path)\n+        try:\n+            for v in self.validators:\n+                schema.required = self.required\n+                compiled.append(schema._compile(v))\n+        finally:\n+            schema.required = old_required\n+\n+        def _run(path: typing.List[typing.Hashable], value):\n+            funcs = compiled\n+            if self.discriminant is not None:\n+                # Selection is per call, using this compilation's parent.\n+                funcs = [\n+                    schema._compile(v)\n+                    for v in self.discriminant(value, self.validators)\n+                ]\n+            return self._exec(funcs, value, path)\n+\n+        return _run\n \n     def __call__(self, v):\n         return self._exec((Schema(val) for val in self.validators), v)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "start",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 7548,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 202298 chars; 19 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff was computed and checked after construction. It combines parent-local eager compilation with per-call discriminant compilation while retaining the existing subclass execution interface. The reference trace establishes diff construction and inspection, though it does not show repository test execution.",
+   "inspect_locate": "The reference execution used 19 targeted searches without printing the whole context. The task requires connecting Schema compilation with shared combinator state, runtime discriminant selection, and error-path propagation rather than merely locating a named function."
+  },
+  "notes": "This is a natural, repository-dependent bug-fix request with a precise unified-diff deliverable. The reproduction identifies observable behavior without revealing the defective implementation or prescribing a fix. The compatibility constraints are relevant to the same change, and the task is substantively distinct from both its dispatch-order parent and the accepted standalone-required-option task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an executable production diff. Its changes must consistently isolate both eagerly compiled alternatives and runtime-selected alternatives, and its hunks must be checked against the exact source text.",
+   "inspect_locate": "The relevant ownership relationships occupy small portions of two large production modules. The investigation must connect Schema construction and invocation with combinator compilation, runtime discriminant selection, and subclass execution, while locating existing required-key, recursion, and error-path compatibility tests."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/schema_builder.py",
+    "symbol": "voluptuous/schema_builder.py::Schema.__init__",
+    "why": "Each parent Schema stores the callable returned by compilation and supplies its own extra-key configuration."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::_WithSubValidators.__voluptuous_compile__",
+    "why": "Compilation currently overwrites validator-instance state and returns a bound method that later reads that shared state."
+   },
+   {
+    "path": "voluptuous/validators.py",
+    "symbol": "voluptuous/validators.py::_WithSubValidators._run",
+    "why": "The discriminant route recompiles selected alternatives using the parent reference most recently stored on the combinator."
+   },
+   {
+    "path": "voluptuous/tests/tests.py",
+    "symbol": null,
+    "why": "Existing tests establish compatibility requirements for combinator required flags, Self recursion, custom messages, discriminants, and nested error paths."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_combinator_reuse.py\n@@ -0,0 +1,84 @@\n+import pytest\n+\n+from voluptuous import (\n+    ALLOW_EXTRA,\n+    REMOVE_EXTRA,\n+    PREVENT_EXTRA,\n+    All,\n+    Any,\n+    MultipleInvalid,\n+    Schema,\n+    SomeOf,\n+    Union,\n+)\n+\n+\n+@pytest.mark.parametrize(\n+    'factory',\n+    [\n+        pytest.param(Any, id='any'),\n+        pytest.param(All, id='all'),\n+        pytest.param(\n+            lambda validator: SomeOf(validators=[validator], min_valid=1),\n+            id='someof',\n+        ),\n+    ],\n+)\n+def test_shared_ordinary_combinator(factory):\n+    shared = factory({'x': int})\n+    data = {'x': 1, 'extra': 2}\n+    first = Schema(shared, extra=ALLOW_EXTRA)\n+    assert first(data) == data\n+    second = Schema(shared, extra=REMOVE_EXTRA)\n+    assert first(data) == data\n+    third = Schema(shared, extra=PREVENT_EXTRA)\n+    for _ in range(6):\n+        assert first(data) == data\n+        assert second(data) == {'x': 1}\n+        with pytest.raises(MultipleInvalid):\n+            third(data)\n+        assert shared({'x': 1}) == {'x': 1}\n+        assert first(data) == data\n+        assert second(data) == {'x': 1}\n+\n+\n+@pytest.mark.parametrize('nested', [False, True])\n+def test_shared_discriminant_union(nested):\n+    def select(value, alternatives):\n+        return filter(lambda alt: alt['kind'] == value['kind'], alternatives)\n+\n+    shared = Union(\n+        {'kind': 'A', 'x': int},\n+        {'kind': 'B', 'y': int},\n+        discriminant=select,\n+    )\n+    definition = {'payload': shared} if nested else shared\n+    def wrap(value):\n+        return {'payload': value} if nested else value\n+\n+    initial = {'kind': 'A', 'x': 1, 'extra': 2}\n+    first = Schema(definition, extra=ALLOW_EXTRA)\n+    assert first(wrap(initial)) == wrap(initial)\n+    second = Schema(definition, extra=REMOVE_EXTRA)\n+    assert first(wrap(initial)) == wrap(initial)\n+    third = Schema(definition, extra=PREVENT_EXTRA)\n+    for i in range(6):\n+        kind = 'A' if i % 2 == 0 else 'B'\n+        key = 'x' if kind == 'A' else 'y'\n+        data = {'kind': kind, key: i, 'extra': 2}\n+        cleaned = {'kind': kind, key: i}\n+        assert first(wrap(data)) == wrap(data)\n+        assert second(wrap(data)) == wrap(cleaned)\n+        with pytest.raises(MultipleInvalid):\n+            third(wrap(data))\n+        assert shared(cleaned) == cleaned\n+        assert second(wrap(data)) == wrap(cleaned)\n+        assert first(wrap(data)) == wrap(data)\n+        invalid = {'kind': kind, key: 'bad'}\n+        with pytest.raises(MultipleInvalid) as exc:\n+            first(wrap(invalid))\n+        assert exc.value.errors[0].path == (\n+            ['payload', key] if nested else [key]\n+        )\n+        assert second(wrap(data)) == wrap(cleaned)\n+        assert first(wrap(data)) == wrap(data)\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains the reuse defect, so this is materialized as an implementation task with new hidden acceptance tests rather than injecting an unrelated setup regression. The new file belongs under voluptuous/tests/, as required by this repository's test layout. All five parameterized acceptance cases should fail on the unmodified snapshot at the assertion immediately after constructing the second Schema. A correct implementation must isolate compilation ownership for ordinary and discriminant-selected alternatives while preserving the existing suite. No production probe or original dispatch patch is reused. The answer is a production repair diff, not the original five-node impact set.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make combinator instances safe to reuse across independently configured Schema objects. Currently, with a single `shared = Any({'x': int})`, a Schema constructed with `extra=ALLOW_EXTRA` retains the extra key in `{'x': 1, 'extra': 2}` initially, but stops retaining it after another Schema using the same instance is constructed with `extra=REMOVE_EXTRA`.\n\nEach Schema must retain its own validation behavior regardless of subsequent construction or invocation of another Schema using that combinator. Apply this guarantee to Any, All, SomeOf, and Union, including Union alternatives chosen by a discriminant on each call. Repeated interleaved calls must continue to respect each parent's extra-key policy, including PREVENT_EXTRA. This must also work when the shared combinator is nested inside a mapping; validation errors must retain the calling schema's correct data path.\n\nKeep Schema's dispatch order and existing required-key, Self recursion, custom-message, and standalone combinator-call behavior unchanged. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from repository-wide test-impact classification to focused state-ownership diagnosis and repair. Direct inspection of Schema.__init__, Schema.__call__, and _WithSubValidators is useful first; targeted execution and interleaved-call regression tests then verify that ordinary and discriminant paths are independently isolated.",
+  "change_type": "failure_condition",
+  "description": "Keep Schema dispatch unchanged and investigate reuse of a single combinator instance across independently configured schemas. In voluptuous/validators.py, create shared = Any({'x': int}), then compile first = Schema(shared, extra=ALLOW_EXTRA) and second = Schema(shared, extra=REMOVE_EXTRA). Validate {'x': 1, 'extra': 2} through first both before and after constructing second. Repair compilation so constructing or invoking another schema cannot change first's behavior. Cover both ordinary alternatives and discriminant-selected Union alternatives, including repeated interleaved calls. Add regression tests in voluptuous/tests/tests.py.",
+  "expected_answer_change": "The current first schema switches from retaining the extra key to removing it after second is constructed because both compiled entry points use the combinator's latest state. The repair must give each compilation its own child validators and parent-schema reference, including the runtime discriminant route, rather than changing Schema._compile dispatch or merely resetting state before a call.",
+  "why_substantive": "The defect is mutable compilation state shared through _WithSubValidators.__voluptuous_compile__ and _WithSubValidators._run, not bypassing the compilation hook. The investigation must examine the lifetime and ownership of self._compiled and self.schema and the bound callable returned to each Schema. None of the original five failing tests establishes independent behavior when a validator object is reused."
+ },
+ "task_id": "alecthomas-voluptuous-r01-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_discriminant_union[False]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_discriminant_union[True]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[all]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[any]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[someof]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/validators.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_discriminant_union[False]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_discriminant_union[True]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[all]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[any]",
+   "voluptuous/tests/test_combinator_reuse.py::test_shared_ordinary_combinator[someof]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

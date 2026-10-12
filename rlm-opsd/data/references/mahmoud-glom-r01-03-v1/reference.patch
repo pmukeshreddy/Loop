@@ -1,0 +1,73 @@
+--- a/glom/core.py
++++ b/glom/core.py
+@@ -1467,6 +1467,9 @@
+ 
+     def __floordiv__(self, arg):
+         return _t_child(self, '#', arg)
++
++    def __rfloordiv__(self, arg):
++        return _t_child(self, 'r//', arg)
+ 
+     def __truediv__(self, arg):
+         return _t_child(self, '/', arg)
+@@ -1624,8 +1627,10 @@
+                     cur = cur - arg
+                 elif op == '*':
+                     cur = cur * arg
+-                #elif op == '#':
+-                #    cur = cur // arg  # TODO: python 2 friendly approach?
++                elif op == '#':
++                    cur = cur // arg
++                elif op == 'r//':
++                    cur = arg // cur
+                 elif op == '/':
+                     cur = cur / arg
+                 elif op == '%':
+@@ -1726,6 +1731,10 @@
+     i = 0
+     while i < len(path):
+         op, arg = path[i], path[i + 1]
++        # A reflected division becomes the left operand of subsequent
++        # operations, rather than extending its denominator.
++        if i and path[i - 2] == 'r//' and op not in ('_', '~', 'r//'):
++            prepr = ['('] + prepr + [')']
+         if op == '.':
+             prepr.append('.' + arg)
+         elif op == '[':
+@@ -1743,17 +1752,33 @@
+             prepr.append(".__star__()")
+         elif op == 'X':
+             prepr.append(".__starstar__()")
++        elif op == 'r//':
++            denominator = "".join(prepr)
++            if any(o in tuple('+-*/%:&|^~_') + ('#', 'r//')
++                   for o in path[:i:2]):
++                denominator = '(' + denominator + ')'
++            numerator = bbrepr(arg)
++            if type(arg) is TType and any(
++                    o in tuple('+-*/%:&|^~_') + ('#', 'r//')
++                    for o in arg.__ops__[1::2]):
++                numerator = '(' + numerator + ')'
++            prepr = [numerator + ' // ' + denominator]
+         elif op in ('_', '~'):  # unary arithmetic operators
+-            if any([o in path[:i] for o in '+-/%:&|^~_']):
++            if any([o in path[:i] for o in tuple('+-/%:&|^~_') + ('#', 'r//')]):
+                 prepr = ['('] + prepr + [')']
+             prepr = ['-' if op == '_' else op] + prepr
+         else:  # binary arithmetic operators
+             formatted_arg = bbrepr(arg)
+             if type(arg) is TType:
+                 arg_path = arg.__ops__
+-                if any([o in arg_path for o in '+-/%:&|^~_']):
++                if any([o in arg_path for o in tuple('+-/%:&|^~_') + ('#', 'r//')]):
+                     formatted_arg = '(' + formatted_arg + ')'
+-            prepr.append(' ' + ('**' if op == ':' else op) + ' ')
++            if op == '#' and any(
++                    o in tuple('+-*/%:&|^~_') + ('#', 'r//')
++                    for o in path[:i:2]) and not (i and path[i - 2] == 'r//'):
++                prepr = ['('] + prepr + [')']
++            symbol = '**' if op == ':' else '//' if op == '#' else op
++            prepr.append(' ' + symbol + ' ')
+             prepr.append(formatted_arg)
+         i += 2
+     return "".join(prepr)

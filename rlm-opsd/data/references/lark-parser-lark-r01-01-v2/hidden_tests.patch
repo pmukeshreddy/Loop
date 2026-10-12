@@ -1,0 +1,72 @@
+--- /dev/null
++++ b/tests/test_subtree_postorder.py
+@@ -0,0 +1,69 @@
++import sys
++import unittest
++
++from lark import Tree
++
++
++class TestSubtreePostorder(unittest.TestCase):
++    def assert_postorder(self, root, reachable):
++        nodes = list(root.iter_subtrees())
++        ids = [id(node) for node in nodes]
++        self.assertEqual(len(ids), len(reachable))
++        self.assertEqual(set(ids), {id(node) for node in reachable})
++        positions = {node_id: i for i, node_id in enumerate(ids)}
++        for parent in reachable:
++            for child in parent.children:
++                if isinstance(child, Tree):
++                    self.assertLess(positions[id(child)], positions[id(parent)])
++        return nodes
++
++    def test_shared_leaf_at_different_depths(self):
++        leaf = Tree('leaf', [])
++        branch = Tree('branch', [leaf])
++        root = Tree('root', [branch, leaf])
++        nodes = self.assert_postorder(root, [root, branch, leaf])
++        self.assertEqual([id(n) for n in nodes], [id(leaf), id(branch), id(root)])
++
++    def test_shared_descendant_with_both_child_orders(self):
++        for reverse in (False, True):
++            with self.subTest(reverse=reverse):
++                leaf = Tree('leaf', [])
++                middle = Tree('middle', [leaf])
++                branch = Tree('branch', [middle])
++                children = [branch, leaf, middle, branch]
++                if reverse:
++                    children.reverse()
++                root = Tree('root', children + ['token', None, {'payload': 1}])
++                self.assert_postorder(root, [root, branch, middle, leaf])
++
++    def test_structurally_equal_distinct_nodes(self):
++        left = Tree('equal', [Tree('leaf', [])])
++        right = Tree('equal', [Tree('leaf', [])])
++        self.assertEqual(left, right)
++        self.assertIsNot(left, right)
++        root = Tree('root', [left, right, left])
++        self.assert_postorder(root, [root, left, right, left.children[0], right.children[0]])
++
++    def test_deeper_than_recursion_limit(self):
++        leaf = Tree('leaf', [])
++        reachable = [leaf]
++        root = leaf
++        for i in range(sys.getrecursionlimit() + 100):
++            root = Tree('branch', [root])
++            reachable.append(root)
++        nodes = self.assert_postorder(root, reachable)
++        self.assertEqual([id(n) for n in nodes], [id(n) for n in reachable])
++
++    def test_topdown_and_metadata_unchanged(self):
++        leaf = Tree('leaf', [])
++        branch = Tree('branch', [leaf])
++        root = Tree('root', [branch, leaf])
++        reachable = [root, branch, leaf]
++        metas = [node.meta for node in reachable]
++        for i, meta in enumerate(metas):
++            meta.tag = i
++        self.assert_postorder(root, reachable)
++        self.assertEqual([id(n) for n in root.iter_subtrees_topdown()], [id(root), id(branch), id(leaf), id(leaf)])
++        for i, node in enumerate(reachable):
++            self.assertIs(node.meta, metas[i])
++            self.assertEqual(node.meta.tag, i)

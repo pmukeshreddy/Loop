@@ -1,0 +1,53 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -2057,11 +2057,19 @@
+                 contexts.append(sub_ctx)
+                 args, sub_ctx.args = sub_ctx.args, []
+ 
+-            rv = []
+-            for sub_ctx in contexts:
+-                with sub_ctx:
+-                    rv.append(sub_ctx.command.invoke(sub_ctx))
+-            return _process_result(rv)
++            # Keep every child's resources alive until result processing is
++            # finished, without keeping the child as the current context.
++            # ExitStack unwinds children in reverse order and forwards any
++            # exception (including suppression) through their resource stacks.
++            with ExitStack() as stack:
++                for sub_ctx in contexts:
++                    stack.push(sub_ctx._close_with_exception_info)
++
++                rv = []
++                for sub_ctx in contexts:
++                    with sub_ctx.scope(cleanup=False):
++                        rv.append(sub_ctx.command.invoke(sub_ctx))
++                return _process_result(rv)
+ 
+     def resolve_command(
+         self, ctx: Context, args: list[str]
+--- a/docs/commands.md
++++ b/docs/commands.md
+@@ -278,13 +278,16 @@
+ After that point we can register as many subcommands as we want and each
+ subcommand can return a processor function to modify the stream of lines.
+ 
+-One important thing of note is that Click shuts down the context after
+-each callback has been run.  This means that for instance file types
+-cannot be accessed in the `processor` functions as the files will already
+-be closed there.  This limitation is unlikely to change because it would
+-make resource handling much more complicated.  For such it's recommended
+-to not use the file type and manually open the file through
+-{func}`open_file`.
++For chained groups, Click keeps the subcommand contexts' resources open
++until all subcommands and the group's result callback have finished. This
++allows files opened by file types, and resources registered with
++{meth}`Context.with_resource`, to be used by the `processor` functions.
++This also applies when no result callback is registered.
++
++After result processing, subcommand resources are closed in reverse
++invocation order, before the group's resources. Within each context,
++resources and callbacks registered with {meth}`Context.call_on_close` are
++released in reverse registration order.
+ 
+ For a more complex example that also improves upon handling of the pipelines,
+ see the [imagepipe example](https://github.com/pallets/click/tree/main/examples/imagepipe)

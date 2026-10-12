@@ -1,0 +1,12 @@
+--- a/src/cachetools/_cached.py
++++ b/src/cachetools/_cached.py
+@@ -266,4 +266,8 @@
+     wrapper.cache_lock = lock if lock is not None else cond
+     wrapper.cache_condition = cond
+ 
+-    return functools.update_wrapper(wrapper, func)
++    # Copy application attributes without replacing the wrapper's controls.
++    for name, value in getattr(func, "__dict__", {}).items():
++        wrapper.__dict__.setdefault(name, value)
++
++    return functools.update_wrapper(wrapper, func, updated=())

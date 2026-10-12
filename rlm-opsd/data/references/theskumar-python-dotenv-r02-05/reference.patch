@@ -1,0 +1,62 @@
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -113,18 +113,28 @@
+ @click.pass_context
+ @click.argument("key", required=True)
+ @click.argument("value", required=True)
+-def set_value(ctx: click.Context, key: Any, value: Any) -> None:
++@click.option(
++    "--follow-symlinks/--no-follow-symlinks",
++    default=False,
++    help="Follow symlinks when modifying the .env file. Disabled by default.",
++)
++def set_value(
++    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool
++) -> None:
+     """
+     Store the given key/value.
+ 
+-    This doesn't follow symlinks, to avoid accidentally modifying a file at a
+-    potentially untrusted path.
++    By default, this doesn't follow symlinks, to avoid accidentally modifying
++    a file at a potentially untrusted path. Use --follow-symlinks to modify the
++    target instead.
+     """
+ 
+     file = ctx.obj["FILE"]
+     quote = ctx.obj["QUOTE"]
+     export = ctx.obj["EXPORT"]
+-    success, key, value = set_key(file, key, value, quote, export)
++    success, key, value = set_key(
++        file, key, value, quote, export, follow_symlinks=follow_symlinks
++    )
+     if success:
+         click.echo(f"{key}={value}")
+     else:
+@@ -150,16 +160,22 @@
+ @cli.command()
+ @click.pass_context
+ @click.argument("key", required=True)
+-def unset(ctx: click.Context, key: Any) -> None:
++@click.option(
++    "--follow-symlinks/--no-follow-symlinks",
++    default=False,
++    help="Follow symlinks when modifying the .env file. Disabled by default.",
++)
++def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:
+     """
+     Removes the given key.
+ 
+-    This doesn't follow symlinks, to avoid accidentally modifying a file at a
+-    potentially untrusted path.
++    By default, this doesn't follow symlinks, to avoid accidentally modifying
++    a file at a potentially untrusted path. Use --follow-symlinks to modify the
++    target instead.
+     """
+     file = ctx.obj["FILE"]
+     quote = ctx.obj["QUOTE"]
+-    success, key = unset_key(file, key, quote)
++    success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)
+     if success:
+         click.echo(f"Successfully removed {key}")
+     else:

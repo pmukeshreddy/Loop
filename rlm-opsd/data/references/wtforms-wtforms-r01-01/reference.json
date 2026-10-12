@@ -1,0 +1,140 @@
+{
+ "answer": "--- a/src/wtforms/fields/core.py\n+++ b/src/wtforms/fields/core.py\n@@ -297,7 +297,7 @@\n         :param extra_filters: A sequence of extra filters to run.\n         \"\"\"\n         self.process_errors = []\n-        if not data:\n+        if data is unset_value:\n             try:\n                 data = self.default()\n             except TypeError:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0051501196691917,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "logs",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 19413,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 379797 chars; 18 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 18 targeted context searches and two scoped subcalls without printing the whole context. Connecting form-level input selection, shared field processing, subclass conversion, and read-only validation was useful for identifying where falsey Python values were incorrectly treated as missing."
+  },
+  "notes": "A natural, repository-dependent regression repair with a precise unified-diff submission format. The question names neither the defective method nor the fix. The verified patch restores sentinel-based default selection while preserving supplied values for conversion and object_data. The task is distinct from the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The symptom can occur through several field subclasses and read-only validation. The investigation must connect form-level selection of Python data with shared field processing, subclass conversion, and the meaning of object_data."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/form.py",
+    "symbol": "src/wtforms/form.py::BaseForm.process",
+    "why": "Selects object attributes, mapping values, keyword values, or the unset sentinel before calling each field."
+   },
+   {
+    "path": "src/wtforms/fields/core.py",
+    "symbol": "src/wtforms/fields/core.py::Field.process",
+    "why": "The changed default-resolution condition conflates explicitly supplied falsey values with absent values."
+   },
+   {
+    "path": "src/wtforms/utils.py",
+    "symbol": "src/wtforms/utils.py::UnsetValue",
+    "why": "The sentinel is falsey but is intentionally distinct from valid blank Python values."
+   },
+   {
+    "path": "src/wtforms/validators.py",
+    "symbol": "src/wtforms/validators.py::ReadOnly.__call__",
+    "why": "Read-only validation compares processed data against the Python-side value recorded during processing."
+   },
+   {
+    "path": "tests/fields/test_integer.py",
+    "symbol": "tests/fields/test_integer.py::test_integer_field",
+    "why": "Documents the interaction between Python data, submitted input, conversion errors, and display values."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The regression is confined to shared default resolution. Existing baseline failures should remain classified separately.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Fix the field-processing regression shown in the attached pytest output. Python-side values supplied through a form must retain the established defaulting and conversion semantics, and `object_data` must remain suitable for read-only validation. Submit a unified diff against the repository files without changing tests or public APIs.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/wtforms/fields/core.py\n+++ b/src/wtforms/fields/core.py\n@@ -311,10 +311,10 @@\n         :param extra_filters: A sequence of extra filters to run.\n         \"\"\"\n         self.process_errors = []\n-        if data is unset_value:\n+        if not data:\n             try:\n                 data = self.default()\n             except TypeError:\n                 data = self.default\n \n         self.object_data = data\n"
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r01-01",
+ "truth": {
+  "fail_to_pass": [
+   "tests/fields/test_radio.py::test_render_kw_preserved",
+   "tests/fields/test_radio.py::test_text_coercion",
+   "tests/test_form.py::test_form_level_errors"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 8,
+    "passed": 346
+   },
+   "patch_files": [
+    "src/wtforms/fields/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/fields/test_radio.py::test_render_kw_preserved",
+   "tests/fields/test_radio.py::test_text_coercion",
+   "tests/test_form.py::test_form_level_errors"
+  ],
+  "ground_truth_symbols": [
+   "src/wtforms/fields/core.py::Field.process"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 343,
+  "stability_runs": 3
+ }
+}

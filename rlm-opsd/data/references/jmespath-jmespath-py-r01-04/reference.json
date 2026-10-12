@@ -1,0 +1,251 @@
+{
+ "answer": [
+  {
+   "end": 3,
+   "start": 0,
+   "type": "unquoted_identifier",
+   "value": "foo"
+  },
+  {
+   "end": 4,
+   "start": 3,
+   "type": "dot",
+   "value": "."
+  },
+  {
+   "end": 5,
+   "start": 4,
+   "type": "quoted_identifier",
+   "value": "bar"
+  },
+  {
+   "end": 10,
+   "start": 10,
+   "type": "pipe",
+   "value": "|"
+  },
+  {
+   "end": 2,
+   "start": 12,
+   "type": "literal",
+   "value": "x"
+  },
+  {
+   "end": 15,
+   "start": 15,
+   "type": "eof",
+   "value": ""
+  }
+ ],
+ "answer_format": "ordered_list",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "[\n  {\"type\":\"unquoted_identifier\",\"value\":\"foo\",\"start\":0,\"end\":3},\n  {\"type\":\"dot\",\"value\":\".\",\"start\":3,\"end\":4},\n  {\"type\":\"quoted_identifier\",\"value\":\"bar\",\"start\":4,\"end\":5},\n  {\"type\":\"pipe\",\"value\":\"|\",\"start\":10,\"end\":11},\n  {\"type\":\"literal\",\"value\":\"x\",\"start\":12,\"end\":15},\n  {\"type\":\"eof\",\"value\":\"\",\"start\":15,\"end\":15}\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 0,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8600 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference solved the bounded lexer task from a single 8,600-character context without searches or sub-calls. Determining the exact emitted dictionaries requires tracking cursor movement and token-specific offset calculations, including delimiter handling and EOF."
+  },
+  "notes": "This is a natural diagnostic-fixture request with precise input and output requirements. The verified token stream depends on this repository snapshot's implementation rather than conventional lexer semantics. The question neither leaks the answer nor prescribes solver operations, and it is distinct from the existing expression-repair task."
+ },
+ "spec": {
+  "answer_format": "ordered_list",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The lexer alone supplies the complete answer. Obtaining the exact dictionaries requires simulating delimiter consumption, the operator matcher, and the EOF cursor behavior rather than assuming conventional token offsets."
+  },
+  "context": {
+   "files": [
+    "jmespath/lexer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer.tokenize",
+    "why": "Defines token dispatch and EOF offsets."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._consume_quoted_identifier",
+    "why": "The quoted identifier's emitted end field is computed from a token length."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._consume_raw_string_literal",
+    "why": "The final raw string combines token-length calculation with _next's final-character behavior."
+   },
+   {
+    "path": "jmespath/lexer.py",
+    "symbol": "jmespath/lexer.py::Lexer._match_or_else",
+    "why": "The single pipe's end field differs from the exclusive-end convention used by simple tokens."
+   }
+  ],
+  "expected_answer": [
+   {
+    "end": 3,
+    "start": 0,
+    "type": "unquoted_identifier",
+    "value": "foo"
+   },
+   {
+    "end": 4,
+    "start": 3,
+    "type": "dot",
+    "value": "."
+   },
+   {
+    "end": 5,
+    "start": 4,
+    "type": "quoted_identifier",
+    "value": "bar"
+   },
+   {
+    "end": 10,
+    "start": 10,
+    "type": "pipe",
+    "value": "|"
+   },
+   {
+    "end": 2,
+    "start": 12,
+    "type": "literal",
+    "value": "x"
+   },
+   {
+    "end": 15,
+    "start": 15,
+    "type": "eof",
+    "value": ""
+   }
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The independent verifier can evaluate list(Lexer().tokenize(\"foo.\\\"bar\\\" | 'x'\")) and compare the full dictionaries. The intentionally unusual offsets are part of the requested snapshot behavior.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "For a lexer-diagnostic fixture, I need the exact token stream this snapshot produces for the expression `foo.\"bar\" | 'x'`, with no leading or trailing whitespace. Return a JSON list containing every dictionary yielded by `Lexer.tokenize`, including the EOF token and the original `type`, `value`, `start`, and `end` fields. Report the emitted offsets as they are, without normalizing them.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r01-04",
+ "truth": {
+  "answer": [
+   {
+    "end": 3,
+    "start": 0,
+    "type": "unquoted_identifier",
+    "value": "foo"
+   },
+   {
+    "end": 4,
+    "start": 3,
+    "type": "dot",
+    "value": "."
+   },
+   {
+    "end": 5,
+    "start": 4,
+    "type": "quoted_identifier",
+    "value": "bar"
+   },
+   {
+    "end": 10,
+    "start": 10,
+    "type": "pipe",
+    "value": "|"
+   },
+   {
+    "end": 2,
+    "start": 12,
+    "type": "literal",
+    "value": "x"
+   },
+   {
+    "end": 15,
+    "start": 15,
+    "type": "eof",
+    "value": ""
+   }
+  ],
+  "kind": "oracle",
+  "normalized": [
+   "{\"end\": 3, \"start\": 0, \"type\": \"unquoted_identifier\", \"value\": \"foo\"}",
+   "{\"end\": 4, \"start\": 3, \"type\": \"dot\", \"value\": \".\"}",
+   "{\"end\": 5, \"start\": 4, \"type\": \"quoted_identifier\", \"value\": \"bar\"}",
+   "{\"end\": 10, \"start\": 10, \"type\": \"pipe\", \"value\": \"|\"}",
+   "{\"end\": 2, \"start\": 12, \"type\": \"literal\", \"value\": \"x\"}",
+   "{\"end\": 15, \"start\": 15, \"type\": \"eof\", \"value\": \"\"}"
+  ],
+  "output_tail": "{\"answer\": [{\"type\": \"unquoted_identifier\", \"value\": \"foo\", \"start\": 0, \"end\": 3}, {\"type\": \"dot\", \"value\": \".\", \"start\": 3, \"end\": 4}, {\"type\": \"quoted_identifier\", \"value\": \"bar\", \"start\": 4, \"end\": 5}, {\"type\": \"pipe\", \"value\": \"|\", \"start\": 10, \"end\": 10}, {\"type\": \"literal\", \"value\": \"x\", \"start\": 12, \"end\": 2}, {\"type\": \"eof\", \"value\": \"\", \"start\": 15, \"end\": 15}]}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "{\"end\": 3, \"start\": 0, \"type\": \"unquoted_identifier\", \"value\": \"foo\"}",
+    "{\"end\": 4, \"start\": 3, \"type\": \"dot\", \"value\": \".\"}",
+    "{\"end\": 5, \"start\": 4, \"type\": \"quoted_identifier\", \"value\": \"bar\"}",
+    "{\"end\": 10, \"start\": 10, \"type\": \"pipe\", \"value\": \"|\"}",
+    "{\"end\": 2, \"start\": 12, \"type\": \"literal\", \"value\": \"x\"}",
+    "{\"end\": 15, \"start\": 15, \"type\": \"eof\", \"value\": \"\"}"
+   ],
+   "predicted": [
+    "{\"end\": 3, \"start\": 0, \"type\": \"unquoted_identifier\", \"value\": \"foo\"}",
+    "{\"end\": 4, \"start\": 3, \"type\": \"dot\", \"value\": \".\"}",
+    "{\"end\": 5, \"start\": 4, \"type\": \"quoted_identifier\", \"value\": \"bar\"}",
+    "{\"end\": 10, \"start\": 10, \"type\": \"pipe\", \"value\": \"|\"}",
+    "{\"end\": 2, \"start\": 12, \"type\": \"literal\", \"value\": \"x\"}",
+    "{\"end\": 15, \"start\": 15, \"type\": \"eof\", \"value\": \"\"}"
+   ]
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

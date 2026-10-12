@@ -1,0 +1,43 @@
+--- a/lark/tree.py
++++ b/lark/tree.py
+@@ -135,19 +135,27 @@
+         return hash((self.data, tuple(self.children)))
+ 
+     def iter_subtrees(self) -> 'Iterator[Tree[_Leaf_T]]':
+-        """Depth-first iteration.
+-
+-        Iterates over all the subtrees, never returning to the same node twice (Lark's parse-tree is actually a DAG).
+-        """
+-        queue = [self]
+-        subtrees = dict()
+-        for subtree in queue:
+-            subtrees[id(subtree)] = subtree
+-            queue += [c for c in reversed(subtree.children)
+-                      if isinstance(c, Tree) and id(c) not in subtrees]
+-
+-        del queue
+-        return reversed(list(subtrees.values()))
++        """Depth-first postorder iteration.
++
++        Visits each Tree object once by identity, yielding children before parents.
++        Lark's parse-tree is actually a DAG.
++        """
++        seen = {id(self)}
++        stack = [(self, iter(self.children))]
++        subtrees = []
++        while stack:
++            subtree, children = stack[-1]
++            try:
++                child = next(children)
++            except StopIteration:
++                subtrees.append(subtree)
++                stack.pop()
++            else:
++                if isinstance(child, Tree) and id(child) not in seen:
++                    seen.add(id(child))
++                    stack.append((child, iter(child.children)))
++
++        return iter(subtrees)
+ 
+     def iter_subtrees_topdown(self):
+         """Breadth-first iteration.

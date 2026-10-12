@@ -1,0 +1,18 @@
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -94,8 +94,13 @@
+         for i in range(len(signature)):
+             allowed_types = signature[i]['types']
+             if allowed_types:
+-                self._type_check_single(actual[i], allowed_types,
+-                                        function_name)
++                if i == len(signature) - 1 and signature[i].get('variadic'):
++                    end = len(actual)
++                else:
++                    end = i + 1
++                for j in range(i, end):
++                    self._type_check_single(actual[j], allowed_types,
++                                            function_name)
+ 
+     def _type_check_single(self, current, types, function_name):
+         # Type checking involves checking the top level type,

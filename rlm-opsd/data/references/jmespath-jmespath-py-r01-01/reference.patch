@@ -1,0 +1,22 @@
+--- a/jmespath/parser.py
++++ b/jmespath/parser.py
+@@ -339,7 +339,8 @@
+         token = self._lookahead_token(0)
+         if token['type'] in ['number', 'colon']:
+             right = self._parse_index_expression()
+-            if left['type'] == 'index_expression':
++            if (left['type'] == 'index_expression' and
++                    right['type'] == 'index'):
+                 # Optimization: if the left node is an index expr,
+                 # we can avoid creating another node and instead just add
+                 # the right node as a child of the left.
+@@ -357,7 +358,8 @@
+     def _project_if_slice(self, left, right):
+         index_expr = ast.index_expression([left, right])
+         if right['type'] == 'slice':
+-            return index_expr
++            right = self._parse_projection_rhs(self.BINDING_POWER['star'])
++            return ast.projection(index_expr, right)
+         else:
+             return index_expr
+ 

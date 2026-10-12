@@ -1,0 +1,145 @@
+{
+ "answer": "--- a/src/marshmallow/class_registry.py\n+++ b/src/marshmallow/class_registry.py\n@@ -92,9 +92,9 @@\n             f\"Class with name {classname!r} was not found. You may need \"\n             \"to import the class.\"\n         ) from error\n+    if all:\n+        return classes.copy()\n     if len(classes) > 1:\n-        if all:\n-            return _registry[classname]\n         raise RegistryError(\n             f\"Multiple classes with name {classname!r} \"\n             \"were found. Please use the full, \"\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 7,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "old",
+    "path"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 10430 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference completed the patch using the focused 10,430-character implementation-and-test context without sub-calls. The task requires distinguishing singleton and ambiguous lookup paths, preserving class identity and registration semantics, and preventing mutable-list aliasing."
+  },
+  "notes": "This is a natural, precisely scoped API-contract change with a clear unified-diff output requirement. Naming the public API and desired behavior specifies the feature rather than revealing its implementation. The verified patch handles all=True before cardinality-dependent lookup and returns a shallow copy while preserving the existing error and all=False paths. The task is substantively different from its parent and the accepted registry task: those repair registration ambiguity, whereas this task changes return shape and ownership."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the registry implementation and its existing tests, totaling less than 16,000 characters. The task requires reasoning about singleton versus ambiguous lookup, list aliasing, and the distinct short-name and qualified-name registration semantics, without broader repository investigation."
+  },
+  "context": {
+   "files": [
+    "src/marshmallow/class_registry.py",
+    "tests/test_registry.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/class_registry.py",
+    "symbol": "src/marshmallow/class_registry.py::get_class",
+    "why": "The all=True overload promises a list, but the implementation returns a class for singleton entries and exposes registry storage for ambiguous entries."
+   },
+   {
+    "path": "src/marshmallow/class_registry.py",
+    "symbol": "src/marshmallow/class_registry.py::register",
+    "why": "Defines registration order and the existing distinction between repeated same-module short-name registration and qualified-name replacement."
+   },
+   {
+    "path": "tests/test_registry.py",
+    "symbol": "tests/test_registry.py::test_multiple_classes_with_all",
+    "why": "Existing coverage exercises ambiguous all=True lookup but does not establish singleton return shape or mutation isolation."
+   }
+  ],
+  "expected_answer": "--- a/src/marshmallow/class_registry.py\n+++ b/src/marshmallow/class_registry.py\n@@ -98,11 +98,11 @@\n             f\"Class with name {classname!r} was not found. You may need \"\n             \"to import the class.\"\n         ) from error\n+    if all:\n+        return list(classes)\n     if len(classes) > 1:\n-        if all:\n-            return _registry[classname]\n         raise RegistryError(\n             f\"Multiple classes with name {classname!r} \"\n             \"were found. Please use the full, \"\n             \"module-qualified path.\"\n         )\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_registry_all_contract.py\n@@ -0,0 +1,78 @@\n+import pytest\n+\n+from marshmallow import class_registry\n+from marshmallow.exceptions import RegistryError\n+\n+\n+@pytest.mark.parametrize(\"qualified\", [False, True])\n+@pytest.mark.parametrize(\"mutation\", [\"clear\", \"append\"])\n+def test_all_singleton_is_an_independent_list(qualified, mutation):\n+    name = f\"AllSingletonContract{qualified}{mutation}\"\n+    cls = type(name, (), {\"__module__\": \"registry_contract.singleton\"})\n+    class_registry.register(name, cls)\n+    reference = f\"{cls.__module__}.{name}\" if qualified else name\n+    result = class_registry.get_class(reference, all=True)\n+    again = class_registry.get_class(reference, all=True)\n+    assert isinstance(result, list)\n+    assert result == [cls]\n+    assert result is not again\n+    assert result[0] is cls\n+    if mutation == \"clear\":\n+        result.clear()\n+    else:\n+        result.append(object)\n+    assert again == [cls]\n+    assert class_registry.get_class(name, all=True) == [cls]\n+    assert class_registry.get_class(f\"{cls.__module__}.{name}\", all=True) == [cls]\n+    assert class_registry.get_class(name) is cls\n+    assert class_registry.get_class(f\"{cls.__module__}.{name}\", all=False) is cls\n+\n+\n+@pytest.mark.parametrize(\"mutation\", [\"clear\", \"append\", \"reverse\"])\n+def test_all_ambiguous_preserves_registry_and_order(mutation):\n+    name = f\"AllAmbiguousContract{mutation}\"\n+    first = type(name, (), {\"__module__\": \"registry_contract.first\"})\n+    second = type(name, (), {\"__module__\": \"registry_contract.second\"})\n+    class_registry.register(name, first)\n+    class_registry.register(name, second)\n+    result = class_registry.get_class(name, all=True)\n+    again = class_registry.get_class(name, all=True)\n+    assert isinstance(result, list)\n+    assert result == [first, second]\n+    assert result is not again\n+    if mutation == \"append\":\n+        result.append(object)\n+    else:\n+        getattr(result, mutation)()\n+    assert again == [first, second]\n+    assert class_registry.get_class(name, all=True) == [first, second]\n+    with pytest.raises(RegistryError, match=\"Multiple classes with name\"):\n+        class_registry.get_class(name)\n+    with pytest.raises(RegistryError, match=\"Multiple classes with name\"):\n+        class_registry.get_class(name, all=False)\n+    for cls in [first, second]:\n+        assert class_registry.get_class(f\"{cls.__module__}.{name}\", all=True) == [cls]\n+        assert class_registry.get_class(f\"{cls.__module__}.{name}\") is cls\n+    third = type(name, (), {\"__module__\": \"registry_contract.third\"})\n+    class_registry.register(name, third)\n+    assert again == [first, second]\n+    assert class_registry.get_class(name, all=True) == [first, second, third]\n+\n+\n+def test_all_respects_same_module_registration():\n+    name = \"AllSameModuleContract\"\n+    first = type(name, (), {\"__module__\": \"registry_contract.reload\"})\n+    replacement = type(name, (), {\"__module__\": \"registry_contract.reload\"})\n+    class_registry.register(name, first)\n+    class_registry.register(name, replacement)\n+    assert class_registry.get_class(name, all=True) == [first]\n+    assert class_registry.get_class(f\"{first.__module__}.{name}\", all=True) == [replacement]\n+    assert class_registry.get_class(name) is first\n+    assert class_registry.get_class(f\"{first.__module__}.{name}\") is replacement\n+\n+\n+@pytest.mark.parametrize(\"all_matches\", [False, True])\n+@pytest.mark.parametrize(\"name\", [\"MissingAllContract\", \"registry_contract.MissingAllContract\"])\n+def test_missing_name_still_raises_registry_error(name, all_matches):\n+    with pytest.raises(RegistryError, match=\"was not found\"):\n+        class_registry.get_class(name, all=all_matches)\n",
+  "include_failure_log": false,
+  "notes": "Use the supplied corrected baseline without applying the original task's setup defect. Acceptance tests are placed in a new tests/test_registry_all_contract.py file as required by the hidden-test artifact rules, rather than modifying tests/test_registry.py. They use explicit register calls with distinct ordinary class names and do not inspect private registry storage. The baseline fails the singleton-list, ambiguous-copy, and same-module list-shape checks; the expected production change preserves registration semantics and fixes those failures. The answer differs from the original register predicate repair.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make `marshmallow.class_registry.get_class(name, all=True)` fulfill its list-returning contract regardless of how many classes match. Every successful call must return a fresh shallow list containing the registered class objects in registry order, including singleton short names and module-qualified references. Clearing, appending to, or reordering that list must not affect later lookups or ambiguity errors, and later registrations must not alter an already returned list.\n\nKeep default and explicit `all=False` lookup behavior unchanged, including class identity and ambiguity errors. Missing names must still raise the existing `RegistryError` with the existing message in either mode. Preserve `register`'s current behavior, including repeated declarations from the same module. Provide a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from scattered regression localization to focused API-contract implementation. Direct inspection of get_class and its overloads is useful, followed by targeted tests that distinguish return-shape correctness from storage isolation; broader repository investigation is unnecessary.",
+  "change_type": "constraint",
+  "description": "On the corrected baseline, make src/marshmallow/class_registry.py::get_class honor its all=True overload consistently: return a new list of registered classes for both singleton and ambiguous names, including module-qualified singleton references. Mutating the returned list must not change subsequent lookup or ambiguity behavior. Preserve all=False behavior, missing-name RegistryError behavior, and register's existing registration semantics. Deliver a production unified diff plus focused acceptance tests in tests/test_registry.py.",
+  "expected_answer_change": "The patch should return a shallow list copy whenever all=True after successful lookup, before applying all=False ambiguity handling. Tests should establish that singleton lookups return lists, ambiguous lookups retain registration order, clearing or appending to returned lists cannot affect the registry, and missing references still raise RegistryError.",
+  "why_substantive": "The original defect loses cross-module entries during registration. This variation instead addresses the lookup API's cardinality-dependent return type and its exposure of mutable registry storage. It requires a different change in get_class, not the original register predicate repair, and tests singleton, qualified, and mutation-isolation cases absent from the original failure set."
+ },
+ "task_id": "marshmallow-code-marshmallow-r02-05-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[append]",
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[clear]",
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[reverse]",
+   "tests/test_registry_all_contract.py::test_all_respects_same_module_registration",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[append-False]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[append-True]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[clear-False]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[clear-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1200
+   },
+   "patch_files": [
+    "src/marshmallow/class_registry.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[append]",
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[clear]",
+   "tests/test_registry_all_contract.py::test_all_ambiguous_preserves_registry_and_order[reverse]",
+   "tests/test_registry_all_contract.py::test_all_respects_same_module_registration",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[append-False]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[append-True]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[clear-False]",
+   "tests/test_registry_all_contract.py::test_all_singleton_is_an_independent_list[clear-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

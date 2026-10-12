@@ -1,0 +1,41 @@
+--- /dev/null
++++ b/tests/test_iterable_choice_attributes.py
+@@ -0,0 +1,38 @@
++import pytest
++
++from wtforms.fields import RadioField
++from wtforms.fields import SelectField
++from wtforms.fields import SelectMultipleField
++from wtforms.form import Form
++
++
++@pytest.mark.parametrize("field_type", [SelectField, SelectMultipleField, RadioField])
++def test_option_attributes(field_type):
++    class F(Form):
++        item = field_type(
++            choices=[
++                ("a", "<A>", {"class_": "choice", "title": "<tip>", "data_src": "option"}),
++                ("b", "B"),
++            ],
++            render_kw={"class": "parent", "data-src": "field"},
++        )
++
++    data = ["a"] if field_type is SelectMultipleField else "a"
++    form = F(item=data)
++    first, second = list(form.item)
++    assert first.checked is True
++    assert second.checked is False
++    html = str(first())
++    assert 'class="choice"' in html
++    assert 'class="parent"' not in html
++    assert 'data-src="option"' in html
++    assert 'title="&lt;tip&gt;"' in html
++    assert "&lt;A&gt;" in str(first.label)
++    assert 'class="parent"' in str(second())
++    overridden = str(first(class_="call", data_src="call"))
++    assert 'class="call"' in overridden
++    assert 'data-src="call"' in overridden
++    assert form.item.render_kw == {"class": "parent", "data-src": "field"}
++    assert form.item.choices[0][2] == {
++        "class_": "choice", "title": "<tip>", "data_src": "option"
++    }

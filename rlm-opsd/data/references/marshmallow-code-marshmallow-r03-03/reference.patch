@@ -1,0 +1,65 @@
+--- a/src/marshmallow/schema.py
++++ b/src/marshmallow/schema.py
+@@ -962,6 +962,46 @@
+ 
+     def __apply_nested_option(self, option_name, field_names, set_operation) -> None:
+         """Apply nested options to nested fields"""
++
++        def apply(field, options, *, child=False):
++            # Fields are shallow-copied when a schema is constructed. Copy
++            # container children before changing their selections so that
++            # other schema instances and the declared fields stay untouched.
++            if isinstance(field, ma_fields.List):
++                field.inner = copy.deepcopy(field.inner)
++                apply(field.inner, options, child=True)
++                if isinstance(field.inner, ma_fields.Nested):
++                    setattr(field, option_name, getattr(field.inner, option_name))
++            elif isinstance(field, ma_fields.Tuple):
++                field.tuple_fields = [
++                    copy.deepcopy(inner) for inner in field.tuple_fields
++                ]
++                for inner in field.tuple_fields:
++                    apply(inner, options, child=True)
++            elif isinstance(field, ma_fields.Mapping):
++                if field.value_field is not None:
++                    field.value_field = copy.deepcopy(field.value_field)
++                    apply(field.value_field, options, child=True)
++                    if isinstance(field.value_field, ma_fields.Nested):
++                        setattr(
++                            field, option_name, getattr(field.value_field, option_name)
++                        )
++            elif not child or isinstance(field, ma_fields.Nested):
++                # Scalar children do not consume dotted selections. Keep the
++                # existing behavior for non-container top-level fields.
++                new_options = self.set_class(options)
++                original_options = getattr(field, option_name, ())
++                if original_options or (
++                    isinstance(field, ma_fields.Nested)
++                    and set_operation == "intersection"
++                    and original_options is not None
++                ):
++                    if set_operation == "union":
++                        new_options |= self.set_class(original_options)
++                    if set_operation == "intersection":
++                        new_options &= self.set_class(original_options)
++                setattr(field, option_name, new_options)
++
+         # Split nested field names on the first dot.
+         nested_fields = [name.split(".", 1) for name in field_names if "." in name]
+         # Partition the nested field names by parent field.
+@@ -970,14 +1010,7 @@
+             nested_options[parent].append(nested_names)
+         # Apply the nested field options.
+         for key, options in iter(nested_options.items()):
+-            new_options = self.set_class(options)
+-            original_options = getattr(self.declared_fields[key], option_name, ())
+-            if original_options:
+-                if set_operation == "union":
+-                    new_options |= self.set_class(original_options)
+-                if set_operation == "intersection":
+-                    new_options &= self.set_class(original_options)
+-            setattr(self.declared_fields[key], option_name, new_options)
++            apply(self.declared_fields[key], options)
+ 
+     def _init_fields(self) -> None:
+         """Update self.fields, self.load_fields, and self.dump_fields based on schema options.

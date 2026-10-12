@@ -1,0 +1,81 @@
+--- /dev/null
++++ b/tests/test_registry_all_contract.py
+@@ -0,0 +1,78 @@
++import pytest
++
++from marshmallow import class_registry
++from marshmallow.exceptions import RegistryError
++
++
++@pytest.mark.parametrize("qualified", [False, True])
++@pytest.mark.parametrize("mutation", ["clear", "append"])
++def test_all_singleton_is_an_independent_list(qualified, mutation):
++    name = f"AllSingletonContract{qualified}{mutation}"
++    cls = type(name, (), {"__module__": "registry_contract.singleton"})
++    class_registry.register(name, cls)
++    reference = f"{cls.__module__}.{name}" if qualified else name
++    result = class_registry.get_class(reference, all=True)
++    again = class_registry.get_class(reference, all=True)
++    assert isinstance(result, list)
++    assert result == [cls]
++    assert result is not again
++    assert result[0] is cls
++    if mutation == "clear":
++        result.clear()
++    else:
++        result.append(object)
++    assert again == [cls]
++    assert class_registry.get_class(name, all=True) == [cls]
++    assert class_registry.get_class(f"{cls.__module__}.{name}", all=True) == [cls]
++    assert class_registry.get_class(name) is cls
++    assert class_registry.get_class(f"{cls.__module__}.{name}", all=False) is cls
++
++
++@pytest.mark.parametrize("mutation", ["clear", "append", "reverse"])
++def test_all_ambiguous_preserves_registry_and_order(mutation):
++    name = f"AllAmbiguousContract{mutation}"
++    first = type(name, (), {"__module__": "registry_contract.first"})
++    second = type(name, (), {"__module__": "registry_contract.second"})
++    class_registry.register(name, first)
++    class_registry.register(name, second)
++    result = class_registry.get_class(name, all=True)
++    again = class_registry.get_class(name, all=True)
++    assert isinstance(result, list)
++    assert result == [first, second]
++    assert result is not again
++    if mutation == "append":
++        result.append(object)
++    else:
++        getattr(result, mutation)()
++    assert again == [first, second]
++    assert class_registry.get_class(name, all=True) == [first, second]
++    with pytest.raises(RegistryError, match="Multiple classes with name"):
++        class_registry.get_class(name)
++    with pytest.raises(RegistryError, match="Multiple classes with name"):
++        class_registry.get_class(name, all=False)
++    for cls in [first, second]:
++        assert class_registry.get_class(f"{cls.__module__}.{name}", all=True) == [cls]
++        assert class_registry.get_class(f"{cls.__module__}.{name}") is cls
++    third = type(name, (), {"__module__": "registry_contract.third"})
++    class_registry.register(name, third)
++    assert again == [first, second]
++    assert class_registry.get_class(name, all=True) == [first, second, third]
++
++
++def test_all_respects_same_module_registration():
++    name = "AllSameModuleContract"
++    first = type(name, (), {"__module__": "registry_contract.reload"})
++    replacement = type(name, (), {"__module__": "registry_contract.reload"})
++    class_registry.register(name, first)
++    class_registry.register(name, replacement)
++    assert class_registry.get_class(name, all=True) == [first]
++    assert class_registry.get_class(f"{first.__module__}.{name}", all=True) == [replacement]
++    assert class_registry.get_class(name) is first
++    assert class_registry.get_class(f"{first.__module__}.{name}") is replacement
++
++
++@pytest.mark.parametrize("all_matches", [False, True])
++@pytest.mark.parametrize("name", ["MissingAllContract", "registry_contract.MissingAllContract"])
++def test_missing_name_still_raises_registry_error(name, all_matches):
++    with pytest.raises(RegistryError, match="was not found"):
++        class_registry.get_class(name, all=all_matches)

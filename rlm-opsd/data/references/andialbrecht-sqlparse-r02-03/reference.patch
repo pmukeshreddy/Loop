@@ -1,0 +1,50 @@
+--- a/sqlparse/sql.py
++++ b/sqlparse/sql.py
+@@ -559,7 +559,14 @@
+     M_OPEN = T.Keyword, 'WHERE'
+     M_CLOSE = T.Keyword, (
+         'ORDER BY', 'GROUP BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT',
+-        'INTERSECT', 'HAVING', 'RETURNING', 'INTO')
++        'INTERSECT', 'HAVING', 'RETURNING', 'INTO', 'QUALIFY')
++
++
++class Qualify(TokenList):
++    """A QUALIFY clause."""
++    M_OPEN = T.Keyword, 'QUALIFY'
++    M_CLOSE = T.Keyword, (
++        'ORDER BY', 'LIMIT', 'UNION', 'UNION ALL', 'EXCEPT', 'INTERSECT')
+ 
+ 
+ class Over(TokenList):
+--- a/sqlparse/engine/grouping.py
++++ b/sqlparse/engine/grouping.py
+@@ -361,6 +361,21 @@
+         eidx = tlist.token_index(end)
+         tlist.group_tokens(sql.Where, tidx, eidx)
+         tidx, token = tlist.token_next_by(m=sql.Where.M_OPEN, idx=tidx)
++
++
++@recurse(sql.Qualify)
++def group_qualify(tlist):
++    tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN)
++    while token:
++        eidx, end = tlist.token_next_by(m=sql.Qualify.M_CLOSE, idx=tidx)
++
++        if end is None:
++            end = tlist._groupable_tokens[-1]
++        else:
++            end = tlist.tokens[eidx - 1]
++        eidx = tlist.token_index(end)
++        tlist.group_tokens(sql.Qualify, tidx, eidx)
++        tidx, token = tlist.token_next_by(m=sql.Qualify.M_OPEN, idx=tidx)
+ 
+ 
+ @recurse()
+@@ -454,6 +469,7 @@
+         group_over,
+         group_functions,
+         group_where,
++        group_qualify,
+         group_period,
+         group_arrays,
+         group_identifier,

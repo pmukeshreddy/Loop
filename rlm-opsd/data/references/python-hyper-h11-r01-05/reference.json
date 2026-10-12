@@ -1,0 +1,128 @@
+{
+ "answer": "--- a/h11/_receivebuffer.py\n+++ b/h11/_receivebuffer.py\n@@ -73,6 +73,14 @@\n         self._multiple_lines_search = 0\n \n         return out\n+\n+    def peek_at_most(self, count: int) -> bytes:\n+        \"\"\"\n+        Return at most count buffered bytes without consuming them.\n+        \"\"\"\n+        if count < 0:\n+            raise ValueError(\"count must be nonnegative\")\n+        return bytes(self._data[:count])\n \n     def maybe_extract_at_most(self, count: int) -> Optional[bytearray]:\n         \"\"\"\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5282 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution handled the single-file, 5,282-character context without sub-calls. The task requires a localized implementation that preserves the buffer's existing consumption and incremental delimiter-search behavior, making direct solving appropriate."
+  },
+  "notes": "This is a natural, precisely specified feature request with a clear unified-diff output format. Naming the new API and defining its contract does not leak the implementation. The verified patch returns an immutable snapshot, rejects negative counts before changing state, and leaves extraction state untouched. The supplied tests cover boundary values, non-consumption, split delimiters, and snapshot independence. Although small, the task qualifies for the direct_solve exception to trivial_lookup."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "ReceiveBuffer is self-contained and about 5,252 characters. Adding a non-consuming byte view requires understanding its extraction and incremental-search behavior, but no delegation or repository-wide investigation is useful."
+  },
+  "context": {
+   "files": [
+    "h11/_receivebuffer.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "h11/_receivebuffer.py",
+    "symbol": "h11/_receivebuffer.py::ReceiveBuffer",
+    "why": "The class owns the buffered bytearray and the two incremental search positions."
+   },
+   {
+    "path": "h11/_receivebuffer.py",
+    "symbol": "h11/_receivebuffer.py::ReceiveBuffer._extract",
+    "why": "Consuming extraction mutates the buffer and resets search positions; the new operation must remain non-consuming."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- a/h11/tests/test_receivebuffer_peek.py\n+++ b/h11/tests/test_receivebuffer_peek.py\n@@ -0,0 +1,51 @@\n+import pytest\n+\n+from .._receivebuffer import ReceiveBuffer\n+\n+\n+@pytest.mark.parametrize(\"data,count,expected\", [\n+    (b\"\", 0, b\"\"),\n+    (b\"\", 10, b\"\"),\n+    (b\"abcdef\", 0, b\"\"),\n+    (b\"abcdef\", 2, b\"ab\"),\n+    (b\"abcdef\", 99, b\"abcdef\"),\n+])\n+def test_peek_at_most_values(data, count, expected):\n+    buf = ReceiveBuffer()\n+    buf += data\n+    result = buf.peek_at_most(count)\n+    assert type(result) is bytes\n+    assert result == expected\n+    assert bytes(buf) == data\n+    assert len(buf) == len(data)\n+\n+\n+def test_peek_negative_count_does_not_consume():\n+    buf = ReceiveBuffer()\n+    buf += b\"abcdef\"\n+    with pytest.raises(ValueError):\n+        buf.peek_at_most(-1)\n+    assert bytes(buf) == b\"abcdef\"\n+    assert buf.maybe_extract_at_most(2) == b\"ab\"\n+    assert buf.peek_at_most(99) == b\"cdef\"\n+\n+\n+def test_peek_preserves_incremental_extraction():\n+    buf = ReceiveBuffer()\n+    buf += b\"one\\r\"\n+    assert buf.maybe_extract_next_line() is None\n+    assert buf.peek_at_most(99) == b\"one\\r\"\n+    buf += b\"\\nsecond\\r\\n\"\n+    assert buf.peek_at_most(3) == b\"one\"\n+    assert buf.maybe_extract_next_line() == b\"one\\r\\n\"\n+    assert buf.maybe_extract_next_line() == b\"second\\r\\n\"\n+    buf += b\"A: 1\\r\\nB: 2\\r\\n\\r\"\n+    assert buf.maybe_extract_lines() is None\n+    assert buf.peek_at_most(4) == b\"A: 1\"\n+    buf += b\"\\nbody\"\n+    assert buf.maybe_extract_lines() == [b\"A: 1\", b\"B: 2\"]\n+    snapshot = buf.peek_at_most(99)\n+    assert snapshot == b\"body\"\n+    assert buf.maybe_extract_at_most(2) == b\"bo\"\n+    assert snapshot == b\"body\"\n+    assert buf.peek_at_most(99) == b\"dy\"\n",
+  "include_failure_log": false,
+  "notes": "Hidden tests use only ReceiveBuffer's named operations and observable byte results. No behavior is specified for non-integer counts. The added test file fails on baseline because peek_at_most is absent.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add `ReceiveBuffer.peek_at_most(count)` so a protocol-sniffing caller can inspect buffered bytes without consuming them. For a nonnegative integer count, return an immutable `bytes` object containing the first at most count currently buffered bytes; zero and an empty buffer must return `b\"\"`, and a count larger than the buffer must return all buffered bytes. A negative count must raise ValueError without changing the buffer. Peeking must not alter the results of subsequent line, header-block, or fixed-count extractions, including after delimiters arrive in multiple appends. Return a unified diff against the non-test repository files.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[-0-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[-10-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-0-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-2-ab]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-99-abcdef]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_negative_count_does_not_consume",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_preserves_incremental_extraction"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 85
+   },
+   "patch_files": [
+    "h11/_receivebuffer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[-0-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[-10-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-0-]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-2-ab]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_at_most_values[abcdef-99-abcdef]",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_negative_count_does_not_consume",
+   "h11/tests/test_receivebuffer_peek.py::test_peek_preserves_incremental_extraction"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

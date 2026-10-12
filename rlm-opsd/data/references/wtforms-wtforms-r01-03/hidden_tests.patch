@@ -1,0 +1,75 @@
+--- /dev/null
++++ b/tests/test_reusable_extra_hooks.py
+@@ -0,0 +1,72 @@
++import pytest
++
++from wtforms.fields import StringField
++from wtforms.form import Form
++
++
++@pytest.mark.parametrize("sequence_type", [list, tuple])
++def test_extra_filters_are_reusable(sequence_type):
++    def declared(value):
++        return value + "|declared"
++
++    def supplied(value):
++        return value + "|supplied"
++
++    class F(Form):
++        a = StringField(default="start", filters=[declared])
++
++        def filter_a(self, value):
++            return value + "|inline"
++
++    sequence = sequence_type([supplied])
++    extras = {"a": sequence}
++    form = F(extra_filters=extras)
++    assert form.a.data == "start|declared|supplied|inline"
++    assert extras == {"a": sequence_type([supplied])}
++    assert extras["a"] is sequence
++
++    form.process(a="again", extra_filters=extras)
++    assert form.a.data == "again|declared|supplied|inline"
++    assert extras == {"a": sequence_type([supplied])}
++    assert extras["a"] is sequence
++
++    other = F(extra_filters=extras)
++    assert other.a.data == "start|declared|supplied|inline"
++    assert extras == {"a": sequence_type([supplied])}
++
++
++@pytest.mark.parametrize("sequence_type", [list, tuple])
++def test_extra_validators_are_reusable(sequence_type):
++    events = []
++
++    def declared(form, field):
++        events.append("declared")
++
++    def supplied(form, field):
++        events.append("supplied")
++
++    class F(Form):
++        a = StringField(validators=[declared])
++
++        def validate_a(self, field):
++            events.append("inline")
++
++    sequence = sequence_type([supplied])
++    extras = {"a": sequence}
++    form = F(a="value")
++    assert form.validate(extra_validators=extras)
++    assert events == ["declared", "supplied", "inline"]
++    assert extras == {"a": sequence_type([supplied])}
++    assert extras["a"] is sequence
++
++    events.clear()
++    assert form.validate(extra_validators=extras)
++    assert events == ["declared", "supplied", "inline"]
++    assert extras == {"a": sequence_type([supplied])}
++    assert extras["a"] is sequence
++
++    events.clear()
++    other = F(a="other")
++    assert other.validate(extra_validators=extras)
++    assert events == ["declared", "supplied", "inline"]
++    assert extras == {"a": sequence_type([supplied])}

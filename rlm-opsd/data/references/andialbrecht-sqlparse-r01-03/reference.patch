@@ -1,0 +1,155 @@
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -12,38 +12,47 @@
+ from typing import IO, Any
+ 
+ from sqlparse import cli, engine, filters, formatter, sql, tokens
++from sqlparse.lexer import Lexer
+ 
+ __version__ = "0.6.0"
+ __all__ = ["cli", "engine", "filters", "formatter", "sql", "tokens"]
+ 
+ 
+ def parse(
+-    sql: str, encoding: str | None = None
++    sql: str, encoding: str | None = None, *, lexer: Lexer | None = None
+ ) -> tuple[sql.Statement, ...]:
+     """Parse sql and return a list of statements.
+ 
+     :param sql: A string containing one or more SQL statements.
+     :param encoding: The encoding of the statement (optional).
++    :param lexer: Lexer instance to use (optional). If None, use the default
++        lexer without changing its configuration.
+     :returns: A tuple of :class:`~sqlparse.sql.Statement` instances.
+     """
+-    return tuple(parsestream(sql, encoding))
++    return tuple(parsestream(sql, encoding, lexer=lexer))
+ 
+ 
+ def parsestream(
+-    stream: str | IO[str], encoding: str | None = None
++    stream: str | IO[str], encoding: str | None = None, *,
++    lexer: Lexer | None = None
+ ) -> Generator[sql.Statement, None, None]:
+     """Parses sql statements from file-like object.
+ 
+     :param stream: A file-like object.
+     :param encoding: The encoding of the stream contents (optional).
++    :param lexer: Lexer instance to use (optional). If None, use the default
++        lexer without changing its configuration.
+     :returns: A generator of :class:`~sqlparse.sql.Statement` instances.
+     """
+     stack = engine.FilterStack()
+     stack.enable_grouping()
+-    return stack.run(stream, encoding)
++    return stack.run(stream, encoding, lexer=lexer)
+ 
+ 
+-def format(sql: str, encoding: str | None = None, **options: Any) -> str:
++def format(
++    sql: str, encoding: str | None = None, *,
++    lexer: Lexer | None = None, **options: Any
++) -> str:
+     """Format *sql* according to *options*.
+ 
+     Available options are documented in :ref:`formatting`.
+@@ -51,17 +60,20 @@
+     In addition to the formatting options this function accepts the
+     keyword "encoding" which determines the encoding of the statement.
+ 
++    :param lexer: Lexer instance to use (optional). If None, use the default
++        lexer without changing its configuration.
+     :returns: The formatted SQL statement as string.
+     """
+     stack = engine.FilterStack()
+     options = formatter.validate_options(options)
+     stack = formatter.build_filter_stack(stack, options)
+     stack.postprocess.append(filters.SerializerUnicode())
+-    return "".join(stack.run(sql, encoding))
++    return "".join(stack.run(sql, encoding, lexer=lexer))
+ 
+ 
+ def split(
+-    sql: str, encoding: str | None = None, strip_semicolon: bool = False
++    sql: str, encoding: str | None = None, strip_semicolon: bool = False, *,
++    lexer: Lexer | None = None
+ ) -> list[str]:
+     """Split *sql* into single statements.
+ 
+@@ -69,7 +81,9 @@
+     :param encoding: The encoding of the statement (optional).
+     :param strip_semicolon: If True, remove trailing semicolons
+         (default: False).
++    :param lexer: Lexer instance to use (optional). If None, use the default
++        lexer without changing its configuration.
+     :returns: A list of strings.
+     """
+     stack = engine.FilterStack(strip_semicolon=strip_semicolon)
+-    return [str(stmt).strip() for stmt in stack.run(sql, encoding)]
++    return [str(stmt).strip() for stmt in stack.run(sql, encoding, lexer=lexer)]
+--- a/sqlparse/engine/filter_stack.py
++++ b/sqlparse/engine/filter_stack.py
+@@ -7,7 +7,7 @@
+ 
+ """filter"""
+ 
+-from sqlparse import lexer
++from sqlparse import lexer as lexer_module
+ from sqlparse.engine import grouping
+ from sqlparse.engine.statement_splitter import StatementSplitter
+ from sqlparse.exceptions import SQLParseError
+@@ -26,9 +26,9 @@
+     def enable_grouping(self):
+         self._grouping = True
+ 
+-    def run(self, sql, encoding=None):
++    def run(self, sql, encoding=None, *, lexer=None):
+         try:
+-            stream = lexer.tokenize(sql, encoding)
++            stream = lexer_module.tokenize(sql, encoding, lexer=lexer)
+             # Process token stream
+             for filter_ in self.preprocess:
+                 stream = filter_.process(stream)
+--- a/sqlparse/lexer.py
++++ b/sqlparse/lexer.py
+@@ -30,19 +30,9 @@
+     # - This class is prepared to be able to support additional SQL dialects
+     #   in the future by adding additional functions that take the place of
+     #   the function default_initialization().
+-    # - The lexer class uses an explicit singleton behavior with the
+-    #   instance-getter method get_default_instance(). This mechanism has
+-    #   the advantage that the call signature of the entry-points to the
+-    #   sqlparse library are not affected. Also, usage of sqlparse in third
+-    #   party code does not need to be adapted. On the other hand, the current
+-    #   implementation does not easily allow for multiple SQL dialects to be
+-    #   parsed in the same process.
+-    #   Such behavior can be supported in the future by passing a
+-    #   suitably initialized lexer object as an additional parameter to the
+-    #   entry-point functions (such as `parse`). Code will need to be written
+-    #   to pass down and utilize such an object. The current implementation
+-    #   is prepared to support this thread safe approach without the
+-    #   default_instance part needing to change interface.
++    # - The default instance preserves the historical singleton behavior.
++    #   Entry points can also use an explicitly supplied lexer instance,
++    #   allowing multiple syntax configurations without changing the default.
+ 
+     @classmethod
+     def get_default_instance(cls):
+@@ -165,10 +155,15 @@
+                 yield tokens.Error, char
+ 
+ 
+-def tokenize(sql, encoding=None):
++def tokenize(sql, encoding=None, *, lexer=None):
+     """Tokenize sql.
+ 
+     Tokenize *sql* using the :class:`Lexer` and return a 2-tuple stream
+     of ``(token type, value)`` items.
++
++    :param lexer: Lexer instance to use (optional). If None, use the default
++        lexer without changing its configuration.
+     """
+-    return Lexer.get_default_instance().get_tokens(sql, encoding)
++    if lexer is None:
++        lexer = Lexer.get_default_instance()
++    return lexer.get_tokens(sql, encoding)

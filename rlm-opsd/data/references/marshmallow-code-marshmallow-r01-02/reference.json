@@ -1,0 +1,166 @@
+{
+ "answer": [
+  "tests/test_deserialization.py::TestSchemaDeserialization::test_dump_only_fields_considered_unknown"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_only[include]\",\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_only[raise]\",\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_exclude[include]\",\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_exclude[raise]\",\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_dump_only[include]\",\n  \"tests/test_schema.py::TestSchema::test_unknown_fields_with_dump_only[raise]\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0019436866294033344,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 18,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "candidates",
+    "files",
+    "k",
+    "schema",
+    "tests",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 22417,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 2,
+   "subcall_sites": 2,
+   "subcall_sites_in_loop": 2,
+   "subcall_sites_on_context": 2,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 8,
+   "turns": 10,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "8 sub-calls (0 failed); 2 call sites on selected context, 0 on the whole context; max prompt 22417 chars"
+   },
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "10 turns; variables reused across turns: ['candidates', 'files', 'k', 'schema', 'tests', 'v']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "8 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Eight sub-calls occurred, but the evidence does not establish that their results contributed to the final answer.",
+   "combine_verify_finish": "The final test-ID collection was computed in code and inspected after construction. Independent impact verification confirmed the single newly failing node ID.",
+   "inspect_locate": "The reference execution used 11 searches across repository context to investigate unknown-key handling and its interaction with loading, field selection, and direction flags. Finding a likely dump-only test alone would not establish the complete impact set.",
+   "persistent_state": "Candidate tests and schema-related variables were retained and reused across turns while comparing the affected behaviors.",
+   "recursive_decomposition": "This behavior is not established: stored sub-call results did not reach the final answer."
+  },
+  "notes": "The question is a natural, precisely scoped change-impact request with an explicit output format. It specifies the proposed implementation change without revealing the affected test. Determining the complete failure set requires repository-specific reasoning about existing coverage and unchanged loading behavior. It is distinct from the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Determining impact requires understanding separate groups of tests for dump-only fields, omitted selections, renamed keys, nested schemas, and INCLUDE versus RAISE. Matching occurrences of 'unknown' alone cannot decide which assertions change.",
+   "combine_verify_finish": "The final answer is an exact aggregate of parameterized pytest node IDs, requiring deduplication and checking that every included case newly fails.",
+   "inspect_locate": "Unknown-key handling is reached through direct loads, nested loads, schema selection, direction flags, and configurable unknown policies, so affected tests are scattered across suites.",
+   "persistent_state": "Candidate test IDs, parameter combinations, and conclusions about which input keys become recognized must be retained across the separate investigations.",
+   "recursive_decomposition": "The impact analysis naturally separates by the reasons a declared field is absent from active load_fields and by the policy applied to its input key; those results must then be combined."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._deserialize",
+    "why": "Constructs the external known-key set and decides whether unrecognized inputs are included or reported as errors."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._init_fields",
+    "why": "Selection and dump-only flags determine the difference between declared_fields and load_fields."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Nested._load",
+    "why": "Nested operations invoke schema loading with the nested field's unknown override, extending the change's impact beyond top-level loads."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestNestedField.test_nested_unknown_override",
+    "why": "Provides a policy matrix that must be distinguished from cases where a known declared field is omitted from loading."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply the probe to the clean snapshot and compare against baseline outcomes. The probe intentionally preserves data_key handling and alters only the source of the known-key set.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -686,9 +686,9 @@\n             if unknown != EXCLUDE:\n                 fields = {\n                     field_obj.data_key if field_obj.data_key is not None else field_name\n-                    for field_name, field_obj in self.load_fields.items()\n+                    for field_name, field_obj in self.declared_fields.items()\n                 }\n                 for key in set(data) - fields:\n                     value = data[key]\n                     if unknown == INCLUDE:\n                         ret_d[key] = value\n",
+  "question": "We are considering changing Schema's unknown-input detection to recognize the external keys of every declared field, including fields omitted by selection and fields marked dump-only. Specifically, the known-key set would use `declared_fields` instead of `load_fields`, retaining the existing `data_key` fallback. Actual field loading, EXCLUDE behavior, and the remaining INCLUDE and RAISE logic would stay unchanged. Which existing tests would newly fail after this change? Return a JSON list of complete pytest node IDs, including parameter suffixes.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_deserialization.py::TestSchemaDeserialization::test_dump_only_fields_considered_unknown"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "expected": [
+    "tests/test_deserialization.py::TestSchemaDeserialization::test_dump_only_fields_considered_unknown"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_deserialization.py::TestSchemaDeserialization::test_dump_only_fields_considered_unknown"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_deserialization.py::TestSchemaDeserialization::test_dump_only_fields_considered_unknown"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

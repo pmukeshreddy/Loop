@@ -1,0 +1,118 @@
+{
+ "answer": "--- a/tlz/_build_tlz.py\n+++ b/tlz/_build_tlz.py\n@@ -53,6 +53,8 @@\n         return types.ModuleType(spec.name)\n \n     def exec_module(self, module):\n+        # Preserve caller-supplied exports, including override and child names.\n+        protected = {k for k in module.__dict__ if not k.startswith('__')}\n         toolz_mods = self._load_toolz(module.__name__)\n         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']\n         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']\n@@ -71,6 +73,8 @@\n             pass\n \n         for k, v in fast_mod.__dict__.items():\n+            if k in protected:\n+                continue\n             tv = slow_mod.__dict__.get(k)\n             try:\n                 hash(tv)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5157 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 5,157-character, three-document context supported a focused solution without sub-calls. The patch distinguishes bindings present at entry from newly populated exports and skips protected names before either override selection or mirrored-child import."
+  },
+  "notes": "This is a natural, repository-dependent loader change with a precise identity-preservation requirement and an explicit production-only unified-diff format. It specifies the desired behavior without prescribing the implementation. The supplied tests cover protected override aliases and owned children, absence of unnecessary child imports, and preservation of policy for new exports. The investigation is distinct from the previously accepted backend-identity, configurable-override, namespace-summary, and find_spec tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The complete namespace-construction policy and its existing tests fit in a small focused context. The main reasoning is distinguishing bindings present before execution from backend values subsequently copied or rewritten."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py",
+    "toolz/tests/test_tlz.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.exec_module",
+    "why": "The initial merge preserves local bindings, but the subsequent override and child-replacement branches can overwrite them."
+   },
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader.__init__",
+    "why": "The override is based on the identity of the slow value, so aliases of toolz.pipe must also respect protected bindings."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/toolz/tests/test_tlz_existing_exports.py\n@@ -0,0 +1,49 @@\n+import types\n+\n+import toolz\n+import tlz._build_tlz as builder\n+\n+\n+def test_existing_exports_survive_population(monkeypatch):\n+    fast = types.ModuleType('cytoolz.audit')\n+    slow = types.ModuleType('toolz.audit')\n+    fast.__package__ = 'cytoolz.audit'\n+    slow.__package__ = 'toolz.audit'\n+    child = types.ModuleType('cytoolz.audit.child')\n+    child.__package__ = fast.__name__\n+    fast.child = child\n+    fast.pipe = object()\n+    fast.alias = object()\n+    slow.pipe = toolz.pipe\n+    slow.alias = toolz.pipe\n+    target = types.ModuleType('tlz.audit')\n+    expected = {name: object() for name in ('pipe', 'alias', 'child')}\n+    target.__dict__.update(expected)\n+    calls = []\n+\n+    def resolve(name):\n+        calls.append(name)\n+        return {'cytoolz.audit': fast, 'toolz.audit': slow}[name]\n+\n+    monkeypatch.setattr(builder, 'import_module', resolve)\n+    builder.TlzLoader().exec_module(target)\n+    assert all(getattr(target, name) is value for name, value in expected.items())\n+    assert calls == ['cytoolz.audit', 'toolz.audit']\n+\n+\n+def test_new_exports_still_use_policy(monkeypatch):\n+    fast = types.ModuleType('cytoolz.audit')\n+    slow = types.ModuleType('toolz.audit')\n+    fast.pipe = object()\n+    slow.pipe = toolz.pipe\n+    child = types.ModuleType('cytoolz.audit.child')\n+    child.__package__ = fast.__name__\n+    fast.child = child\n+    mirrored = types.ModuleType('tlz.audit.child')\n+    modules = {'cytoolz.audit': fast, 'toolz.audit': slow,\n+               'tlz.audit.child': mirrored}\n+    monkeypatch.setattr(builder, 'import_module', modules.__getitem__)\n+    target = types.ModuleType('tlz.audit')\n+    builder.TlzLoader().exec_module(target)\n+    assert target.pipe is toolz.pipe\n+    assert target.child is mirrored\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests use synthetic backends through the module's import_module binding, so cytoolz installation is irrelevant. Protection is based on the target namespace at method entry, not the namespace after merging.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make `TlzLoader.exec_module` consistently preserve caller-supplied exports. Every target binding whose name does not begin with `__` and which exists when execution starts must survive by identity, even if the corresponding backend export would normally trigger the `toolz.pipe` override or owned-child-module replacement. Do not import a mirrored child merely to replace one of these protected bindings. Newly supplied backend exports must continue to use the current override and child-mirroring policies, and metadata behavior must remain unchanged. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r02-02",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_existing_exports.py::test_existing_exports_survive_population"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 194
+   },
+   "patch_files": [
+    "tlz/_build_tlz.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "toolz/tests/test_tlz_existing_exports.py::test_existing_exports_survive_population"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

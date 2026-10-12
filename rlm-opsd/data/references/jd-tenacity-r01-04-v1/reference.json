@@ -1,0 +1,163 @@
+{
+ "answer": "--- a/tenacity/retry.py\n+++ b/tenacity/retry.py\n@@ -15,6 +15,7 @@\n # limitations under the License.\n \n import abc\n+import inspect\n import re\n import typing\n \n@@ -31,36 +32,51 @@\n     def __call__(self, retry_state: \"RetryCallState\") -> bool:\n         pass\n \n-    def __and__(self, other: \"RetryBaseT\") -> \"retry_all\":\n-        if isinstance(other, retry_base):\n-            return other.__rand__(self)\n-        # Plain callable: flatten if self is already a retry_all\n-        if isinstance(self, retry_all):\n-            return retry_all(*self.retries, other)\n-        return retry_all(self, other)\n-\n-    def __rand__(self, other: \"RetryBaseT\") -> \"retry_all\":\n-        # Flatten if other is already a retry_all\n-        if isinstance(other, retry_all):\n-            return retry_all(*other.retries, self)\n-        return retry_all(other, self)\n-\n-    def __or__(self, other: \"RetryBaseT\") -> \"retry_any\":\n-        if isinstance(other, retry_base):\n-            return other.__ror__(self)\n-        # Plain callable: flatten if self is already a retry_any\n-        if isinstance(self, retry_any):\n-            return retry_any(*self.retries, other)\n-        return retry_any(self, other)\n-\n-    def __ror__(self, other: \"RetryBaseT\") -> \"retry_any\":\n-        # Flatten if other is already a retry_any\n-        if isinstance(other, retry_any):\n-            return retry_any(*other.retries, self)\n-        return retry_any(other, self)\n-\n-\n-RetryBaseT = retry_base | typing.Callable[[\"RetryCallState\"], bool]\n+    def __and__(self, other: \"RetryBaseT\") -> \"retry_base\":\n+        return _combine_retries(self, other, retry_all)\n+\n+    def __rand__(self, other: \"RetryBaseT\") -> \"retry_base\":\n+        return _combine_retries(other, self, retry_all)\n+\n+    def __or__(self, other: \"RetryBaseT\") -> \"retry_base\":\n+        return _combine_retries(self, other, retry_any)\n+\n+    def __ror__(self, other: \"RetryBaseT\") -> \"retry_base\":\n+        return _combine_retries(other, self, retry_any)\n+\n+\n+RetryBaseT = (\n+    retry_base | typing.Callable[[\"RetryCallState\"], bool | typing.Awaitable[bool]]\n+)\n+\n+\n+def _is_async_retry(retry: RetryBaseT) -> bool:\n+    # A synchronous composite may conceal asynchronous strategies at any depth.\n+    if isinstance(retry, (retry_any, retry_all)):\n+        return any(_is_async_retry(child) for child in retry.retries)\n+    return inspect.iscoroutinefunction(retry) or inspect.iscoroutinefunction(\n+        getattr(retry, \"__call__\", None)\n+    )\n+\n+\n+def _combine_retries(\n+    left: RetryBaseT,\n+    right: RetryBaseT,\n+    operator: type[\"retry_any\"] | type[\"retry_all\"],\n+) -> retry_base:\n+    if _is_async_retry(left) or _is_async_retry(right):\n+        # Import lazily: the asyncio retry module itself imports retry_base.\n+        from tenacity.asyncio.retry import retry_all as async_retry_all\n+        from tenacity.asyncio.retry import retry_any as async_retry_any\n+\n+        if operator is retry_any:\n+            return async_retry_any(left, right)\n+        return async_retry_all(left, right)\n+\n+    # Flatten only the same operator, never across an AND/OR boundary.\n+    left_retries = left.retries if isinstance(left, operator) else (left,)\n+    right_retries = right.retries if isinstance(right, operator) else (right,)\n+    return operator(*left_retries, *right_retries)\n \n \n class _retry_never(retry_base):\n@@ -291,12 +307,6 @@\n     def __call__(self, retry_state: \"RetryCallState\") -> bool:\n         return any(r(retry_state) for r in self.retries)\n \n-    @override\n-    def __ror__(self, other: \"RetryBaseT\") -> \"retry_any\":\n-        if isinstance(other, retry_any):\n-            return retry_any(*other.retries, *self.retries)\n-        return retry_any(other, *self.retries)\n-\n \n class retry_all(retry_base):\n     \"\"\"Retries if all the retries condition are valid.\"\"\"\n@@ -307,9 +317,3 @@\n     @override\n     def __call__(self, retry_state: \"RetryCallState\") -> bool:\n         return all(r(retry_state) for r in self.retries)\n-\n-    @override\n-    def __rand__(self, other: \"RetryBaseT\") -> \"retry_all\":\n-        if isinstance(other, retry_all):\n-            return retry_all(*other.retries, *self.retries)\n-        return retry_all(other, *self.retries)\n--- a/tenacity/asyncio/retry.py\n+++ b/tenacity/asyncio/retry.py\n@@ -14,10 +14,14 @@\n # See the License for the specific language governing permissions and\n # limitations under the License.\n import abc\n+import inspect\n import typing\n \n-from tenacity import _utils, retry_base\n+from tenacity import retry_base\n from tenacity._utils import override\n+from tenacity.retry import RetryBaseT\n+from tenacity.retry import retry_all as sync_retry_all\n+from tenacity.retry import retry_any as sync_retry_any\n \n if typing.TYPE_CHECKING:\n     from tenacity import RetryCallState\n@@ -33,32 +37,40 @@\n \n     @override\n     def __and__(  # type: ignore[override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_all\":\n         return retry_all(self, other)\n \n     @override\n     def __rand__(  # type: ignore[misc,override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_all\":\n         return retry_all(other, self)\n \n     @override\n     def __or__(  # type: ignore[override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_any\":\n         return retry_any(self, other)\n \n     @override\n     def __ror__(  # type: ignore[misc,override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_any\":\n         return retry_any(other, self)\n \n \n-RetryBaseT = (\n-    async_retry_base | typing.Callable[[\"RetryCallState\"], typing.Awaitable[bool]]\n-)\n+async def _evaluate_retry(retry: RetryBaseT, retry_state: \"RetryCallState\") -> bool:\n+    # Do not call synchronous composites directly: their any/all would test\n+    # coroutine objects for truth instead of awaiting their results.\n+    if isinstance(retry, sync_retry_any):\n+        return await retry_any(*retry.retries)(retry_state)\n+    if isinstance(retry, sync_retry_all):\n+        return await retry_all(*retry.retries)(retry_state)\n+    result = retry(retry_state)\n+    if inspect.isawaitable(result):\n+        return await result\n+    return result\n \n \n class retry_if_exception(async_retry_base):\n@@ -103,21 +115,19 @@\n class retry_any(async_retry_base):\n     \"\"\"Retries if any of the retries condition is valid.\"\"\"\n \n-    def __init__(self, *retries: retry_base | async_retry_base) -> None:\n+    def __init__(self, *retries: RetryBaseT) -> None:\n         self.retries = retries\n \n     @override\n     async def __call__(self, retry_state: \"RetryCallState\") -> bool:  # type: ignore[override]\n-        result = False\n-        for r in self.retries:\n-            result = result or await _utils.wrap_to_async_func(r)(retry_state)\n-            if result:\n-                break\n-        return result\n+        for retry in self.retries:\n+            if await _evaluate_retry(retry, retry_state):\n+                return True\n+        return False\n \n     @override\n     def __ror__(  # type: ignore[misc,override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_any\":\n         if isinstance(other, retry_any):\n             return retry_any(*other.retries, *self.retries)\n@@ -127,21 +137,19 @@\n class retry_all(async_retry_base):\n     \"\"\"Retries if all the retries condition are valid.\"\"\"\n \n-    def __init__(self, *retries: retry_base | async_retry_base) -> None:\n+    def __init__(self, *retries: RetryBaseT) -> None:\n         self.retries = retries\n \n     @override\n     async def __call__(self, retry_state: \"RetryCallState\") -> bool:  # type: ignore[override]\n-        result = True\n-        for r in self.retries:\n-            result = result and await _utils.wrap_to_async_func(r)(retry_state)\n-            if not result:\n-                break\n-        return result\n+        for retry in self.retries:\n+            if not await _evaluate_retry(retry, retry_state):\n+                return False\n+        return True\n \n     @override\n     def __rand__(  # type: ignore[misc,override]\n-        self, other: \"retry_base | async_retry_base\"\n+        self, other: \"RetryBaseT\"\n     ) -> \"retry_all\":\n         if isinstance(other, retry_all):\n             return retry_all(*other.retries, *self.retries)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "a",
+    "edited",
+    "files",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 15333 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The two-module context supports a focused implementation task requiring reasoning across synchronous and asynchronous operator dispatch, recursively nested composites, awaiting, and short-circuit evaluation. The reference execution used no sub-calls and produced a patch directly, consistent with the intended behavior."
+  },
+  "notes": "The request specifies a coherent maintainer-facing change and a clear unified-diff output format without prescribing solver operations or revealing the implementation. The supplied test evidence exercises operand order, grouping, evaluation traces, plain callables, and nested synchronous composites containing asynchronous strategies. This is materially distinct from the parent exception-chain traversal task and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context consists of the two retry-strategy modules. Reading their forward and reflected operators together reveals how synchronous composites are constructed and how asynchronous composites await their operands. The task requires reasoning about nested dispatch, evaluation order, and grouping, but does not require repository-wide discovery or delegation."
+  },
+  "context": {
+   "files": [
+    "tenacity/retry.py",
+    "tenacity/asyncio/retry.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/retry.py",
+    "symbol": "tenacity/retry.py::retry_base",
+    "why": "Its forward and reflected operators select synchronous composites and delegate to strategy operands, making it relevant to promotion when asynchronous strategies are nested rather than immediate operands."
+   },
+   {
+    "path": "tenacity/retry.py",
+    "symbol": "tenacity/retry.py::retry_any.__call__",
+    "why": "Synchronous any evaluation treats an unawaited coroutine result as truthy when an asynchronous strategy is stored inside this composite."
+   },
+   {
+    "path": "tenacity/retry.py",
+    "symbol": "tenacity/retry.py::retry_all.__call__",
+    "why": "Synchronous all evaluation likewise cannot correctly evaluate an asynchronous strategy stored in a nested synchronous composite."
+   },
+   {
+    "path": "tenacity/asyncio/retry.py",
+    "symbol": "tenacity/asyncio/retry.py::async_retry_base",
+    "why": "The asynchronous operators construct awaitable composites, but nested synchronous operands must also receive asynchronous evaluation."
+   },
+   {
+    "path": "tenacity/asyncio/retry.py",
+    "symbol": "tenacity/asyncio/retry.py::retry_any.__call__",
+    "why": "The awaited, ordered loop provides the asynchronous short-circuit semantics required for disjunction."
+   },
+   {
+    "path": "tenacity/asyncio/retry.py",
+    "symbol": "tenacity/asyncio/retry.py::retry_all.__call__",
+    "why": "The awaited, ordered loop provides the asynchronous short-circuit semantics required for conjunction."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_mixed_retry_composition.py\n@@ -0,0 +1,109 @@\n+import asyncio\n+import inspect\n+\n+import pytest\n+\n+from tenacity import RetryCallState, Retrying, retry_if_exception_cause_type\n+from tenacity.retry import retry_all as SAll\n+from tenacity.retry import retry_any as SAny\n+from tenacity.asyncio.retry import retry_if_exception as AsyncException\n+\n+\n+def policies():\n+    trace = []\n+    state = RetryCallState(Retrying(), fn=None, args=(), kwargs={})\n+    error = RuntimeError(\"outer\")\n+    error.__cause__ = ValueError(\"cause\")\n+    state.set_exception((type(error), error, None))\n+\n+    class Cause(retry_if_exception_cause_type):\n+        def __init__(self, label, exception_type):\n+            super().__init__(exception_type)\n+            self.label = label\n+\n+        def __call__(self, retry_state):\n+            trace.append(self.label)\n+            return super().__call__(retry_state)\n+\n+    def async_policy(label, value):\n+        async def predicate(exception):\n+            await asyncio.sleep(0)\n+            trace.append(label)\n+            return value\n+        return AsyncException(predicate)\n+\n+    def plain(label, value):\n+        def predicate(retry_state):\n+            trace.append(label)\n+            return value\n+        return predicate\n+\n+    operands = {\n+        \"t\": Cause(\"t\", ValueError),\n+        \"f\": Cause(\"f\", KeyError),\n+        \"a\": async_policy(\"a\", False),\n+        \"b\": async_policy(\"b\", True),\n+        \"p\": plain(\"p\", False),\n+        \"q\": plain(\"q\", True),\n+        \"SAll\": SAll,\n+        \"SAny\": SAny,\n+    }\n+    return operands, state, trace\n+\n+\n+@pytest.mark.parametrize(\n+    \"expression, expected, calls\",\n+    [\n+        (\"t & a\", False, \"t a\"),\n+        (\"a & t\", False, \"a\"),\n+        (\"f | b\", True, \"f b\"),\n+        (\"b | f\", True, \"b\"),\n+        (\"f & b\", False, \"f\"),\n+        (\"b & f\", False, \"b f\"),\n+        (\"t | a\", True, \"t\"),\n+        (\"a | t\", True, \"a t\"),\n+        (\"(t & b) | a\", True, \"t b\"),\n+        (\"(f | a) & b\", False, \"f a\"),\n+        (\"a | (t & b)\", True, \"a t b\"),\n+        (\"b & (f | a)\", False, \"b f a\"),\n+        (\"p | b\", True, \"p b\"),\n+        (\"b & q\", True, \"b q\"),\n+        (\"q & a\", False, \"q a\"),\n+        (\"a | p\", False, \"a p\"),\n+        (\"SAll(t, a) | f\", False, \"t a f\"),\n+        (\"SAny(f, a) & t\", False, \"f a\"),\n+        (\"SAll(t, b) & q\", True, \"t b q\"),\n+        (\"p | SAny(f, b)\", True, \"p f b\"),\n+        (\"SAny(f, SAll(t, a)) | b\", True, \"f t a b\"),\n+        (\"(SAny(f, a) | f) & b\", False, \"f a f\"),\n+        (\"t & SAny(f, a)\", False, \"t f a\"),\n+        (\"SAll(t, a) | SAny(f, b)\", True, \"t a f b\"),\n+    ],\n+)\n+def test_mixed_expression(expression, expected, calls):\n+    operands, state, trace = policies()\n+    policy = eval(expression, {\"__builtins__\": {}}, operands)\n+\n+    async def run():\n+        result = policy(state)\n+        assert inspect.isawaitable(result)\n+        assert await result is expected\n+\n+    asyncio.run(run())\n+    assert trace == calls.split()\n+\n+\n+@pytest.mark.parametrize(\n+    \"expression, expected, calls\",\n+    [\n+        (\"t & q\", True, \"t q\"),\n+        (\"f | p\", False, \"f p\"),\n+        (\"SAny(f, p) & t\", False, \"f p\"),\n+        (\"t | SAll(f, q)\", True, \"t\"),\n+    ],\n+)\n+def test_synchronous_expression_remains_synchronous(expression, expected, calls):\n+    operands, state, trace = policies()\n+    policy = eval(expression, {\"__builtins__\": {}}, operands)\n+    assert policy(state) is expected\n+    assert trace == calls.split()\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work with new hidden tests, not an injected regression. Immediate mixed binary expressions already work in this snapshot; the substantive missing behavior is promotion and asynchronous evaluation of operator expressions whose synchronous composite operands contain asynchronous strategies. The tests cover those failing paths as well as both immediate operand orders, false asynchronous results, source-order invocation traces, unlike-operator grouping, plain callables, and synchronous-only compatibility. No include_context option or exception-chain change is required.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make mixed synchronous/asynchronous retry-policy composition reliable. Expressions using `&` and `|` with `tenacity.retry.retry_if_exception_cause_type` and `tenacity.asyncio.retry.retry_if_exception` must produce awaitable policies in either operand order. Evaluate operands left to right, await asynchronous predicates before using their boolean results, and short-circuit normally. Preserve parentheses and grouping across unlike operators.\n\nThis must also work when an operand is an existing synchronous `tenacity.retry.retry_any` or `retry_all` containing an asynchronous strategy, including recursively nested composites. Once such an operand participates in an operator expression, the whole expression must evaluate asynchronously without a synchronous inner composite treating a coroutine as truthy. Plain synchronous callable operands must work on either side, including when the asynchronous strategy is nested inside the other operand. Expressions containing only synchronous strategies and callables must retain their synchronous boolean behavior.\n\nReturn a unified diff against non-test repository files. Keep exception-chain traversal unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Cross-file dependency tracing replaces the original single-module direct solve. Reading both retry modules together is useful to follow forward and reflected operators and distinguish synchronous any/all evaluation from awaited evaluation. Focused execution probes can verify operand order and reveal unawaited coroutine results; delegation is not necessary.",
+  "change_type": "dependency",
+  "description": "Repair mixed synchronous/asynchronous retry-policy composition. Use tenacity/retry.py::retry_if_exception_cause_type as a synchronous operand and tenacity/asyncio/retry.py::retry_if_exception as an asynchronous operand. Require both operand orders for & and | to produce awaitable composites that evaluate operands in source order, short-circuit correctly, and preserve grouping across unlike operators. Include nested expressions and plain synchronous callable operands. Return a unified diff against non-test files, targeting the operator dispatch in tenacity/retry.py::retry_base and tenacity/asyncio/retry.py::async_retry_base as needed; do not change exception-chain traversal.",
+  "expected_answer_change": "The patch must ensure that compositions containing asynchronous strategy objects use the asynchronous retry_any or retry_all implementation, including when a synchronous composite appears on the left. It must preserve ordered short-circuit evaluation and avoid flattening across unlike operators. Verification should use awaited predicates with invocation traces, including an async predicate returning false, rather than cause/context traversal tests.",
+  "why_substantive": "The problem moves from selecting exception links to selecting the correct composite implementation. In this snapshot, a synchronous strategy on the left can delegate to an asynchronous operand's reflected operator, whereas an asynchronous strategy on the left directly constructs an async composite. Nested synchronous composites can still consume coroutine results as truthy values rather than awaiting them. Correctness therefore depends on Python's operator dispatch and composite evaluation, not the accepted task's include_context option."
+ },
+ "task_id": "jd-tenacity-r01-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[(SAny(f, a) | f) & b-False-f a f]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, a) | SAny(f, b)-True-t a f b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, a) | f-False-t a f]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, b) & q-True-t b q]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAny(f, SAll(t, a)) | b-True-f t a b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAny(f, a) & t-False-f a]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[p | SAny(f, b)-True-p f b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[t & SAny(f, a)-False-t f a]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 212
+   },
+   "patch_files": [
+    "tenacity/retry.py",
+    "tenacity/asyncio/retry.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[(SAny(f, a) | f) & b-False-f a f]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, a) | SAny(f, b)-True-t a f b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, a) | f-False-t a f]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAll(t, b) & q-True-t b q]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAny(f, SAll(t, a)) | b-True-f t a b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[SAny(f, a) & t-False-f a]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[p | SAny(f, b)-True-p f b]",
+   "tests/test_mixed_retry_composition.py::test_mixed_expression[t & SAny(f, a)-False-t f a]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

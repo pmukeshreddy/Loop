@@ -1,0 +1,84 @@
+--- /dev/null
++++ b/jsonschema/tests/test_uniq_finite_iterators.py
+@@ -0,0 +1,81 @@
++from unittest import TestCase
++
++from jsonschema import Draft202012Validator
++from jsonschema._utils import uniq
++
++
++class ObservedIterator:
++    def __init__(self, values):
++        self.values = iter(values)
++        self.exhaustions = 0
++
++    def __iter__(self):
++        return self
++
++    def __next__(self):
++        try:
++            return next(self.values)
++        except StopIteration:
++            self.exhaustions += 1
++            raise
++
++
++CASES = [
++    ([{"enabled": True}, {"enabled": 1}, {"enabled": True}], False),
++    ([{"enabled": True}, {"enabled": 1}], True),
++    ([{"enabled": False}, {"enabled": 0}], True),
++    ([{"enabled": 1}, {"enabled": 1.0}], False),
++    ([True, True], False),
++    ([False, False], False),
++    ([True, False, 1, 0], True),
++    ([], True),
++    ([3, 1, 2], True),
++    ([3, 1, 3], False),
++    ([1, 1.0], False),
++]
++
++
++class TestUniqFiniteIterators(TestCase):
++    def test_generators(self):
++        for values, expected in CASES:
++            with self.subTest(values=values):
++                self.assertIs(uniq(value for value in values), expected)
++
++    def test_no_second_traversal(self):
++        for values, expected in CASES:
++            with self.subTest(values=values):
++                source = ObservedIterator(values)
++                self.assertIs(uniq(source), expected)
++                self.assertLessEqual(source.exhaustions, 1)
++
++    def test_reusable_containers(self):
++        for values, expected in CASES:
++            with self.subTest(values=values):
++                original = list(values)
++                self.assertIs(uniq(values), expected)
++                self.assertEqual(values, original)
++                self.assertIs(uniq(tuple(values)), expected)
++
++    def test_unique_items_compatibility(self):
++        validator = Draft202012Validator({"uniqueItems": True})
++        for values, expected in CASES:
++            with self.subTest(values=values):
++                errors = list(validator.iter_errors(values))
++                self.assertIs(not errors, expected)
++                if not expected:
++                    self.assertEqual(len(errors), 1)
++                    self.assertEqual(errors[0].validator, "uniqueItems")
++                    self.assertEqual(
++                        errors[0].message,
++                        f"{values!r} has non-unique elements",
++                    )
++
++    def test_unique_items_disabled(self):
++        validator = Draft202012Validator({"uniqueItems": False})
++        self.assertEqual(list(validator.iter_errors([True, True])), [])
++
++    def test_iterators_are_not_default_arrays(self):
++        validator = Draft202012Validator({"uniqueItems": True})
++        source = (value for value in [True, True])
++        self.assertEqual(list(validator.iter_errors(source)), [])
++        self.assertEqual(list(source), [True, True])

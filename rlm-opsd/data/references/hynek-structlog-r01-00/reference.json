@@ -1,0 +1,134 @@
+{
+ "answer": "--- a/src/structlog/_base.py\n+++ b/src/structlog/_base.py\n@@ -165,7 +165,7 @@\n         \"\"\"\n         # We're typing it as Any, because processors can return more than an\n         # EventDict.\n-        event_dict: Any = self._context\n+        event_dict: Any = self._context.copy()\n         event_dict.update(**event_kw)\n \n         if event is not None:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.004269965468485064,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "base",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 710076 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The repair restores a fresh event dictionary before overlays and processor execution, addressing both isolation failures without changing downstream dispatch. The final diff was constructed and inspected programmatically, and independent test verification established the two fail-to-pass results. The reference execution itself did not run repository tests.",
+   "inspect_locate": "The reference execution made 12 targeted searches without printing the whole repository context. The reported symptoms required locating the shared event-processing path and connecting context aliasing to both per-call field persistence and destructive processor mutations."
+  },
+  "notes": "A natural, repository-dependent regression repair with a precise unified-diff deliverable. The question does not disclose the defective symbol or fix, and the two symptoms arise from the same underlying defect rather than unrelated bundled requirements. The verified one-line copy restoration preserves event-field precedence, processor chaining, and backend adaptation. Neither accepted task duplicates this investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled from the exact source and checked against both the per-call overlay contract and the requirement that destructive processors cannot modify bound context.",
+   "inspect_locate": "The failures concern event processing and bound-context isolation. The investigation must connect the failing assertions to context construction, processor mutation, and backend dispatch rather than treating each renderer as independently broken."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_base.py",
+    "symbol": "src/structlog/_base.py::BoundLoggerBase._process_event",
+    "why": "Constructs the event dictionary, overlays call-specific fields, and invokes potentially destructive processors."
+   },
+   {
+    "path": "tests/test_base.py",
+    "symbol": "tests/test_base.py::TestProcessing.test_copies_context_before_processing",
+    "why": "Checks both object isolation and the absence of event-field leakage into persistent context."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::render_to_log_args_and_kwargs",
+    "why": "Demonstrates a downstream processor that consumes event and positional-argument fields."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup changes only event-dictionary construction. Restoring the original shallow-copy behavior is sufficient; deep-copying values would change the established contract.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The attached pytest output shows a regression in bound-context isolation. Per-call fields can survive into later events, and processors that consume fields can remove values from a logger's persistent context. Restore the existing isolation contract while preserving event-field precedence, processor chaining, and backend argument adaptation. Send a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/structlog/_base.py\n+++ b/src/structlog/_base.py\n@@ -162,7 +162,7 @@\n         \"\"\"\n         # We're typing it as Any, because processors can return more than an\n         # EventDict.\n-        event_dict: Any = self._context.copy()\n+        event_dict: Any = self._context\n         event_dict.update(**event_kw)\n \n         if event is not None:\n"
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_base.py::TestProcessing::test_copies_context_before_processing",
+   "tests/test_testing.py::TestCaptureLogs::test_captures_bound_logers"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 884
+   },
+   "patch_files": [
+    "src/structlog/_base.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_base.py::TestProcessing::test_copies_context_before_processing",
+   "tests/test_testing.py::TestCaptureLogs::test_captures_bound_logers"
+  ],
+  "ground_truth_symbols": [
+   "src/structlog/_base.py::BoundLoggerBase._process_event"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 882,
+  "stability_runs": 3
+ }
+}

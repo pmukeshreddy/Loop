@@ -1,0 +1,165 @@
+--- /dev/null
++++ b/tests/test_async_cancellation_boundaries.py
+@@ -0,0 +1,162 @@
++import asyncio
++
++import pytest
++
++from tenacity import (
++    AsyncRetrying,
++    AttemptManager,
++    Retrying,
++    RetryCallState,
++    TryAgain,
++    stop_after_attempt,
++    wait_fixed,
++)
++
++
++class ChildCancellation(asyncio.CancelledError):
++    pass
++
++
++class OtherBaseError(BaseException):
++    pass
++
++
++@pytest.mark.parametrize("mode", ["async_call", "sync_call", "async_context"])
++@pytest.mark.parametrize("enabled", [True, False])
++@pytest.mark.parametrize("error_type", [asyncio.CancelledError, ChildCancellation])
++def test_cancellation_escapes_without_an_outcome(mode, enabled, error_type):
++    async def scenario():
++        error = error_type("cancelled")
++        calls = []
++        states = []
++        events = []
++
++        def policy(state):
++            events.append("retry")
++            return state.outcome.failed
++
++        async def sleep(delay):
++            events.append("sleep")
++
++        controller = AsyncRetrying(
++            retry=policy,
++            stop=stop_after_attempt(2),
++            sleep=sleep,
++            before=states.append,
++            after=lambda state: events.append("after"),
++            before_sleep=lambda state: events.append("before_sleep"),
++            enabled=enabled,
++        )
++
++        def operation():
++            calls.append("attempt")
++            if len(calls) == 1:
++                raise error
++            return "ok"
++
++        async def async_operation():
++            return operation()
++
++        with pytest.raises(error_type) as caught:
++            if mode == "async_call":
++                await controller(async_operation)
++            elif mode == "sync_call":
++                await controller(operation)
++            else:
++                async for attempt in controller:
++                    if not enabled:
++                        states.append(attempt.retry_state)
++                    async with attempt:
++                        operation()
++
++        assert caught.value is error
++        assert calls == ["attempt"]
++        assert events == []
++        for state in states:
++            assert state.outcome is None
++            assert state.outcome_timestamp is None
++            assert state.attempt_number == 1
++
++    asyncio.run(scenario())
++
++
++@pytest.mark.parametrize("mode", ["async_call", "sync_call", "async_context"])
++@pytest.mark.parametrize("error_type", [ValueError, OtherBaseError, TryAgain])
++def test_other_exceptions_still_retry(mode, error_type):
++    async def scenario():
++        calls = []
++        sleeps = []
++        states = []
++
++        def operation():
++            calls.append("attempt")
++            if len(calls) == 1:
++                raise error_type("retry me")
++            return "ok"
++
++        async def async_operation():
++            return operation()
++
++        async def sleep(delay):
++            sleeps.append(float(delay))
++
++        controller = AsyncRetrying(
++            retry=lambda state: state.outcome.failed,
++            stop=stop_after_attempt(3),
++            wait=wait_fixed(0.25),
++            sleep=sleep,
++            before=states.append,
++        )
++        if mode == "async_call":
++            assert await controller(async_operation) == "ok"
++        elif mode == "sync_call":
++            assert await controller(operation) == "ok"
++        else:
++            async for attempt in controller:
++                async with attempt:
++                    operation()
++        assert calls == ["attempt", "attempt"]
++        assert sleeps == [0.25]
++        assert states[-1].attempt_number == 2
++        assert not states[-1].outcome.failed
++
++    asyncio.run(scenario())
++
++
++@pytest.mark.parametrize("mode", ["call", "context"])
++def test_synchronous_retrying_still_retries_cancellation(mode):
++    calls = []
++    error = asyncio.CancelledError("sync")
++
++    def operation():
++        calls.append("attempt")
++        if len(calls) == 1:
++            raise error
++        return "ok"
++
++    controller = Retrying(
++        retry=lambda state: state.outcome.failed,
++        stop=stop_after_attempt(2),
++        sleep=lambda delay: None,
++    )
++    if mode == "call":
++        assert controller(operation) == "ok"
++    else:
++        for attempt in controller:
++            with attempt:
++                operation()
++    assert calls == ["attempt", "attempt"]
++
++
++@pytest.mark.parametrize("controller_type", [Retrying, AsyncRetrying])
++def test_synchronous_attempt_context_and_state_can_store_cancellation(controller_type):
++    error = asyncio.CancelledError("stored")
++    state = RetryCallState(controller_type(), fn=None, args=(), kwargs={})
++    with AttemptManager(state):
++        raise error
++    assert state.outcome.failed
++    assert state.outcome.exception() is error
++    assert state.outcome_timestamp is not None
++    state.prepare_for_next_attempt()
++    state.set_exception((type(error), error, None))
++    assert state.outcome.exception() is error

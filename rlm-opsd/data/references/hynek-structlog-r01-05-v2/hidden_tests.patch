@@ -1,0 +1,103 @@
+--- /dev/null
++++ b/tests/test_stdlib_dictionary_interpolation.py
+@@ -0,0 +1,100 @@
++import logging
++
++import pytest
++
++from structlog.stdlib import (
++    BoundLogger,
++    PositionalArgumentsFormatter,
++    ProcessorFormatter,
++)
++
++
++@pytest.mark.parametrize("remove", [True, False])
++@pytest.mark.parametrize(
++    ("event", "args", "expected"),
++    [
++        ("hello %(user)s", {"user": "Ada"}, "hello Ada"),
++        ("%(user)s/%(role)s", {"user": "Ada", "role": "dev"}, "Ada/dev"),
++        ("hello %(user)s", ({"user": "Ada"},), "hello Ada"),
++        ("%s %d", ("Ada", 3), "Ada 3"),
++        ("%s", ("Ada",), "Ada"),
++        ("literal %s", (), "literal %s"),
++        ("literal %(user)s", {}, "literal %(user)s"),
++    ],
++)
++def test_argument_forms(event, args, expected, remove):
++    original_args = args.copy() if isinstance(args, dict) else args
++    ed = {"event": event, "positional_args": args}
++    result = PositionalArgumentsFormatter(remove)(None, "info", ed)
++    assert result["event"] == expected
++    assert args == original_args
++    if remove:
++        assert "positional_args" not in result
++    else:
++        assert result["positional_args"] is args
++
++
++@pytest.mark.parametrize("remove", [True, False])
++def test_missing_and_none_arguments(remove):
++    processor = PositionalArgumentsFormatter(remove)
++    assert processor(None, "info", {"event": "literal %s"}) == {
++        "event": "literal %s"
++    }
++    assert processor(
++        None, "info", {"event": "literal %s", "positional_args": None}
++    ) == {"event": "literal %s", "positional_args": None}
++
++
++@pytest.mark.parametrize("remove", [True, False])
++@pytest.mark.parametrize("structured", [True, False])
++def test_mapping_logging_pipeline(remove, structured):
++    messages = []
++    captured = []
++
++    def render(logger, name, ed):
++        captured.append(ed.copy())
++        return ed["event"]
++
++    class Handler(logging.Handler):
++        def emit(self, record):
++            messages.append(self.format(record))
++
++    processor = PositionalArgumentsFormatter(remove)
++    formatter = ProcessorFormatter(
++        use_get_message=False,
++        pass_foreign_args=True,
++        foreign_pre_chain=[processor],
++        processors=[render],
++    )
++    handler = Handler()
++    handler.setFormatter(formatter)
++    logger = logging.Logger("mapping-pipeline", logging.INFO)
++    logger.addHandler(handler)
++    args = {"user": "Ada"}
++    if structured:
++        bound = BoundLogger(
++            logger, [processor, ProcessorFormatter.wrap_for_formatter], {}
++        )
++        bound.info("hello %(user)s", args)
++    else:
++        logger.info("hello %(user)s", args)
++
++    assert messages == ["hello Ada"]
++    assert captured[0]["_from_structlog"] is structured
++    if remove:
++        assert "positional_args" not in captured[0]
++    else:
++        expected_args = (args,) if structured else args
++        assert captured[0]["positional_args"] == expected_args
++    assert args == {"user": "Ada"}
++
++
++def test_default_get_message_is_unchanged():
++    formatter = ProcessorFormatter(
++        processors=[lambda logger, name, ed: ed["event"]]
++    )
++    record = logging.LogRecord(
++        "mapping-default", logging.INFO, __file__, 1,
++        "hello %(user)s", ({"user": "Ada"},), None,
++    )
++    assert formatter.format(record) == "hello Ada"

@@ -1,0 +1,34 @@
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -245,6 +245,31 @@
+     def _func_join(self, separator, array):
+         return separator.join(array)
+ 
++    @signature({'types': ['array']}, {'types': ['expref']})
++    def _func_filter_by(self, array, expref):
++        result = []
++        for element in array:
++            predicate = expref.visit(expref.expression, element)
++            if expref.interpreter._is_true(predicate):
++                result.append(element)
++        return result
++
++    @signature({'types': ['array']}, {'types': ['expref']})
++    def _func_any_by(self, array, expref):
++        for element in array:
++            predicate = expref.visit(expref.expression, element)
++            if expref.interpreter._is_true(predicate):
++                return True
++        return False
++
++    @signature({'types': ['array']}, {'types': ['expref']})
++    def _func_all_by(self, array, expref):
++        for element in array:
++            predicate = expref.visit(expref.expression, element)
++            if not expref.interpreter._is_true(predicate):
++                return False
++        return True
++
+     @signature({'types': ['expref']}, {'types': ['array']})
+     def _func_map(self, expref, arg):
+         result = []

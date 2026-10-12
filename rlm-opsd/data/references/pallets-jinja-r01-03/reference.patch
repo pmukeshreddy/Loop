@@ -1,0 +1,37 @@
+--- a/src/jinja2/environment.py
++++ b/src/jinja2/environment.py
+@@ -907,10 +907,13 @@
+ 
+         If there are other files in the template folder besides the
+         actual templates, the returned list can be filtered.  There are two
+-        ways: either `extensions` is set to a list of file extensions for
++        ways: `extensions` can be set to a collection of file extensions for
+         templates, or a `filter_func` can be provided which is a callable that
+         is passed a template name and should return `True` if it should end up
+-        in the result list.
++        in the result list. If both are provided, only templates matching
++        both filters are returned. Extension matching is case-sensitive, and
++        an empty extension collection returns no templates. The loader's
++        ordering is preserved.
+ 
+         If the loader does not support that, a :exc:`TypeError` is raised.
+ 
+@@ -920,13 +923,11 @@
+         names = self.loader.list_templates()
+ 
+         if extensions is not None:
+-            if filter_func is not None:
+-                raise TypeError(
+-                    "either extensions or filter_func can be passed, but not both"
+-                )
+-
+-            def filter_func(x: str) -> bool:
+-                return "." in x and x.rsplit(".", 1)[1] in extensions
++            names = [
++                name
++                for name in names
++                if "." in name and name.rsplit(".", 1)[1] in extensions
++            ]
+ 
+         if filter_func is not None:
+             names = [name for name in names if filter_func(name)]

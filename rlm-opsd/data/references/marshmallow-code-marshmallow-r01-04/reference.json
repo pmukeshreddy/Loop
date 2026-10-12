@@ -1,0 +1,125 @@
+{
+ "answer": "--- a/src/marshmallow/orderedset.py\n+++ b/src/marshmallow/orderedset.py\n@@ -49,6 +49,28 @@\n             prev[2] = next\n             next[1] = prev\n \n+    def move_to_end(self, key, last=True):\n+        \"\"\"Move an existing member to the end, or to the beginning if last is false.\n+\n+        Raise KeyError if the member is not present.\n+        \"\"\"\n+        node = self.map[key]\n+        end = self.end\n+        if node is (end[1] if last else end[2]):\n+            return\n+\n+        prev, next = node[1], node[2]  # noqa: A001\n+        prev[2] = next\n+        next[1] = prev\n+\n+        if last:\n+            prev, next = end[1], end\n+        else:\n+            prev, next = end, end[2]\n+        node[1] = prev\n+        node[2] = next\n+        prev[2] = next[1] = node\n+\n     def __iter__(self):\n         end = self.end\n         curr = end[2]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 2,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 3,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 2991 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 2,991-character context contains the complete OrderedSet implementation. The reference produced the patch without sub-calls, using the existing map and sentinel-linked structure to relocate nodes in constant time."
+  },
+  "notes": "This is a natural, precisely scoped feature request requiring repository-specific reasoning about linked-list invariants. Naming the requested new API does not leak its implementation. The patch preserves membership and other members' order, handles missing keys before mutation, and safely treats endpoint and singleton moves as no-ops. The supplied tests cover forward and reverse iteration, subsequent mutations, endpoint pops, and edge cases. The task is distinct from the previously accepted schema-binding regression."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The complete OrderedSet implementation is under 3,000 characters. Its map and doubly linked sentinel structure can be read directly to implement endpoint relocation without a wider repository investigation."
+  },
+  "context": {
+   "files": [
+    "src/marshmallow/orderedset.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.add",
+    "why": "Shows how map entries and sentinel links represent insertion order."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.discard",
+    "why": "Shows the unlinking operation needed to relocate an existing node."
+   },
+   {
+    "path": "src/marshmallow/orderedset.py",
+    "symbol": "src/marshmallow/orderedset.py::OrderedSet.pop",
+    "why": "Endpoint operations rely on sentinel links remaining consistent after relocation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_orderedset_move_to_end.py\n@@ -0,0 +1,49 @@\n+import pytest\n+\n+from marshmallow.orderedset import OrderedSet\n+\n+\n+def test_move_to_each_endpoint_preserves_structure():\n+    s = OrderedSet([\"a\", \"b\", \"c\"])\n+    assert s.move_to_end(\"a\") is None\n+    assert list(s) == [\"b\", \"c\", \"a\"]\n+    assert list(reversed(s)) == [\"a\", \"c\", \"b\"]\n+    assert len(s) == 3\n+    assert s == OrderedSet([\"b\", \"c\", \"a\"])\n+    assert s.move_to_end(\"c\", last=False) is None\n+    assert list(s) == [\"c\", \"b\", \"a\"]\n+    assert list(reversed(s)) == [\"a\", \"b\", \"c\"]\n+    assert s.pop(last=False) == \"c\"\n+    assert s.pop() == \"a\"\n+    assert list(s) == [\"b\"]\n+\n+\n+def test_repeated_moves_and_subsequent_mutations():\n+    s = OrderedSet([\"a\", \"b\", \"c\"])\n+    s.move_to_end(\"b\")\n+    s.move_to_end(\"b\")\n+    assert list(s) == [\"a\", \"c\", \"b\"]\n+    s.move_to_end(\"c\", last=False)\n+    s.move_to_end(\"c\", last=False)\n+    assert list(s) == [\"c\", \"a\", \"b\"]\n+    s.discard(\"a\")\n+    s.add(\"a\")\n+    assert list(s) == [\"c\", \"b\", \"a\"]\n+\n+\n+def test_missing_empty_and_singleton_cases():\n+    s = OrderedSet([\"a\", \"b\"])\n+    with pytest.raises(KeyError):\n+        s.move_to_end(\"missing\")\n+    assert list(s) == [\"a\", \"b\"]\n+    assert list(reversed(s)) == [\"b\", \"a\"]\n+    empty = OrderedSet()\n+    with pytest.raises(KeyError):\n+        empty.move_to_end(\"missing\", last=False)\n+    assert list(empty) == []\n+    single = OrderedSet([\"x\"])\n+    assert single.move_to_end(\"x\") is None\n+    assert single.move_to_end(\"x\", last=False) is None\n+    assert list(single) == [\"x\"]\n+    assert single.pop() == \"x\"\n+    assert not single\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests exercise only the new public method and the observable invariants named in the request. Constant-time relocation is supported directly by the existing map and linked-list representation.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Add `OrderedSet.move_to_end(key, last=True)` for callers that need to reprioritize an existing member without removing and re-adding it. With `last=True`, move the member to the end of iteration order; with `last=False`, move it to the beginning. Preserve every other member's relative order and leave membership and size unchanged. Return None. A missing key must raise KeyError without changing the set, and moving an endpoint or the sole member must be harmless. The operation should take constant time and preserve reverse iteration, discard, add, and endpoint-pop behavior. Return a unified diff against `src/marshmallow/orderedset.py`, without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r01-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_orderedset_move_to_end.py::test_missing_empty_and_singleton_cases",
+   "tests/test_orderedset_move_to_end.py::test_move_to_each_endpoint_preserves_structure",
+   "tests/test_orderedset_move_to_end.py::test_repeated_moves_and_subsequent_mutations"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1191
+   },
+   "patch_files": [
+    "src/marshmallow/orderedset.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_orderedset_move_to_end.py::test_missing_empty_and_singleton_cases",
+   "tests/test_orderedset_move_to_end.py::test_move_to_each_endpoint_preserves_structure",
+   "tests/test_orderedset_move_to_end.py::test_repeated_moves_and_subsequent_mutations"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

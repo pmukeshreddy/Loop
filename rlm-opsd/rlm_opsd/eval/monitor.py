@@ -15,7 +15,7 @@ from rlm_opsd.training.samples import samples_from_rollout
 from .gate import GateClient,write_json,append_json
 from .preflight import sha256,safe_error
 from .monitor_config import MonitorConfig
-from .metrics import score_trajectory
+from .metrics import score_trajectory, task_success
 from .scoring import load_adapter,score_samples,token_offsets
 
 
@@ -138,7 +138,8 @@ async def run_monitor(config,output_dir):
                 raw=json.loads(path.read_text())
                 score=score_trajectory(raw,*plan.answers[task['info']['task_id']])
                 record=dict(phase=phase,trajectory_path=str(path),analysis=analyze_trajectory(raw,plan.gate_plan.detector_config),
-                            task_success=score==1.,task_score=score)
+                            task_score=score)
+                if task_success(score) is not None:record['task_success']=task_success(score)
                 records.append(record);append_json(output/'records.jsonl',{**record,'trajectory_path':str(path.relative_to(output))})
                 if phase=='after':
                     write_json(output/'rollouts'/(path.stem+'.json'),rollout)

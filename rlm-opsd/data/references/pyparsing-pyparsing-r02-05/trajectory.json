@@ -1,0 +1,322 @@
+{
+  "task_id": "pyparsing-pyparsing-r02-05",
+  "family": "recursive_decomposition",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 1199705,
+    "context_lengths": [
+      158,
+      804,
+      3365,
+      8781,
+      1078,
+      4259,
+      2354,
+      12619,
+      9046,
+      69,
+      8786,
+      66050,
+      16609,
+      42673,
+      6870,
+      657,
+      666,
+      56,
+      31576,
+      11734,
+      5986,
+      4848,
+      712,
+      21154,
+      6512,
+      1397,
+      3703,
+      7577,
+      29320,
+      21725,
+      40237,
+      11390,
+      3004,
+      2518,
+      12902,
+      4394,
+      6934,
+      64094,
+      15526,
+      4159,
+      836,
+      852,
+      5444,
+      3415,
+      737,
+      5342,
+      23476,
+      2000,
+      1370,
+      2534,
+      1985,
+      7549,
+      22117,
+      108894,
+      7032,
+      2995,
+      1758,
+      2118,
+      36680,
+      5851,
+      4445,
+      2150,
+      2028,
+      1251,
+      2287,
+      1602,
+      547,
+      430,
+      2373,
+      9040,
+      5934,
+      3310,
+      5391,
+      19610,
+      12646,
+      1614,
+      13059,
+      2004,
+      13466,
+      8133,
+      8509,
+      102,
+      17057,
+      26967,
+      11013,
+      65673,
+      27632,
+      15473,
+      6441,
+      10485,
+      16023,
+      387,
+      1988,
+      3945,
+      2881,
+      2948,
+      12404,
+      373,
+      718,
+      54,
+      10956,
+      55,
+      10563,
+      1730,
+      3303,
+      33173,
+      17712,
+      26060,
+      2940,
+      9776,
+      1224,
+      533
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint(context[0][:180]); print(context[len(context)//2][:180]);print(context[-1][:180])\nfiles={c.split('\\n',1)[0][8:]:c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint([p for p in files if 'inv_regex' in p])\nprint([c[:150] for c in context if c.startswith('# Log:')])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint(context[0][:180]); print(context[len(context)//2][:180]);print(context[-1][:180])\nfiles={c.split('\\n',1)[0][8:]:c.split('\\n',1)[1] for c in context if c.startswith('# File: ')}\nprint([p for p in files if 'inv_regex' in p])\nprint([c[:150] for c in context if c.startswith('# Log:')])"
+      ],
+      "stdout_raw_chars": 565,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 112\n# File: .pre-commit-config.yaml\nrepos:\n-   repo: https://github.com/python/black\n    rev: stable\n    hooks:\n    - id: black\n      language_version: python3.9\n\n# File: examples/dictExample.py\n#\n# dictExample.py\n#\n#  Illustration of using pyparsing's Dict class to process tabular data\n#\n# Copyright (c) 2003, Paul McGuire\n#\nimport pyparsing\n# File: update_pyparsing_timestamp.py\nfrom datetime import datetime, timezone\nfrom pathlib import Path\nfrom pyparsing import quoted_string\n\nnw = datetime.now(timezone.utc)\n\nnow_str\n['dest/inv_regex.py']\n[]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nsrc=files['dest/inv_regex.py']\nprint(len(src))\nprint(src[:3900])\n```            ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "src=files['dest/inv_regex.py']\nprint(len(src))\nprint(src[:3900])"
+      ],
+      "stdout_raw_chars": 3906,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "9020\n#\n# original file: https://raw.githubusercontent.com/pyparsing/pyparsing/pyparsing_3.0.9/examples/invRegex.py\n#\n# Copyright 2008, Paul McGuire\n#\n# pyparsing script to expand a regular expression into all possible matching strings\n# Supports:\n# - {n} and {m,n} repetition, but not unbounded + or * repetition\n# - ? optional elements\n# - [] character ranges\n# - () grouping\n# - | alternation\n#\n__all__ = [\"count\", \"invert\"]\n\nfrom pyparsing import (\n    Literal,\n    one_of,\n    Empty,\n    printables,\n    ParserElement,\n    Combine,\n    Optional,\n    SkipTo,\n    infix_notation,\n    ParseFatalException,\n    Word,\n    nums,\n    OpAssoc,\n    Suppress,\n    ParseResults,\n    srange,\n    autoname_elements,\n    Regex,\n)\n\nParserElement.enable_packrat()\n\n\nclass CharacterRangeEmitter:\n    def __init__(self, chars):\n        # remove duplicate chars in character range, but preserve original order\n        seen = set()\n        self.charset = \"\".join(seen.add(c) or c for c in chars if c not in seen)\n\n    def __str__(self):\n        return \"[\" + self.charset + \"]\"\n\n    def __repr__(self):\n        return \"[\" + self.charset + \"]\"\n\n    def make_generator(self):\n        def gen_chars():\n            yield from self.charset\n\n        return gen_chars\n\n\nclass OptionalEmitter:\n    def __init__(self, expr):\n        self.expr = expr\n\n    def make_generator(self):\n        def optional_gen():\n            yield \"\"\n            yield from self.expr.make_generator()()\n\n        return optional_gen\n\n\nclass DotEmitter:\n    def make_generator(self):\n        def dot_gen():\n            yield from printables\n\n        return dot_gen\n\n\nclass GroupEmitter:\n    def __init__(self, exprs):\n        self.exprs = ParseResults(exprs)\n\n    def make_generator(self):\n        def group_gen():\n            def recurse_list(elist):\n                if len(elist) == 1:\n                    yield from elist[0].make_generator()()\n                else:\n                    for s in elist[0].make_generator()():\n                        for s2 in recurse_list(elist[1:]):\n                            yield s + s2\n\n            if self.exprs:\n                yield from recurse_list(self.exprs)\n\n        return group_gen\n\n\nclass AlternativeEmitter:\n    def __init__(self, exprs):\n        self.exprs = exprs\n\n    def make_generator(self):\n        def alt_gen():\n            for e in self.exprs:\n                yield from e.make_generator()()\n\n        return alt_gen\n\n\nclass LiteralEmitter:\n    def __init__(self, lit):\n        self.lit = lit\n\n    def __str__(self):\n        return \"Lit:\" + self.lit\n\n    def __repr__(self):\n        return \"Lit:\" + self.lit\n\n    def make_generator(self):\n        def lit_gen():\n            yield self.lit\n\n        return lit_gen\n\n\ndef handle_range(toks):\n    inner = toks[0][1:-1]\n    if inner.startswith(\"^\"):\n        range_chars = set(printables) - set(srange(f\"[{inner[1:]}]\"))\n        return CharacterRangeEmitter(sorted(range_chars))\n    return CharacterRangeEmitter(srange(toks[0]))\n\n\ndef handle_repetition(toks):\n    toks = toks[0]\n    if toks[1] in \"*+\":\n        raise ParseFatalException(\"\", 0, \"unbounded repetition operators not supported\")\n    if toks[1] == \"?\":\n        return OptionalEmitter(toks[0])\n    if \"count\" in toks:\n        return GroupEmitter([toks[0]] * int(toks.count))\n    if \"minCount\" in toks:\n        mincount = int(toks.minCount)\n        maxcount = int(toks.maxCount)\n        optcount = maxcount - mincount\n        if optcount:\n            opt = OptionalEmitter(toks[0])\n            for i in range(1, optcount):\n                opt = OptionalEmitter(GroupEmitter([toks[0], opt]))\n            return GroupEmitter([toks[0]] * mincount + [opt])\n        else:\n            return [toks[0]] * mincount\n\n\ndef handle_literal(toks):\n    lit = \"\"\n    for t in toks:\n        if t[0] == \"\\\\\":\n            if t[1] == \"t\":\n                lit += \"\\t\"\n            else:\n                lit += \n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(src[3900:7800])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(src[3900:7800])"
+      ],
+      "stdout_raw_chars": 3901,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "t[1]\n        else:\n            lit += t\n    return LiteralEmitter(lit)\n\n\ndef handle_macro(toks):\n    macro_char = toks[0][1]\n    if macro_char == \"d\":\n        return CharacterRangeEmitter(\"0123456789\")\n    elif macro_char == \"w\":\n        return CharacterRangeEmitter(srange(\"[A-Za-z0-9_]\"))\n    elif macro_char == \"s\":\n        return LiteralEmitter(\" \")\n    elif macro_char == \"D\":\n        return CharacterRangeEmitter(sorted(set(printables + \" \") - set(\"0123456789\")))\n    elif macro_char == \"W\":\n        return CharacterRangeEmitter(\n            sorted(set(printables + \" \") - set(srange(\"[A-Za-z0-9_]\")))\n        )\n    elif macro_char == \"S\":\n        return CharacterRangeEmitter(printables)\n    else:\n        raise ParseFatalException(\n            \"\", 0, \"unsupported macro character (\" + macro_char + \")\"\n        )\n\n\ndef handle_sequence(toks):\n    return GroupEmitter(toks[0])\n\n\ndef handle_dot():\n    return CharacterRangeEmitter(printables)\n\n\ndef handle_alternative(toks):\n    return AlternativeEmitter(toks[0])\n\n\n_parser = None\n\n\ndef parser():\n    global _parser\n    if _parser is None:\n        ParserElement.set_default_whitespace_chars(\"\")\n        lbrack, rbrack, lbrace, rbrace, lparen, rparen, colon, qmark = (\n            Literal.using_each(\"[]{}():?\")\n        )\n\n        re_macro = Combine(\"\\\\\" + one_of(\"d w s D W S\"))\n        escaped_char = ~re_macro + Combine(\"\\\\\" + one_of(list(printables)))\n        re_literal_char = (\n            \"\".join(c for c in printables if c not in r\"\\[]{}().*?+|\") + \" \\t\"\n        )\n\n        re_range = Combine(lbrack + SkipTo(rbrack, ignore=escaped_char) + rbrack)  # type: ignore\n        re_literal = escaped_char | one_of(list(re_literal_char))\n        re_non_capture_group = Suppress(\"?:\")\n        re_named_group = Suppress(Regex(r\"\\?P<\\w+>\"))\n        re_dot = Literal(\".\")\n        repetition = (\n            (lbrace + Word(nums)(\"count\") + rbrace)\n            | (\n                lbrace\n                + Optional(Word(nums), default=0)(\"minCount\")\n                + \",\"\n                + Word(nums)(\"maxCount\")\n                + rbrace\n            )\n            | one_of(list(\"*+?\"))\n        )\n\n        re_range.add_parse_action(handle_range)\n        re_literal.add_parse_action(handle_literal)\n        re_macro.add_parse_action(handle_macro)\n        re_dot.add_parse_action(handle_dot)\n\n        re_term = (\n            re_literal\n            | re_range\n            | re_macro\n            | re_dot\n            | re_non_capture_group\n            | re_named_group\n        )\n        re_term.set_name(\"re_term\")\n        alt_op = Suppress(\"|\")\n        seq_op = Empty()\n        autoname_elements()\n        re_expr = infix_notation(\n            re_term,\n            [\n                (repetition, 1, OpAssoc.LEFT, handle_repetition),\n                (seq_op, 2, OpAssoc.LEFT, handle_sequence),\n                (alt_op.set_name(\"re\"), 2, OpAssoc.LEFT, handle_alternative),\n            ],\n        )\n        _parser = re_expr\n\n    return _parser\n\n\ndef count(gen):\n    \"\"\"Simple function to count the number of elements returned by a generator.\"\"\"\n    return sum(1 for _ in gen)\n\n\ndef invert(regex):\n    r\"\"\"\n    Call this routine as a generator to return all the strings that\n    match the input regular expression.\n        for s in invert(r\"[A-Z]{3}\\d{3}\"):\n            print s\n    \"\"\"\n    invre = GroupEmitter(parser().parse_string(regex, parse_all=True)).make_generator()\n    return invre()\n\n\ndef main():\n    tests = r\"\"\"\n    abc|def\n    [A-EA]\n    [A-D]*\n    [A-D]{3}\n    X[A-C]{3}Y\n    X[A-C]{3}\\(\n    X\\d\n    foobar\\d\\d\n    foobar{2}\n    foobar{2,9}\n    fooba[rz]{2}\n    (foobar){2}\n    ([01]\\d)|(2[0-5])\n    (?:[01]\\d)|(2[0-5])\n    ([01]\\d\\d)|(2[0-4]\\d)|(25[0-5])\n    [A-C]{1,2}\n    [A-C]{0,3}\n    [A-C]\\s[A-C]\\s[A-C]\n    [A-C]\\s?[A-C][A-C]\n    [A-C]\\s([A-C][A-C])\n    [A-C]\\s([A-C][A-C])?\n    [A-C]{2}\\d{2}\n    @|TH[12]\n    @(@|TH[12])?\n    @(@|TH[12]|A\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(src[7800:])\nprint([p for p in files if 'core' in p or 'util' in p])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(src[7800:])\nprint([p for p in files if 'core' in p or 'util' in p])"
+      ],
+      "stdout_raw_chars": 1265,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "L[12]|SP[123]|TB(1[0-9]?|20?|[3-9]))?\n    @(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9])|OH(1[0-9]?|2[0-9]?|30?|[4-9]))?\n    (([ECMP]|HA|AK)[SD]|HS)T\n    [A-CV]{,2}\n    A[cglmrstu]|B[aehikr]?|C[adeflmorsu]?|D[bsy]|E[rsu]|F[emr]?|G[ade]|H[efgos]?|I[nr]?|Kr?|L[airu]|M[dgnot]|N[abdeiop]?|Os?|P[abdmortu]?|R[abefghnu]|S[bcegimnr]?|T[abcehilm]|Uu[bhopqst]|U|V|W|Xe|Yb?|Z[nr]\n    (a|b)|(x|y)\n    (a|b) (x|y)\n    [ABCDEFG](?:#|##|b|bb)?(?:maj|min|m|sus|aug|dim)?[0-9]?(?:/[ABCDEFG](?:#|##|b|bb)?)?\n    (Fri|Mon|S(atur|un)|T(hur|ue)s|Wednes)day\n    A(pril|ugust)|((Dec|Nov|Sept)em|Octo)ber|(Febr|Jan)uary|Ju(ly|ne)|Ma(rch|y)\n    \\S-\\d{2}\n    \\D{2}-\\W\n    [^A-Z]-\\d{3}\n    \"\"\".splitlines()\n\n    for t in tests:\n        t = t.strip()\n        if not t:\n            continue\n        print(\"-\" * 50)\n        print(t)\n        try:\n            num = count(invert(t))\n            print(num)\n            maxprint = 30\n            for s in invert(t):\n                print(s)\n                maxprint -= 1\n                if not maxprint:\n                    break\n        except ParseFatalException as pfe:\n            print(pfe.msg)\n            print(\"\")\n            continue\n        print(\"\")\n\n\nif __name__ == \"__main__\":\n    main()\n\n['pyparsing/util.py', 'tests/test_util.py']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re,ast\npatterns=[t.strip() for t in re.search(r'tests = r\"\"\"(.*?)\"\"\"',src,re.S).group(1).splitlines() if t.strip()]\nprint(len(patterns))\nprint([(p,len(v)) for p,v in files.items() if p.startswith('pyparsing/')][:20])\nhits=[(p,m.start()) for p,v in files.items() for m in re.finditer(r'^def (srange|infix_notation)\\(',v,re.M)]\nprint(hits)\nfor p,v in files.items():\n    for m in re.finditer(r'^printables\\s*=.*',v,re.M):\n        print(p,m.group())\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re,ast\npatterns=[t.strip() for t in re.search(r'tests = r\"\"\"(.*?)\"\"\"',src,re.S).group(1).splitlines() if t.strip()]\nprint(len(patterns))\nprint([(p,len(v)) for p,v in files.items() if p.startswith('pyparsing/')][:20])\nhits=[(p,m.start()) for p,v in files.items() for m in re.finditer(r'^def (srange|infix_notation)\\(',v,re.M)]\nprint(hits)\nfor p,v in files.items():\n    for m in re.finditer(r'^printables\\s*=.*',v,re.M):\n        print(p,m.group())"
+      ],
+      "stdout_raw_chars": 559,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "37\n[('pyparsing/__init__.py', 13436), ('pyparsing/actions.py', 8104), ('pyparsing/ai/best_practices.md', 8470), ('pyparsing/ai/show_best_practices/__main__.py', 49), ('pyparsing/common.py', 17029), ('pyparsing/diagram/__init__.py', 26929), ('pyparsing/exceptions.py', 10981), ('pyparsing/helpers.py', 65644), ('pyparsing/results.py', 27603), ('pyparsing/testing.py', 15444), ('pyparsing/tools/cvt_pyparsing_pep8_names.py', 6389), ('pyparsing/unicode.py', 10456), ('pyparsing/util.py', 15997), ('pyparsing/warnings.py', 357)]\n[('pyparsing/helpers.py', 54668)]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint([p for p in files if 'core' in p or 'range' in p])\nfor p,v in files.items():\n    if p.startswith('pyparsing/'):\n        for m in re.finditer(r'printables\\s*[:=]|def srange|def infix_notation',v):\n            print(p,repr(v[max(0,m.start()-80):m.start()+180]))\n```\n",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print([p for p in files if 'core' in p or 'range' in p])\nfor p,v in files.items():\n    if p.startswith('pyparsing/'):\n        for m in re.finditer(r'printables\\s*[:=]|def srange|def infix_notation',v):\n            print(p,repr(v[max(0,m.start()-80):m.start()+180]))"
+      ],
+      "stdout_raw_chars": 294,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "[]\npyparsing/helpers.py 'nal_result\\n        else:\\n            return loc, ParseResults([final_result])\\n\\n\\ndef infix_notation(base_expr, op_list, lpar=\"(\", rpar=\")\"):\\n    \"\"\"Helper method for constructing grammars of expressions made up of\\n    operators working in a precedence hierarchy'\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nanalysis_counts=llm_query(\"Read this implementation and demonstration corpus. Determine number of yielded entries for each stripped pattern in tests, duplicates counted; fatal errors msg. Do not execute code. Pay attention bounded repetition nests optional (geometric sums), printables usual ASCII 94, macro D includes space minus digits =85, W=32, complement A-Z =68, and empty suppressed noncapture prefixes. Return JSON object only, plus no explanation.\\n\"+src)\nprint(analysis_counts)\nprint(files['pyparsing/__init__.py'][:1200])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "analysis_counts=llm_query(\"Read this implementation and demonstration corpus. Determine number of yielded entries for each stripped pattern in tests, duplicates counted; fatal errors msg. Do not execute code. Pay attention bounded repetition nests optional (geometric sums), printables usual ASCII 94, macro D includes space minus digits =85, W=32, complement A-Z =68, and empty suppressed noncapture prefixes. Return JSON object only, plus no explanation.\\n\"+src)\nprint(analysis_counts)\nprint(files['pyparsing/__init__.py'][:1200])"
+      ],
+      "stdout_raw_chars": 2556,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\n  \"abc|def\": 2,\n  \"[A-EA]\": 5,\n  \"[A-D]*\": \"unbounded repetition operators not supported\",\n  \"[A-D]{3}\": 64,\n  \"X[A-C]{3}Y\": 27,\n  \"X[A-C]{3}\\\\(\": 27,\n  \"X\\\\d\": 10,\n  \"foobar\\\\d\\\\d\": 100,\n  \"foobar{2}\": 1,\n  \"foobar{2,9}\": 8,\n  \"fooba[rz]{2}\": 4,\n  \"(foobar){2}\": 1,\n  \"([01]\\\\d)|(2[0-5])\": 26,\n  \"(?:[01]\\\\d)|(2[0-5])\": 26,\n  \"([01]\\\\d\\\\d)|(2[0-4]\\\\d)|(25[0-5])\": 256,\n  \"[A-C]{1,2}\": 12,\n  \"[A-C]{0,3}\": 40,\n  \"[A-C]\\\\s[A-C]\\\\s[A-C]\": 27,\n  \"[A-C]\\\\s?[A-C][A-C]\": 54,\n  \"[A-C]\\\\s([A-C][A-C])\": 27,\n  \"[A-C]\\\\s([A-C][A-C])?\": 30,\n  \"[A-C]{2}\\\\d{2}\": 900,\n  \"@|TH[12]\": 3,\n  \"@(@|TH[12])?\": 4,\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9]))?\": 29,\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9])|OH(1[0-9]?|2[0-9]?|30?|[4-9]))?\": 59,\n  \"(([ECMP]|HA|AK)[SD]|HS)T\": 13,\n  \"[A-CV]{,2}\": 21,\n  \"A[cglmrstu]|B[aehikr]?|C[adeflmorsu]?|D[bsy]|E[rsu]|F[emr]?|G[ade]|H[efgos]?|I[nr]?|Kr?|L[airu]|M[dgnot]|N[abdeiop]?|Os?|P[abdmortu]?|R[abefghnu]|S[bcegimnr]?|T[abcehilm]|Uu[bhopqst]|U|V|W|Xe|Yb?|Z[nr]\": 118,\n  \"(a|b)|(x|y)\": 4,\n  \"(a|b) (x|y)\": 4,\n  \"[ABCDEFG](?:#|##|b|bb)?(?:maj|min|m|sus|aug|dim)?[0-9]?(?:/[ABCDEFG](?:#|##|b|bb)?)?\": 97020,\n  \"(Fri|Mon|S(atur|un)|T(hur|ue)s|Wednes)day\": 7,\n  \"A(pril|ugust)|((Dec|Nov|Sept)em|Octo)ber|(Febr|Jan)uary|Ju(ly|ne)|Ma(rch|y)\": 12,\n  \"\\\\S-\\\\d{2}\": 9400,\n  \"\\\\D{2}-\\\\W\": 231200,\n  \"[^A-Z]-\\\\d{3}\": 68000\n}\n# see LICENSE file for terms and conditions for using this software.\n\n# fmt: off\n__doc__ = \"\"\"\npyparsing - Classes and methods to define and execute parsing grammars\n======================================================================\n\nPyparsing is an alternative approach to creating and executing simple\ngrammars, vs. the traditional lex/yacc approach, or the use of regular\nexpressions.  With pyparsing, you don't need to learn a new syntax for\ndefining grammars or matching expressions - the parsing module provides\na library of classes that you use to construct the grammar directly in\nPython.\n\nHere is a program to parse \"Hello, World!\" (or any greeting of the form\n``\"<salutation>, <addressee>!\"``), built up using :class:`Word`,\n:class:`Literal`, and :class:`And` elements\n(the :meth:`'+'<ParserElement.__add__>` operators create :class:`And` expressions,\nand the strings are auto-converted to :class:`Literal` expressions):\n\n.. testcode::\n\n    from pyparsing import Word, alphas\n\n    # define grammar of a greeting\n    greet = Word(alphas) + \",\" + Word(alphas) + \"!\"\n\n    hello = \"Hello, World!\"\n    print(hello, \"->\", greet.parse_string(hello))\n\nThe program outputs the following:\n\n.. tes\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": [
+        {
+          "prompt_chars": 9450,
+          "output_chars": 1354,
+          "latency_s": 23.84720083299908,
+          "turn_index": 6,
+          "depth": 1,
+          "kind": "llm_query",
+          "error": null
+        }
+      ]
+    },
+    {
+      "assistant_text": "```repl\nh=files['pyparsing/helpers.py']\npos=h.index('def infix_notation')\nprint(h[pos+5700:pos+9500])\nprint([(p,v[:80]) for p,v in files.items() if 'pyparsing' not in p and ('94' in v or 'printables =' in v)][:6])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "h=files['pyparsing/helpers.py']\npos=h.index('def infix_notation')\nprint(h[pos+5700:pos+9500])\nprint([(p,v[:80]) for p,v in files.items() if 'pyparsing' not in p and ('94' in v or 'printables =' in v)][:6])"
+      ],
+      "stdout_raw_chars": 4562,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": ",\n         'BB',\n         ['(', 'a', 'b', 'c', ')'],\n         ':',\n         [['BB1'], [['def', 'BBA', ['(', ')'], ':', [['bba1'], ['bba2'], ['bba3']]]]]],\n        'C',\n        'D',\n        ['def',\n         'spam',\n         ['(', 'x', 'y', ')'],\n         ':',\n         [[['def', 'eggs', ['(', 'z', ')'], ':', [['pass']]]]]]]\n    \"\"\"\n    warnings.warn(\n        f\"{'indentedBlock'!r} deprecated - use {'IndentedBlock'!r}\",\n        PyparsingDeprecationWarning,\n        stacklevel=2,\n    )\n\n    backup_stacks.append(indentStack[:])\n\n    def reset_stack():\n        indentStack[:] = backup_stacks[-1]\n\n    def checkPeerIndent(s, l, t):\n        if l >= len(s):\n            return\n        curCol = col(l, s)\n        if curCol != indentStack[-1]:\n            if curCol > indentStack[-1]:\n                raise ParseException(s, l, \"illegal nesting\")\n            raise ParseException(s, l, \"not a peer entry\")\n\n    def checkSubIndent(s, l, t):\n        curCol = col(l, s)\n        if curCol > indentStack[-1]:\n            indentStack.append(curCol)\n        else:\n            raise ParseException(s, l, \"not a subentry\")\n\n    def checkUnindent(s, l, t):\n        if l >= len(s):\n            return\n        curCol = col(l, s)\n        if not (indentStack and curCol in indentStack):\n            raise ParseException(s, l, \"not an unindent\")\n        if curCol < indentStack[-1]:\n            indentStack.pop()\n\n    NL = OneOrMore(LineEnd().set_whitespace_chars(\"\\t \").suppress())\n    INDENT = (Empty() + Empty().set_parse_action(checkSubIndent)).set_name(\"INDENT\")\n    PEER = Empty().set_parse_action(checkPeerIndent).set_name(\"\")\n    UNDENT = Empty().set_parse_action(checkUnindent).set_name(\"UNINDENT\")\n    if indent:\n        smExpr = Group(\n            Opt(NL)\n            + INDENT\n            + OneOrMore(PEER + Group(blockStatementExpr) + Opt(NL))\n            + UNDENT\n        )\n    else:\n        smExpr = Group(\n            Opt(NL)\n            + OneOrMore(PEER + Group(blockStatementExpr) + Opt(NL))\n            + Opt(UNDENT)\n        )\n\n    # add a parse action to remove backup_stack from list of backups\n    smExpr.add_parse_action(\n        lambda: backup_stacks.pop(-1) and None if backup_stacks else None\n    )\n    smExpr.set_fail_action(lambda a, b, c, d: reset_stack())\n    blockStatementExpr.ignore(_bslash + LineEnd())\n    return smExpr.set_name(\"indented block\")\n\n\n# it's easy to get these comment structures wrong - they're very common,\n# so may as well make them available\nc_style_comment = Regex(r\"/\\*(?:[^*]|\\*(?!/))*\\*\\/\").set_name(\"C style comment\")\n\"Comment of the form ``/* ... */``\"\n\nhtml_comment = Regex(r\"<!--[\\s\\S]*?-->\").set_name(\"HTML comment\")\n\"Comment of the form ``<!-- ... -->``\"\n\nrest_of_line = Regex(r\".*\").leave_whitespace().set_name(\"rest of line\")\ndbl_slash_comment = Regex(r\"//(?:\\\\\\n|[^\\n])*\").set_name(\"// comment\")\n\"Comment of the form ``// ... (to end of line)``\"\n\ncpp_style_comment = Regex(\n    r\"(?:/\\*(?:[^*]|\\*(?!/))*\\*\\/)|(?://(?:\\\\\\n|[^\\n])*)\"\n).set_name(\"C++ style comment\")\n\"Comment of either form :class:`c_style_comment` or :class:`dbl_slash_comment`\"\n\njava_style_comment = cpp_style_comment\n\"Same as :class:`cpp_style_comment`\"\n\npython_style_comment = Regex(r\"#.*\").set_name(\"Python style comment\")\n\"Comment of the form ``# ... (to end of line)``\"\n\n\n# build list of built-in expressions, for future reference if a global default value\n# gets updated\n_builtin_exprs: list[ParserElement] = [\n    v for v in vars().values() if isinstance(v, ParserElement)\n]\n\n\n# compatibility function, superseded by DelimitedList class\ndef delimited_list(\n    expr: Union[str, ParserElement],\n    delim: Union[str, ParserElement] = \",\",\n    combine: bool = False,\n    min: typing.Optional[int] = None,\n    max: typing.Optional[int] = None,\n    *,\n    allow_trailing_delim: bool = Fals\n[('docs/_static/sql_railroad.html', '<!DOCTYPE html>\\n<html>\\n<head>\\n    \\n        <style type=\"text/css\">\\n            .'), ('examples/TAP_diagram.html', '\\n<!DOCTYPE html>\\n<html>\\n<head>\\n\\n    \\n        <style>\\n            .railroad-headi'), ('examples/adventure_game_parser_diagram.html', '\\n<!DOCTYPE html>\\n<html>\\n<head>\\n\\n    \\n        <style>\\n            .railroad-headi'), ('examples/apicheck_diagram.html', '\\n<!DOCTYPE html>\\n<html>\\n<head>\\n\\n    \\n        <style>\\n            .railroad-headi'), ('examples/bf_diagram.html', '\\n<!DOCTYPE html>\\n<html>\\n<head>\\n\\n    \\n        <style>\\n            .railroad-headi'), ('examples/chemical_formulas.py', '#\\n# chemicalFormulas.py\\n#\\n# Copyright (c) 2003,2019 Paul McGuire\\n#\\n\\nimport pypar')]\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(h[pos+2000:pos+5100])\nfor p,v in files.items():\n    for m in re.finditer(r'printables',v):\n        if p.endswith('__init__.py'): print(v[max(0,m.start()-100):m.start()+120])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(h[pos+2000:pos+5100])\nfor p,v in files.items():\n    for m in re.finditer(r'printables',v):\n        if p.endswith('__init__.py'): print(v[max(0,m.start()-100):m.start()+120])"
+      ],
+      "stdout_raw_chars": 3322,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": " as a\n       str, then will be parsed as ``Suppress(lpar)``. If lpar is passed as\n       an expression (such as ``Literal('(')``), then it will be kept in\n       the parsed results, and grouped with them. (default= ``Suppress('(')``)\n    :param rpar: expression for matching right-parentheses; if passed as a\n       str, then will be parsed as ``Suppress(rpar)``. If rpar is passed as\n       an expression (such as ``Literal(')')``), then it will be kept in\n       the parsed results, and grouped with them. (default= ``Suppress(')')``)\n\n    Example:\n\n    .. testcode::\n\n       # simple example of four-function arithmetic with ints and\n       # variable names\n       integer = pyparsing_common.signed_integer\n       varname = pyparsing_common.identifier\n\n       arith_expr = infix_notation(integer | varname,\n           [\n           ('-', 1, OpAssoc.RIGHT),\n           (one_of('* /'), 2, OpAssoc.LEFT),\n           (one_of('+ -'), 2, OpAssoc.LEFT),\n           ])\n\n       arith_expr.run_tests('''\n           5+3*6\n           (5+3)*6\n           (5+x)*y\n           -2--11\n           ''', full_dump=False)\n\n    prints:\n\n    .. testoutput::\n       :options: +NORMALIZE_WHITESPACE\n\n\n       5+3*6\n       [[5, '+', [3, '*', 6]]]\n\n       (5+3)*6\n       [[[5, '+', 3], '*', 6]]\n\n       (5+x)*y\n       [[[5, '+', 'x'], '*', 'y']]\n\n       -2--11\n       [[['-', 2], '-', ['-', 11]]]\n    \"\"\"\n    return _InfixNotation(base_expr, op_list, lpar=lpar, rpar=rpar)\n\n\ndef indentedBlock(blockStatementExpr, indentStack, indent=True, backup_stacks=[]):\n    \"\"\"\n    .. deprecated:: 3.0.0\n       Use the :class:`IndentedBlock` class instead. Note that `IndentedBlock`\n       has a difference method signature.\n\n    Helper method for defining space-delimited indentation blocks,\n    such as those used to define block statements in Python source code.\n\n    :param blockStatementExpr: expression defining syntax of statement that\n      is repeated within the indented block\n\n    :param indentStack: list created by caller to manage indentation stack\n      (multiple ``statementWithIndentedBlock`` expressions within a single\n      grammar should share a common ``indentStack``)\n\n    :param indent: boolean indicating whether block must be indented beyond\n      the current level; set to ``False`` for block of left-most statements\n\n    A valid block must contain at least one ``blockStatement``.\n\n    (Note that indentedBlock uses internal parse actions which make it\n    incompatible with packrat parsing.)\n\n    Example:\n\n    .. testcode::\n\n       data = '''\n       def A(z):\n         A1\n         B = 100\n         G = A2\n         A2\n         A3\n       B\n       def BB(a,b,c):\n         BB1\n         def BBA():\n           bba1\n           bba2\n           bba3\n       C\n       D\n       def spam(x,y):\n            def eggs(z):\n                pass\n       '''\n\n       indentStack = [1]\n       stmt = Forward()\n\n       identifier = Word(alphas, alphanums)\n       funcDecl = (\"def\" + identifier + Group(\"(\" + Opt(delimitedList(identifier)) + \")\") + \":\")\n       func_body = indentedBlock(stmt, indentStack)\n       funcDef = Group(func\n    \"nested_expr\",\n    \"null_debug_action\",\n    \"nums\",\n    \"one_of\",\n    \"original_text_for\",\n    \"printables\",\n    \"punc8bit\",\n    \"pyparsing_common\",\n    \"pyparsing_test\",\n    \"pyparsing_unicode\",\n    \"python_style_co\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\n# Independent arithmetic model of emitter counts (not executing repository code).\nimport string,json\nalphabet=string.ascii_letters+string.digits+string.punctuation\ndef cardinality(p):\n    i=0\n    def alt():\n        nonlocal i\n        n=seq()\n        while i<len(p) and p[i]=='|':\n            i+=1; n+=seq()\n        return n\n    def seq():\n        nonlocal i\n        n=1\n        while i<len(p) and p[i] not in ')|':\n            if p[i]=='(':\n                i+=1\n                if p[i:i+2]=='?:': i+=2\n                a=alt(); assert p[i]==')'; i+=1\n            elif p[i]=='[':\n                end=p.index(']',i)\n                chars=p[i+1:end]; i=end+1\n                neg=chars.startswith('^')\n                if neg: chars=chars[1:]\n                out=set(); k=0\n                while k<len(chars):\n                    if k+2<len(chars) and chars[k+1]=='-':\n                        out.update(chr(v) for v in range(ord(chars[k]),ord(chars[k+2])+1));k+=3\n                    else: out.add(chars[k]);k+=1\n                a=len(set(alphabet)-out) if neg else len(out)\n            elif p[i]=='\\\\':\n                i+=1;a={'d':10,'w':63,'s':1,'D':85,'W':32,'S':94}.get(p[i],1);i+=1\n            else: a=94 if p[i]=='.' else 1;i+=1\n            if i<len(p):\n                if p[i] in '*+': return 'unbounded repetition operators not supported'\n                if p[i]=='?': a+=1;i+=1\n                elif p[i]=='{':\n                    end=p.index('}',i); spec=p[i+1:end];i=end+1\n                    if ',' in spec:\n                        lo,hi=spec.split(',');lo=int(lo or 0);hi=int(hi)\n                        a=sum(a**k for k in range(lo,hi+1))\n                    else:\n                        a=a**int(spec) if int(spec) else 0\n            n*=a\n        return n\n    result=alt()\n    if isinstance(result,int): assert i==len(p),(p,i)\n    return result\ncomputed={p:cardinality(p) for p in patterns}\nmodel=json.loads(analysis_counts)\nprint([(p,computed[p],model[p]) for p in patterns if computed[p]!=model[p]])\nprint(computed)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "# Independent arithmetic model of emitter counts (not executing repository code).\nimport string,json\nalphabet=string.ascii_letters+string.digits+string.punctuation\ndef cardinality(p):\n    i=0\n    def alt():\n        nonlocal i\n        n=seq()\n        while i<len(p) and p[i]=='|':\n            i+=1; n+=seq()\n        return n\n    def seq():\n        nonlocal i\n        n=1\n        while i<len(p) and p[i] not in ')|':\n            if p[i]=='(':\n                i+=1\n                if p[i:i+2]=='?:': i+=2\n                a=alt(); assert p[i]==')'; i+=1\n            elif p[i]=='[':\n                end=p.index(']',i)\n                chars=p[i+1:end]; i=end+1\n                neg=chars.startswith('^')\n                if neg: chars=chars[1:]\n                out=set(); k=0\n                while k<len(chars):\n                    if k+2<len(chars) and chars[k+1]=='-':\n                        out.update(chr(v) for v in range(ord(chars[k]),ord(chars[k+2])+1));k+=3\n                    else: out.add(chars[k]);k+=1\n                a=len(set(alphabet)-out) if neg else len(out)\n            elif p[i]=='\\\\':\n                i+=1;a={'d':10,'w':63,'s':1,'D':85,'W':32,'S':94}.get(p[i],1);i+=1\n            else: a=94 if p[i]=='.' else 1;i+=1\n            if i<len(p):\n                if p[i] in '*+': return 'unbounded repetition operators not supported'\n                if p[i]=='?': a+=1;i+=1\n                elif p[i]=='{':\n                    end=p.index('}',i); spec=p[i+1:end];i=end+1\n                    if ',' in spec:\n                        lo,hi=spec.split(',');lo=int(lo or 0);hi=int(hi)\n                        a=sum(a**k for k in range(lo,hi+1))\n                    else:\n                        a=a**int(spec) if int(spec) else 0\n            n*=a\n        return n\n    result=alt()\n    if isinstance(result,int): assert i==len(p),(p,i)\n    return result\ncomputed={p:cardinality(p) for p in patterns}\nmodel=json.loads(analysis_counts)\nprint([(p,computed[p],model[p]) for p in patterns if computed[p]!=model[p]])\nprint(computed)"
+      ],
+      "stdout_raw_chars": 1282,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "[]\n{'abc|def': 2, '[A-EA]': 5, '[A-D]*': 'unbounded repetition operators not supported', '[A-D]{3}': 64, 'X[A-C]{3}Y': 27, 'X[A-C]{3}\\\\(': 27, 'X\\\\d': 10, 'foobar\\\\d\\\\d': 100, 'foobar{2}': 1, 'foobar{2,9}': 8, 'fooba[rz]{2}': 4, '(foobar){2}': 1, '([01]\\\\d)|(2[0-5])': 26, '(?:[01]\\\\d)|(2[0-5])': 26, '([01]\\\\d\\\\d)|(2[0-4]\\\\d)|(25[0-5])': 256, '[A-C]{1,2}': 12, '[A-C]{0,3}': 40, '[A-C]\\\\s[A-C]\\\\s[A-C]': 27, '[A-C]\\\\s?[A-C][A-C]': 54, '[A-C]\\\\s([A-C][A-C])': 27, '[A-C]\\\\s([A-C][A-C])?': 30, '[A-C]{2}\\\\d{2}': 900, '@|TH[12]': 3, '@(@|TH[12])?': 4, '@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9]))?': 29, '@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9])|OH(1[0-9]?|2[0-9]?|30?|[4-9]))?': 59, '(([ECMP]|HA|AK)[SD]|HS)T': 13, '[A-CV]{,2}': 21, 'A[cglmrstu]|B[aehikr]?|C[adeflmorsu]?|D[bsy]|E[rsu]|F[emr]?|G[ade]|H[efgos]?|I[nr]?|Kr?|L[airu]|M[dgnot]|N[abdeiop]?|Os?|P[abdmortu]?|R[abefghnu]|S[bcegimnr]?|T[abcehilm]|Uu[bhopqst]|U|V|W|Xe|Yb?|Z[nr]': 118, '(a|b)|(x|y)': 4, '(a|b) (x|y)': 4, '[ABCDEFG](?:#|##|b|bb)?(?:maj|min|m|sus|aug|dim)?[0-9]?(?:/[ABCDEFG](?:#|##|b|bb)?)?': 97020, '(Fri|Mon|S(atur|un)|T(hur|ue)s|Wednes)day': 7, 'A(pril|ugust)|((Dec|Nov|Sept)em|Octo)ber|(Febr|Jan)uary|Ju(ly|ne)|Ma(rch|y)': 12, '\\\\S-\\\\d{2}': 9400, '\\\\D{2}-\\\\W': 231200, '[^A-Z]-\\\\d{3}': 68000}\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nmanifest={p:({\"count\":v} if isinstance(v,int) else {\"error\":v}) for p,v in computed.items()}\nassert len(manifest)==len(patterns)==37\nassert all(list(v) in (['count'],['error']) for v in manifest.values())\nanswer_json=json.dumps(manifest,indent=2)\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "manifest={p:({\"count\":v} if isinstance(v,int) else {\"error\":v}) for p,v in computed.items()}\nassert len(manifest)==len(patterns)==37\nassert all(list(v) in (['count'],['error']) for v in manifest.values())\nanswer_json=json.dumps(manifest,indent=2)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 2058,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\n  \"abc|def\": {\n    \"count\": 2\n  },\n  \"[A-EA]\": {\n    \"count\": 5\n  },\n  \"[A-D]*\": {\n    \"error\": \"unbounded repetition operators not supported\"\n  },\n  \"[A-D]{3}\": {\n    \"count\": 64\n  },\n  \"X[A-C]{3}Y\": {\n    \"count\": 27\n  },\n  \"X[A-C]{3}\\\\(\": {\n    \"count\": 27\n  },\n  \"X\\\\d\": {\n    \"count\": 10\n  },\n  \"foobar\\\\d\\\\d\": {\n    \"count\": 100\n  },\n  \"foobar{2}\": {\n    \"count\": 1\n  },\n  \"foobar{2,9}\": {\n    \"count\": 8\n  },\n  \"fooba[rz]{2}\": {\n    \"count\": 4\n  },\n  \"(foobar){2}\": {\n    \"count\": 1\n  },\n  \"([01]\\\\d)|(2[0-5])\": {\n    \"count\": 26\n  },\n  \"(?:[01]\\\\d)|(2[0-5])\": {\n    \"count\": 26\n  },\n  \"([01]\\\\d\\\\d)|(2[0-4]\\\\d)|(25[0-5])\": {\n    \"count\": 256\n  },\n  \"[A-C]{1,2}\": {\n    \"count\": 12\n  },\n  \"[A-C]{0,3}\": {\n    \"count\": 40\n  },\n  \"[A-C]\\\\s[A-C]\\\\s[A-C]\": {\n    \"count\": 27\n  },\n  \"[A-C]\\\\s?[A-C][A-C]\": {\n    \"count\": 54\n  },\n  \"[A-C]\\\\s([A-C][A-C])\": {\n    \"count\": 27\n  },\n  \"[A-C]\\\\s([A-C][A-C])?\": {\n    \"count\": 30\n  },\n  \"[A-C]{2}\\\\d{2}\": {\n    \"count\": 900\n  },\n  \"@|TH[12]\": {\n    \"count\": 3\n  },\n  \"@(@|TH[12])?\": {\n    \"count\": 4\n  },\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9]))?\": {\n    \"count\": 29\n  },\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9])|OH(1[0-9]?|2[0-9]?|30?|[4-9]))?\": {\n    \"count\": 59\n  },\n  \"(([ECMP]|HA|AK)[SD]|HS)T\": {\n    \"count\": 13\n  },\n  \"[A-CV]{,2}\": {\n    \"count\": 21\n  },\n  \"A[cglmrstu]|B[aehikr]?|C[adeflmorsu]?|D[bsy]|E[rsu]|F[emr]?|G[ade]|H[efgos]?|I[nr]?|Kr?|L[airu]|M[dgnot]|N[abdeiop]?|Os?|P[abdmortu]?|R[abefghnu]|S[bcegimnr]?|T[abcehilm]|Uu[bhopqst]|U|V|W|Xe|Yb?|Z[nr]\": {\n    \"count\": 118\n  },\n  \"(a|b)|(x|y)\": {\n    \"count\": 4\n  },\n  \"(a|b) (x|y)\": {\n    \"count\": 4\n  },\n  \"[ABCDEFG](?:#|##|b|bb)?(?:maj|min|m|sus|aug|dim)?[0-9]?(?:/[ABCDEFG](?:#|##|b|bb)?)?\": {\n    \"count\": 97020\n  },\n  \"(Fri|Mon|S(atur|un)|T(hur|ue)s|Wednes)day\": {\n    \"count\": 7\n  },\n  \"A(pril|ugust)|((Dec|Nov|Sept)em|Octo)ber|(Febr|Jan)uary|Ju(ly|ne)|Ma(rch|y)\": {\n    \"count\": 12\n  },\n  \"\\\\S-\\\\d{2}\": {\n    \"count\": 9400\n  },\n  \"\\\\D{2}-\\\\W\": {\n    \"count\": 231200\n  },\n  \"[^A-Z]-\\\\d{3}\": {\n    \"count\": 68000\n  }\n}\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "{\n  \"abc|def\": {\n    \"count\": 2\n  },\n  \"[A-EA]\": {\n    \"count\": 5\n  },\n  \"[A-D]*\": {\n    \"error\": \"unbounded repetition operators not supported\"\n  },\n  \"[A-D]{3}\": {\n    \"count\": 64\n  },\n  \"X[A-C]{3}Y\": {\n    \"count\": 27\n  },\n  \"X[A-C]{3}\\\\(\": {\n    \"count\": 27\n  },\n  \"X\\\\d\": {\n    \"count\": 10\n  },\n  \"foobar\\\\d\\\\d\": {\n    \"count\": 100\n  },\n  \"foobar{2}\": {\n    \"count\": 1\n  },\n  \"foobar{2,9}\": {\n    \"count\": 8\n  },\n  \"fooba[rz]{2}\": {\n    \"count\": 4\n  },\n  \"(foobar){2}\": {\n    \"count\": 1\n  },\n  \"([01]\\\\d)|(2[0-5])\": {\n    \"count\": 26\n  },\n  \"(?:[01]\\\\d)|(2[0-5])\": {\n    \"count\": 26\n  },\n  \"([01]\\\\d\\\\d)|(2[0-4]\\\\d)|(25[0-5])\": {\n    \"count\": 256\n  },\n  \"[A-C]{1,2}\": {\n    \"count\": 12\n  },\n  \"[A-C]{0,3}\": {\n    \"count\": 40\n  },\n  \"[A-C]\\\\s[A-C]\\\\s[A-C]\": {\n    \"count\": 27\n  },\n  \"[A-C]\\\\s?[A-C][A-C]\": {\n    \"count\": 54\n  },\n  \"[A-C]\\\\s([A-C][A-C])\": {\n    \"count\": 27\n  },\n  \"[A-C]\\\\s([A-C][A-C])?\": {\n    \"count\": 30\n  },\n  \"[A-C]{2}\\\\d{2}\": {\n    \"count\": 900\n  },\n  \"@|TH[12]\": {\n    \"count\": 3\n  },\n  \"@(@|TH[12])?\": {\n    \"count\": 4\n  },\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9]))?\": {\n    \"count\": 29\n  },\n  \"@(@|TH[12]|AL[12]|SP[123]|TB(1[0-9]?|20?|[3-9])|OH(1[0-9]?|2[0-9]?|30?|[4-9]))?\": {\n    \"count\": 59\n  },\n  \"(([ECMP]|HA|AK)[SD]|HS)T\": {\n    \"count\": 13\n  },\n  \"[A-CV]{,2}\": {\n    \"count\": 21\n  },\n  \"A[cglmrstu]|B[aehikr]?|C[adeflmorsu]?|D[bsy]|E[rsu]|F[emr]?|G[ade]|H[efgos]?|I[nr]?|Kr?|L[airu]|M[dgnot]|N[abdeiop]?|Os?|P[abdmortu]?|R[abefghnu]|S[bcegimnr]?|T[abcehilm]|Uu[bhopqst]|U|V|W|Xe|Yb?|Z[nr]\": {\n    \"count\": 118\n  },\n  \"(a|b)|(x|y)\": {\n    \"count\": 4\n  },\n  \"(a|b) (x|y)\": {\n    \"count\": 4\n  },\n  \"[ABCDEFG](?:#|##|b|bb)?(?:maj|min|m|sus|aug|dim)?[0-9]?(?:/[ABCDEFG](?:#|##|b|bb)?)?\": {\n    \"count\": 97020\n  },\n  \"(Fri|Mon|S(atur|un)|T(hur|ue)s|Wednes)day\": {\n    \"count\": 7\n  },\n  \"A(pril|ugust)|((Dec|Nov|Sept)em|Octo)ber|(Febr|Jan)uary|Ju(ly|ne)|Ma(rch|y)\": {\n    \"count\": 12\n  },\n  \"\\\\S-\\\\d{2}\": {\n    \"count\": 9400\n  },\n  \"\\\\D{2}-\\\\W\": {\n    \"count\": 231200\n  },\n  \"[^A-Z]-\\\\d{3}\": {\n    \"count\": 68000\n  }\n}",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 3040.503538292003
+  }
+}

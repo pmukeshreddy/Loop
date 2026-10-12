@@ -1,0 +1,161 @@
+{
+ "answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -766,6 +766,7 @@\n \n     def _bind_to_schema(self, field_name: str, parent: Schema | Field) -> None:\n         super()._bind_to_schema(field_name, parent)\n+        self.inner = copy.deepcopy(self.inner)\n         self.inner._bind_to_schema(field_name, self)\n         if isinstance(self.inner, Nested):\n             self.inner.only = self.only\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002668632637587092,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "b",
+    "f",
+    "files",
+    "logs",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 18248,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 1,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 809778 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "6 turns; variables reused across turns: ['b', 'f', 'files', 'logs', 't']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The unified diff was computed from source text and inspected before submission. Executable verification established that the patch resolves the five reported binding and nested-selection regressions.",
+   "inspect_locate": "The execution used 19 targeted searches without printing the whole context. The investigation connects schema-instance field copying, List child binding, parent/root ownership, and Nested option propagation rather than merely locating a named defective method.",
+   "persistent_state": "Variables were reused across six turns, supporting continuity during the investigation, although persistent state was not separately established as a necessary behavior."
+  },
+  "notes": "This is a natural maintainer request with a precise patch-only deliverable. The question identifies symptoms without revealing the defective method or repair. The verified change restores per-instance isolation of List child fields while retaining the existing binding and nested-option logic. No duplicate or cosmetic-variation issue is present."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is a diff assembled from exact source text; its context and scope should be checked before submission.",
+   "inspect_locate": "The failures involve child-field roots and repeated nested selections. Their cause requires connecting schema instance construction, Field's deepcopy implementation, container binding, and lazy Nested schema construction.",
+   "persistent_state": "The investigation must retain the distinction between declared fields, instance-level container copies, and their child objects while following successive binding and option-normalization stages."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema.__init__",
+    "why": "Schema instances copy declared fields before normalizing nested options and binding the selected fields."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Field.__deepcopy__",
+    "why": "Deepcopy of a field is actually a shallow copy, so copying the declared-field dictionary does not isolate container children."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::List._bind_to_schema",
+    "why": "This is the additional child-copy boundary affected by the setup regression."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestParentAndName.test_list_root_inheritance",
+    "why": "Checks that children belonging to separate schema instances retain their respective roots."
+   },
+   {
+    "path": "tests/test_fields.py",
+    "symbol": "tests/test_fields.py::TestListNested.test_list_nested_class_multiple_dumps",
+    "why": "Checks separate nested selections on repeated schema construction and use."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The setup removes only the List child-copy operation. Existing binding, root-inheritance, and repeated nested-selection tests provide execution checks; the correct repair must not weaken those contracts.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "The attached pytest output shows regressions involving List child-field roots and nested selections across schema instances. Ordinary fields still appear to be isolated, but constructing or using another schema instance can affect List behavior. Find and repair the underlying regression while preserving the existing binding and nested-option contracts. Return a unified diff against the repository files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -803,10 +803,9 @@\n     def _bind_to_schema(self, field_name: str, parent: Schema | Field) -> None:\n         super()._bind_to_schema(field_name, parent)\n-        self.inner = copy.deepcopy(self.inner)\n         self.inner._bind_to_schema(field_name, self)\n         if isinstance(self.inner, Nested):\n             self.inner.only = self.only\n             self.inner.exclude = self.exclude\n \n     def _serialize(self, value, attr, obj, **kwargs) -> list[_InternalT] | None:\n         if value is None:\n"
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r01-00",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_fields.py::TestListNested::test_list_nested_class_multiple_dumps",
+   "tests/test_fields.py::TestListNested::test_list_nested_instance_multiple_dumps",
+   "tests/test_fields.py::TestParentAndName::test_list_field_inner_parent_and_name",
+   "tests/test_fields.py::TestParentAndName::test_list_field_inner_root",
+   "tests/test_fields.py::TestParentAndName::test_list_root_inheritance"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 5,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1188
+   },
+   "patch_files": [
+    "src/marshmallow/fields.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_fields.py::TestListNested::test_list_nested_class_multiple_dumps",
+   "tests/test_fields.py::TestListNested::test_list_nested_instance_multiple_dumps",
+   "tests/test_fields.py::TestParentAndName::test_list_field_inner_parent_and_name",
+   "tests/test_fields.py::TestParentAndName::test_list_field_inner_root",
+   "tests/test_fields.py::TestParentAndName::test_list_root_inheritance"
+  ],
+  "ground_truth_symbols": [
+   "src/marshmallow/fields.py::List._bind_to_schema"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1181,
+  "stability_runs": 3
+ }
+}

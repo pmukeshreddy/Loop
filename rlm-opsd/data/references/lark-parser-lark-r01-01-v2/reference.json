@@ -1,0 +1,138 @@
+{
+ "answer": "--- a/lark/tree.py\n+++ b/lark/tree.py\n@@ -135,19 +135,27 @@\n         return hash((self.data, tuple(self.children)))\n \n     def iter_subtrees(self) -> 'Iterator[Tree[_Leaf_T]]':\n-        \"\"\"Depth-first iteration.\n-\n-        Iterates over all the subtrees, never returning to the same node twice (Lark's parse-tree is actually a DAG).\n-        \"\"\"\n-        queue = [self]\n-        subtrees = dict()\n-        for subtree in queue:\n-            subtrees[id(subtree)] = subtree\n-            queue += [c for c in reversed(subtree.children)\n-                      if isinstance(c, Tree) and id(c) not in subtrees]\n-\n-        del queue\n-        return reversed(list(subtrees.values()))\n+        \"\"\"Depth-first postorder iteration.\n+\n+        Visits each Tree object once by identity, yielding children before parents.\n+        Lark's parse-tree is actually a DAG.\n+        \"\"\"\n+        seen = {id(self)}\n+        stack = [(self, iter(self.children))]\n+        subtrees = []\n+        while stack:\n+            subtree, children = stack[-1]\n+            try:\n+                child = next(children)\n+            except StopIteration:\n+                subtrees.append(subtree)\n+                stack.pop()\n+            else:\n+                if isinstance(child, Tree) and id(child) not in seen:\n+                    seen.add(id(child))\n+                    stack.append((child, iter(child.children)))\n+\n+        return iter(subtrees)\n \n     def iter_subtrees_topdown(self):\n         \"\"\"Breadth-first iteration.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8994 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 8,994-character, single-file context supports a focused local repair. The reference execution used no sub-calls. Solving requires reasoning about shared descendants, identity versus structural equality, and nonrecursive traversal rather than merely locating a symbol."
+  },
+  "notes": "The question is a natural maintainer request with a concrete public-API reproduction and precise traversal invariants. Naming the affected API identifies the observed behavior without prescribing the implementation. The verified patch implements iterative identity-based postorder traversal and leaves the other named behaviors untouched. The task is substantively different from the position-propagation parent and the existing accepted tasks, and the unified-diff output requirement is clear."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused tree.py context is under 16,000 characters. Solving requires simulating traversal of a shared descendant, distinguishing object identity from Tree's structural equality and hashing, and designing traversal state that also handles deep structures without recursion-limit failures. All necessary evidence is local to this file."
+  },
+  "context": {
+   "files": [
+    "lark/tree.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.iter_subtrees",
+    "why": "Reverses dictionary insertion order after queue-based discovery. In the supplied graph, the shared leaf is discovered before the branch, so reversing discovery yields the branch before its child."
+   },
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.__eq__",
+    "why": "Compares data and children structurally, so equality-based deduplication would incorrectly merge distinct reachable objects."
+   },
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.__hash__",
+    "why": "Hashes children structurally; storing Tree objects themselves in traversal sets risks both structural deduplication and recursive hashing on deep trees."
+   },
+   {
+    "path": "lark/tree.py",
+    "symbol": "lark/tree.py::Tree.iter_subtrees_topdown",
+    "why": "The independent top-down traversal must retain its existing behavior, including repeated visits through shared references."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_subtree_postorder.py\n@@ -0,0 +1,69 @@\n+import sys\n+import unittest\n+\n+from lark import Tree\n+\n+\n+class TestSubtreePostorder(unittest.TestCase):\n+    def assert_postorder(self, root, reachable):\n+        nodes = list(root.iter_subtrees())\n+        ids = [id(node) for node in nodes]\n+        self.assertEqual(len(ids), len(reachable))\n+        self.assertEqual(set(ids), {id(node) for node in reachable})\n+        positions = {node_id: i for i, node_id in enumerate(ids)}\n+        for parent in reachable:\n+            for child in parent.children:\n+                if isinstance(child, Tree):\n+                    self.assertLess(positions[id(child)], positions[id(parent)])\n+        return nodes\n+\n+    def test_shared_leaf_at_different_depths(self):\n+        leaf = Tree('leaf', [])\n+        branch = Tree('branch', [leaf])\n+        root = Tree('root', [branch, leaf])\n+        nodes = self.assert_postorder(root, [root, branch, leaf])\n+        self.assertEqual([id(n) for n in nodes], [id(leaf), id(branch), id(root)])\n+\n+    def test_shared_descendant_with_both_child_orders(self):\n+        for reverse in (False, True):\n+            with self.subTest(reverse=reverse):\n+                leaf = Tree('leaf', [])\n+                middle = Tree('middle', [leaf])\n+                branch = Tree('branch', [middle])\n+                children = [branch, leaf, middle, branch]\n+                if reverse:\n+                    children.reverse()\n+                root = Tree('root', children + ['token', None, {'payload': 1}])\n+                self.assert_postorder(root, [root, branch, middle, leaf])\n+\n+    def test_structurally_equal_distinct_nodes(self):\n+        left = Tree('equal', [Tree('leaf', [])])\n+        right = Tree('equal', [Tree('leaf', [])])\n+        self.assertEqual(left, right)\n+        self.assertIsNot(left, right)\n+        root = Tree('root', [left, right, left])\n+        self.assert_postorder(root, [root, left, right, left.children[0], right.children[0]])\n+\n+    def test_deeper_than_recursion_limit(self):\n+        leaf = Tree('leaf', [])\n+        reachable = [leaf]\n+        root = leaf\n+        for i in range(sys.getrecursionlimit() + 100):\n+            root = Tree('branch', [root])\n+            reachable.append(root)\n+        nodes = self.assert_postorder(root, reachable)\n+        self.assertEqual([id(n) for n in nodes], [id(n) for n in reachable])\n+\n+    def test_topdown_and_metadata_unchanged(self):\n+        leaf = Tree('leaf', [])\n+        branch = Tree('branch', [leaf])\n+        root = Tree('root', [branch, leaf])\n+        reachable = [root, branch, leaf]\n+        metas = [node.meta for node in reachable]\n+        for i, meta in enumerate(metas):\n+            meta.tag = i\n+        self.assert_postorder(root, reachable)\n+        self.assertEqual([id(n) for n in root.iter_subtrees_topdown()], [id(root), id(branch), id(leaf), id(leaf)])\n+        for i, node in enumerate(reachable):\n+            self.assertIs(node.meta, metas[i])\n+            self.assertEqual(node.meta.tag, i)\n",
+  "include_failure_log": false,
+  "notes": "The defect already exists in the pinned source, so this task uses new hidden acceptance tests rather than introducing a setup regression. The supplied three-node DAG deterministically violates the child-before-parent requirement on the current implementation. Acceptance checks use identities rather than Tree equality, allow any valid ordering of unrelated nodes, and cover shared descendants, duplicate edges, equal-but-distinct objects, non-Tree children, deep chains, and metadata preservation. Run the new test file alongside the existing suite. A correct repair belongs in Tree.iter_subtrees and differs from the original task's callback-wrapper repair.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "A metadata aggregation pass using `Tree.iter_subtrees()` encounters a branch before its shared leaf for this graph: `leaf = Tree('leaf', [])`, `branch = Tree('branch', [leaf])`, and `root = Tree('root', [branch, leaf])`. Repair the traversal so that, for any finite acyclic graph of Tree objects, every reachable Tree object\u2014including the root\u2014is yielded exactly once by identity, and every Tree child precedes each of its parents. Structurally equal but distinct objects must both be visited, repeated references must not duplicate visits, and traversal must work for trees deeper than Python's recursion limit without changing that limit. Ignore non-Tree children; no particular relative order is required between unrelated nodes. Leave the graph, metadata, `iter_subtrees_topdown()`, and position propagation unchanged. Return a unified diff against the repository files without changing tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "This exercises constructing a minimal graph counterexample, tracing queue and dictionary ordering, and verifying traversal invariants across shared and deep structures. Combining the Tree.iter_subtrees documentation with Tree.__eq__ and Tree.__hash__ is necessary to choose correct deduplication semantics; the original source-position wrapper investigation is irrelevant.",
+  "change_type": "failure_condition",
+  "description": "A downstream metadata aggregation pass relies on lark/tree.py::Tree.iter_subtrees to visit children before their parents, but receives a parent before a shared descendant when the parse tree is a DAG. Reproduce this with leaf = Tree('leaf', []), branch = Tree('branch', [leaf]), and root = Tree('root', [branch, leaf]). Repair iter_subtrees so every reachable Tree object is yielded exactly once by identity and every child precedes each of its parents, including shared descendants reached at different depths. Add acceptance tests for that graph, structurally equal but distinct nodes, and a deep tree that rules out a recursion-limit-dependent implementation. Do not change iter_subtrees_topdown or metadata propagation.",
+  "expected_answer_change": "The verified repair must replace the traversal strategy in Tree.iter_subtrees with an iterative postorder traversal that tracks node identity. For the supplied graph, leaf must precede branch, and branch must precede root, with leaf emitted once. Tree equality and hashing cannot substitute for identity because distinct trees may compare equal.",
+  "why_substantive": "Here the source metadata can be correct; the failure arises when consumers aggregate it using the documented depth-first traversal. The current reversed queue-discovery order is not a valid child-before-parent order for all DAGs. The investigation and repair move from callback assembly to traversal scheduling and identity-based deduplication."
+ },
+ "task_id": "lark-parser-lark-r01-01-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_shared_descendant_with_both_child_orders",
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_shared_leaf_at_different_depths",
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_topdown_and_metadata_unchanged"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1127
+   },
+   "patch_files": [
+    "lark/tree.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_shared_descendant_with_both_child_orders",
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_shared_leaf_at_different_depths",
+   "tests/test_subtree_postorder.py::TestSubtreePostorder::test_topdown_and_metadata_unchanged"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1127,
+  "stability_runs": 3
+ }
+}

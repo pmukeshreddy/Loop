@@ -1,0 +1,157 @@
+--- /dev/null
++++ b/tests/test_cached_recursive_condition.py
+@@ -0,0 +1,154 @@
++import threading
++
++import pytest
++
++from cachetools import cached
++
++
++class CheckedCondition(threading.Condition):
++    def __init__(self, lock):
++        super().__init__(lock)
++        self.forbidden_waiter = None
++        self.waiting = threading.Event()
++
++    def wait(self, timeout=None):
++        if self.forbidden_waiter == threading.get_ident():
++            raise AssertionError("recursive computation attempted to wait on itself")
++        self.waiting.set()
++        return super().wait(timeout)
++
++
++def make_wrapper(info, separate, func, key=None):
++    lock = threading.RLock()
++    cond = CheckedCondition(lock)
++    options = {"condition": cond, "info": info}
++    if separate:
++        options["lock"] = lock
++    if key is not None:
++        options["key"] = key
++    return cached({}, **options)(func), cond
++
++
++def assert_info(wrapper, info, hits, misses, size):
++    if info:
++        stats = wrapper.cache_info()
++        assert tuple(stats) == (hits, misses, None, size)
++    else:
++        assert wrapper.cache_info is None
++
++
++@pytest.mark.parametrize("info", [False, True])
++@pytest.mark.parametrize("separate", [False, True])
++def test_caught_recursion_uses_generated_key(info, separate):
++    calls = []
++
++    def compute(n):
++        calls.append(n)
++        cond.forbidden_waiter = threading.get_ident()
++        try:
++            with pytest.raises(RuntimeError):
++                wrapper(n + 1)
++        finally:
++            cond.forbidden_waiter = None
++        assert_info(wrapper, info, 0, 1, 0)
++        return 17
++
++    wrapper, cond = make_wrapper(info, separate, compute, key=lambda n: 0)
++    assert wrapper(1) == 17
++    assert_info(wrapper, info, 0, 1, 1)
++    assert wrapper(99) == 17
++    assert calls == [1]
++    assert_info(wrapper, info, 1, 1, 1)
++
++
++@pytest.mark.parametrize("info", [False, True])
++@pytest.mark.parametrize("separate", [False, True])
++def test_uncaught_recursion_releases_key_for_retry(info, separate):
++    recurse = True
++    calls = []
++
++    def compute(n):
++        calls.append(n)
++        if recurse:
++            cond.forbidden_waiter = threading.get_ident()
++            try:
++                return wrapper(n)
++            finally:
++                cond.forbidden_waiter = None
++        return 23
++
++    wrapper, cond = make_wrapper(info, separate, compute)
++    with pytest.raises(RuntimeError):
++        wrapper(5)
++    assert not wrapper.cache
++    assert_info(wrapper, info, 0, 1, 0)
++    recurse = False
++    assert wrapper(5) == 23
++    assert wrapper(5) == 23
++    assert calls == [5, 5]
++    assert_info(wrapper, info, 1, 2, 1)
++
++
++@pytest.mark.parametrize("info", [False, True])
++@pytest.mark.parametrize("separate", [False, True])
++def test_different_key_recursion(info, separate):
++    calls = []
++
++    def compute(n):
++        calls.append(n)
++        return 0 if n == 0 else wrapper(n - 1) + 1
++
++    wrapper, cond = make_wrapper(info, separate, compute)
++    assert wrapper(4) == 4
++    assert calls == [4, 3, 2, 1, 0]
++    assert_info(wrapper, info, 0, 5, 5)
++    assert wrapper(3) == 3
++    assert_info(wrapper, info, 1, 5, 5)
++
++
++@pytest.mark.parametrize("info", [False, True])
++@pytest.mark.parametrize("separate", [False, True])
++def test_other_thread_waits_and_uses_cached_result(info, separate):
++    started = threading.Event()
++    release = threading.Event()
++    calls = []
++    results = []
++    errors = []
++    token = object()
++
++    def compute(n):
++        calls.append(n)
++        started.set()
++        if not release.wait(5):
++            raise AssertionError("test did not release computation")
++        return token
++
++    wrapper, cond = make_wrapper(info, separate, compute)
++
++    def call():
++        try:
++            results.append(wrapper(7))
++        except BaseException as exc:
++            errors.append(exc)
++
++    first = threading.Thread(target=call, daemon=True)
++    second = threading.Thread(target=call, daemon=True)
++    first.start()
++    try:
++        assert started.wait(5)
++        second.start()
++        assert cond.waiting.wait(5)
++        with wrapper.cache_lock:
++            assert calls == [7]
++            assert results == []
++            assert_info(wrapper, info, 0, 1, 0)
++    finally:
++        release.set()
++        first.join(5)
++        if second.ident is not None:
++            second.join(5)
++    assert not first.is_alive()
++    assert not second.is_alive()
++    assert errors == []
++    assert results == [token, token]
++    assert_info(wrapper, info, 1, 1, 1)

@@ -1,0 +1,155 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -474,6 +474,11 @@\n \n     if field_transformer is not None:\n         attrs = tuple(field_transformer(cls, attrs))\n+\n+        # FORCE also applies to attributes changed or added by the transformer.\n+        # Evolve instead of mutating in case an attribute belongs to a base class.\n+        if kw_only is ClassProps.KeywordOnly.FORCE:\n+            attrs = tuple(a.evolve(kw_only=True) for a in attrs)\n \n     # Check attr order after executing the field_transformer.\n     # Mandatory vs non-mandatory attr order only matters when they are part of\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0007326482917238565,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 23,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "make",
+    "ng",
+    "start",
+    "transform"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 23 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The requested patch must reconcile forced final keyword-only metadata with transformer-visible metadata, inherited-field isolation, and unchanged non-forced behavior. The reference constructed and checked its final diff in code.",
+   "inspect_locate": "The reference execution used 23 targeted searches without printing the whole context. The task requires connecting the public policy flags, field-transformer output, ordering validation, and generated initializer and matching metadata."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise behavioral constraints and a clear unified-diff output format. It states the desired contract without identifying the defective implementation symbol or prescribing the fix. Although related to the parent task, it changes transformer-policy enforcement rather than investigating failures caused by changing a default, so it is neither a cosmetic variation nor a duplicate."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must satisfy a policy matrix rather than just change constructor behavior: final field metadata, inherited-field isolation, ordering validation, initializer signatures, and generated __match_args__ must agree. The resulting unified diff also needs exact source context.",
+   "inspect_locate": "The implementation requires connecting define's flags to the effective keyword-only policy, locating where field transformers produce final Attribute metadata, and following that metadata into initializer generation and positional matching. These are small, separated sections within the large class-building module and its next-generation wrapper."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_next_gen.py",
+    "symbol": "src/attr/_next_gen.py::define",
+    "why": "The modern decorator defaults force_kw_only to False and forwards both keyword-only flags to the shared builder."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::attrs",
+    "why": "The two public flags select the NO, YES, or FORCE policy."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_transform_attrs",
+    "why": "FORCE currently affects collected fields before the transformer runs, while positional ordering validation examines the transformer's output."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Initializer parameter kinds are generated from final Attribute.kw_only values, with init=False fields handled separately."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.add_match_args",
+    "why": "Generated positional matching includes only final fields with init enabled and kw_only disabled."
+   }
+  ],
+  "expected_answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -484,6 +484,9 @@\n     if field_transformer is not None:\n         attrs = tuple(field_transformer(cls, attrs))\n \n+    if kw_only is ClassProps.KeywordOnly.FORCE:\n+        attrs = [a.evolve(kw_only=True) for a in attrs]\n+\n     # Check attr order after executing the field_transformer.\n     # Mandatory vs non-mandatory attr order only matters when they are part of\n     # the __init__ signature and when they aren't kw_only (which are moved to\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_final_kw_only_transformer.py\n@@ -0,0 +1,111 @@\n+# SPDX-License-Identifier: MIT\n+\n+import inspect\n+import sys\n+\n+import pytest\n+\n+import attrs\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\n+    \"options, forced\",\n+    [\n+        ({\"kw_only\": True, \"force_kw_only\": True}, True),\n+        ({\"kw_only\": True, \"force_kw_only\": False}, False),\n+        ({\"kw_only\": False, \"force_kw_only\": True}, False),\n+        ({\"kw_only\": False, \"force_kw_only\": False}, False),\n+        ({\"kw_only\": True}, False),\n+        ({}, False),\n+    ],\n+)\n+def test_final_keyword_only_policy(options, forced, slots):\n+    @attrs.define(kw_only=True, slots=slots)\n+    class Base:\n+        inherited: int\n+\n+    @attrs.define(slots=slots)\n+    class Added:\n+        added: int\n+        extra_skipped: int = attrs.field(init=False, default=9)\n+\n+    def transform(cls, fields):\n+        if forced:\n+            assert all(a.kw_only is True for a in fields)\n+        return (\n+            a.evolve(kw_only=False)\n+            for a in (*fields, *attrs.fields(Added))\n+        )\n+\n+    @attrs.define(slots=slots, field_transformer=transform, **options)\n+    class Child(Base):\n+        own: int = attrs.field(kw_only=True)\n+        skipped: int = attrs.field(init=False, default=7)\n+\n+    assert [a.name for a in attrs.fields(Child)] == [\n+        \"inherited\", \"own\", \"skipped\", \"added\", \"extra_skipped\"\n+    ]\n+    assert all(a.kw_only is forced for a in attrs.fields(Child))\n+    assert attrs.fields(Base).inherited.kw_only is True\n+    params = inspect.signature(Child).parameters\n+    assert list(params) == [\"inherited\", \"own\", \"added\"]\n+    kind = (\n+        inspect.Parameter.KEYWORD_ONLY\n+        if forced else inspect.Parameter.POSITIONAL_OR_KEYWORD\n+    )\n+    assert all(p.kind is kind for p in params.values())\n+    if sys.version_info >= (3, 10):\n+        assert Child.__match_args__ == (\n+            () if forced else (\"inherited\", \"own\", \"added\")\n+        )\n+    child = Child(inherited=1, own=2, added=3)\n+    assert attrs.astuple(child) == (1, 2, 7, 3, 9)\n+    if forced:\n+        with pytest.raises(TypeError):\n+            Child(1, 2, 3)\n+    else:\n+        assert Child(1, 2, 3) == child\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"kw_only, force_kw_only\", [\n+    (True, True), (True, False), (False, True), (False, False)\n+])\n+def test_transformed_default_before_mandatory(kw_only, force_kw_only, slots):\n+    @attrs.define(slots=slots)\n+    class Base:\n+        first: int = 10\n+\n+    def transform(cls, fields):\n+        return [a.evolve(kw_only=False) for a in fields]\n+\n+    def build():\n+        @attrs.define(\n+            kw_only=kw_only,\n+            force_kw_only=force_kw_only,\n+            slots=slots,\n+            field_transformer=transform,\n+        )\n+        class Child(Base):\n+            required: int\n+\n+        return Child\n+\n+    if not (kw_only and force_kw_only):\n+        with pytest.raises(ValueError, match=\"No mandatory attributes allowed\"):\n+            build()\n+        return\n+\n+    child_cls = build()\n+    assert all(a.kw_only is True for a in attrs.fields(child_cls))\n+    params = inspect.signature(child_cls).parameters\n+    assert list(params) == [\"first\", \"required\"]\n+    assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for p in params.values())\n+    assert params[\"first\"].default == 10\n+    assert params[\"required\"].default is inspect.Parameter.empty\n+    assert attrs.astuple(child_cls(required=4)) == (10, 4)\n+    if sys.version_info >= (3, 10):\n+        assert child_cls.__match_args__ == ()\n+    with pytest.raises(TypeError):\n+        child_cls(10, 4)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work on the unmodified snapshot, not a default-change probe. The new hidden test file provides regression coverage without modifying tests/test_next_gen.py. On the starting code, explicit FORCE cases fail because transformer output remains positional, and the FORCE ordering cases raise ValueError during decoration. The intended implementation retains pre-transform FORCE handling and enforces FORCE again on final fields before ordering validation. Tests also cover list and generator transformer results, slotted and dict classes, newly added init=False fields, and omitted modern defaults. Execution verification is still required.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Strengthen attrs' keyword-only contract when both kw_only=True and force_kw_only=True are selected. Every final field returned by field_transformer must be keyword-only, including inherited fields that the transformer changes to kw_only=False and positional fields that it adds. This must also allow a transformed default-valued field to precede a mandatory field, since neither will be positional in the generated initializer.\n\nKeep define's force_kw_only default False. Under the YES policy (kw_only=True, force_kw_only=False) and the NO policy (kw_only=False), continue honoring the transformer's keyword-only choices and rejecting invalid positional default-before-mandatory ordering. Preserve the policy metadata currently presented to the transformer, and do not alter the base class's fields when decorating a subclass. Generated initializer signatures and generated __match_args__ must reflect the final policy; init=False fields must remain excluded from both initializer parameters and positional matching.\n\nReturn a unified diff against the non-test repository files. Leave existing tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from change-impact enumeration to inspect_locate, implementation, and targeted verification. The essential investigation follows final Attribute metadata through _transform_attrs, _attrs_to_init_script, and _ClassBuilder.add_match_args; a small policy-matrix test suite provides stronger evidence than collecting unrelated existing failures.",
+  "change_type": "deliverable",
+  "description": "Implement a stricter final-field contract for explicit kw_only=True, force_kw_only=True: all fields returned by field_transformer must end up keyword-only, even if the transformer changes an existing field to kw_only=False or adds a positional field. Keep define's force_kw_only default False and preserve transformer overrides under the YES and NO policies. Modify src/attr/_make.py::_transform_attrs and add regression tests in tests/test_next_gen.py covering transformed inherited fields, newly added fields, default-before-mandatory ordering, generated initializer signatures, and _ClassBuilder.add_match_args.",
+  "expected_answer_change": "The answer becomes a patch and acceptance tests, not a set of existing failing test IDs. FORCE must be reapplied after field_transformer and before the mandatory-after-default check. Tests should show that transformed fields are keyword-only and absent from generated __match_args__, that otherwise-invalid positional ordering is accepted under FORCE, and that YES and NO still permit the transformer's positional choices. Fields with init=False must remain excluded from initializer parameters and positional matching.",
+  "why_substantive": "The seed asks for existing failures caused by a default change. This variation asks for an implementation of a new ordering-sensitive contract. Currently _transform_attrs applies FORCE before invoking field_transformer, so the transformer can undo it. Correctness now depends on enforcing policy on the final transformed fields before positional-field order validation and code generation."
+ },
+ "task_id": "python-attrs-attrs-r01-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_final_kw_only_transformer.py::test_final_keyword_only_policy[options0-True-False]",
+   "tests/test_final_kw_only_transformer.py::test_final_keyword_only_policy[options0-True-True]",
+   "tests/test_final_kw_only_transformer.py::test_transformed_default_before_mandatory[True-True-False]",
+   "tests/test_final_kw_only_transformer.py::test_transformed_default_before_mandatory[True-True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1398
+   },
+   "patch_files": [
+    "src/attr/_make.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_final_kw_only_transformer.py::test_final_keyword_only_policy[options0-True-False]",
+   "tests/test_final_kw_only_transformer.py::test_final_keyword_only_policy[options0-True-True]",
+   "tests/test_final_kw_only_transformer.py::test_transformed_default_before_mandatory[True-True-False]",
+   "tests/test_final_kw_only_transformer.py::test_transformed_default_before_mandatory[True-True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

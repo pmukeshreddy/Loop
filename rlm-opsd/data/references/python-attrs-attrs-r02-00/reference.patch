@@ -1,0 +1,37 @@
+--- a/src/attr/setters.py
++++ b/src/attr/setters.py
+@@ -12,13 +12,33 @@
+     """
+     Run all *setters* and return the return value of the last one.
+ 
++    Lists and tuples are expanded recursively in left-to-right order. Empty
++    sequences contribute no hooks. If there are no hooks, return the supplied
++    value unchanged.
++
++    Each hook receives the original instance and attribute and the preceding
++    hook's return value. Non-callable leaves raise `TypeError` when the pipeline
++    is created.
++
+     .. versionadded:: 20.1.0
+     """
++    hooks = []
++
++    def add_hooks(items):
++        for setter in items:
++            if isinstance(setter, (list, tuple)):
++                add_hooks(setter)
++            elif callable(setter):
++                hooks.append(setter)
++            else:
++                raise TypeError("All setters must be callable.")
++
++    add_hooks(setters)
+ 
+     def wrapped_pipe(instance, attrib, new_value):
+         rv = new_value
+ 
+-        for setter in setters:
++        for setter in hooks:
+             rv = setter(instance, attrib, rv)
+ 
+         return rv

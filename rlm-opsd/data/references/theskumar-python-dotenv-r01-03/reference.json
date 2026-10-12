@@ -1,0 +1,157 @@
+{
+ "answer": "--- a/src/dotenv/cli.py\n+++ b/src/dotenv/cli.py\n@@ -90,12 +90,17 @@\n     help=\"The format in which to display the list. Default format is simple, \"\n     \"which displays name=value without quotes.\",\n )\n-def list_values(ctx: click.Context, output_format: str) -> None:\n+@click.option(\n+    \"--interpolate/--no-interpolate\",\n+    default=True,\n+    help=\"Whether to interpolate variable references in values. Default is to interpolate.\",\n+)\n+def list_values(ctx: click.Context, output_format: str, interpolate: bool) -> None:\n     \"\"\"Display all the stored key/value.\"\"\"\n     file = ctx.obj[\"FILE\"]\n \n     with stream_file(file) as stream:\n-        values = dotenv_values(stream=stream)\n+        values = dotenv_values(stream=stream, interpolate=interpolate)\n \n     if output_format == \"json\":\n         click.echo(json.dumps(values, indent=2, sort_keys=True))\n@@ -134,12 +139,17 @@\n @cli.command()\n @click.pass_context\n @click.argument(\"key\", required=True)\n-def get(ctx: click.Context, key: Any) -> None:\n+@click.option(\n+    \"--interpolate/--no-interpolate\",\n+    default=True,\n+    help=\"Whether to interpolate variable references in values. Default is to interpolate.\",\n+)\n+def get(ctx: click.Context, key: Any, interpolate: bool) -> None:\n     \"\"\"Retrieve the value for the given key.\"\"\"\n     file = ctx.obj[\"FILE\"]\n \n     with stream_file(file) as stream:\n-        values = dotenv_values(stream=stream)\n+        values = dotenv_values(stream=stream, interpolate=interpolate)\n \n     # Empty strings are valid values; only missing keys / bare keys (None) fail.\n     if key not in values or values[key] is None:\n@@ -179,8 +189,15 @@\n     default=True,\n     help=\"Override variables from the environment file with those from the .env file.\",\n )\n+@click.option(\n+    \"--interpolate/--no-interpolate\",\n+    default=True,\n+    help=\"Whether to interpolate variable references in values. Default is to interpolate.\",\n+)\n @click.argument(\"commandline\", nargs=-1, type=click.UNPROCESSED)\n-def run(ctx: click.Context, override: bool, commandline: tuple[str, ...]) -> None:\n+def run(\n+    ctx: click.Context, override: bool, interpolate: bool, commandline: tuple[str, ...]\n+) -> None:\n     \"\"\"Run command with environment variables present.\"\"\"\n     file = ctx.obj[\"FILE\"]\n     if not os.path.isfile(file):\n@@ -189,7 +206,9 @@\n         )\n     dotenv_as_dict = {\n         k: v\n-        for (k, v) in DotEnv(file, override=override, encoding=\"utf-8\").dict().items()\n+        for (k, v) in DotEnv(\n+            file, override=override, interpolate=interpolate, encoding=\"utf-8\"\n+        ).dict().items()\n         if v is not None and (override or k not in os.environ)\n     }\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.002512709635949278,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "cli",
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 171130 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['cli', 'files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected after construction. Its coordinated hunks preserve enabled-by-default interpolation and leave run's existing override filtering and child-command handling intact.",
+   "inspect_locate": "The execution used two targeted searches to locate the command implementations. The patch accounts for their distinct parsing routes: stream-based dotenv_values calls for list/get and DotEnv plus environment filtering for run.",
+   "persistent_state": "The execution reused cli and files across turns while coordinating option declarations, callback signatures, and parser arguments for three commands."
+  },
+  "notes": "This is a natural, repository-dependent CLI feature request with a precise patch format. Naming the requested options and commands specifies the feature rather than leaking its implementation. The requirements are related compatibility constraints, not artificial padding. The supplied verification covers default, explicit, and disabled interpolation, bare keys, child-option forwarding, and run's no-override policy. This task is distinct from the previously accepted interpolation regression repair and variable-expression extension."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The answer is a multi-hunk patch across option declarations, callback signatures, and parser calls. Its hunks must be assembled and checked consistently so all three commands expose the same default without altering child command tokens.",
+   "inspect_locate": "The three commands use different parsing routes: list and get call dotenv_values through streams, while run constructs DotEnv and applies a separate overlay filter.",
+   "persistent_state": "Implementing the same option across three decorated command definitions requires retaining their exact source, parser-call differences, and default/explicit/raw-mode requirements while constructing coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::list_values",
+    "why": "Must forward the new interpolation choice without changing format-specific handling."
+   },
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::get",
+    "why": "Must expose the option while preserving empty-string success and None failure."
+   },
+   {
+    "path": "src/dotenv/cli.py",
+    "symbol": "src/dotenv/cli.py::run",
+    "why": "Must forward interpolation independently of override and retain existing command-token parsing."
+   },
+   {
+    "path": "src/dotenv/main.py",
+    "symbol": "src/dotenv/main.py::DotEnv.dict",
+    "why": "Already provides the interpolation-disabled path needed by the CLI."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cli_interpolation_option.py\n@@ -0,0 +1,79 @@\n+import json\n+\n+import pytest\n+from click.testing import CliRunner\n+\n+from dotenv.cli import cli\n+\n+\n+@pytest.mark.parametrize(\"command\", [\"list\", \"get\", \"run\"])\n+@pytest.mark.parametrize(\"mode\", [None, \"--interpolate\", \"--no-interpolate\"])\n+def test_interpolation_option(tmp_path, monkeypatch, command, mode):\n+    monkeypatch.setenv(\"DOTENV_FEATURE_BASE\", \"process\")\n+    monkeypatch.delenv(\"DOTENV_FEATURE_RESULT\", raising=False)\n+    path = tmp_path / \".env\"\n+    path.write_text(\n+        \"DOTENV_FEATURE_BASE=file\\n\"\n+        \"DOTENV_FEATURE_RESULT=${DOTENV_FEATURE_BASE}/tail\\nBARE\\n\"\n+    )\n+    captured = []\n+    monkeypatch.setattr(\n+        \"dotenv.cli.run_command\",\n+        lambda args, env: captured.append((args, env)),\n+    )\n+    args = [\"--file\", str(path), command]\n+    if mode is not None:\n+        args.append(mode)\n+    if command == \"list\":\n+        args.extend([\"--format\", \"json\"])\n+    elif command == \"get\":\n+        args.append(\"DOTENV_FEATURE_RESULT\")\n+    else:\n+        args.extend([\"tool\", \"--no-interpolate\"])\n+    result = CliRunner().invoke(cli, args)\n+    assert result.exit_code == 0, result.output\n+    expected = (\n+        \"${DOTENV_FEATURE_BASE}/tail\"\n+        if mode == \"--no-interpolate\"\n+        else \"file/tail\"\n+    )\n+    if command == \"list\":\n+        values = json.loads(result.output)\n+        assert values[\"DOTENV_FEATURE_RESULT\"] == expected\n+        assert values[\"BARE\"] is None\n+    elif command == \"get\":\n+        assert result.output == expected + \"\\n\"\n+    else:\n+        assert captured[0][0] == [\"tool\", \"--no-interpolate\"]\n+        assert captured[0][1] == {\n+            \"DOTENV_FEATURE_BASE\": \"file\",\n+            \"DOTENV_FEATURE_RESULT\": expected,\n+        }\n+\n+\n+@pytest.mark.parametrize(\n+    \"mode,expected\",\n+    [\n+        (\"--interpolate\", \"process/tail\"),\n+        (\"--no-interpolate\", \"${DOTENV_FEATURE_BASE}/tail\"),\n+    ],\n+)\n+def test_run_no_override(tmp_path, monkeypatch, mode, expected):\n+    monkeypatch.setenv(\"DOTENV_FEATURE_BASE\", \"process\")\n+    monkeypatch.delenv(\"DOTENV_FEATURE_RESULT\", raising=False)\n+    path = tmp_path / \".env\"\n+    path.write_text(\n+        \"DOTENV_FEATURE_BASE=file\\n\"\n+        \"DOTENV_FEATURE_RESULT=${DOTENV_FEATURE_BASE}/tail\\n\"\n+    )\n+    captured = []\n+    monkeypatch.setattr(\n+        \"dotenv.cli.run_command\",\n+        lambda args, env: captured.append((args, env)),\n+    )\n+    result = CliRunner().invoke(\n+        cli,\n+        [\"--file\", str(path), \"run\", mode, \"--no-override\", \"tool\"],\n+    )\n+    assert result.exit_code == 0, result.output\n+    assert captured == [([\"tool\"], {\"DOTENV_FEATURE_RESULT\": expected})]\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests mock process launch to observe command tokens and the environment overlay deterministically. They cover default, explicitly enabled, disabled, and no-override behavior.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add a command-specific `--interpolate/--no-interpolate` option to each of `dotenv list`, `dotenv get`, and `dotenv run`. Interpolation must remain enabled by default. With `--no-interpolate`, use the normal dotenv parser but leave variable-reference text in values unexpanded; quote decoding, bare-key handling, and output formatting must stay unchanged. For `run`, preserve both override policies, and do not interpret options appearing after the child command as dotenv options. Do not add this option to `set` or `unset`. Return a unified diff against the implementation files, without changing existing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "theskumar-python-dotenv-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-get]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-list]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-run]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-get]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-list]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-run]",
+   "tests/test_cli_interpolation_option.py::test_run_no_override[--interpolate-process/tail]",
+   "tests/test_cli_interpolation_option.py::test_run_no_override[--no-interpolate-${DOTENV_FEATURE_BASE}/tail]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 268
+   },
+   "patch_files": [
+    "src/dotenv/cli.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-get]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-list]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--interpolate-run]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-get]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-list]",
+   "tests/test_cli_interpolation_option.py::test_interpolation_option[--no-interpolate-run]",
+   "tests/test_cli_interpolation_option.py::test_run_no_override[--interpolate-process/tail]",
+   "tests/test_cli_interpolation_option.py::test_run_no_override[--no-interpolate-${DOTENV_FEATURE_BASE}/tail]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 257,
+  "stability_runs": 3
+ }
+}

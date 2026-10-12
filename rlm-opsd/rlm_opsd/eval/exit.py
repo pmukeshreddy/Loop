@@ -82,7 +82,7 @@ def load_evaluation(directory,expected_checkpoint_sha256):
     pairs={(r.get('phase'),r.get('task_id')) for r in requests if r.get('role') in ('base','student')}
     if not expected<=pairs:raise ValueError('generation evidence does not cover dev phases')
     from rlm_opsd.detectors import DetectorConfig,analyze_trajectory,aggregate_behavior
-    from .metrics import score_trajectory
+    from .metrics import score_trajectory, task_success
     from .monitor_reports import summarize_divergence
     detectors=DetectorConfig.model_validate(json.loads((root/'detectors.json').read_text()))
     answers=json.loads((root/'answers.json').read_text())
@@ -90,10 +90,11 @@ def load_evaluation(directory,expected_checkpoint_sha256):
     for record in records:
         path=contained(root,record['trajectory_path']);raw=json.loads(path.read_text())
         analysis=analyze_trajectory(raw,detectors)
-        success=score_trajectory(raw,*answers[raw['task_id']])==1.
-        if json.loads(json.dumps(analysis))!=record['analysis'] or success!=record['task_success']:
+        success=task_success(score_trajectory(raw,*answers[raw['task_id']]))
+        if json.loads(json.dumps(analysis))!=record['analysis'] or success!=record.get('task_success'):
             raise ValueError('saved behavior analysis differs from trajectory evidence')
-        recomputed.append(dict(phase=record['phase'],trajectory_path=str(path),analysis=analysis,task_success=success))
+        recomputed.append(dict(phase=record['phase'],trajectory_path=str(path),analysis=analysis,
+                               **({} if success is None else dict(task_success=success))))
     turns=json.loads((root/'token-scores.json').read_text())
     after_paths={str(contained(root,r['trajectory_path'])) for r in records if r['phase']=='after'}
     if not turns or {t['trajectory_path'] for t in turns}!=after_paths:raise ValueError('KL coverage differs')

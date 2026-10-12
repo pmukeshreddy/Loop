@@ -1,0 +1,139 @@
+{
+ "answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -52,7 +52,8 @@\n             return NotImplemented\n         # A plain callable -- `WaitBaseT` admits those, and a function has no\n         # `__add__` of its own to handle `callable + strategy`.\n-        return wait_combine(self, other)\n+        # Keep the left operand first so evaluation order is preserved.\n+        return wait_combine(other, self)\n \n \n WaitBaseT = wait_base | typing.Callable[[\"RetryCallState\"], float | int]\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 11564 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 11,564-character context supports a local repair without sub-calls. The task requires reasoning about reflected addition, operand order in nested combinations, exception propagation, and preservation of the integer-zero identity rather than merely locating a named symbol."
+  },
+  "notes": "A natural, precisely specified maintainer request with a clear production-only unified-diff deliverable. The verified patch preserves the left operand in reflected addition, and the supplied tests cover ordered evaluation, state identity, nested composition, exception short-circuiting, sum(), and nonzero-integer rejection. The question states the required behavior without revealing the implementation fix. This variation is substantively distinct from the parent wait_chain task and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused wait.py context is under 16,000 characters and contains both addition operators and the combination evaluator. The repair requires reasoning about reflected operator dispatch, nested evaluation order, exception propagation, and the integer identity branch, without broader repository investigation."
+  },
+  "context": {
+   "files": [
+    "tenacity/wait.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_base.__radd__",
+    "why": "Handles callable-left addition and integer-zero identity; its callable branch currently reverses the operands."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_base.__add__",
+    "why": "Establishes the forward operand order used by ordinary and nested strategy additions."
+   },
+   {
+    "path": "tenacity/wait.py",
+    "symbol": "tenacity/wait.py::wait_combine.__call__",
+    "why": "Invokes children positionally in stored order and naturally stops evaluation when a child raises."
+   }
+  ],
+  "expected_answer": "--- a/tenacity/wait.py\n+++ b/tenacity/wait.py\n@@ -52,7 +52,7 @@\n             return NotImplemented\n         # A plain callable -- `WaitBaseT` admits those, and a function has no\n         # `__add__` of its own to handle `callable + strategy`.\n-        return wait_combine(self, other)\n+        return wait_combine(other, self)\n \n \n WaitBaseT = wait_base | typing.Callable[[\"RetryCallState\"], float | int]\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_wait_addition_order.py\n@@ -0,0 +1,92 @@\n+import pytest\n+\n+from tenacity.wait import wait_base, wait_fixed\n+\n+\n+class RecordingWait(wait_base):\n+    def __init__(self, name, events, state, value):\n+        self.name = name\n+        self.events = events\n+        self.state = state\n+        self.value = value\n+\n+    def __call__(self, incoming, /):\n+        assert incoming is self.state\n+        self.events.append(self.name)\n+        return self.value\n+\n+\n+def policy(name, events, state, value, error=None):\n+    def call(incoming, /):\n+        assert incoming is state\n+        events.append(name)\n+        if error is not None:\n+            raise error\n+        return value\n+\n+    return call\n+\n+\n+@pytest.mark.parametrize(\"shape\", [\"flat\", \"forward\", \"left\", \"right\", \"both\"])\n+def test_addition_evaluates_policies_in_operand_order(shape):\n+    state = object()\n+    events = []\n+    first = policy(\"first\", events, state, 1)\n+    second = RecordingWait(\"second\", events, state, 2)\n+    last = RecordingWait(\"last\", events, state, 8)\n+    if shape == \"flat\":\n+        combined = first + second\n+        expected = [\"first\", \"second\"]\n+        total = 3.0\n+    elif shape == \"forward\":\n+        combined = second + first\n+        expected = [\"second\", \"first\"]\n+        total = 3.0\n+    elif shape == \"left\":\n+        combined = (first + second) + last\n+        expected = [\"first\", \"second\", \"last\"]\n+        total = 11.0\n+    elif shape == \"right\":\n+        combined = first + (second + last)\n+        expected = [\"first\", \"second\", \"last\"]\n+        total = 11.0\n+    else:\n+        third = policy(\"third\", events, state, 4)\n+        combined = (first + second) + (third + last)\n+        expected = [\"first\", \"second\", \"third\", \"last\"]\n+        total = 15.0\n+    assert events == []\n+    for _ in range(2):\n+        events.clear()\n+        assert combined(state) == total\n+        assert events == expected\n+\n+\n+@pytest.mark.parametrize(\"nested\", [False, True])\n+def test_left_exception_stops_remaining_operands(nested):\n+    state = object()\n+    events = []\n+    error = RuntimeError(\"wait failed\")\n+    first = policy(\"first\", events, state, 1, error=error)\n+    second = RecordingWait(\"second\", events, state, 2)\n+    combined = first + second\n+    if nested:\n+        combined = combined + RecordingWait(\"last\", events, state, 8)\n+    with pytest.raises(RuntimeError) as caught:\n+        combined(state)\n+    assert caught.value is error\n+    assert events == [\"first\"]\n+\n+\n+def test_integer_zero_identity_and_sum():\n+    state = object()\n+    strategy = wait_fixed(2)\n+    assert 0 + strategy is strategy\n+    assert sum([strategy]) is strategy\n+    assert sum([strategy, wait_fixed(3)])(state) == 5.0\n+\n+\n+@pytest.mark.parametrize(\"number\", [-2, -1, 1, 2])\n+def test_nonzero_integers_rejected_at_addition(number):\n+    with pytest.raises(TypeError):\n+        number + wait_fixed(2)\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains the sequencing defect, so this task uses new hidden acceptance tests rather than injecting another regression. Six acceptance cases fail on the supplied implementation: four callable-left ordering cases and two exception-order cases. The forward-addition and integer cases guard existing behavior. The expected production repair differs from the original task's wait_chain changes.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make wait-policy addition preserve operand order when an ordinary state callable appears to the left of a `wait_base` strategy. Evaluating `callable + strategy` must invoke the callable first and the strategy second, each exactly once with the original state object, and return their summed wait. Nested additions must retain left-to-right evaluation of their constituent policies. If an operand raises, propagate that exception without evaluating any later operands. Keep ordinary strategy addition working, preserve integer zero as the identity used by `sum()`, and continue rejecting nonzero integers with `TypeError` at addition time. Submit a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains direct_solve with focused reading of wait_base.__radd__ and wait_combine.__call__, but adds reasoning about operator dispatch, side effects, nested evaluation, and short-circuiting through exception propagation.",
+  "change_type": "failure_condition",
+  "description": "Repair operand-order preservation for reflected wait addition in tenacity/wait.py::wait_base.__radd__. A plain state callable added on the left of a wait_base instance currently produces wait_combine(self, other), reversing evaluation order. Require callable + strategy to evaluate the callable first and the strategy second, passing the same state object to each exactly once. Include nested combinations and exception propagation: if the left operand raises, the right operand must not execute. Preserve sum()'s integer-zero identity and rejection of nonzero integers. Deliver a unified diff against production files only.",
+  "expected_answer_change": "The repair belongs in wait_base.__radd__, constructing wait_combine(other, self) for the callable case while retaining the integer branch. Verification depends on Python's reflected-add dispatch and wait_combine.__call__'s ordered generator evaluation, rather than wait_chain's child selection or constructor annotation.",
+  "why_substantive": "This investigates an observable sequencing defect in operator composition, not wait_chain's keyword invocation incompatibility. The existing positional invocation in wait_combine is already correct; the defect is the order in which reflected addition constructs its children. Stateful policies and exceptions make the reversed order observable even when numeric sums agree."
+ },
+ "task_id": "jd-tenacity-r02-04-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[both]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[flat]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[left]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[right]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_remaining_operands[False]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_remaining_operands[True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 196
+   },
+   "patch_files": [
+    "tenacity/wait.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[both]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[flat]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[left]",
+   "tests/test_wait_addition_order.py::test_addition_evaluates_policies_in_operand_order[right]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_remaining_operands[False]",
+   "tests/test_wait_addition_order.py::test_left_exception_stops_remaining_operands[True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 184,
+  "stability_runs": 3
+ }
+}

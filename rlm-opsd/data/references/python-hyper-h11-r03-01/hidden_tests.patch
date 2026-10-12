@@ -1,0 +1,87 @@
+--- /dev/null
++++ b/h11/tests/test_obsolete_folding_policy.py
+@@ -0,0 +1,84 @@
++import h11
++import pytest
++
++
++def _client(allow):
++    c = h11.Connection(h11.CLIENT, allow_obsolete_folding=allow)
++    c.send(h11.Request(method="GET", target="/", headers=[("Host", "a")]))
++    c.send(h11.EndOfMessage())
++    return c
++
++
++@pytest.mark.parametrize("status", [100, 200])
++def test_strict_response_headers(status):
++    c = _client(False)
++    wire = (
++        b"HTTP/1.1 " + str(status).encode("ascii") + b" "
++        b"OK\r\nX-Test: first\r\n second\r\n\r\n"
++    )
++    c.receive_data(wire)
++    with pytest.raises(h11.RemoteProtocolError):
++        c.next_event()
++    assert c.their_state is h11.ERROR
++    assert c.our_state is not h11.ERROR
++
++
++@pytest.mark.parametrize("fragmented", [False, True])
++def test_strict_request_headers(fragmented):
++    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)
++    wire = b"GET / HTTP/1.1\r\nHost: a\r\nX-Test: first\r\n\tsecond\r\n\r\n"
++    if fragmented:
++        for byte in wire[:-1]:
++            c.receive_data(bytes([byte]))
++            assert c.next_event() is h11.NEED_DATA
++        c.receive_data(wire[-1:])
++    else:
++        c.receive_data(wire)
++    with pytest.raises(h11.RemoteProtocolError):
++        c.next_event()
++    assert c.their_state is h11.ERROR
++
++
++@pytest.mark.parametrize("allow", [None, True])
++def test_compatible_unfolding(allow):
++    kwargs = {} if allow is None else {"allow_obsolete_folding": allow}
++    c = h11.Connection(h11.SERVER, **kwargs)
++    c.receive_data(b"GET / HTTP/1.1\r\nHost: a\r\nX-Test: first\r\n second\r\n\r\n")
++    request = c.next_event()
++    assert isinstance(request, h11.Request)
++    assert list(request.headers) == [(b"host", b"a"), (b"x-test", b"first second")]
++    assert isinstance(c.next_event(), h11.EndOfMessage)
++
++
++def test_strict_chunked_trailers():
++    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)
++    c.receive_data(b"POST / HTTP/1.1\r\nHost: a\r\nTransfer-Encoding: chunked\r\n\r\n")
++    assert isinstance(c.next_event(), h11.Request)
++    c.receive_data(b"1\r\nx\r\n0\r\nX-Test: first\r\n second\r\n\r\n")
++    assert c.next_event().data == b"x"
++    with pytest.raises(h11.RemoteProtocolError):
++        c.next_event()
++    assert c.their_state is h11.ERROR
++
++
++def test_policy_survives_cycle_reset():
++    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)
++    c.receive_data(b"GET /one HTTP/1.1\r\nHost: a\r\n\r\n")
++    assert isinstance(c.next_event(), h11.Request)
++    assert isinstance(c.next_event(), h11.EndOfMessage)
++    c.send(h11.Response(status_code=204, headers=[]))
++    c.send(h11.EndOfMessage())
++    c.start_next_cycle()
++    c.receive_data(b"GET /two HTTP/1.1\r\nHost: a\r\nX-Test: first\r\n second\r\n\r\n")
++    with pytest.raises(h11.RemoteProtocolError):
++        c.next_event()
++
++
++def test_nonfolded_lf_headers_still_work():
++    c = h11.Connection(h11.SERVER, allow_obsolete_folding=False)
++    c.receive_data(b"GET / HTTP/1.1\nHost: a\nX-Test: first\n\n")
++    request = c.next_event()
++    assert isinstance(request, h11.Request)
++    assert list(request.headers) == [(b"host", b"a"), (b"x-test", b"first")]
++    assert isinstance(c.next_event(), h11.EndOfMessage)
++    assert c.next_event() is h11.NEED_DATA

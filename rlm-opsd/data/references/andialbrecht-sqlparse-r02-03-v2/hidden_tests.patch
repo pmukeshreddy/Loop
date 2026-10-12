@@ -1,0 +1,104 @@
+--- /dev/null
++++ b/tests/test_procedural_clause_boundaries.py
+@@ -0,0 +1,101 @@
++import pytest
++import sqlparse
++from sqlparse import sql, tokens as T
++
++
++def checked_parse(text):
++    statements = sqlparse.parse(text)
++    assert len(statements) == 1
++    statement = statements[0]
++    assert str(statement) == text
++    def check_parents(group):
++        for token in group.tokens:
++            assert token.parent is group
++            if token.is_group:
++                check_parents(token)
++    check_parents(statement)
++    return statement
++
++
++def children(group, cls):
++    return [token for token in group.tokens if isinstance(token, cls)]
++
++
++def test_sibling_clauses_in_begin():
++    text = ('BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1; '
++            'SELECT y FROM u QUALIFY m = 2; END;')
++    statement = checked_parse(text)
++    block, = children(statement, sql.Begin)
++    where, = children(block, sql.Where)
++    assert str(where) == 'WHERE x > 0 '
++    assert [str(c) for c in children(block, sql.Qualify)] == [
++        'QUALIFY n = 1', 'QUALIFY m = 2']
++    assert sum(t.match(T.Punctuation, ';') for t in block.tokens) == 2
++    assert block.tokens[-1].match(T.Keyword, 'END')
++    assert not children(where, sql.Qualify)
++
++
++@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])
++@pytest.mark.parametrize('terminator', [';', ''])
++def test_begin_tail_preserves_end(clause, terminator):
++    statement = checked_parse(
++        f'BEGIN SELECT x FROM t {clause} x = 1 {terminator} END;')
++    block, = children(statement, sql.Begin)
++    cls = sql.Where if clause == 'WHERE' else sql.Qualify
++    grouped, = children(block, cls)
++    assert str(grouped) == f'{clause} x = 1 ' + (
++        '' if terminator else ' ')
++    assert block.tokens[-1].match(T.Keyword, 'END')
++    assert sum(t.match(T.Punctuation, ';') for t in block.tokens
++               ) == bool(terminator)
++
++
++def test_nested_parenthesis_statement_boundaries():
++    text = ("SELECT ((SELECT x FROM t WHERE x = ';' QUALIFY n = ';'; "
++            "SELECT y FROM u WHERE y = 2 QUALIFY m = 2;))")
++    statement = checked_parse(text)
++    outer, = children(statement, sql.Parenthesis)
++    inner, = children(outer, sql.Parenthesis)
++    assert [str(c) for c in children(inner, sql.Where)] == [
++        "WHERE x = ';' ", 'WHERE y = 2 ']
++    assert [str(c) for c in children(inner, sql.Qualify)] == [
++        "QUALIFY n = ';'", 'QUALIFY m = 2']
++    assert sum(t.match(T.Punctuation, ';') for t in inner.tokens) == 2
++    assert inner.tokens[0].match(T.Punctuation, '(')
++    assert inner.tokens[-1].match(T.Punctuation, ')')
++    assert statement.get_type() == 'SELECT'
++
++
++@pytest.mark.parametrize('ending', [
++    'ORDER BY x', 'LIMIT 1', 'UNION SELECT y FROM u',
++    'UNION ALL SELECT y FROM u', 'EXCEPT SELECT y FROM u',
++    'INTERSECT SELECT y FROM u'])
++def test_keyword_boundary_precedes_semicolon(ending):
++    statement = checked_parse(
++        f'BEGIN SELECT x FROM t WHERE x > 0 QUALIFY n = 1 {ending}; END;')
++    block, = children(statement, sql.Begin)
++    where, = children(block, sql.Where)
++    qualify, = children(block, sql.Qualify)
++    assert str(where) == 'WHERE x > 0 '
++    assert str(qualify) == 'QUALIFY n = 1 '
++    assert block.tokens[-1].match(T.Keyword, 'END')
++
++
++@pytest.mark.parametrize('clause', ['WHERE', 'QUALIFY'])
++def test_parenthesis_tail_without_semicolon(clause):
++    statement = checked_parse(f'SELECT (SELECT x FROM t {clause} x = 1)')
++    paren, = children(statement, sql.Parenthesis)
++    cls = sql.Where if clause == 'WHERE' else sql.Qualify
++    grouped, = children(paren, cls)
++    assert str(grouped) == f'{clause} x = 1'
++    assert paren.tokens[-1].match(T.Punctuation, ')')
++
++
++def test_statement_level_qualify():
++    statement = checked_parse(
++        'SELECT x FROM t WHERE x > 0 QUALIFY n = 1;')
++    where, = children(statement, sql.Where)
++    qualify, = children(statement, sql.Qualify)
++    assert str(where) == 'WHERE x > 0 '
++    assert str(qualify) == 'QUALIFY n = 1;'
++    assert statement.get_type() == 'SELECT'

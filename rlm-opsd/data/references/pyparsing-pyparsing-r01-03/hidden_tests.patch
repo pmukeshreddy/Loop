@@ -1,0 +1,51 @@
+--- /dev/null
++++ b/tests/test_with_attribute_mixed_constraints.py
+@@ -0,0 +1,48 @@
++import pytest
++import pyparsing as pp
++
++
++def test_mixed_constraints_accept_matching_fields():
++    validate = pp.with_attribute(("role", "grid"), id="main")
++    validate("", 0, pp.ParseResults.from_dict({"role": "grid", "id": "main"}))
++
++
++@pytest.mark.parametrize("attrs", [
++    {"role": "grid"},
++    {"role": "grid", "id": "wrong"},
++    {"id": "main"},
++    {"role": "wrong", "id": "main"},
++])
++def test_mixed_constraints_reject_missing_or_wrong_fields(attrs):
++    validate = pp.with_attribute(("role", "grid"), id="main")
++    with pytest.raises(pp.ParseException):
++        validate("", 0, pp.ParseResults.from_dict(attrs))
++
++
++def test_any_value_still_requires_presence_in_mixed_call():
++    validate = pp.with_attribute(("enabled", pp.with_attribute.ANY_VALUE), id="main")
++    validate("", 0, pp.ParseResults.from_dict({"enabled": "", "id": "main"}))
++    with pytest.raises(pp.ParseException):
++        validate("", 0, pp.ParseResults.from_dict({"id": "main"}))
++
++
++def test_duplicate_names_are_not_overridden():
++    validate = pp.with_attribute(("role", "grid"), role="chart")
++    with pytest.raises(pp.ParseException):
++        validate("", 0, pp.ParseResults.from_dict({"role": "grid"}))
++
++
++def test_mixed_constraints_on_html_start_tag():
++    open_tag, _ = pp.make_html_tags("div")
++    open_tag.add_parse_action(pp.with_attribute(("role", "grid"), id="main"))
++    result = open_tag.parse_string('<div role="grid" id="main">', parse_all=True)
++    assert result.id == "main"
++    with pytest.raises(pp.ParseException):
++        open_tag.parse_string('<div role="grid" id="other">', parse_all=True)
++
++
++def test_positional_failure_is_reported_before_keyword_failure():
++    validate = pp.with_attribute(("role", "grid"), id="main")
++    with pytest.raises(pp.ParseException) as exc:
++        validate("", 0, pp.ParseResults([]))
++    assert "no matching attribute 'role'" in str(exc.value)

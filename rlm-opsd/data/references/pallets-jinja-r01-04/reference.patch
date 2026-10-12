@@ -1,0 +1,25 @@
+--- a/src/jinja2/compiler.py
++++ b/src/jinja2/compiler.py
+@@ -1141,18 +1141,16 @@
+             )
+             self.writeline(f"if {frame.symbols.ref(alias)} is missing:")
+             self.indent()
+-            # The position will contain the template name, and will be formatted
+-            # into a string that will be compiled into an f-string. Curly braces
+-            # in the name must be replaced with escapes so that they will not be
+-            # executed as part of the f-string.
++            # Keep the position as literal text, not part of a generated f-string.
+             position = self.position(node)
+             message = (
+-                "the template {included_template.__name__!r}"
+                 f" (imported on {position})"
+                 f" does not export the requested name {name!r}"
+             )
+             self.writeline(
+-                f"{frame.symbols.ref(alias)} = undefined(f{message!r}, name={name!r})"
++                f"{frame.symbols.ref(alias)} = undefined("
++                f"'the template ' + repr(included_template.__name__) + {message!r},"
++                f" name={name!r})"
+             )
+             self.outdent()
+             if frame.toplevel:

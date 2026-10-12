@@ -1,0 +1,129 @@
+{
+ "answer": "--- a/voluptuous/humanize.py\n+++ b/voluptuous/humanize.py\n@@ -32,6 +32,8 @@\n     Invalid and MultipleInvalid do not include the offending value in error messages,\n     and MultipleInvalid.__str__ only provides the first error.\n     \"\"\"\n+    if max_sub_error_length < 0:\n+        raise ValueError('max_sub_error_length must be non-negative')\n     if isinstance(validation_error, MultipleInvalid):\n         return '\\n'.join(\n             sorted(\n@@ -42,9 +44,12 @@\n     else:\n         offending_item_summary = repr(_nested_getitem(data, validation_error.path))\n         if len(offending_item_summary) > max_sub_error_length:\n-            offending_item_summary = (\n-                offending_item_summary[: max_sub_error_length - 3] + '...'\n-            )\n+            if max_sub_error_length < 3:\n+                offending_item_summary = '.' * max_sub_error_length\n+            else:\n+                offending_item_summary = (\n+                    offending_item_summary[: max_sub_error_length - 3] + '...'\n+                )\n         return '%s. Got %s' % (validation_error, offending_item_summary)\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6570 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 6,570-character scope contains the rendering and aggregation logic, allowing the solver to reason directly about truncation boundaries and validation placement without sub-calls. The patch handles tiny budgets and rejects negative budgets before recursive aggregation, preserving existing formatting and sorting."
+  },
+  "notes": "This is a natural, narrowly scoped implementation request with precise boundary behavior and a clear unified-diff output format. Naming the public function identifies the requested API change rather than leaking a hidden defect diagnosis. The supplied tests cover tiny budgets, exact-fit repr preservation, negative budgets including empty aggregation, and nested sorting. The task is distinct from the previously accepted required-key regression investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The scoped files contain the complete rendering and aggregation logic in well under 16,000 characters. The defect is a small-budget slicing boundary case that can be reasoned about directly."
+  },
+  "context": {
+   "files": [
+    "voluptuous/humanize.py",
+    "voluptuous/error.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "voluptuous/humanize.py",
+    "symbol": "voluptuous/humanize.py::humanize_error",
+    "why": "Subtracting three from a tiny budget currently creates a negative slice bound, and negative budgets are not rejected."
+   },
+   {
+    "path": "voluptuous/error.py",
+    "symbol": "voluptuous/error.py::MultipleInvalid",
+    "why": "An empty aggregate is constructible and must still obey the new budget-validation contract."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/voluptuous/tests/test_humanize_small_budgets.py\n@@ -0,0 +1,37 @@\n+import pytest\n+\n+from voluptuous.error import Invalid, MultipleInvalid\n+from voluptuous.humanize import humanize_error\n+\n+\n+@pytest.mark.parametrize(\"budget,summary\", [\n+    (0, \"\"),\n+    (1, \".\"),\n+    (2, \"..\"),\n+    (3, \"...\"),\n+    (4, \"'...\"),\n+    (8, \"'abcd...\"),\n+])\n+def test_small_summary_budgets(budget, summary):\n+    result = humanize_error({\"x\": \"abcdefghijk\"}, Invalid(\"bad\", [\"x\"]), budget)\n+    assert result == \"bad @ data['x']. Got \" + summary\n+\n+\n+def test_summary_that_exactly_fits_is_unchanged():\n+    assert humanize_error(\"abc\", Invalid(\"bad\"), 5) == \"bad. Got 'abc'\"\n+\n+\n+@pytest.mark.parametrize(\"error\", [Invalid(\"bad\"), MultipleInvalid([])])\n+def test_negative_budget_is_rejected(error):\n+    with pytest.raises(ValueError):\n+        humanize_error(\"abc\", error, -1)\n+\n+\n+def test_nested_aggregation_preserves_sorting_and_budget():\n+    error = MultipleInvalid([\n+        Invalid(\"zeta\", [\"x\"]),\n+        MultipleInvalid([Invalid(\"alpha\", [\"y\"])])\n+    ])\n+    assert humanize_error({\"x\": \"long\", \"y\": \"also long\"}, error, 2) == (\n+        \"alpha @ data['y']. Got ..\\nzeta @ data['x']. Got ..\"\n+    )\n",
+  "include_failure_log": false,
+  "notes": "The new test file has one 37-line hunk. All tested budgets are integers; handling other argument types is outside the requested change.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make `humanize_error` honor tiny offending-value summary budgets. For a non-negative integer `max_sub_error_length`, leave the offending value's repr unchanged when it fits. When truncation is needed, budgets of at least three must retain the existing prefix-plus-`...` convention; budgets zero, one, and two must produce respectively an empty summary, `.`, and `..`. Only the text after `Got ` is budgeted, not the diagnostic itself. A negative budget must raise ValueError, even for an empty MultipleInvalid. Preserve recursive rendering, sorting, and all existing message and path formatting. Return a unified diff against non-test files.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "alecthomas-voluptuous-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_small_budgets.py::test_negative_budget_is_rejected[error0]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_negative_budget_is_rejected[error1]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_nested_aggregation_preserves_sorting_and_budget",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[0-]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[1-.]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[2-..]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 6,
+   "full_suite": {
+    "failed": 0,
+    "passed": 168
+   },
+   "patch_files": [
+    "voluptuous/humanize.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "voluptuous/tests/test_humanize_small_budgets.py::test_negative_budget_is_rejected[error0]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_negative_budget_is_rejected[error1]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_nested_aggregation_preserves_sorting_and_budget",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[0-]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[1-.]",
+   "voluptuous/tests/test_humanize_small_budgets.py::test_small_summary_budgets[2-..]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 168,
+  "stability_runs": 3
+ }
+}

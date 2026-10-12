@@ -1,0 +1,69 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_override_policy.py
+@@ -0,0 +1,66 @@
++import types
++
++import toolz
++
++from tlz._build_tlz import TlzLoader
++
++
++def _backend(name, **exports):
++    module = types.ModuleType(name)
++    module.__package__ = None
++    module.__dict__.update(exports)
++    return module
++
++
++def _mirror(monkeypatch, loader, fast, slow):
++    monkeypatch.setattr(loader, '_load_toolz', lambda name: {'cytoolz': fast, 'toolz': slow})
++    target = types.ModuleType('tlz.override_test')
++    loader.exec_module(target)
++    return target
++
++
++def test_extra_overrides_are_identity_based_and_keep_pipe(monkeypatch):
++    selected = []
++    unrelated = []
++    fast = _backend('cytoolz.override_test', chosen=object(), equal=object(), pipe=object())
++    slow = _backend('toolz.override_test', chosen=selected, equal=unrelated, pipe=toolz.pipe)
++    loader = TlzLoader(always_from_toolz=(value for value in [selected]))
++    target = _mirror(monkeypatch, loader, fast, slow)
++    assert target.chosen is selected
++    assert target.equal is fast.equal
++    assert target.pipe is toolz.pipe
++    assert target.__name__ == 'tlz.override_test'
++
++
++def test_equal_hashable_values_do_not_trigger_override(monkeypatch):
++    class EqualToPipe:
++        def __hash__(self):
++            return hash(toolz.pipe)
++
++        def __eq__(self, other):
++            return True
++
++    fast = _backend('cytoolz.override_test', impostor=object())
++    slow = _backend('toolz.override_test', impostor=EqualToPipe())
++    target = _mirror(monkeypatch, TlzLoader(), fast, slow)
++    assert target.impostor is fast.impostor
++
++
++def test_overrides_do_not_add_slow_only_names(monkeypatch):
++    value = {}
++    fast = _backend('cytoolz.override_test')
++    slow = _backend('toolz.override_test', slow_only=value)
++    target = _mirror(monkeypatch, TlzLoader(always_from_toolz=[value]), fast, slow)
++    assert not hasattr(target, 'slow_only')
++
++
++def test_configured_override_can_replace_an_existing_target_export(monkeypatch):
++    value = []
++    fast = _backend('cytoolz.override_test', chosen=object())
++    slow = _backend('toolz.override_test', chosen=value)
++    loader = TlzLoader(always_from_toolz=[value])
++    monkeypatch.setattr(loader, '_load_toolz', lambda name: {'cytoolz': fast, 'toolz': slow})
++    target = types.ModuleType('tlz.override_test')
++    target.chosen = object()
++    loader.exec_module(target)
++    assert target.chosen is value

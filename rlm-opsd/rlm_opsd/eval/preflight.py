@@ -61,14 +61,14 @@ def prepare_gate(config):
     actual=set()
     for example in inputs:
         info=example['info'];row=by_id[info['task_id']]
-        bucket=row.get('knobs',{}).get('target_chars')
+        bucket=row.get('size_bucket')
         if type(bucket) is not int or bucket<=0:
-            raise ValueError('dev task needs an explicit positive target_chars size bucket')
+            raise ValueError('dev task needs an explicit positive size_bucket')
         info['size_bucket']=bucket
         actual.add((info['family'],bucket))
         if info['task_id'] not in detectors.max_subcalls_expected and info['family'] not in detectors.max_subcalls_expected:
             raise ValueError(f'missing detector call limit for family {info["family"]}')
-    expected={(r['family'],r['bucket']) for r in report.get('generated_grid',[]) if r['split']=='dev_behavior'}
+    expected={(r['family'],r['size_bucket']) for r in report.get('released_grid',[]) if r['split']=='dev_behavior'}
     if not expected or actual!=expected or {f for f,_ in actual}!=set(FAMILIES):
         raise ValueError('dev_behavior family/size grid is missing, incomplete or inconsistent')
     provenance=dict(manifest_sha256=sha256(config.manifest_path),build_report_sha256=sha256(report_path),

@@ -1,0 +1,19 @@
+--- a/h11/_connection.py
++++ b/h11/_connection.py
+@@ -636,20 +636,6 @@
+                 # Connection: keep-alive support later:
+                 if self._request_method != b"HEAD":
+                     need_close = True
+-            else:
+-                headers = set_comma_header(headers, b"transfer-encoding", [b"chunked"])
+-
+-        if not self._cstate.keep_alive or need_close:
+-            # Make sure Connection: close is set
+-            connection = set(get_comma_header(headers, b"connection"))
+-            connection.discard(b"keep-alive")
+-            connection.add(b"close")
+-            headers = set_comma_header(headers, b"connection", sorted(connection))
+ 
+         return Response(
+             headers=headers,
+             status_code=response.status_code,

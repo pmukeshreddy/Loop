@@ -1,0 +1,58 @@
+--- /dev/null
++++ b/tests/test_public_stacklevel.py
+@@ -0,0 +1,55 @@
++import logging
++
++import pytest
++
++from structlog.processors import CallsiteParameter, CallsiteParameterAdder, StackInfoRenderer
++from structlog.stdlib import LoggerFactory
++
++
++@pytest.fixture
++def bridge():
++    namespace = {"__name__": "stacklevel_bridge"}
++    exec(
++        compile(
++            "def invoke(target, *args):\n    return target(*args)\n",
++            "stacklevel_bridge_site.py",
++            "exec",
++        ),
++        namespace,
++    )
++    return namespace["invoke"]
++
++
++@pytest.mark.parametrize("level, expected", [(0, "stacklevel_bridge"), (1, __name__)])
++def test_factory_offset(bridge, level, expected):
++    old_class = logging.getLoggerClass()
++    try:
++        factory = LoggerFactory(stacklevel=level)
++        assert bridge(factory).name == expected
++    finally:
++        logging.setLoggerClass(old_class)
++
++
++@pytest.mark.parametrize("level, expected", [(0, "stacklevel_bridge"), (1, __name__)])
++def test_callsite_offset(bridge, level, expected):
++    adder = CallsiteParameterAdder(
++        [CallsiteParameter.QUAL_MODULE],
++        stacklevel=level,
++    )
++    assert bridge(adder, None, "info", {})["qual_module"] == expected
++
++
++@pytest.mark.parametrize("level", [0, 1])
++def test_stack_offset(bridge, level):
++    renderer = StackInfoRenderer(stacklevel=level)
++    event = bridge(renderer, None, "info", {"stack_info": True})
++    assert ("stacklevel_bridge_site.py" in event["stack"]) is (level == 0)
++
++
++def test_ignores_are_applied_before_offset(bridge):
++    adder = CallsiteParameterAdder(
++        [CallsiteParameter.QUAL_MODULE],
++        additional_ignores=["stacklevel_bridge"],
++        stacklevel=0,
++    )
++    assert bridge(adder, None, "info", {})["qual_module"] == __name__

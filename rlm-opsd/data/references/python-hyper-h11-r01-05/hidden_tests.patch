@@ -1,0 +1,54 @@
+--- a/h11/tests/test_receivebuffer_peek.py
++++ b/h11/tests/test_receivebuffer_peek.py
+@@ -0,0 +1,51 @@
++import pytest
++
++from .._receivebuffer import ReceiveBuffer
++
++
++@pytest.mark.parametrize("data,count,expected", [
++    (b"", 0, b""),
++    (b"", 10, b""),
++    (b"abcdef", 0, b""),
++    (b"abcdef", 2, b"ab"),
++    (b"abcdef", 99, b"abcdef"),
++])
++def test_peek_at_most_values(data, count, expected):
++    buf = ReceiveBuffer()
++    buf += data
++    result = buf.peek_at_most(count)
++    assert type(result) is bytes
++    assert result == expected
++    assert bytes(buf) == data
++    assert len(buf) == len(data)
++
++
++def test_peek_negative_count_does_not_consume():
++    buf = ReceiveBuffer()
++    buf += b"abcdef"
++    with pytest.raises(ValueError):
++        buf.peek_at_most(-1)
++    assert bytes(buf) == b"abcdef"
++    assert buf.maybe_extract_at_most(2) == b"ab"
++    assert buf.peek_at_most(99) == b"cdef"
++
++
++def test_peek_preserves_incremental_extraction():
++    buf = ReceiveBuffer()
++    buf += b"one\r"
++    assert buf.maybe_extract_next_line() is None
++    assert buf.peek_at_most(99) == b"one\r"
++    buf += b"\nsecond\r\n"
++    assert buf.peek_at_most(3) == b"one"
++    assert buf.maybe_extract_next_line() == b"one\r\n"
++    assert buf.maybe_extract_next_line() == b"second\r\n"
++    buf += b"A: 1\r\nB: 2\r\n\r"
++    assert buf.maybe_extract_lines() is None
++    assert buf.peek_at_most(4) == b"A: 1"
++    buf += b"\nbody"
++    assert buf.maybe_extract_lines() == [b"A: 1", b"B: 2"]
++    snapshot = buf.peek_at_most(99)
++    assert snapshot == b"body"
++    assert buf.maybe_extract_at_most(2) == b"bo"
++    assert snapshot == b"body"
++    assert buf.peek_at_most(99) == b"dy"

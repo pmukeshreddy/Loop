@@ -1,0 +1,171 @@
+{
+ "answer": [
+  "tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level",
+  "tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level",
+  "tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args",
+  "tests/test_native.py::TestNativeFilteringLogger::test_log_interp",
+  "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict",
+  "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp",
+  "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+  "tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged[alog-args2]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_native.py::TestFilteringBoundLogger::test_log\",\n  \"tests/test_native.py::TestFilteringBoundLogger::test_alog\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0006968690466916425,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 26,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "cls",
+    "files",
+    "selected",
+    "st",
+    "t"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 26 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final answer combines synchronous and asynchronous failures with the specific affected parametrized node, rather than including every test of the logger or the entire parametrized test.",
+   "inspect_locate": "The reference execution searched repository evidence to distinguish numeric dispatch from unchanged named methods and identify direct, interpolation, and parametrized asynchronous test coverage."
+  },
+  "notes": "This is a natural, precisely scoped change-impact request. It requires repository-specific reasoning about threshold equality and existing test inputs. The requested JSON list of pytest node IDs is clear, the verified failures match the two comparison changes, and the task does not duplicate the existing arbitrary-minimum-level extension request."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "combine_verify_finish": "The answer is an exact node-ID set that combines synchronous, asynchronous, and parametrized failures while excluding unchanged named-method tests.",
+   "inspect_locate": "Numeric logging calls occur directly in native tests and indirectly in parametrized context-propagation cases and processor integrations. Named logging methods must be distinguished from numeric dispatch."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/_native.py",
+    "symbol": "src/structlog/_native.py::_make_filtering_bound_logger",
+    "why": "Numeric dispatch has separate threshold checks from generated named methods and introspection."
+   },
+   {
+    "path": "tests/test_native.py",
+    "symbol": "tests/test_native.py::TestNativeFilteringLogger",
+    "why": "Contains exact-level numeric calls, interpolation cases, no-argument behavior, and parametrized async context propagation."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::BoundLogger.log",
+    "why": "The stdlib numeric dispatch is separate and explicitly outside the proposed change."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Compute ground truth from the full suite, including processor integrations outside test_native.py. Only the two native numeric threshold comparisons are changed.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": "--- a/src/structlog/_native.py\n+++ b/src/structlog/_native.py\n@@ -206,7 +206,7 @@\n         return meth, ameth\n \n     def log(self: Any, level: int, event: str, *args: Any, **kw: Any) -> Any:\n-        if level < min_level:\n+        if level <= min_level:\n             return None\n         name = LEVEL_TO_NAME[level]\n \n@@ -220,7 +220,7 @@\n         .. versionchanged:: 23.3.0\n            Callsite parameters are now also collected under asyncio.\n         \"\"\"\n-        if level < min_level:\n+        if level <= min_level:\n             return None\n         name = LEVEL_TO_NAME[level]\n         event = _maybe_interpolate(event, args)\n",
+  "question": "We want to measure the impact of making only native numeric dispatch use a strict threshold. In classes returned by `make_filtering_bound_logger`, `log(level, ...)` and `alog(level, ...)` would drop calls when `level` equals the configured minimum, as well as when it is below the minimum. Named methods such as `info` and `ainfo`, exception methods, aliases, and introspection would not change. Which existing tests would newly fail after this precise change? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "hynek-structlog-r02-05",
+ "truth": {
+  "answer": [
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+    "tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args",
+    "tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp",
+    "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_exact_level",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict",
+   "tests/test_native.py::TestNativeFilteringLogger::test_alog_no_args",
+   "tests/test_native.py::TestNativeFilteringLogger::test_async_contextvars_merged",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_exact_level",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp",
+   "tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

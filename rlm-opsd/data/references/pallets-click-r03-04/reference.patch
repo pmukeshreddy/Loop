@@ -1,0 +1,36 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -60,6 +60,15 @@
+ _HELP_OPTION_STORAGE_NAME = "_click_default_help"
+ 
+ 
++def _complete_name_matches(ctx: Context, name: str, incomplete: str) -> bool:
++    """Match a completion name using its owning context's normalization."""
++    if ctx.token_normalize_func is not None:
++        name = ctx.token_normalize_func(name)
++        incomplete = ctx.token_normalize_func(incomplete)
++
++    return name.startswith(incomplete)
++
++
+ def _complete_visible_commands(
+     ctx: Context, incomplete: str
+ ) -> cabc.Iterator[tuple[str, Command]]:
+@@ -72,7 +81,7 @@
+     multi = t.cast(Group, ctx.command)
+ 
+     for name in multi.list_commands(ctx):
+-        if name.startswith(incomplete):
++        if _complete_name_matches(ctx, name, incomplete):
+             command = multi.get_command(ctx, name)
+ 
+             if command is not None and not command.hidden:
+@@ -1446,7 +1455,7 @@
+                 results.extend(
+                     CompletionItem(name, help=param.help)
+                     for name in [*param.opts, *param.secondary_opts]
+-                    if name.startswith(incomplete)
++                    if _complete_name_matches(ctx, name, incomplete)
+                 )
+ 
+         while ctx.parent is not None:

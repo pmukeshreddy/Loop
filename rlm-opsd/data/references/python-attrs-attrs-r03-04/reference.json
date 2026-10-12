@@ -1,0 +1,218 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -2209,7 +2209,13 @@\n         arg_name = a.alias\n \n         has_factory = isinstance(a.default, Factory)\n-        maybe_self = \"self\" if has_factory and a.default.takes_self else \"\"\n+        factory_args = []\n+        if has_factory:\n+            if a.default.takes_self:\n+                factory_args.append(\"self\")\n+            if a.default.takes_field:\n+                factory_args.append(f\"attr_dict['{attr_name}']\")\n+        factory_args = \", \".join(factory_args)\n \n         if a.converter is not None and not isinstance(a.converter, Converter):\n             converter = Converter(a.converter)\n@@ -2223,7 +2229,7 @@\n                     lines.append(\n                         fmt_setter_with_converter(\n                             attr_name,\n-                            init_factory_name + f\"({maybe_self})\",\n+                            init_factory_name + f\"({factory_args})\",\n                             has_on_setattr,\n                             converter,\n                         )\n@@ -2235,7 +2241,7 @@\n                     lines.append(\n                         fmt_setter(\n                             attr_name,\n-                            init_factory_name + f\"({maybe_self})\",\n+                            init_factory_name + f\"({factory_args})\",\n                             has_on_setattr,\n                         )\n                     )\n@@ -2302,7 +2308,7 @@\n                     \"    \"\n                     + fmt_setter_with_converter(\n                         attr_name,\n-                        init_factory_name + \"(\" + maybe_self + \")\",\n+                        init_factory_name + \"(\" + factory_args + \")\",\n                         has_on_setattr,\n                         converter,\n                     )\n@@ -2319,7 +2325,7 @@\n                     \"    \"\n                     + fmt_setter(\n                         attr_name,\n-                        init_factory_name + \"(\" + maybe_self + \")\",\n+                        init_factory_name + \"(\" + factory_args + \")\",\n                         has_on_setattr,\n                     )\n                 )\n@@ -3035,21 +3041,32 @@\n \n     Args:\n         factory (typing.Callable):\n-            A callable that takes either none or exactly one mandatory\n-            positional argument depending on *takes_self*.\n+            A callable whose positional arguments depend on *takes_self* and\n+            *takes_field*.\n \n         takes_self (bool):\n             Pass the partially initialized instance that is being initialized\n             as a positional argument.\n \n+        takes_field (bool):\n+            Pass the final `Attribute` of the field being initialized as a\n+            positional argument. If *takes_self* is also true, the instance is\n+            passed first, followed by the field. (default: `False`)\n+\n     .. versionadded:: 17.1.0  *takes_self*\n     \"\"\"\n \n-    __slots__ = (\"factory\", \"takes_self\")\n-\n-    def __init__(self, factory, takes_self=False):\n+    __slots__ = (\"factory\", \"takes_self\", \"takes_field\")\n+\n+    def __init__(self, factory, takes_self=False, *, takes_field=False):\n         self.factory = factory\n         self.takes_self = takes_self\n+        self.takes_field = takes_field\n+\n+    def __repr__(self):\n+        if self.takes_field:\n+            return _factory_repr(self)\n+        return _factory_repr_without_field(self)\n \n     def __getstate__(self):\n         \"\"\"\n@@ -3061,6 +3078,8 @@\n         \"\"\"\n         Play nice with pickle.\n         \"\"\"\n+        # Factories pickled before takes_field was added have two values.\n+        self.takes_field = False\n         for name, value in zip(self.__slots__, state):\n             setattr(self, name, value)\n \n@@ -3081,7 +3100,11 @@\n     for name in Factory.__slots__\n ]\n \n-Factory = _add_hash(_add_eq(_add_repr(Factory, attrs=_f), attrs=_f), attrs=_f)\n+_factory_repr_method = Factory.__repr__\n+_factory_repr_without_field = _add_repr(Factory, attrs=_f[:-1]).__repr__\n+_factory_repr = _add_repr(Factory, attrs=_f).__repr__\n+Factory.__repr__ = _factory_repr_method\n+Factory = _add_hash(_add_eq(Factory, attrs=_f), attrs=_f)\n \n \n class Converter:\n--- a/src/attr/__init__.pyi\n+++ b/src/attr/__init__.pyi\n@@ -80,16 +80,32 @@\n # Work around mypy issue #4554 in the common case by using an overload.\n \n @overload\n-def Factory(factory: Callable[[], _T]) -> _T: ...\n+def Factory(\n+    factory: Callable[[], _T],\n+    takes_self: Literal[False] = ...,\n+    *,\n+    takes_field: Literal[False] = ...,\n+) -> _T: ...\n @overload\n def Factory(\n     factory: Callable[[Any], _T],\n     takes_self: Literal[True],\n+    *,\n+    takes_field: Literal[False] = ...,\n ) -> _T: ...\n @overload\n def Factory(\n-    factory: Callable[[], _T],\n-    takes_self: Literal[False],\n+    factory: Callable[[Attribute], _T],\n+    takes_self: Literal[False] = ...,\n+    *,\n+    takes_field: Literal[True],\n+) -> _T: ...\n+@overload\n+def Factory(\n+    factory: Callable[[Any, Attribute], _T],\n+    takes_self: Literal[True],\n+    *,\n+    takes_field: Literal[True],\n ) -> _T: ...\n \n In = TypeVar(\"In\")\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0006167229291093222,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 27,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 2,
+   "repository_execution": [],
+   "reused_variables": [
+    "edited",
+    "files",
+    "make",
+    "new"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "chunked_subcalls",
+  "results": {
+   "chunked_subcalls": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); 0 call sites on selected context, 0 on the whole context; max prompt 0 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 27 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "8 turns; variables reused across turns: ['edited', 'files', 'make', 'new']; hand-copied literals 2"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Not demonstrated: the reference execution made no sub-calls. This should not be counted as an established behavior.",
+   "combine_verify_finish": "The implementation must combine changes to factory invocation, Factory state, equality, and legacy repr behavior. The reference assembled its diff programmatically and inspected the final value before finishing.",
+   "inspect_locate": "The reference execution used 27 targeted searches without printing the whole context. Locating Factory metadata and the separate generated-initialization branches was useful for implementing this change.",
+   "persistent_state": "Variables holding source and edits were reused across the eight-turn execution, supporting incremental patch construction."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise production-only unified-diff format. Its requirements constrain one coherent change and require reasoning across Factory representation and generated initialization paths. Naming the API to extend does not leak an implementation or make the task a trivial lookup. The supplied tests exercise field identity after transformation, factory argument ordering, initialization variants, converters, explicit-argument bypass, and state compatibility. None of the listed accepted tasks asks for the same change."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "chunked_subcalls": "The initializer branch matrix, Factory metadata generation, and state restoration require semantic reading of separate substantial sections; a single invocation-site edit is insufficient.",
+   "combine_verify_finish": "The assembled diff must cover all factory invocation branches while retaining legacy Factory behavior and state compatibility.",
+   "inspect_locate": "Factory metadata and its generated invocations are separated within the large _make.py module.",
+   "persistent_state": "The implementation must reuse a consistent argument-order contract across init-disabled defaults, omitted arguments, and storage strategies."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::Factory",
+    "why": "Owns the factory context flags and pickle state."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Emits separate factory calls for init-disabled fields and omitted initializer arguments, including converted values."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_make_init_script",
+    "why": "Builds attr_dict from final transformed fields for generated initializer context."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_determine_setters",
+    "why": "Factory results must remain compatible with frozen and slotted assignment strategies."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_factory_field_context.py\n@@ -0,0 +1,58 @@\n+import pickle\n+\n+import pytest\n+\n+import attr\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"frozen\", [False, True])\n+@pytest.mark.parametrize(\"init\", [False, True])\n+@pytest.mark.parametrize(\"takes_self\", [False, True])\n+@pytest.mark.parametrize(\"converted\", [False, True])\n+def test_factory_receives_final_field(slots, frozen, init, takes_self, converted):\n+    calls = []\n+\n+    def factory(*args):\n+        field = args[-1]\n+        assert field is attr.fields(C).value\n+        assert field.metadata[\"transformed\"] is True\n+        assert len(args) == (2 if takes_self else 1)\n+        if takes_self:\n+            assert args[0].seed == 5\n+        calls.append(args)\n+        return \"7\"\n+\n+    def transform(cls, fields):\n+        return [a.evolve(metadata={\"transformed\": True}) for a in fields]\n+\n+    @attr.s(slots=slots, frozen=frozen, field_transformer=transform)\n+    class C:\n+        seed = attr.ib(default=5)\n+        value = attr.ib(\n+            init=init,\n+            default=attr.Factory(factory, takes_self=takes_self, takes_field=True),\n+            converter=int if converted else None,\n+        )\n+\n+    c = C()\n+    assert c.value == (7 if converted else \"7\")\n+    assert len(calls) == 1\n+    if init:\n+        supplied = C(value=\"9\")\n+        assert supplied.value == (9 if converted else \"9\")\n+        assert len(calls) == 1\n+\n+\n+def test_factory_state_and_legacy_repr():\n+    old = attr.Factory(list)\n+    assert repr(old) == \"Factory(factory=<class 'list'>, takes_self=False)\"\n+    contextual = attr.Factory(list, takes_field=True)\n+    assert contextual != old\n+    loaded = pickle.loads(pickle.dumps(contextual))\n+    assert loaded == contextual\n+    assert loaded.takes_field is True\n+    legacy = attr.Factory.__new__(attr.Factory)\n+    legacy.__setstate__((list, True))\n+    assert legacy.takes_self is True\n+    assert legacy.takes_field is False\n",
+  "include_failure_log": false,
+  "notes": "The capability requested here is field-default invocation by generated initializers. It does not add field context to unrelated utilities that call a Factory outside class initialization. The hidden file contains 58 added lines.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "Add a keyword-only takes_field=False option to attr.Factory. When a Factory is used as an attrs field default and takes_field=True, pass that field's final Attribute object to the factory. The argument order must be factory(field) without takes_self, and factory(instance, field) when both flags are true. Field context must reflect any field-transformer changes. Support init=False fields and omitted init arguments, with and without converters, for slotted and dict-backed classes, including frozen classes. Supplying an init argument must still bypass its factory. Preserve existing behavior and repr output when takes_field is false. Include the new flag in Factory equality and pickle state; loading the legacy two-element Factory state must default takes_field to false. Return a unified diff against production files only, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r03-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_state_and_legacy_repr"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 33,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1411
+   },
+   "patch_files": [
+    "src/attr/_make.py",
+    "src/attr/__init__.pyi"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-False-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[False-True-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-False-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-False-True-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-False-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-False-True]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-True-False]",
+   "tests/test_factory_field_context.py::test_factory_receives_final_field[True-True-True-True-True]",
+   "tests/test_factory_field_context.py::test_factory_state_and_legacy_repr"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

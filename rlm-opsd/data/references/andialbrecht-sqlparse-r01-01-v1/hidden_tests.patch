@@ -1,0 +1,28 @@
+--- /dev/null
++++ b/tests/test_split_closing_whitespace.py
+@@ -0,0 +1,25 @@
++import pytest
++
++import sqlparse
++
++
++@pytest.mark.parametrize('separator', ['   ', '\t\n'],
++                         ids=['spaces', 'tab-newline'])
++@pytest.mark.parametrize('opener, suffix', [
++    ('IF 1 = 1 THEN', 'IF'),
++    ('LOOP', 'LOOP'),
++    ('FOR r IN (SELECT 1) DO', 'FOR'),
++    ('WHILE 1 = 1 DO', 'WHILE'),
++    ('CASE 1 WHEN 1 THEN', 'CASE'),
++    ('FOR r IN SELECT 1 LOOP', 'LOOP'),
++    ('WHILE 1 = 1 LOOP', 'LOOP'),
++])
++def test_split_closing_phrase_whitespace(opener, suffix, separator):
++    first = (
++        f'BEGIN\n    {opener}\n'
++        '        SELECT 1;\n'
++        f'    END{separator}{suffix};\n'
++        '    SELECT 2;\n'
++        'END;'
++    )
++    assert sqlparse.split(first + '\nSELECT 3;') == [first, 'SELECT 3;']

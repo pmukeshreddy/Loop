@@ -1,0 +1,126 @@
+{
+ "answer": {
+  "source": "expr = pp.Located(pp.Word(\"set_name\")).set_results_name(\"as_list\")\nresult = expr.parse_string(text, parse_all=True, aslist=False)\n",
+  "warnings": [
+   "Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\n  1: expr = pp.locatedExpr(pp.Word(\"setName\")).setResultsName(\"asList\")"
+  ]
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"source\": \"expr = pp.Located(pp.Word(\\\"setName\\\")).set_results_name(\\\"asList\\\")\\nresult = expr.parse_string(text, parse_all=True, as_list=False)\\n\",\n  \"warnings\": [\n    \"'locatedExpr' is deprecated - use 'Located' instead\"\n  ]\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 3,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6441 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused 6,441-character converter context supported direct reasoning about replacement ordering, quoted-name handling, keyword conversion, and warning construction. The reference execution used three context searches and no sub-calls, computed the final value, and matched the executable oracle."
+  },
+  "notes": "This is a natural migration-audit request with a precise input and output format. The quoted strings and keyword arguments probe related aspects of the same converter behavior, rather than unrelated checks. The exact transformed text and warning require repository-specific knowledge, and the question does not disclose their outcomes."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The converter module is a focused context of approximately 6.4 KB. Its inventories, expression ordering, special replacements, and warning construction suffice to reason directly about the requested migration."
+  },
+  "context": {
+   "files": [
+    "pyparsing/tools/cvt_pyparsing_pep8_names.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": "pyparsing/tools/cvt_pyparsing_pep8_names.py::pep8_converter",
+    "why": "Its alternative ordering distinguishes the special asList keyword replacement from the ordinary asList name replacement and does not protect quoted strings."
+   },
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": "pyparsing/tools/cvt_pyparsing_pep8_names.py::update_special_changes",
+    "why": "The Located migration emits a warning containing the original source line and line number."
+   }
+  ],
+  "expected_answer": {
+   "source": "expr = pp.Located(pp.Word(\"set_name\")).set_results_name(\"as_list\")\nresult = expr.parse_string(text, parse_all=True, aslist=False)\n",
+   "warnings": [
+    "Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\n  1: expr = pp.locatedExpr(pp.Word(\"setName\")).setResultsName(\"asList\")"
+   ]
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "The independent verifier should import the converter, capture warnings only around one transform_string call, and use the exact two-line source including its final newline.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Before applying the PEP8 converter to a grammar, I need to check its treatment of names inside quoted text and keyword arguments. For pep8_converter.transform_string applied once to the following two-line source, what exact transformed source and warning messages are produced?\n\nexpr = pp.locatedExpr(pp.Word(\"setName\")).setResultsName(\"asList\")\nresult = expr.parseString(text, parseAll=True, asList=False)\n\nThe source ends with a newline. Assume warnings are captured with an 'always' filter; do not include warning filenames, categories, or stack locations. Return a JSON object with keys \"source\" and \"warnings\", where \"warnings\" is the list of message strings in emission order.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "api_migration_audit",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pyparsing-pyparsing-r01-04",
+ "truth": {
+  "answer": {
+   "source": "expr = pp.Located(pp.Word(\"set_name\")).set_results_name(\"as_list\")\nresult = expr.parse_string(text, parse_all=True, aslist=False)\n",
+   "warnings": [
+    "Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\n  1: expr = pp.locatedExpr(pp.Word(\"setName\")).setResultsName(\"asList\")"
+   ]
+  },
+  "kind": "oracle",
+  "normalized": "{\"source\": \"expr = pp.Located(pp.Word(\\\"set_name\\\")).set_results_name(\\\"as_list\\\")\\nresult = expr.parse_string(text, parse_all=True, aslist=False)\", \"warnings\": [\"Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\\n  1: expr = pp.locatedExpr(pp.Word(\\\"setName\\\")).setResultsName(\\\"asList\\\")\"]}",
+  "output_tail": "{\"answer\": {\"source\": \"expr = pp.Located(pp.Word(\\\"set_name\\\")).set_results_name(\\\"as_list\\\")\\nresult = expr.parse_string(text, parse_all=True, aslist=False)\\n\", \"warnings\": [\"Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\\n  1: expr = pp.locatedExpr(pp.Word(\\\"setName\\\")).setResultsName(\\\"asList\\\")\"]}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"source\": \"expr = pp.Located(pp.Word(\\\"set_name\\\")).set_results_name(\\\"as_list\\\")\\nresult = expr.parse_string(text, parse_all=True, aslist=False)\", \"warnings\": [\"Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\\n  1: expr = pp.locatedExpr(pp.Word(\\\"setName\\\")).setResultsName(\\\"asList\\\")\"]}",
+   "predicted": "{\"source\": \"expr = pp.Located(pp.Word(\\\"set_name\\\")).set_results_name(\\\"as_list\\\")\\nresult = expr.parse_string(text, parse_all=True, aslist=False)\", \"warnings\": [\"Conversion of 'locatedExpr' to new 'Located' may require added code changes - Located does not automatically group parsed elements\\n  1: expr = pp.locatedExpr(pp.Word(\\\"setName\\\")).setResultsName(\\\"asList\\\")\"]}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 2046,
+  "stability_runs": 3
+ }
+}

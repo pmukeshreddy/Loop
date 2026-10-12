@@ -1,0 +1,106 @@
+--- /dev/null
++++ b/tests/test_chain_resource_lifetime.py
+@@ -0,0 +1,103 @@
++import pytest
++
++import click
++
++
++@pytest.mark.parametrize("outcome", ["return", "raise", "no_callback"])
++def test_chain_resources_span_result_processing(outcome):
++    events = []
++    resources = []
++    children = []
++    group_contexts = []
++    exits = []
++    failure = RuntimeError("result failed")
++    final_value = object()
++
++    class Resource:
++        def __init__(self, label):
++            self.label = label
++            self.closed = False
++
++        def __enter__(self):
++            events.append(("enter", self.label))
++            return self
++
++        def __exit__(self, exc_type, exc_value, tb):
++            self.closed = True
++            exits.append((exc_type, exc_value, tb is not None))
++            events.append(("exit", self.label))
++
++    @click.group(chain=True)
++    @click.option("--tag", default="kept")
++    @click.pass_context
++    def cli(ctx, tag):
++        group_contexts.append(ctx)
++        ctx.with_resource(Resource("group"))
++        ctx.call_on_close(lambda: events.append(("close", "group")))
++
++    def run_child(ctx):
++        assert click.get_current_context() is ctx
++        assert ctx.parent is group_contexts[0]
++        assert all(not resource.closed for resource in resources)
++        children.append(ctx)
++        label = f"{ctx.info_name}-{len(children)}"
++        resource = ctx.with_resource(Resource(label))
++        resources.append(resource)
++        ctx.call_on_close(lambda: events.append(("close", label)))
++        events.append(("run", label))
++        return resource
++
++    cli.add_command(click.Command("a", callback=click.pass_context(run_child)))
++    cli.add_command(click.Command("b", callback=click.pass_context(run_child)))
++
++    if outcome != "no_callback":
++        @cli.result_callback()
++        @click.pass_context
++        def process_result(ctx, result, tag):
++            assert ctx is group_contexts[0]
++            assert click.get_current_context() is ctx
++            assert tag == "kept"
++            assert len(result) == 3
++            assert all(value is resource for value, resource in zip(result, resources))
++            assert all(not resource.closed for resource in result)
++            events.append(("result", tag))
++            if outcome == "raise":
++                raise failure
++            return final_value
++
++    outer = click.Context(click.Command("outer"))
++    with outer:
++        if outcome == "raise":
++            with pytest.raises(RuntimeError) as caught:
++                cli.main(["a", "b", "a"], prog_name="cli", standalone_mode=False)
++            assert caught.value is failure
++        else:
++            result = cli.main(["a", "b", "a"], prog_name="cli", standalone_mode=False)
++            if outcome == "return":
++                assert result is final_value
++            else:
++                assert len(result) == 3
++                assert all(value is resource for value, resource in zip(result, resources))
++        assert click.get_current_context() is outer
++    assert len({id(child) for child in children}) == 3
++    assert all(resource.closed for resource in resources)
++    assert len(exits) == 4
++    for exc_type, exc_value, has_tb in exits:
++        assert exc_type is (RuntimeError if outcome == "raise" else None)
++        assert exc_value is (failure if outcome == "raise" else None)
++        assert has_tb == (outcome == "raise")
++    expected = [
++        ("enter", "group"),
++        ("enter", "a-1"), ("run", "a-1"),
++        ("enter", "b-2"), ("run", "b-2"),
++        ("enter", "a-3"), ("run", "a-3"),
++    ]
++    if outcome != "no_callback":
++        expected.append(("result", "kept"))
++    expected.extend([
++        ("close", "a-3"), ("exit", "a-3"),
++        ("close", "b-2"), ("exit", "b-2"),
++        ("close", "a-1"), ("exit", "a-1"),
++        ("close", "group"), ("exit", "group"),
++    ])
++    assert events == expected

@@ -3,7 +3,7 @@ from dataclasses import asdict, dataclass, field
 import json
 from pathlib import Path
 
-from .models import BENCHMARKS, normalized
+from .models import BENCHMARKS, SPLITS, normalized
 
 
 @dataclass
@@ -68,7 +68,7 @@ def decontaminate(tasks, heldout, *, ngram_size, overlap_threshold):
     counts = dict(exact_query=0, near_query=0, shared_source=0, shared_content=0)
     kept, dropped, by_split = [], [], defaultdict(lambda: dict(input=0, kept=0, dropped=0))
     for task in tasks:
-        if task.split not in ('train', 'dev_behavior'):
+        if task.split not in SPLITS:
             raise ValueError('only train/dev candidates may pass through decontamination')
         by_split[task.split]['input'] += 1
         hits = {}
@@ -105,3 +105,32 @@ def decontaminate(tasks, heldout, *, ngram_size, overlap_threshold):
                       similarity='word n-gram Jaccard > threshold; NFKC/casefold/word normalization',
                       heldout_records=len(heldout.records), coverage=heldout.coverage,
                       coverage_complete=not missing, missing_benchmarks=missing)
+
+
+_QUERY_INDEX = {}
+
+
+def query_overlap(query, heldout, *, ngram_size, overlap_threshold):
+    """Fast screen used during generation; the release build reruns full decontamination."""
+    key = (id(heldout), ngram_size)
+    if key not in _QUERY_INDEX:
+        exact, postings, held = {}, defaultdict(set), []
+        for i, record in enumerate(heldout.records):
+            exact.setdefault(normalized(record.query), i)
+            word_grams = grams(record.query, ngram_size)
+            held.append(word_grams)
+            for gram in word_grams:
+                postings[gram].add(i)
+        _QUERY_INDEX[key] = (exact, postings, held)
+    exact, postings, held = _QUERY_INDEX[key]
+    text = normalized(query)
+    if text in exact:
+        record = heldout.records[exact[text]]
+        return f'exact query match: {record.benchmark}:{record.task_id}'
+    query_grams = grams(query, ngram_size)
+    for i in set().union(*(postings.get(g, set()) for g in query_grams)) if query_grams else ():
+        similarity = len(query_grams & held[i]) / len(query_grams | held[i])
+        if similarity > overlap_threshold:
+            record = heldout.records[i]
+            return f'near query match {similarity:.2f}: {record.benchmark}:{record.task_id}'
+    return None

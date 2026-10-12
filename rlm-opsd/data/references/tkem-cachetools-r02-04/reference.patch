@@ -1,0 +1,416 @@
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -734,9 +734,17 @@
+ )
+ 
+ 
+-def cached(cache, key=keys.hashkey, lock=None, condition=None, info=False):
++def cached(
++    cache, key=keys.hashkey, lock=None, condition=None, info=False, *, cache_if=None
++):
+     """Decorator to wrap a function with a memoizing callable that saves
+     results in a cache.
++
++    If cache_if is not None, it is called with each result computed on a
++    cache miss before insertion. A false predicate result skips insertion;
++    predicate exceptions propagate without caching the result. Cache hits
++    do not call cache_if.
++    With cache=None, cache_if is not called.
+ 
+     """
+     from ._cached import _wrapper
+@@ -758,16 +766,25 @@
+                 def make_info(hits, misses):
+                     return _CacheInfo(hits, misses, 0, 0)
+ 
+-            return _wrapper(func, cache, key, lock, condition, info=make_info)
+-        else:
+-            return _wrapper(func, cache, key, lock, condition)
++            return _wrapper(
++                func, cache, key, lock, condition, info=make_info, cache_if=cache_if
++            )
++        else:
++            return _wrapper(func, cache, key, lock, condition, cache_if=cache_if)
+ 
+     return decorator
+ 
+ 
+-def cachedmethod(cache, key=keys.methodkey, lock=None, condition=None, info=False):
++def cachedmethod(
++    cache, key=keys.methodkey, lock=None, condition=None, info=False, *, cache_if=None
++):
+     """Decorator to wrap a method with a memoizing callable that saves
+     results in a cache.
++
++    If cache_if is not None, it is called with each result computed on a
++    cache miss before insertion. A false predicate result skips insertion;
++    predicate exceptions propagate without caching the result. Cache hits
++    do not call cache_if.
+ 
+     """
+     from ._cachedmethod import _wrapper
+@@ -783,8 +800,10 @@
+                 else:
+                     raise TypeError("cache(self) must return a mutable mapping")
+ 
+-            return _wrapper(method, cache, key, lock, condition, info=make_info)
+-        else:
+-            return _wrapper(method, cache, key, lock, condition)
++            return _wrapper(
++                method, cache, key, lock, condition, info=make_info, cache_if=cache_if
++            )
++        else:
++            return _wrapper(method, cache, key, lock, condition, cache_if=cache_if)
+ 
+     return decorator
+--- a/src/cachetools/__init__.pyi
++++ b/src/cachetools/__init__.pyi
+@@ -172,6 +172,8 @@
+     lock: AbstractContextManager[Any] | None = None,
+     condition: _AbstractCondition | None = None,
+     info: Literal[False] = ...,
++    *,
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[[Callable[_P, _R]], _cached_wrapper[_P, _R]]: ...
+ @overload
+ def cached(
+@@ -181,6 +183,7 @@
+     condition: _AbstractCondition | None = None,
+     *,
+     info: Literal[True],
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[[Callable[_P, _R]], _cached_wrapper_info[_P, _R]]: ...
+ @overload
+ def cached(
+@@ -189,6 +192,8 @@
+     lock: AbstractContextManager[Any] | None,
+     condition: _AbstractCondition | None,
+     info: Literal[True],
++    *,
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[[Callable[_P, _R]], _cached_wrapper_info[_P, _R]]: ...
+ 
+ @type_check_only
+@@ -221,6 +226,8 @@
+     lock: Callable[[Any], AbstractContextManager[Any]] | None = None,
+     condition: Callable[[Any], _AbstractCondition] | None = None,
+     info: Literal[False] = ...,
++    *,
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[[Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper[_P, _R]]: ...
+ @overload
+ def cachedmethod(
+@@ -230,6 +237,7 @@
+     condition: Callable[[Any], _AbstractCondition] | None = None,
+     *,
+     info: Literal[True],
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[
+     [Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper_info[_P, _R]
+ ]: ...
+@@ -240,6 +248,8 @@
+     lock: Callable[[Any], AbstractContextManager[Any]] | None,
+     condition: Callable[[Any], _AbstractCondition] | None,
+     info: Literal[True],
++    *,
++    cache_if: Callable[[Any], Any] | None = None,
+ ) -> Callable[
+     [Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper_info[_P, _R]
+ ]: ...
+--- a/src/cachetools/_cached.py
++++ b/src/cachetools/_cached.py
+@@ -13,7 +13,7 @@
+ # info.
+ 
+ 
+-def _condition_info(func, cache, key, lock, cond, info):
++def _condition_info(func, cache, key, lock, cond, info, cache_if=None):
+     hits = misses = 0
+     pending = set()
+ 
+@@ -31,6 +31,8 @@
+                 misses += 1
+         try:
+             v = func(*args, **kwargs)
++            if cache_if is not None and not cache_if(v):
++                return v
+             with lock:
+                 try:
+                     cache[k] = v
+@@ -57,7 +59,7 @@
+     return wrapper
+ 
+ 
+-def _locked_info(func, cache, key, lock, info):
++def _locked_info(func, cache, key, lock, info, cache_if=None):
+     hits = misses = 0
+ 
+     def wrapper(*args, **kwargs):
+@@ -71,6 +73,8 @@
+             except KeyError:
+                 misses += 1
+         v = func(*args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         with lock:
+             try:
+                 # In case of a race condition, i.e. if another thread
+@@ -95,7 +99,7 @@
+     return wrapper
+ 
+ 
+-def _unlocked_info(func, cache, key, info):
++def _unlocked_info(func, cache, key, info, cache_if=None):
+     hits = misses = 0
+ 
+     def wrapper(*args, **kwargs):
+@@ -108,6 +112,8 @@
+         except KeyError:
+             misses += 1
+         v = func(*args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         try:
+             cache[k] = v
+         except ValueError:
+@@ -144,7 +150,7 @@
+     return wrapper
+ 
+ 
+-def _condition(func, cache, key, lock, cond):
++def _condition(func, cache, key, lock, cond, cache_if=None):
+     pending = set()
+ 
+     def wrapper(*args, **kwargs):
+@@ -158,6 +164,8 @@
+                 pending.add(k)
+         try:
+             v = func(*args, **kwargs)
++            if cache_if is not None and not cache_if(v):
++                return v
+             with lock:
+                 try:
+                     cache[k] = v
+@@ -177,7 +185,7 @@
+     return wrapper
+ 
+ 
+-def _locked(func, cache, key, lock):
++def _locked(func, cache, key, lock, cache_if=None):
+     def wrapper(*args, **kwargs):
+         k = key(*args, **kwargs)
+         with lock:
+@@ -186,6 +194,8 @@
+             except KeyError:
+                 pass  # key not found
+         v = func(*args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         with lock:
+             try:
+                 # In case of a race condition, i.e. if another thread
+@@ -203,7 +213,7 @@
+     return wrapper
+ 
+ 
+-def _unlocked(func, cache, key):
++def _unlocked(func, cache, key, cache_if=None):
+     def wrapper(*args, **kwargs):
+         k = key(*args, **kwargs)
+         try:
+@@ -211,6 +221,8 @@
+         except KeyError:
+             pass  # key not found
+         v = func(*args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         try:
+             cache[k] = v
+         except ValueError:
+@@ -229,7 +241,7 @@
+     return wrapper
+ 
+ 
+-def _wrapper(func, cache, key, lock=None, cond=None, info=None):
++def _wrapper(func, cache, key, lock=None, cond=None, info=None, cache_if=None):
+     if cache is None:
+         warnings.warn(
+             "@cachetools.cached(cache=None) is deprecated",
+@@ -241,24 +253,24 @@
+         if cache is None:
+             wrapper = _uncached_info(func, info)
+         elif cond is not None and lock is not None:
+-            wrapper = _condition_info(func, cache, key, lock, cond, info)
++            wrapper = _condition_info(func, cache, key, lock, cond, info, cache_if)
+         elif cond is not None:
+-            wrapper = _condition_info(func, cache, key, cond, cond, info)
++            wrapper = _condition_info(func, cache, key, cond, cond, info, cache_if)
+         elif lock is not None:
+-            wrapper = _locked_info(func, cache, key, lock, info)
++            wrapper = _locked_info(func, cache, key, lock, info, cache_if)
+         else:
+-            wrapper = _unlocked_info(func, cache, key, info)
++            wrapper = _unlocked_info(func, cache, key, info, cache_if)
+     else:
+         if cache is None:
+             wrapper = _uncached(func)
+         elif cond is not None and lock is not None:
+-            wrapper = _condition(func, cache, key, lock, cond)
++            wrapper = _condition(func, cache, key, lock, cond, cache_if)
+         elif cond is not None:
+-            wrapper = _condition(func, cache, key, cond, cond)
++            wrapper = _condition(func, cache, key, cond, cond, cache_if)
+         elif lock is not None:
+-            wrapper = _locked(func, cache, key, lock)
++            wrapper = _locked(func, cache, key, lock, cache_if)
+         else:
+-            wrapper = _unlocked(func, cache, key)
++            wrapper = _unlocked(func, cache, key, cache_if)
+         wrapper.cache_info = None
+ 
+     wrapper.cache = cache
+--- a/src/cachetools/_cachedmethod.py
++++ b/src/cachetools/_cachedmethod.py
+@@ -147,7 +147,7 @@
+ # info.
+ 
+ 
+-def _condition_info(method, cache, key, lock, cond, info):
++def _condition_info(method, cache, key, lock, cond, info, cache_if=None):
+     class Descriptor(_DescriptorBase):
+         class Wrapper(_WrapperBase):
+             def __init__(self, obj):
+@@ -172,6 +172,8 @@
+                         self.__misses += 1
+                 try:
+                     val = method(self._obj, *args, **kwargs)
++                    if cache_if is not None and not cache_if(val):
++                        return val
+                     with lock:
+                         try:
+                             cache[key] = val
+@@ -195,7 +197,7 @@
+     return Descriptor()
+ 
+ 
+-def _locked_info(method, cache, key, lock, info):
++def _locked_info(method, cache, key, lock, info, cache_if=None):
+     class Descriptor(_DescriptorBase):
+         class Wrapper(_WrapperBase):
+             def __init__(self, obj):
+@@ -214,6 +216,8 @@
+                     except KeyError:
+                         self.__misses += 1
+                 val = method(self._obj, *args, **kwargs)
++                if cache_if is not None and not cache_if(val):
++                    return val
+                 with lock:
+                     try:
+                         # In case of a race condition, i.e. if another thread
+@@ -235,7 +239,7 @@
+     return Descriptor()
+ 
+ 
+-def _unlocked_info(method, cache, key, info):
++def _unlocked_info(method, cache, key, info, cache_if=None):
+     class Descriptor(_DescriptorBase):
+         class Wrapper(_WrapperBase):
+             def __init__(self, obj):
+@@ -252,6 +256,8 @@
+                 except KeyError:
+                     self.__misses += 1
+                 val = method(self._obj, *args, **kwargs)
++                if cache_if is not None and not cache_if(val):
++                    return val
+                 try:
+                     cache[key] = val
+                 except ValueError:
+@@ -268,7 +274,7 @@
+     return Descriptor()
+ 
+ 
+-def _condition(method, cache, key, lock, cond):
++def _condition(method, cache, key, lock, cond, cache_if=None):
+     # backward-compatible weakref dictionary for Python >= 3.13
+     pending = weakref.WeakKeyDictionary()
+ 
+@@ -283,6 +289,8 @@
+                 pending.add(k)
+         try:
+             v = method(self, *args, **kwargs)
++            if cache_if is not None and not cache_if(v):
++                return v
+             with lock(self):
+                 try:
+                     c[k] = v
+@@ -319,7 +327,7 @@
+     return Descriptor(classmethod_wrapper, cache_clear)
+ 
+ 
+-def _locked(method, cache, key, lock):
++def _locked(method, cache, key, lock, cache_if=None):
+     def wrapper(self, *args, **kwargs):
+         c = cache(self)
+         k = key(self, *args, **kwargs)
+@@ -329,6 +337,8 @@
+             except KeyError:
+                 pass  # key not found
+         v = method(self, *args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         with lock(self):
+             try:
+                 # In case of a race condition, i.e. if another thread
+@@ -358,7 +368,7 @@
+     return Descriptor(wrapper, cache_clear)
+ 
+ 
+-def _unlocked(method, cache, key):
++def _unlocked(method, cache, key, cache_if=None):
+     def wrapper(self, *args, **kwargs):
+         c = cache(self)
+         k = key(self, *args, **kwargs)
+@@ -367,6 +377,8 @@
+         except KeyError:
+             pass  # key not found
+         v = method(self, *args, **kwargs)
++        if cache_if is not None and not cache_if(v):
++            return v
+         try:
+             c[k] = v
+         except ValueError:
+@@ -392,25 +404,25 @@
+     return Descriptor(wrapper, cache_clear)
+ 
+ 
+-def _wrapper(method, cache, key, lock=None, cond=None, info=None):
++def _wrapper(method, cache, key, lock=None, cond=None, info=None, cache_if=None):
+     if info is not None:
+         if cond is not None and lock is not None:
+-            wrapper = _condition_info(method, cache, key, lock, cond, info)
++            wrapper = _condition_info(method, cache, key, lock, cond, info, cache_if)
+         elif cond is not None:
+-            wrapper = _condition_info(method, cache, key, cond, cond, info)
++            wrapper = _condition_info(method, cache, key, cond, cond, info, cache_if)
+         elif lock is not None:
+-            wrapper = _locked_info(method, cache, key, lock, info)
++            wrapper = _locked_info(method, cache, key, lock, info, cache_if)
+         else:
+-            wrapper = _unlocked_info(method, cache, key, info)
++            wrapper = _unlocked_info(method, cache, key, info, cache_if)
+     else:
+         if cond is not None and lock is not None:
+-            wrapper = _condition(method, cache, key, lock, cond)
++            wrapper = _condition(method, cache, key, lock, cond, cache_if)
+         elif cond is not None:
+-            wrapper = _condition(method, cache, key, cond, cond)
++            wrapper = _condition(method, cache, key, cond, cond, cache_if)
+         elif lock is not None:
+-            wrapper = _locked(method, cache, key, lock)
++            wrapper = _locked(method, cache, key, lock, cache_if)
+         else:
+-            wrapper = _unlocked(method, cache, key)
++            wrapper = _unlocked(method, cache, key, cache_if)
+ 
+     # backward-compatible properties for deprecated @classmethod use
+     wrapper.cache = cache  # type: ignore

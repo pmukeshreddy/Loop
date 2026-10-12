@@ -1,0 +1,159 @@
+{
+ "answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -890,6 +890,10 @@\n     This processor can be used for adding data passed in the ``extra``\n     parameter of the `logging` module's log methods to the event dictionary.\n \n+    The attributes ``_record`` and ``_from_structlog`` are reserved for\n+    `ProcessorFormatter` metadata and are never copied, even if included in\n+    ``allow``.\n+\n     Args:\n         allow:\n             An optional collection of attributes that, if present in\n@@ -927,7 +931,10 @@\n         cls, event_dict: EventDict, record: logging.LogRecord\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if (\n+                key not in _LOG_RECORD_KEYS\n+                and key not in (\"_record\", \"_from_structlog\")\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -938,7 +945,10 @@\n         record: logging.LogRecord,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if (\n+                key not in (\"_record\", \"_from_structlog\")\n+                and key in record.__dict__\n+            ):\n                 event_dict[key] = record.__dict__[key]\n \n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0007535250667478736,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "old",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 706015 chars; 11 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final patch applies the reserved-key rule to both copying modes while preserving ordinary overwrite and allow-list behavior. The reference constructed and inspected its final diff; the supplied verification evidence covers metadata preservation, allow-list snapshots, no-record behavior, and foreign pre-chain integration.",
+   "inspect_locate": "The reference execution used 11 targeted searches without printing the whole context. The relevant investigation connects ExtraAdder's two copying paths with ProcessorFormatter's metadata initialization and removal, rather than relying on a single symbol lookup."
+  },
+  "notes": "This is a natural, precisely scoped hardening request with a clear unified-diff deliverable. Naming the component and reserved attributes specifies the requested behavior rather than leaking an implementation. It is substantively distinct from the existing overwrite-option task: it protects authoritative formatter metadata unconditionally without introducing a new public option."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must enforce the same reserved-key contract in both allow modes without changing ordinary overwrite semantics or standard-field allow-list support. Its exact hunks and behavior must be checked against metadata preservation, absent destination metadata, repeated processors, and the existing constructor and no-record contracts.",
+   "inspect_locate": "The repository context is large, but the relevant evidence is concentrated in ExtraAdder's two copying paths, ProcessorFormatter's foreign-event initialization and metadata removal, and the corresponding compatibility tests. The solver must connect these producer, copier, and consumer boundaries."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ExtraAdder",
+    "why": "Both copying paths currently admit the reserved names. The constructor snapshots explicit allow collections, and __call__ supplies the existing missing-record behavior."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.format",
+    "why": "Creates authoritative metadata using a shallow copy of the incoming LogRecord, then invokes foreign_pre_chain before the shared processors."
+   },
+   {
+    "path": "src/structlog/stdlib.py",
+    "symbol": "src/structlog/stdlib.py::ProcessorFormatter.remove_processors_meta",
+    "why": "Removes exactly the two reserved fields before rendering; subsequent ExtraAdder invocation must remain a no-op."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestExtraAdder",
+    "why": "Compatibility evidence for allow selection, missing attributes, empty collections, no-record behavior, and foreign logging integration."
+   },
+   {
+    "path": "tests/test_stdlib.py",
+    "symbol": "tests/test_stdlib.py::TestProcessorFormatter",
+    "why": "Compatibility evidence for foreign-origin metadata, metadata removal, processor ordering, and original-record isolation."
+   }
+  ],
+  "expected_answer": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -927,7 +927,9 @@\n         cls, event_dict: EventDict, record: logging.LogRecord\n     ) -> None:\n         for key, value in record.__dict__.items():\n-            if key not in _LOG_RECORD_KEYS:\n+            if (\n+                key not in _LOG_RECORD_KEYS and key not in (\"_record\", \"_from_structlog\")\n+            ):\n                 event_dict[key] = value\n \n     @classmethod\n@@ -938,7 +940,9 @@\n         record: logging.LogRecord,\n     ) -> None:\n         for key in allow:\n-            if key in record.__dict__:\n+            if (\n+                key in record.__dict__ and key not in (\"_record\", \"_from_structlog\")\n+            ):\n                 event_dict[key] = record.__dict__[key]\n \n \n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_extra_adder_reserved_metadata.py\n@@ -0,0 +1,117 @@\n+import json\n+import logging\n+\n+import pytest\n+\n+from structlog.stdlib import ExtraAdder, ProcessorFormatter\n+\n+\n+def make_record():\n+    return logging.LogRecord(\n+        \"foreign\", logging.INFO, \"source.py\", 7, \"hello %s\", (\"world\",), None\n+    )\n+\n+\n+@pytest.mark.parametrize(\n+    \"allow\", [None, [\"_record\", \"_from_structlog\", \"field\", \"_user\"]]\n+)\n+@pytest.mark.parametrize(\"has_origin\", [False, True])\n+def test_reserved_metadata_is_not_copied(allow, has_origin):\n+    record = make_record()\n+    spoofed = object()\n+    record.__dict__.update(\n+        _record=spoofed, _from_structlog=True, field=\"new\", _user=\"kept\"\n+    )\n+    before = record.__dict__.copy()\n+    ed = {\"_record\": record, \"field\": \"old\"}\n+    if has_origin:\n+        ed[\"_from_structlog\"] = False\n+\n+    assert ExtraAdder(allow)(None, \"info\", ed) is ed\n+    assert ed[\"_record\"] is record\n+    if has_origin:\n+        assert ed[\"_from_structlog\"] is False\n+    else:\n+        assert \"_from_structlog\" not in ed\n+    assert ed[\"field\"] == \"new\"\n+    assert ed[\"_user\"] == \"kept\"\n+    assert record.__dict__ == before\n+\n+\n+def test_allow_snapshot_and_standard_fields():\n+    record = make_record()\n+    record.field = \"new\"\n+    record.other = \"not allowed\"\n+    record._record = object()\n+    record._from_structlog = True\n+    allow = [\"name\", \"field\", \"missing\", \"_record\", \"_from_structlog\"]\n+    adder = ExtraAdder(allow)\n+    allow[:] = [\"other\"]\n+    ed = {\"_record\": record, \"_from_structlog\": False, \"field\": None}\n+\n+    assert adder(None, \"info\", ed) == {\n+        \"_record\": record,\n+        \"_from_structlog\": False,\n+        \"field\": \"new\",\n+        \"name\": \"foreign\",\n+    }\n+    empty = {\"_record\": record}\n+    assert ExtraAdder([])(None, \"info\", empty) == {\"_record\": record}\n+\n+\n+@pytest.mark.parametrize(\"allow\", [None, [\"_record\", \"_from_structlog\", \"field\"]])\n+@pytest.mark.parametrize(\"ed\", [{}, {\"field\": \"old\"}, {\"_record\": None}])\n+def test_missing_record_is_noop(allow, ed):\n+    before = ed.copy()\n+    assert ExtraAdder(allow)(None, \"info\", ed) is ed\n+    assert ed == before\n+\n+\n+@pytest.mark.parametrize(\n+    \"allow\", [None, [\"_record\", \"_from_structlog\", \"field\"]]\n+)\n+def test_foreign_chain_keeps_authoritative_metadata(allow):\n+    spoofed = make_record()\n+    record = logging.Logger(\"foreign\").makeRecord(\n+        \"foreign\", logging.INFO, \"source.py\", 7, \"hello %s\", (\"world\",), None,\n+        extra={\"_record\": spoofed, \"_from_structlog\": True, \"field\": \"extra\"},\n+    )\n+    seen = []\n+\n+    def remember(_, __, ed):\n+        seen.append(ed[\"_record\"])\n+        ed[\"field\"] = \"pre-chain\"\n+        return ed\n+\n+    def mark_record(_, __, ed):\n+        assert ed[\"_record\"] is seen[0]\n+        assert ed[\"_from_structlog\"] is False\n+        ed[\"_record\"].late = \"from actual record\"\n+        return ed\n+\n+    def verify(_, __, ed):\n+        assert ed[\"_record\"] is seen[0]\n+        assert ed[\"_record\"] is not spoofed\n+        assert ed[\"_from_structlog\"] is False\n+        assert ed[\"field\"] == \"extra\"\n+        assert ed[\"late\"] == \"from actual record\"\n+        return ed\n+\n+    formatter = ProcessorFormatter(\n+        foreign_pre_chain=[\n+            remember, ExtraAdder(allow), mark_record, ExtraAdder([\"late\"]),\n+        ],\n+        processors=[\n+            verify, ProcessorFormatter.remove_processors_meta,\n+            ExtraAdder(allow), lambda _, __, ed: json.dumps(ed),\n+        ],\n+    )\n+\n+    assert json.loads(formatter.format(record)) == {\n+        \"event\": \"hello world\",\n+        \"field\": \"extra\",\n+        \"late\": \"from actual record\",\n+    }\n+    assert record._record is spoofed\n+    assert record._from_structlog is True\n+    assert record.args == (\"world\",)\n",
+  "include_failure_log": false,
+  "notes": "The supplied snapshot already contains this metadata-poisoning defect, so this task uses new hidden regression tests rather than injecting a second synthetic defect. The new test file covers both copying modes, absent _from_structlog, preservation of existing metadata, ordinary overwriting, nonreserved underscore extras, source-record preservation, standard fields, allow-list snapshotting, empty allow collections, and missing records. Formatter integration captures the formatter-owned record before ExtraAdder, adds an attribute to that record between two adders, verifies foreign-origin metadata, removes metadata, and checks that it is not restored. The expected repair differs substantively from the original overwrite-option implementation. No repository execution was available during authoring; patch application and test outcomes require harness verification.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Harden `structlog.stdlib.ExtraAdder` against foreign LogRecords that carry extra attributes named `_record` or `_from_structlog`. These attributes can currently poison the metadata established by `ProcessorFormatter` before its foreign pre-chain runs.\n\nTreat those two names as reserved: ExtraAdder must never copy either attribute from a LogRecord, even when explicitly included in `allow` or when the destination key is absent. Leave any existing destination metadata unchanged. All other eligible attributes must retain their current behavior, including overwriting existing event values, explicitly allowed standard LogRecord fields, ignored missing attributes, empty allow collections, and the constructor's allow-list snapshot. An absent or `None` `_record` must remain a no-op.\n\nIn a foreign pre-chain containing two ExtraAdder instances, later processors must still receive the formatter's actual LogRecord and `_from_structlog=False` despite spoofed extras. `ProcessorFormatter.remove_processors_meta` must continue to remove the metadata before rendering, and a subsequent ExtraAdder must not restore it. Deliver a unified diff against non-test repository files, without changing the public constructor signature.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Emphasizes inspect_locate and combine_verify_finish across producer, copier, and consumer boundaries. A focused read of stdlib.py plus targeted formatter tests is sufficient; persistent state concerns shift from carrying a collision option to preserving authoritative metadata throughout a processor chain.",
+  "change_type": "failure_condition",
+  "description": "Repair metadata poisoning when ExtraAdder runs in ProcessorFormatter's foreign_pre_chain. A foreign LogRecord can carry extra attributes named `_record` and `_from_structlog`; ExtraAdder currently copies them over the formatter's authoritative metadata. Require ExtraAdder to never copy those two attributes, including when they are explicitly allowed, while retaining ordinary extra-field overwriting, standard-field allow-list support, allow-list snapshotting, and missing-record behavior. Deliver a non-test unified diff and specify regression cases using src/structlog/stdlib.py::ExtraAdder, ProcessorFormatter.format, and ProcessorFormatter.remove_processors_meta, with tests/test_stdlib.py::TestExtraAdder and TestProcessorFormatter as compatibility evidence.",
+  "expected_answer_change": "The patch must unconditionally exclude `_record` and `_from_structlog` in both copying paths rather than add an overwrite option. Integration verification should show that a second ExtraAdder still sees the actual LogRecord and that `_from_structlog` remains False for a foreign event despite spoofed extras. Ordinary collisions must continue to overwrite.",
+  "why_substantive": "This is a trust-boundary defect rather than a configurable collision policy. Protecting only existing keys would not satisfy the new contract: the forbidden metadata must not be copied even when absent from the destination. Investigation must follow how formatter metadata is created, how ExtraAdder can replace it, and how later processors consume it."
+ },
+ "task_id": "hynek-structlog-r01-03-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_extra_adder_reserved_metadata.py::test_allow_snapshot_and_standard_fields",
+   "tests/test_extra_adder_reserved_metadata.py::test_foreign_chain_keeps_authoritative_metadata[None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_foreign_chain_keeps_authoritative_metadata[allow1]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[False-None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[False-allow1]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[True-None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[True-allow1]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 7,
+   "full_suite": {
+    "failed": 0,
+    "passed": 897
+   },
+   "patch_files": [
+    "src/structlog/stdlib.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_extra_adder_reserved_metadata.py::test_allow_snapshot_and_standard_fields",
+   "tests/test_extra_adder_reserved_metadata.py::test_foreign_chain_keeps_authoritative_metadata[None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_foreign_chain_keeps_authoritative_metadata[allow1]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[False-None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[False-allow1]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[True-None]",
+   "tests/test_extra_adder_reserved_metadata.py::test_reserved_metadata_is_not_copied[True-allow1]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 884,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,103 @@
+--- /dev/null
++++ b/tests/test_session_csrf_expiration_format.py
+@@ -0,0 +1,100 @@
++import hmac
++from datetime import datetime, timedelta
++from hashlib import sha1
++from types import SimpleNamespace
++
++import pytest
++
++from wtforms.csrf.session import SessionCSRF
++from wtforms.validators import ValidationError
++
++
++NOW = datetime(2030, 1, 2, 3, 4, 5)
++
++
++class FixedClockCSRF(SessionCSRF):
++    def now(self):
++        return NOW
++
++
++def make_impl(**settings):
++    meta = SimpleNamespace(
++        csrf_secret=b"secret",
++        csrf_context={"csrf": "fixed-session"},
++        csrf_field_name="csrf_token",
++        **settings,
++    )
++    impl = FixedClockCSRF()
++    impl.setup_form(SimpleNamespace(meta=meta))
++    impl.generate_csrf_token(None)
++    return impl
++
++
++def signed_token(expires):
++    digest = hmac.new(
++        b"secret", ("fixed-session" + expires).encode("utf8"), sha1
++    ).hexdigest()
++    return f"{expires}##{digest}"
++
++
++def validate(impl, token):
++    field = SimpleNamespace(data=token, gettext=lambda message: message)
++    impl.validate_csrf_token(None, field)
++
++
++@pytest.mark.parametrize(
++    "expires",
++    [
++        "99999999999999",
++        "z",
++        "20300230030405",
++        "",
++        "2030010203045",
++        "203001020304050",
++        "２０３００１０２０３０４０５",
++        "20300102030405 ",
++    ],
++)
++def test_malformed_authenticated_expiration(expires):
++    with pytest.raises(ValidationError, match=r"^CSRF token invalid expiration\.$"):
++        validate(make_impl(), signed_token(expires))
++
++
++@pytest.mark.parametrize("expires", ["20300102030405", "20300102030406", "20300228030405"])
++def test_valid_expiration_at_or_after_now(expires):
++    validate(make_impl(), signed_token(expires))
++
++
++def test_valid_but_expired():
++    with pytest.raises(ValidationError, match=r"^CSRF token expired\.$"):
++        validate(make_impl(), signed_token("20300102030404"))
++
++
++@pytest.mark.parametrize("token", [None, "", "z", "20300102030405"])
++def test_missing_token_precedes_expiration_checks(token):
++    with pytest.raises(ValidationError, match=r"^CSRF token missing\.$"):
++        validate(make_impl(), token)
++
++
++@pytest.mark.parametrize("expires", ["z", "20300230030405", "20300102030404", ""])
++def test_digest_error_precedes_expiration_checks(expires):
++    token = signed_token(expires)
++    prefix, digest = token.split("##", 1)
++    wrong = ("0" if digest[0] != "0" else "1") + digest[1:]
++    with pytest.raises(ValidationError, match=r"^CSRF failed\.$"):
++        validate(make_impl(), f"{prefix}##{wrong}")
++
++
++@pytest.mark.parametrize("limit", [None, timedelta(0)])
++@pytest.mark.parametrize("expires", ["99999999999999", "z", "20300230030405", "", "20300101000000"])
++def test_disabled_expiration_accepts_authenticated_prefix(limit, expires):
++    validate(make_impl(csrf_time_limit=limit), signed_token(expires))
++
++
++def test_generation_stays_compatible():
++    impl = make_impl()
++    assert impl.generate_csrf_token(None).split("##", 1)[0] == "20300102033405"
++    validate(impl, impl.generate_csrf_token(None))
++    disabled = make_impl(csrf_time_limit=None)
++    assert disabled.generate_csrf_token(None).startswith("##")
++    validate(disabled, disabled.generate_csrf_token(None))

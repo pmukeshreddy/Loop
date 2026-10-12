@@ -1,0 +1,96 @@
+--- /dev/null
++++ b/jsonschema/tests/test_legacy_additional_property_coverage.py
+@@ -0,0 +1,95 @@
++import pytest
++
++from jsonschema import Draft201909Validator, Draft202012Validator
++
++
++@pytest.mark.parametrize("Validator", [Draft201909Validator, Draft202012Validator])
++@pytest.mark.parametrize("name", ["x", "type", "properties"])
++def test_successful_additional_values_are_evaluated(Validator, name):
++    schema = {
++        "additionalProperties": {"type": "integer"},
++        "unevaluatedProperties": False,
++    }
++    assert list(Validator(schema).iter_errors({name: 1})) == []
++
++
++@pytest.mark.parametrize("name", ["x", "type"])
++def test_failed_additional_values_remain_uncovered(name):
++    schema = {
++        "additionalProperties": {"type": "integer"},
++        "unevaluatedProperties": False,
++    }
++    errors = list(Draft201909Validator(schema).iter_errors({name: "bad"}))
++    assert len(errors) == 2
++    ordinary = [error for error in errors if error.validator == "type"]
++    assert len(ordinary) == 1
++    assert list(ordinary[0].path) == [name]
++    assert list(ordinary[0].schema_path) == ["additionalProperties", "type"]
++    uncovered = [
++        error for error in errors if error.validator == "unevaluatedProperties"
++    ]
++    assert len(uncovered) == 1
++    assert repr(name) in uncovered[0].message
++
++
++def test_only_failed_extras_are_reported_as_unevaluated():
++    schema = {
++        "additionalProperties": {"type": "integer"},
++        "unevaluatedProperties": False,
++    }
++    instance = {"good": 1, "bad": "no", "type": "no"}
++    errors = list(Draft201909Validator(schema).iter_errors(instance))
++    assert sorted(
++        list(error.path) for error in errors if error.validator == "type"
++    ) == [["bad"], ["type"]]
++    uncovered = [
++        error for error in errors if error.validator == "unevaluatedProperties"
++    ]
++    assert len(uncovered) == 1
++    assert "'bad'" in uncovered[0].message
++    assert "'type'" in uncovered[0].message
++    assert "'good'" not in uncovered[0].message
++
++
++@pytest.mark.parametrize("Validator", [Draft201909Validator, Draft202012Validator])
++def test_declared_and_pattern_matched_values_are_not_additional(Validator):
++    schema = {
++        "properties": {"declared": {"type": "string"}},
++        "patternProperties": {"mid": {"type": "string"}},
++        "additionalProperties": {"type": "integer"},
++        "unevaluatedProperties": False,
++    }
++    instance = {"declared": "text", "prefix_mid_suffix": "text", "x": 1}
++    assert list(Validator(schema).iter_errors(instance)) == []
++
++
++def test_uncovered_failed_extra_is_checked_by_unevaluated_schema():
++    schema = {
++        "additionalProperties": {"type": "integer"},
++        "unevaluatedProperties": {"const": "allowed"},
++    }
++    errors = list(Draft201909Validator(schema).iter_errors({"type": "bad"}))
++    assert sorted(error.validator for error in errors) == [
++        "type", "unevaluatedProperties",
++    ]
++    allowed = list(
++        Draft201909Validator(schema).iter_errors({"type": "allowed"}),
++    )
++    assert [error.validator for error in allowed] == ["type"]
++
++
++@pytest.mark.parametrize(
++    "extra_schema, valid",
++    [({}, False), ({"additionalProperties": True}, True),
++     ({"additionalProperties": False}, False)],
++)
++def test_absent_and_boolean_additional_properties(extra_schema, valid):
++    schema = dict(extra_schema, unevaluatedProperties=False)
++    assert Draft201909Validator(schema).is_valid({"x": 1}) is valid
++
++
++def test_empty_additional_schema_evaluates_extra_values():
++    schema = {"additionalProperties": {}, "unevaluatedProperties": False}
++    assert Draft201909Validator(schema).is_valid({"x": "anything"})

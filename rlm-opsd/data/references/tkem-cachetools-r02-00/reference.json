@@ -1,0 +1,127 @@
+{
+ "answer": [
+  "tests/test_keys.py::CacheKeysTest::test_addkeys"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_keys.py::HashKeyTest::test_add\",\n  \"tests/test_keys.py::HashKeyTest::test_radd\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 2,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 6798 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The focused two-file context supports direct reasoning about the changed concatenation result type, its use in typed-key construction, and which test assertions distinguish ordinary tuples from _HashedTuple instances. The reference completed without sub-calls, and executable impact verification confirmed the resulting test ID."
+  },
+  "notes": "This is a natural, precisely specified change-impact question with a clear JSON-list output format. Naming the proposed implementation change does not disclose the failing test. Identifying the failure requires repository-specific reasoning rather than general Python knowledge or a simple symbol lookup. It is distinct from the previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "direct_solve": "The key implementation and its complete test module form a small, focused context. Determining the failures requires reasoning about concatenation results, typed-key construction, and assertions, rather than merely finding references."
+  },
+  "context": {
+   "files": [
+    "src/cachetools/keys.py",
+    "tests/test_keys.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/keys.py",
+    "symbol": "src/cachetools/keys.py::_HashedTuple.__add__",
+    "why": "Controls the result representation of key concatenation and the additions used by typedkey."
+   },
+   {
+    "path": "src/cachetools/keys.py",
+    "symbol": "src/cachetools/keys.py::_HashedTuple.__radd__",
+    "why": "Controls concatenation with an ordinary tuple on the left."
+   },
+   {
+    "path": "tests/test_keys.py",
+    "symbol": "tests/test_keys.py::CacheKeysTest.test_addkeys",
+    "why": "Checks representation preservation, while the other key tests primarily check equality and hash behavior."
+   }
+  ],
+  "expected_answer": [
+   "tests/test_keys.py::CacheKeysTest::test_addkeys"
+  ],
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the existing suite after applying the probe. Ordinary tuple results still contain the type annotations appended by typedkey; the planned change does not remove those annotations.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": "--- a/src/cachetools/keys.py\n+++ b/src/cachetools/keys.py\n@@ -21,10 +21,10 @@\n         return hashvalue\n \n     def __add__(self, other, add=tuple.__add__):\n-        return _HashedTuple(add(self, other))\n+        return add(self, other)\n \n     def __radd__(self, other, add=tuple.__add__):\n-        return _HashedTuple(add(other, self))\n+        return add(other, self)\n \n     def __getstate__(self):\n         return {}\n",
+  "question": "We are considering simplifying `_HashedTuple` concatenation: both left-hand and right-hand addition would return the ordinary tuple produced by the corresponding tuple operation, without wrapping that result in `_HashedTuple`. The tuple elements, ordering, and all other key behavior would remain unchanged. Which existing tests would newly fail? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "tkem-cachetools-r02-00",
+ "truth": {
+  "answer": [
+   "tests/test_keys.py::CacheKeysTest::test_addkeys"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_keys.py::CacheKeysTest::test_addkeys"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_keys.py::CacheKeysTest::test_addkeys"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_keys.py::CacheKeysTest::test_addkeys"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

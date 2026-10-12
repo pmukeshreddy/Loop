@@ -1,0 +1,217 @@
+{
+ "answer": [
+  "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_205",
+  "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_206",
+  "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_214",
+  "tests/test_commonmark.py::TestCommonMark::test_links_538",
+  "tests/test_commonmark.py::TestCommonMark::test_links_539",
+  "tests/test_commonmark.py::TestCommonMark::test_links_554",
+  "tests/test_commonmark.py::TestCommonMark::test_links_560",
+  "tests/test_commonmark.py::TestCommonMark::test_images_576",
+  "tests/test_commonmark.py::TestCommonMark::test_images_582",
+  "tests/test_commonmark.py::TestCommonMark::test_images_585",
+  "tests/test_commonmark.py::TestCommonMark::test_images_590"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_commonmark.py::TestCommonMark::test_205\",\n  \"tests/test_commonmark.py::TestCommonMark::test_206\",\n  \"tests/test_commonmark.py::TestCommonMark::test_546\",\n  \"tests/test_commonmark.py::TestCommonMark::test_547\",\n  \"tests/test_commonmark.py::TestCommonMark::test_555\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0013022064761128774,
+  "facts": {
+   "code_blocks": 9,
+   "context_searches": 19,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "candidates",
+    "failures",
+    "files",
+    "judgments",
+    "p",
+    "records",
+    "t"
+   ],
+   "subcall_errors": 1,
+   "subcall_max_prompt_chars": 50146,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 3,
+   "subcall_sites": 3,
+   "subcall_sites_in_loop": 2,
+   "subcall_sites_on_context": 3,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 6,
+   "turns": 12,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "chunked_subcalls",
+  "results": {
+   "chunked_subcalls": {
+    "established": false,
+    "evidence": "6 sub-calls (1 failed); 3 call sites on selected context, 0 on the whole context; max prompt 50146 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 549836 chars; 19 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": true,
+    "evidence": "6 sub-calls (1 failed); results stored at 3 sites; sub-call results reach the final answer: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution combined candidate judgments into a computed, deduplicated collection of exact pytest node IDs and inspected the final variable before finishing.",
+   "inspect_locate": "The execution used 19 targeted searches across repository context to connect normalization consumers with ordinary and fixture-generated tests, without printing the whole context."
+  },
+  "notes": "This is a natural change-impact request with a precisely specified normalization change and output format. Identifying the affected tests requires repository-specific reasoning about reference matching and fixture-generated test identities, rather than merely locating unikey. The verified answer matches the ground-truth impact set. The task neither prescribes solver operations nor duplicates the existing accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Reference-related fixture collections contain many cases whose labels, definitions, capitalization, and expected token or HTML output must be interpreted together. Finding a unikey call or a bracket expression does not determine whether a case fails.",
+   "combine_verify_finish": "Fixture-generated tests and tests covering several inputs must be reduced to a deduplicated set of exact pytest node IDs, rather than a list of affected examples or call sites.",
+   "inspect_locate": "The affected key normalization is used by block definitions, inline reference resolution, and environment-based extensions. Relevant tests are scattered across ordinary test modules and fixture-generated suites.",
+   "recursive_decomposition": "The impact can be investigated independently for ordinary reference links, nested-link/reference precedence, and plugin consumers, then combined into one suite-wide result."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/util.py",
+    "symbol": "src/mistune/util.py::unikey",
+    "why": "Defines the exact normalization policy being changed."
+   },
+   {
+    "path": "src/mistune/block_parser.py",
+    "symbol": "src/mistune/block_parser.py::BlockParser.parse_ref_link",
+    "why": "Normalizes definition labels before storing them in the shared reference environment."
+   },
+   {
+    "path": "src/mistune/_inline/links.py",
+    "symbol": "src/mistune/_inline/links.py::parse_link",
+    "why": "Normalizes explicit, collapsed, and shortcut reference labels during lookup."
+   },
+   {
+    "path": "src/mistune/_inline/links.py",
+    "symbol": "src/mistune/_inline/links.py::find_link_range_end",
+    "why": "Reference-key matching also affects recognition of nested reference-link ranges."
+   },
+   {
+    "path": "tests/test_commonmark.py",
+    "symbol": "tests/test_commonmark.py::TestCommonMark",
+    "why": "Loads the CommonMark cases as executable tests, including reference-label matching cases."
+   },
+   {
+    "path": "tests/test_plugins.py",
+    "symbol": "tests/test_plugins.py::load_plugin",
+    "why": "Creates separate fixture-generated plugin suites, including the compatibility-plugin variants."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the full existing suite after applying the probe. Ground truth is newly failing test node IDs, not every test that reaches unikey. The probe retains whitespace normalization and changes only case folding.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/src/mistune/util.py\n+++ b/src/mistune/util.py\n@@ -58,7 +58,7 @@\n def unikey(s: str) -> str:\n     \"\"\"Generate a unique key for links and footnotes.\"\"\"\n     key = \" \".join(s.split()).strip()\n-    return key.lower().upper()\n+    return key\n \n \n _charref_re = re.compile(\n",
+  "question": "We are considering making unikey preserve letter case: it would still collapse whitespace with its existing split/join operation, but would return that normalized string without calling lower() or upper(). Apply this policy uniformly to every existing unikey consumer. Which existing tests would newly fail under that change? Include fixture-generated tests and return a JSON list of exact pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r01-02",
+ "truth": {
+  "answer": [
+   "tests/test_commonmark.py::TestCommonMark::test_images_576",
+   "tests/test_commonmark.py::TestCommonMark::test_images_582",
+   "tests/test_commonmark.py::TestCommonMark::test_images_585",
+   "tests/test_commonmark.py::TestCommonMark::test_images_590",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_205",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_206",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_214",
+   "tests/test_commonmark.py::TestCommonMark::test_links_538",
+   "tests/test_commonmark.py::TestCommonMark::test_links_539",
+   "tests/test_commonmark.py::TestCommonMark::test_links_554",
+   "tests/test_commonmark.py::TestCommonMark::test_links_560"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_commonmark.py::TestCommonMark::test_images_576",
+    "tests/test_commonmark.py::TestCommonMark::test_images_582",
+    "tests/test_commonmark.py::TestCommonMark::test_images_585",
+    "tests/test_commonmark.py::TestCommonMark::test_images_590",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_205",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_206",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_214",
+    "tests/test_commonmark.py::TestCommonMark::test_links_538",
+    "tests/test_commonmark.py::TestCommonMark::test_links_539",
+    "tests/test_commonmark.py::TestCommonMark::test_links_554",
+    "tests/test_commonmark.py::TestCommonMark::test_links_560"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_commonmark.py::TestCommonMark::test_images_576",
+    "tests/test_commonmark.py::TestCommonMark::test_images_582",
+    "tests/test_commonmark.py::TestCommonMark::test_images_585",
+    "tests/test_commonmark.py::TestCommonMark::test_images_590",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_205",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_206",
+    "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_214",
+    "tests/test_commonmark.py::TestCommonMark::test_links_538",
+    "tests/test_commonmark.py::TestCommonMark::test_links_539",
+    "tests/test_commonmark.py::TestCommonMark::test_links_554",
+    "tests/test_commonmark.py::TestCommonMark::test_links_560"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_commonmark.py::TestCommonMark::test_images_576",
+   "tests/test_commonmark.py::TestCommonMark::test_images_582",
+   "tests/test_commonmark.py::TestCommonMark::test_images_585",
+   "tests/test_commonmark.py::TestCommonMark::test_images_590",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_205",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_206",
+   "tests/test_commonmark.py::TestCommonMark::test_link_reference_definitions_214",
+   "tests/test_commonmark.py::TestCommonMark::test_links_538",
+   "tests/test_commonmark.py::TestCommonMark::test_links_539",
+   "tests/test_commonmark.py::TestCommonMark::test_links_554",
+   "tests/test_commonmark.py::TestCommonMark::test_links_560"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1155,
+  "stability_runs": 3
+ }
+}

@@ -1,13 +1,31 @@
 """Strict adapters for reserved evaluation snapshots; never substitute datasets."""
+from dataclasses import dataclass, field
 import json
 import re
 from pathlib import Path
 
-from .models import BENCHMARKS, Task, canonical, digest, source_ref
+from .models import BENCHMARKS, canonical, digest, source_ref
+
+
+@dataclass
+class HeldoutTask:
+    """A reserved evaluation item. Only its query and source refs enter the decontamination index."""
+    task_id: str
+    family: str
+    split: str
+    context: str | list[str]
+    query: str
+    answer: object
+    answer_type: str
+    knobs: dict
+    source: str
+    source_refs: list[dict]
+    tags: list[str] = field(default_factory=list)
+    domain: str = 'long_context'
 
 
 def adapt_heldout(benchmark, raw, *, revision, license, context_record=None, context_len=None, documents=None):
-    if benchmark not in BENCHMARKS or not revision or not license:
+    if benchmark not in BENCHMARKS or benchmark == 'deepswe' or not revision or not license:
         raise ValueError('known benchmark, revision and source license required')
     refs = None
     answer_type = 'exact'
@@ -62,9 +80,9 @@ def adapt_heldout(benchmark, raw, *, revision, license, context_record=None, con
     task_id = benchmark + '-' + digest(canonical(dict(query=query, context=context)))[:20]
     if refs is None:
         refs = [source_ref(benchmark, revision, digest(canonical(context)), canonical(context))]
-    return Task(task_id=task_id, family=benchmark, split='eval_heldout', context=context,
+    return HeldoutTask(task_id=task_id, family=benchmark, split='eval_heldout', context=context,
                 query=query, answer=answer, answer_type=answer_type, knobs=dict(revision=revision),
-                seed=0, source=f'{benchmark}@{revision}; {license}', source_refs=refs,
+                source=f'{benchmark}@{revision}; {license}', source_refs=refs,
                 tags=['eval_heldout'], domain='code' if benchmark == 'longbench_v2_codeqa' else 'long_context')
 
 

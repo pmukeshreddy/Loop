@@ -1,0 +1,124 @@
+--- /dev/null
++++ b/tests/test_semantic_env_flags.py
+@@ -0,0 +1,121 @@
++import click
++import pytest
++
++
++FIRST = "CLICK_SEM_FIRST"
++SECOND = "CLICK_SEM_SECOND"
++AUTO = "CLICK_SEM_MODE"
++
++
++def _parse(monkeypatch, values, *, args=(), default_map=None, **option_kwargs):
++    for name in (FIRST, SECOND, AUTO):
++        monkeypatch.delenv(name, raising=False)
++    for name, value in values.items():
++        monkeypatch.setenv(name, value)
++    settings = dict(
++        flag_value="active",
++        type=click.UNPROCESSED,
++        default="declared",
++        envvar=(FIRST, SECOND),
++    )
++    settings.update(option_kwargs)
++    cmd = click.Command("cli", params=[click.Option(["--mode"], **settings)])
++    with cmd.make_context(
++        "cli", list(args), auto_envvar_prefix="CLICK_SEM", default_map=default_map
++    ) as ctx:
++        return ctx.params["mode"], ctx.get_parameter_source("mode")
++
++
++@pytest.mark.parametrize(
++    "values,expected",
++    [
++        ({FIRST: "invalid", SECOND: "yes"}, "active"),
++        ({FIRST: "invalid", SECOND: "active"}, "active"),
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "on"}, "active"),
++        ({FIRST: "", SECOND: "invalid", AUTO: "active"}, "active"),
++        ({FIRST: "invalid", SECOND: " OFF ", AUTO: "yes"}, False),
++        ({FIRST: "no", SECOND: "active", AUTO: "yes"}, False),
++        ({FIRST: "active", SECOND: "no"}, "active"),
++        ({FIRST: " TRUE ", SECOND: "no"}, "active"),
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "0"}, False),
++    ],
++)
++def test_semantic_env_candidates(monkeypatch, values, expected):
++    value, source = _parse(monkeypatch, values)
++    assert value == expected
++    assert source is click.ParameterSource.ENVIRONMENT
++
++
++@pytest.mark.parametrize(
++    "values,option_kwargs,default_map,expected,source",
++    [
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "invalid"}, {}, None,
++         "declared", click.ParameterSource.DEFAULT),
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "invalid"}, {},
++         {"mode": "mapped"}, "mapped", click.ParameterSource.DEFAULT_MAP),
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "invalid"}, {},
++         {"mode": None}, None, click.ParameterSource.DEFAULT_MAP),
++        ({FIRST: "invalid", SECOND: "invalid", AUTO: "yes"},
++         {"allow_from_autoenv": False}, None,
++         "declared", click.ParameterSource.DEFAULT),
++        ({FIRST: "invalid", SECOND: "yes", AUTO: "no"},
++         {"allow_from_autoenv": False}, None,
++         "active", click.ParameterSource.ENVIRONMENT),
++        ({FIRST: "invalid", AUTO: "yes"}, {"envvar": FIRST}, None,
++         "active", click.ParameterSource.ENVIRONMENT),
++    ],
++)
++def test_semantic_env_fallback(monkeypatch, values, option_kwargs,
++                               default_map, expected, source):
++    assert _parse(
++        monkeypatch, values, default_map=default_map, **option_kwargs
++    ) == (expected, source)
++
++
++@pytest.mark.parametrize("raw", ["invalid", "no", "active"])
++def test_semantic_env_commandline(monkeypatch, raw):
++    assert _parse(
++        monkeypatch, {FIRST: raw, SECOND: "yes", AUTO: "no"},
++        args=("--mode",), default_map={"mode": "mapped"}
++    ) == ("active", click.ParameterSource.COMMANDLINE)
++
++
++@pytest.mark.parametrize("raw", ["false", "0", " bar ", ""])
++def test_semantic_env_exact_match(monkeypatch, raw):
++    values = {FIRST: "invalid", SECOND: raw, AUTO: "no"}
++    expected = False if raw == "" else raw
++    assert _parse(monkeypatch, values, flag_value=raw) == (
++        expected, click.ParameterSource.ENVIRONMENT
++    )
++
++
++@pytest.mark.parametrize(
++    "option_kwargs,expected",
++    [
++        ({"flag_value": 42, "type": None}, 42),
++        ({"flag_value": "active", "type": None}, "active"),
++    ],
++)
++def test_semantic_env_inferred_types(monkeypatch, option_kwargs, expected):
++    assert _parse(
++        monkeypatch, {FIRST: "invalid", SECOND: "yes"}, **option_kwargs
++    ) == (expected, click.ParameterSource.ENVIRONMENT)
++
++
++def test_ordinary_env_selection_unchanged(monkeypatch):
++    assert _parse(
++        monkeypatch, {FIRST: "invalid", SECOND: "yes", AUTO: "fallback"},
++        is_flag=False, flag_value=None, type=str
++    ) == ("invalid", click.ParameterSource.ENVIRONMENT)
++
++
++def test_boolean_env_selection_unchanged(monkeypatch):
++    with pytest.raises(click.BadParameter):
++        _parse(
++            monkeypatch, {FIRST: "invalid", SECOND: "yes", AUTO: "yes"},
++            is_flag=True, flag_value=True, type=bool, default=False
++        )
++    assert _parse(
++        monkeypatch, {FIRST: "no", SECOND: "yes", AUTO: "yes"},
++        is_flag=True, flag_value=True, type=bool, default=False
++    ) == (False, click.ParameterSource.ENVIRONMENT)

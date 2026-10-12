@@ -1,0 +1,46 @@
+--- a/src/attr/setters.py
++++ b/src/attr/setters.py
+@@ -12,8 +12,43 @@
+     """
+     Run all *setters* and return the return value of the last one.
+ 
++    Lists and tuples of setters are expanded in left-to-right order, including
++    nested containers. Empty containers are ignored. The expanded sequence is
++    captured when the pipeline is created, so later changes to input lists do
++    not affect it. With no setters, the supplied value is returned unchanged.
++
++    Cyclic containers raise `ValueError`; non-callable leaves (including
++    `NO_OP`) raise `TypeError`. Hooks are not called during construction.
++
+     .. versionadded:: 20.1.0
+     """
++    hooks = []
++    active = {id(setters)}
++    stack = [(iter(setters), id(setters))]
++
++    # Track only the current ancestry: shared acyclic containers must be
++    # expanded at every occurrence. An explicit stack avoids recursion limits.
++    while stack:
++        iterator, container_id = stack[-1]
++        try:
++            setter = next(iterator)
++        except StopIteration:
++            stack.pop()
++            active.remove(container_id)
++            continue
++
++        if isinstance(setter, (list, tuple)):
++            container_id = id(setter)
++            if container_id in active:
++                raise ValueError("Cyclic setter container.")
++            active.add(container_id)
++            stack.append((iter(setter), container_id))
++        elif callable(setter):
++            hooks.append(setter)
++        else:
++            raise TypeError("Setters must be callable.")
++
++    setters = tuple(hooks)
+ 
+     def wrapped_pipe(instance, attrib, new_value):
+         rv = new_value

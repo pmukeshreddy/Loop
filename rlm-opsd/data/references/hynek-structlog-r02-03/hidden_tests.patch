@@ -1,0 +1,46 @@
+--- /dev/null
++++ b/tests/test_async_backend_results.py
+@@ -0,0 +1,43 @@
++import logging
++
++import pytest
++
++from structlog import make_filtering_bound_logger
++from structlog.stdlib import AsyncBoundLogger, BoundLogger
++
++
++class Backend:
++    def __init__(self):
++        self.calls = []
++
++    def __getattr__(self, name):
++        def log(*args, **kwargs):
++            self.calls.append((name, args, kwargs))
++            return self
++        return log
++
++
++@pytest.mark.asyncio
++@pytest.mark.parametrize("style", ["native", "stdlib", "deprecated"])
++@pytest.mark.parametrize("method", ["debug", "info", "warning", "error", "critical", "fatal", "exception", "log"])
++async def test_async_result(style, method):
++    backend = Backend()
++    if style == "native":
++        logger = make_filtering_bound_logger(logging.DEBUG)(backend, [], {})
++    elif style == "stdlib":
++        logger = BoundLogger(backend, [], {})
++    else:
++        logger = AsyncBoundLogger(backend, [], {})
++    args = (logging.INFO, "event") if method == "log" else ("event",)
++    name = method if style == "deprecated" else "a" + method
++    assert await getattr(logger, name)(*args) is backend
++    assert len(backend.calls) == 1
++
++
++@pytest.mark.asyncio
++async def test_filtered_native_returns_none():
++    backend = Backend()
++    logger = make_filtering_bound_logger(logging.WARNING)(backend, [], {})
++    assert await logger.ainfo("filtered") is None
++    assert await logger.alog(logging.INFO, "filtered") is None
++    assert backend.calls == []

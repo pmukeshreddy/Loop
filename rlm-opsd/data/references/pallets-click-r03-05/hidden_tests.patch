@@ -1,0 +1,85 @@
+--- /dev/null
++++ b/tests/test_invoke_shared_destination_defaults.py
+@@ -0,0 +1,82 @@
++import pytest
++
++import click
++
++
++@pytest.mark.parametrize(
++    "configs,expected",
++    [
++        ([{"is_flag": True, "default": True}, {"is_flag": True}], True),
++        ([{"is_flag": True}, {"is_flag": True, "default": True}], True),
++        ([{"flag_value": "red", "default": True}, {"flag_value": "blue", "default": True}], "blue"),
++        ([{"flag_value": "blue", "default": True}, {"flag_value": "red", "default": True}], "red"),
++        ([{"is_flag": True, "default": None}, {"is_flag": True}], None),
++        ([{"is_flag": True}, {"is_flag": True, "default": None}], None),
++        ([{"count": True, "default": 1}, {"count": True, "default": 2}], 2),
++        ([{"count": True, "default": 2}, {"count": True, "default": 1}], 1),
++    ],
++)
++def test_shared_defaults(configs, expected):
++    params = [
++        click.Option([f"--p{i}", "value"], **config)
++        for i, config in enumerate(configs)
++    ]
++    cmd = click.Command("target", params=params, callback=lambda value: value)
++    parent = click.Context(click.Command("parent"))
++    assert parent.invoke(cmd) == expected
++
++
++@pytest.mark.parametrize("map_value", [None, "green"])
++def test_inherited_map(map_value):
++    params = [
++        click.Option(["--red", "value"], flag_value="red", default=True),
++        click.Option(["--blue", "value"], flag_value="blue", default=True),
++    ]
++    cmd = click.Command("target", params=params, callback=lambda value: value)
++    parent = click.Context(
++        click.Command("parent"), default_map={"target": {"value": map_value}}
++    )
++    assert parent.invoke(cmd) == map_value
++
++
++def test_only_winner_is_cast_and_supplied_kwargs_are_untouched():
++    calls = []
++    def first():
++        calls.append("first")
++        return "bad"
++    def second():
++        calls.append("second")
++        return "12"
++    params = [
++        click.Option(["--one", "value"], type=int, default=first),
++        click.Option(["--two", "value"], type=int, default=second),
++    ]
++    @click.pass_context
++    def callback(ctx, value):
++        assert ctx.params["value"] == value
++        return value
++    cmd = click.Command("target", params=params, callback=callback)
++    parent = click.Context(click.Command("parent"))
++    assert parent.invoke(cmd) == 12
++    assert calls == ["first", "second"]
++    calls.clear()
++    assert parent.invoke(cmd, value="uncast") == "uncast"
++    assert calls == []
++
++
++def test_forward_keeps_selected_shared_defaults():
++    target = click.Command(
++        "target",
++        params=[
++            click.Option(["--a", "value"], default=1),
++            click.Option(["--b", "value"], default=2),
++        ],
++        callback=lambda value: value,
++    )
++    @click.pass_context
++    def relay(ctx, value):
++        assert ctx.params["value"] == value
++        return ctx.forward(target)
++    intermediate = click.Command("relay", params=target.params, callback=relay)
++    parent = click.Context(click.Command("parent"))
++    assert parent.invoke(intermediate) == 2

@@ -1,0 +1,92 @@
+--- /dev/null
++++ b/tests/test_disabled_async_sleep_wrapper.py
+@@ -0,0 +1,89 @@
++import asyncio
++
++import pytest
++
++from tenacity import AsyncRetrying, TryAgain, retry
++
++
++def _options(events):
++    def forbidden(*args, **kwargs):
++        events.append("policy")
++        raise AssertionError("disabled retry invoked a policy or callback")
++
++    async def sleep(seconds):
++        events.append("sleep")
++        raise AssertionError("disabled retry invoked sleep")
++
++    return {
++        "sleep": sleep,
++        "stop": forbidden,
++        "wait": forbidden,
++        "retry": forbidden,
++        "before": forbidden,
++        "after": forbidden,
++        "before_sleep": forbidden,
++        "retry_error_callback": forbidden,
++    }
++
++
++def _call(target, route, options):
++    if route == "direct":
++        controller = AsyncRetrying(enabled=False, **options)
++        return controller(target, 7, label="x")
++    if route == "decorator":
++        wrapped = retry(enabled=False, **options)(target)
++    else:
++        original = retry(**options)(target)
++        wrapped = original.retry_with(enabled=False)
++    return wrapped(7, label="x")
++
++
++@pytest.mark.parametrize("route", ["direct", "decorator", "retry_with"])
++@pytest.mark.parametrize("native_async", [False, True])
++@pytest.mark.parametrize("result", [None, 0, "ok"])
++def test_disabled_returns_result_once(route, native_async, result):
++    events = []
++    calls = []
++
++    def sync_target(number, *, label):
++        calls.append((number, label))
++        return result
++
++    async def async_target(number, *, label):
++        return sync_target(number, label=label)
++
++    target = async_target if native_async else sync_target
++
++    async def invoke():
++        return await _call(target, route, _options(events))
++
++    assert asyncio.run(invoke()) is result
++    assert calls == [(7, "x")]
++    assert events == []
++
++
++@pytest.mark.parametrize("route", ["direct", "decorator", "retry_with"])
++@pytest.mark.parametrize("native_async", [False, True])
++@pytest.mark.parametrize("error_type", [ValueError, TryAgain])
++def test_disabled_preserves_exception_once(route, native_async, error_type):
++    events = []
++    calls = []
++    error = error_type("original")
++
++    def sync_target(number, *, label):
++        calls.append((number, label))
++        raise error
++
++    async def async_target(number, *, label):
++        return sync_target(number, label=label)
++
++    target = async_target if native_async else sync_target
++
++    async def invoke():
++        return await _call(target, route, _options(events))
++
++    with pytest.raises(error_type) as caught:
++        asyncio.run(invoke())
++    assert caught.value is error
++    assert calls == [(7, "x")]
++    assert events == []

@@ -1,0 +1,38 @@
+--- a/tenacity/wait.py
++++ b/tenacity/wait.py
+@@ -141,6 +141,10 @@
+     The predicate is passed the exception object. Based on the exception, the
+     user can decide how much time to wait before retrying.
+ 
++    For successful outcomes, the optional fallback is called with the retry
++    state to determine the wait. Without a fallback, successful outcomes raise
++    RuntimeError. An unset outcome always raises RuntimeError.
++
+     For example::
+ 
+         def http_error(exception: BaseException) -> float:
+@@ -161,8 +165,14 @@
+             response.raise_for_status()
+     """
+ 
+-    def __init__(self, predicate: typing.Callable[[BaseException], float]) -> None:
++    def __init__(
++        self,
++        predicate: typing.Callable[[BaseException], float],
++        *,
++        fallback: "WaitBaseT | None" = None,
++    ) -> None:
+         self.predicate = predicate
++        self.fallback = fallback
+ 
+     @override
+     def __call__(self, retry_state: "RetryCallState") -> float:
+@@ -171,6 +181,8 @@
+ 
+         exception = retry_state.outcome.exception()
+         if exception is None:
++            if self.fallback is not None:
++                return self.fallback(retry_state)
+             raise RuntimeError("outcome failed but the exception is None")
+         return self.predicate(exception)
+ 

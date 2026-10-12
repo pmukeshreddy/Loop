@@ -1,0 +1,233 @@
+{
+ "answer": {
+  "both": {
+   "attempts": [
+    "cytoolz.audit",
+    "toolz.audit"
+   ],
+   "backends": [
+    "cytoolz",
+    "toolz"
+   ],
+   "error_args": null
+  },
+  "cytoolz_only": {
+   "attempts": [
+    "cytoolz.audit",
+    "toolz.audit"
+   ],
+   "backends": [
+    "cytoolz"
+   ],
+   "error_args": null
+  },
+  "neither": {
+   "attempts": [
+    "cytoolz.audit",
+    "toolz.audit"
+   ],
+   "backends": [],
+   "error_args": [
+    "tlz.audit"
+   ]
+  },
+  "toolz_only": {
+   "attempts": [
+    "cytoolz.audit",
+    "toolz.audit"
+   ],
+   "backends": [
+    "toolz"
+   ],
+   "error_args": null
+  }
+ },
+ "answer_format": "object",
+ "answer_type": "value",
+ "baseline": {
+  "answer": "{\n  \"both\": {\n    \"attempts\": [\"toolz.audit\", \"cytoolz.audit\"],\n    \"backends\": [\"cytoolz\", \"toolz\"],\n    \"error_args\": null\n  },\n  \"cytoolz_only\": {\n    \"attempts\": [\"toolz.audit\", \"cytoolz.audit\"],\n    \"backends\": [\"cytoolz\"],\n    \"error_args\": null\n  },\n  \"toolz_only\": {\n    \"attempts\": [\"toolz.audit\", \"cytoolz.audit\"],\n    \"backends\": [\"toolz\"],\n    \"error_args\": null\n  },\n  \"neither\": {\n    \"attempts\": [\"toolz.audit\", \"cytoolz.audit\"],\n    \"backends\": [],\n    \"error_args\": null\n  }\n}",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 1,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "method"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 3532 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the small supplied context without sub-calls and computed the fixture matrix. The task requires following both backend import attempts, determining which exceptions are caught, and distinguishing those exceptions from the loader's final exception when neither backend is available."
+  },
+  "notes": "A precise, repository-dependent request to document existing discovery behavior. The four fixtures form a coherent availability matrix, and the requested JSON fields are unambiguous. Naming the method does not reveal its behavior; the direct_solve setting appropriately permits this small scope. The task is distinct from the existing namespace-population and find_spec modification tasks."
+ },
+ "spec": {
+  "answer_format": "object",
+  "answer_kind": "value",
+  "behavior_rationale": {
+   "direct_solve": "The discovery method is short and fully supplied. Answering requires following both independent import attempts and distinguishing the caught backend exceptions from the final exception constructed by the loader."
+  },
+  "context": {
+   "files": [
+    "tlz/_build_tlz.py",
+    "tlz/__init__.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "tlz/_build_tlz.py",
+    "symbol": "tlz/_build_tlz.py::TlzLoader._load_toolz",
+    "why": "Both backend imports are attempted independently, ImportError subclasses are suppressed, and an empty result produces a new ImportError containing the requested tlz name."
+   }
+  ],
+  "expected_answer": {
+   "both": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "cytoolz",
+     "toolz"
+    ],
+    "error_args": null
+   },
+   "cytoolz_only": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "cytoolz"
+    ],
+    "error_args": null
+   },
+   "neither": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [],
+    "error_args": [
+     "tlz.audit"
+    ]
+   },
+   "toolz_only": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "toolz"
+    ],
+    "error_args": null
+   }
+  },
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "An independent verifier can import the builder normally, temporarily replace its import_module binding with each fixture, and execute the named method. Record only imports made during that method call, not bootstrap imports.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Document the current backend-discovery behavior for `TlzLoader._load_toolz('tlz.audit')` using four isolated import fixtures. In `both`, importing either corresponding backend returns a module with the requested backend name. In `cytoolz_only`, the cytoolz import succeeds and the toolz import raises `ImportError('toolz initialization failed')`. In `toolz_only`, the cytoolz import raises `ModuleNotFoundError('missing dependency', name='cytoolz.audit.dependency')` and the toolz import succeeds. In `neither`, those same two exceptions occur. No other imports are triggered by these fixtures. Return a JSON object keyed by these four fixture names. Each value must contain `attempts`, the backend module names attempted in order; `backends`, the sorted keys of the returned mapping, or an empty list if the call raises; and `error_args`, null on success or the escaping exception's arguments as a JSON list. Report the behavior of this snapshot, not a proposed stricter fallback policy.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "dependency_tracing",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pytoolz-toolz-r02-05",
+ "truth": {
+  "answer": {
+   "both": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "cytoolz",
+     "toolz"
+    ],
+    "error_args": null
+   },
+   "cytoolz_only": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "cytoolz"
+    ],
+    "error_args": null
+   },
+   "neither": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [],
+    "error_args": [
+     "tlz.audit"
+    ]
+   },
+   "toolz_only": {
+    "attempts": [
+     "cytoolz.audit",
+     "toolz.audit"
+    ],
+    "backends": [
+     "toolz"
+    ],
+    "error_args": null
+   }
+  },
+  "kind": "oracle",
+  "normalized": "{\"both\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\", \"toolz\"], \"error_args\": null}, \"cytoolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\"], \"error_args\": null}, \"neither\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [], \"error_args\": [\"tlz.audit\"]}, \"toolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"toolz\"], \"error_args\": null}}",
+  "output_tail": "{\"answer\": {\"both\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\", \"toolz\"], \"error_args\": null}, \"cytoolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\"], \"error_args\": null}, \"toolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"toolz\"], \"error_args\": null}, \"neither\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [], \"error_args\": [\"tlz.audit\"]}}}\n"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": "{\"both\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\", \"toolz\"], \"error_args\": null}, \"cytoolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\"], \"error_args\": null}, \"neither\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [], \"error_args\": [\"tlz.audit\"]}, \"toolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"toolz\"], \"error_args\": null}}",
+   "predicted": "{\"both\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\", \"toolz\"], \"error_args\": null}, \"cytoolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"cytoolz\"], \"error_args\": null}, \"neither\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [], \"error_args\": [\"tlz.audit\"]}, \"toolz_only\": {\"attempts\": [\"cytoolz.audit\", \"toolz.audit\"], \"backends\": [\"toolz\"], \"error_args\": null}}"
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "oracle",
+  "pass_to_pass_count": 192,
+  "stability_runs": 3
+ }
+}

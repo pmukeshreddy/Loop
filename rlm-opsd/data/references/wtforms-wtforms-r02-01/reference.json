@@ -1,0 +1,151 @@
+{
+ "answer": "--- a/src/wtforms/fields/choices.py\n+++ b/src/wtforms/fields/choices.py\n@@ -3,6 +3,7 @@\n from wtforms import widgets\n from wtforms.fields.core import Field\n from wtforms.validators import ValidationError\n+from wtforms.widgets.core import clean_key\n \n __all__ = (\n     \"SelectField\",\n@@ -45,7 +46,6 @@\n             widget=self.option_widget,\n             validators=self.validators,\n             name=self.name,\n-            render_kw=self.render_kw,\n             _form=None,\n             _meta=self.meta,\n         )\n@@ -56,7 +56,19 @@\n                 value, label, checked = choice\n                 render_kw = {}\n \n-            opt = self._Option(label=label, id=f\"{self.id}-{i}\", **opts, **render_kw)\n+            # Normalize each layer before merging so aliases obey precedence.\n+            option_render_kw = {\n+                clean_key(k): v for k, v in (self.render_kw or {}).items()\n+            }\n+            option_render_kw.update(\n+                {clean_key(k): v for k, v in (render_kw or {}).items()}\n+            )\n+            opt = self._Option(\n+                label=label,\n+                id=f\"{self.id}-{i}\",\n+                render_kw=option_render_kw,\n+                **opts,\n+            )\n             opt.process(None, value)\n             opt.checked = checked\n             yield opt\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0021968078147485935,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "c",
+    "files",
+    "m",
+    "old",
+    "path",
+    "w"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 366896 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "9 turns; variables reused across turns: ['c', 'files', 'm', 'old', 'path', 'w']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The execution assembled a production-only diff and inspected the computed final value. This supports combination and final-artifact checking, although the execution summary does not establish runtime testing.",
+   "inspect_locate": "The reference execution performed 18 targeted searches without printing the whole context. Locating option construction, attribute normalization, and rendering behavior was useful for resolving the precedence contract.",
+   "persistent_state": "Variables holding file content and extracted implementation details were reused across nine turns, supporting reconciliation of option construction with the existing normalization behavior."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with precise precedence, preservation, and non-mutation requirements and a clear output format. It specifies desired behavior without revealing the patch or prescribing solver operations. The investigation requires connecting choice handling to bound-option rendering and attribute normalization. It is distinct from the existing native-select tuple-compatibility and explicit checked-state tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve option identity and checked state while implementing and checking a three-level attribute-precedence contract.",
+   "inspect_locate": "The request spans choice tuple handling, construction of bound option fields, Meta attribute normalization, and two option widgets.",
+   "persistent_state": "The implementation must retain and reconcile the extracted option-construction arguments and the existing normalization contract while changing how option defaults are assembled."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/choices.py",
+    "symbol": "src/wtforms/fields/choices.py::SelectFieldBase.__iter__",
+    "why": "Currently expands per-choice rendering attributes into the option constructor."
+   },
+   {
+    "path": "src/wtforms/meta.py",
+    "symbol": "src/wtforms/meta.py::DefaultMeta.render_field",
+    "why": "Defines normalized precedence between field rendering defaults and call-time arguments."
+   },
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::clean_key",
+    "why": "Defines which attribute spellings are equivalent."
+   },
+   {
+    "path": "src/wtforms/widgets/core.py",
+    "symbol": "src/wtforms/widgets/core.py::Option.__call__",
+    "why": "Consumes a bound option's rendering keywords."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_iterable_choice_attributes.py\n@@ -0,0 +1,38 @@\n+import pytest\n+\n+from wtforms.fields import RadioField\n+from wtforms.fields import SelectField\n+from wtforms.fields import SelectMultipleField\n+from wtforms.form import Form\n+\n+\n+@pytest.mark.parametrize(\"field_type\", [SelectField, SelectMultipleField, RadioField])\n+def test_option_attributes(field_type):\n+    class F(Form):\n+        item = field_type(\n+            choices=[\n+                (\"a\", \"<A>\", {\"class_\": \"choice\", \"title\": \"<tip>\", \"data_src\": \"option\"}),\n+                (\"b\", \"B\"),\n+            ],\n+            render_kw={\"class\": \"parent\", \"data-src\": \"field\"},\n+        )\n+\n+    data = [\"a\"] if field_type is SelectMultipleField else \"a\"\n+    form = F(item=data)\n+    first, second = list(form.item)\n+    assert first.checked is True\n+    assert second.checked is False\n+    html = str(first())\n+    assert 'class=\"choice\"' in html\n+    assert 'class=\"parent\"' not in html\n+    assert 'data-src=\"option\"' in html\n+    assert 'title=\"&lt;tip&gt;\"' in html\n+    assert \"&lt;A&gt;\" in str(first.label)\n+    assert 'class=\"parent\"' in str(second())\n+    overridden = str(first(class_=\"call\", data_src=\"call\"))\n+    assert 'class=\"call\"' in overridden\n+    assert 'data-src=\"call\"' in overridden\n+    assert form.item.render_kw == {\"class\": \"parent\", \"data-src\": \"field\"}\n+    assert form.item.choices[0][2] == {\n+        \"class_\": \"choice\", \"title\": \"<tip>\", \"data_src\": \"option\"\n+    }\n",
+  "include_failure_log": false,
+  "notes": "Acceptance tests use public field iteration and rendering. Native select behavior should remain unchanged.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Make per-choice HTML attributes work when iterating `SelectField`, `SelectMultipleField`, and `RadioField`, not only when rendering a native select. The optional attribute dictionary in a choice tuple must become rendering defaults for that choice's bound option, rather than field-constructor arguments. For iterable options, field-level `render_kw` supplies defaults, the choice dictionary overrides those defaults, and arguments supplied when calling the option override both. At each precedence boundary, equivalent spellings recognized by `clean_key`, such as `class`/`class_` and `data-src`/`data_src`, must refer to the same attribute. Preserve existing option IDs, labels, values, and checked state, and do not mutate the field defaults or choice dictionaries. Deliver a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "wtforms-wtforms-r02-01",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[RadioField]",
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[SelectField]",
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[SelectMultipleField]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 8,
+    "passed": 349
+   },
+   "patch_files": [
+    "src/wtforms/fields/choices.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[RadioField]",
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[SelectField]",
+   "tests/test_iterable_choice_attributes.py::test_option_attributes[SelectMultipleField]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

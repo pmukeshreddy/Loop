@@ -1,0 +1,66 @@
+--- /dev/null
++++ b/tests/test_selection_iterable_diagnostics.py
+@@ -0,0 +1,63 @@
++import pytest
++
++from jinja2 import DictLoader
++from jinja2 import Environment
++from jinja2 import TemplatesNotFound
++
++
++@pytest.mark.parametrize("api", ["select_template", "get_or_select_template"])
++def test_exhausted_generator_retains_candidates(api):
++    env = Environment(loader=DictLoader({}))
++    with pytest.raises(TemplatesNotFound) as caught:
++        getattr(env, api)((n for n in ["one", "two"]))
++    assert caught.value.templates == ["one", "two"]
++    assert caught.value.name == "two"
++    with pytest.raises(TemplatesNotFound) as baseline:
++        env.select_template(["one", "two"])
++    assert str(caught.value) == str(baseline.value)
++
++
++@pytest.mark.parametrize("api", ["select_template", "get_or_select_template"])
++def test_empty_iterator_matches_empty_list(api):
++    env = Environment(loader=DictLoader({}))
++    with pytest.raises(TemplatesNotFound) as baseline:
++        env.select_template([])
++    with pytest.raises(TemplatesNotFound) as caught:
++        getattr(env, api)(iter(()))
++    assert caught.value.templates == []
++    assert caught.value.name is None
++    assert str(caught.value) == str(baseline.value)
++
++
++def test_selection_stays_lazy():
++    env = Environment(loader=DictLoader({"found": "ok"}))
++    def names():
++        yield "missing"
++        yield "found"
++        raise AssertionError("read past success")
++    assert env.select_template(names()).render() == "ok"
++    template = env.get_template("found")
++    def objects():
++        yield template
++        raise AssertionError("read past template object")
++    assert env.get_or_select_template(objects()) is template
++
++
++def test_original_names_survive_parent_joining():
++    class RelativeEnvironment(Environment):
++        def join_path(self, template, parent):
++            return parent + "/" + template
++    env = RelativeEnvironment(loader=DictLoader({}))
++    with pytest.raises(TemplatesNotFound) as caught:
++        env.select_template(iter(["one", "two"]), parent="dir")
++    assert caught.value.templates == ["one", "two"]
++    assert caught.value.name == "two"
++
++
++def test_iteration_errors_propagate():
++    env = Environment(loader=DictLoader({}))
++    def names():
++        yield "missing"
++        raise RuntimeError("iterator failed")
++    with pytest.raises(RuntimeError, match="iterator failed"):
++        env.select_template(names())

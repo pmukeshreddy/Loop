@@ -1,0 +1,21 @@
+--- a/tenacity/wait.py
++++ b/tenacity/wait.py
+@@ -34,7 +34,7 @@
+     def __call__(self, retry_state: "RetryCallState") -> float:
+         pass
+ 
+-    def __add__(self, other: "wait_base") -> "wait_combine":
++    def __add__(self, other: "WaitBaseT") -> "wait_combine":
+         return wait_combine(self, other)
+ 
+     # `other` is `int` rather than `Literal[0]` because typeshed's `sum()`
+@@ -52,7 +52,8 @@
+             return NotImplemented
+         # A plain callable -- `WaitBaseT` admits those, and a function has no
+         # `__add__` of its own to handle `callable + strategy`.
+-        return wait_combine(self, other)
++        # Keep the left operand first so evaluation follows expression order.
++        return wait_combine(other, self)
+ 
+ 
+ WaitBaseT = wait_base | typing.Callable[["RetryCallState"], float | int]

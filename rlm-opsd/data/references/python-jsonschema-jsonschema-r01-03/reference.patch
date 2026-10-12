@@ -1,0 +1,69 @@
+--- a/jsonschema/_keywords.py
++++ b/jsonschema/_keywords.py
+@@ -411,17 +411,17 @@
+         validator, instance, schema,
+     )
+     unevaluated_keys = []
++    unevaluated_errors = []
+     for property in instance:
+         if property not in evaluated_keys:
+-            for _ in validator.descend(
++            for error in validator.descend(
+                 instance[property],
+                 unevaluatedProperties,
+                 path=property,
+                 schema_path=property,
+             ):
+-                # FIXME: Include context for each unevaluated property
+-                #        indicating why it's invalid under the subschema.
+-                unevaluated_keys.append(property)  # noqa: PERF401
++                unevaluated_keys.append(property)
++                unevaluated_errors.append(error)
+ 
+     if unevaluated_keys:
+         if unevaluatedProperties is False:
+@@ -433,7 +433,10 @@
+                 "Unevaluated properties are not valid under "
+                 "the given schema (%s %s unevaluated and invalid)"
+             )
+-            yield ValidationError(error % extras_msg(unevaluated_keys))
++            yield ValidationError(
++                error % extras_msg(unevaluated_keys),
++                context=unevaluated_errors,
++            )
+ 
+ 
+ def prefixItems(validator, prefixItems, instance, schema):
+--- a/jsonschema/_legacy_keywords.py
++++ b/jsonschema/_legacy_keywords.py
+@@ -424,17 +424,17 @@
+         validator, instance, schema,
+     )
+     unevaluated_keys = []
++    unevaluated_errors = []
+     for property in instance:
+         if property not in evaluated_keys:
+-            for _ in validator.descend(
++            for error in validator.descend(
+                 instance[property],
+                 uP,
+                 path=property,
+                 schema_path=property,
+             ):
+-                # FIXME: Include context for each unevaluated property
+-                #        indicating why it's invalid under the subschema.
+-                unevaluated_keys.append(property)  # noqa: PERF401
++                unevaluated_keys.append(property)
++                unevaluated_errors.append(error)
+ 
+     if unevaluated_keys:
+         if uP is False:
+@@ -446,4 +446,7 @@
+                 "Unevaluated properties are not valid under "
+                 "the given schema (%s %s unevaluated and invalid)"
+             )
+-            yield ValidationError(error % _utils.extras_msg(unevaluated_keys))
++            yield ValidationError(
++                error % _utils.extras_msg(unevaluated_keys),
++                context=unevaluated_errors,
++            )

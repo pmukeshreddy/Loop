@@ -1,0 +1,25 @@
+--- a/tenacity/__init__.py
++++ b/tenacity/__init__.py
+@@ -508,10 +508,7 @@
+         if not (self.iter_state.is_explicit_retry or self.iter_state.retry_run_result):
+             self._add_action_func(lambda rs: rs.outcome.result())
+             return
+ 
+-        if self.after is not None:
+-            self._add_action_func(self.after)
+-
+         self._add_action_func(self._run_wait)
+         self._add_action_func(self._run_stop)
+         self._add_action_func(self._post_stop_check_actions)
+@@ -532,6 +529,11 @@
+             self._add_action_func(exc_check)
+             return
+ 
++        if self.after is not None:
++            self._add_action_func(self.after)
++
++        self._add_action_func(self._run_wait)
++
+         def next_action(rs: "RetryCallState") -> None:
+             sleep = rs.upcoming_sleep
+             rs.next_action = RetryAction(sleep)

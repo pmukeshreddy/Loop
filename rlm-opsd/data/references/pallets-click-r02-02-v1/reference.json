@@ -1,0 +1,175 @@
+{
+ "answer": "--- a/src/click/core.py\n+++ b/src/click/core.py\n@@ -3551,29 +3551,44 @@\n \n         :meta private:\n         \"\"\"\n+        # Non-boolean flags select the first usable activation value, rather\n+        # than the first non-empty environment variable.\n+        if self.is_flag and not self.is_bool_flag:\n+            if isinstance(self.envvar, str):\n+                envvars = [self.envvar]\n+            else:\n+                envvars = list(self.envvar or ())\n+\n+            if (\n+                self.allow_from_autoenv\n+                and ctx.auto_envvar_prefix is not None\n+                and self.name\n+            ):\n+                envvars.append(f\"{ctx.auto_envvar_prefix}_{self.name.upper()}\")\n+\n+            for envvar in envvars:\n+                rv = os.environ.get(envvar)\n+\n+                # Missing and empty values decline this candidate.\n+                if not rv:\n+                    continue\n+\n+                # Preserve the exact-match rule before interpreting booleans.\n+                if rv == self.flag_value:\n+                    return self.flag_value\n+\n+                parsed = types.BoolParamType.str_to_bool(rv)\n+                if parsed is not None:\n+                    # False is accepted too, so it must stop the search.\n+                    return self.flag_value if parsed else False\n+\n+            return None\n+\n         rv = self.resolve_envvar_value(ctx)\n \n         # Absent environment variable or an empty string is interpreted as unset.\n         if rv is None:\n             return None\n-\n-        # Non-boolean flags are more liberal in what they accept. But a flag being a\n-        # flag, its envvar value still needs to be analyzed to determine if the flag is\n-        # activated or not.\n-        if self.is_flag and not self.is_bool_flag:\n-            # An exact match against ``flag_value`` (a non-bool flag always has one\n-            # explicitly set) returns it directly. Otherwise the value is analyzed as a\n-            # boolean: a truthy reading activates the flag and the function receives\n-            # ``flag_value``; a falsy reading produces ``False``; an unrecognized\n-            # reading falls through as ``None``. Folding the substitution here means\n-            # :meth:`consume_value` no longer has to repeat it in a source-checked\n-            # branch.\n-            if rv == self.flag_value:\n-                return self.flag_value\n-            parsed = types.BoolParamType.str_to_bool(rv)\n-            if parsed is None:\n-                return None\n-            return self.flag_value if parsed else False\n \n         # Split the envvar value if it is allowed to be repeated.\n         value_depth = (self.nargs != 1) + bool(self.multiple)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.000728423779285928,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 17,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "end",
+    "files",
+    "oldmethod",
+    "start"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199851 chars; 17 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The constructed production diff was inspected before completion. It combines ordered candidate acceptance with exact-match precedence, accepted false values, automatic fallback, and preservation of the existing paths for other option types and default provenance.",
+   "inspect_locate": "The reference used 17 targeted searches without printing the whole context. The task requires connecting environment candidate resolution, non-boolean flag interpretation, automatic fallback, and parameter-source recording, rather than merely finding a named symbol."
+  },
+  "notes": "This is a natural, precisely specified implementation request with a clear unified-diff deliverable. The requirements describe externally observable behavior without prescribing solver operations or revealing the implementation. It is materially different from the parent task: it changes candidate selection and fallback rather than asking which tests fail when exact-match activation is removed. No accepted task duplicates this change."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must reconcile candidate acceptance with existing precedence and type conversion. Its exact hunks and combined behavior need checking against cases where False is accepted, unrecognized strings decline, and defaults retain their own provenance.",
+   "inspect_locate": "The repository context is large, but the relevant behavior is concentrated in separate layers of core.py: explicit environment-name selection, automatic-prefix fallback, non-boolean flag interpretation, value acquisition, and source recording. These layers must be connected without altering unrelated option behavior."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.resolve_envvar_value",
+    "why": "Explicit environment-name sequences currently select their first non-empty raw value without considering activation meaning."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.resolve_envvar_value",
+    "why": "Automatic-prefix lookup currently occurs only when explicit raw resolution returns None, and is gated by allow_from_autoenv."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Option.value_from_envvar",
+    "why": "Defines exact flag-value matching, boolean-string interpretation, and the distinction between accepted False and a declined None."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.consume_value",
+    "why": "Establishes command-line, environment, default-map, and declared-default precedence and determines provenance before conversion."
+   },
+   {
+    "path": "src/click/core.py",
+    "symbol": "src/click/core.py::Parameter.handle_parse_result",
+    "why": "Records ParameterSource and applies normal processing to the selected value."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_semantic_env_flags.py\n@@ -0,0 +1,121 @@\n+import click\n+import pytest\n+\n+\n+FIRST = \"CLICK_SEM_FIRST\"\n+SECOND = \"CLICK_SEM_SECOND\"\n+AUTO = \"CLICK_SEM_MODE\"\n+\n+\n+def _parse(monkeypatch, values, *, args=(), default_map=None, **option_kwargs):\n+    for name in (FIRST, SECOND, AUTO):\n+        monkeypatch.delenv(name, raising=False)\n+    for name, value in values.items():\n+        monkeypatch.setenv(name, value)\n+    settings = dict(\n+        flag_value=\"active\",\n+        type=click.UNPROCESSED,\n+        default=\"declared\",\n+        envvar=(FIRST, SECOND),\n+    )\n+    settings.update(option_kwargs)\n+    cmd = click.Command(\"cli\", params=[click.Option([\"--mode\"], **settings)])\n+    with cmd.make_context(\n+        \"cli\", list(args), auto_envvar_prefix=\"CLICK_SEM\", default_map=default_map\n+    ) as ctx:\n+        return ctx.params[\"mode\"], ctx.get_parameter_source(\"mode\")\n+\n+\n+@pytest.mark.parametrize(\n+    \"values,expected\",\n+    [\n+        ({FIRST: \"invalid\", SECOND: \"yes\"}, \"active\"),\n+        ({FIRST: \"invalid\", SECOND: \"active\"}, \"active\"),\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"on\"}, \"active\"),\n+        ({FIRST: \"\", SECOND: \"invalid\", AUTO: \"active\"}, \"active\"),\n+        ({FIRST: \"invalid\", SECOND: \" OFF \", AUTO: \"yes\"}, False),\n+        ({FIRST: \"no\", SECOND: \"active\", AUTO: \"yes\"}, False),\n+        ({FIRST: \"active\", SECOND: \"no\"}, \"active\"),\n+        ({FIRST: \" TRUE \", SECOND: \"no\"}, \"active\"),\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"0\"}, False),\n+    ],\n+)\n+def test_semantic_env_candidates(monkeypatch, values, expected):\n+    value, source = _parse(monkeypatch, values)\n+    assert value == expected\n+    assert source is click.ParameterSource.ENVIRONMENT\n+\n+\n+@pytest.mark.parametrize(\n+    \"values,option_kwargs,default_map,expected,source\",\n+    [\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"invalid\"}, {}, None,\n+         \"declared\", click.ParameterSource.DEFAULT),\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"invalid\"}, {},\n+         {\"mode\": \"mapped\"}, \"mapped\", click.ParameterSource.DEFAULT_MAP),\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"invalid\"}, {},\n+         {\"mode\": None}, None, click.ParameterSource.DEFAULT_MAP),\n+        ({FIRST: \"invalid\", SECOND: \"invalid\", AUTO: \"yes\"},\n+         {\"allow_from_autoenv\": False}, None,\n+         \"declared\", click.ParameterSource.DEFAULT),\n+        ({FIRST: \"invalid\", SECOND: \"yes\", AUTO: \"no\"},\n+         {\"allow_from_autoenv\": False}, None,\n+         \"active\", click.ParameterSource.ENVIRONMENT),\n+        ({FIRST: \"invalid\", AUTO: \"yes\"}, {\"envvar\": FIRST}, None,\n+         \"active\", click.ParameterSource.ENVIRONMENT),\n+    ],\n+)\n+def test_semantic_env_fallback(monkeypatch, values, option_kwargs,\n+                               default_map, expected, source):\n+    assert _parse(\n+        monkeypatch, values, default_map=default_map, **option_kwargs\n+    ) == (expected, source)\n+\n+\n+@pytest.mark.parametrize(\"raw\", [\"invalid\", \"no\", \"active\"])\n+def test_semantic_env_commandline(monkeypatch, raw):\n+    assert _parse(\n+        monkeypatch, {FIRST: raw, SECOND: \"yes\", AUTO: \"no\"},\n+        args=(\"--mode\",), default_map={\"mode\": \"mapped\"}\n+    ) == (\"active\", click.ParameterSource.COMMANDLINE)\n+\n+\n+@pytest.mark.parametrize(\"raw\", [\"false\", \"0\", \" bar \", \"\"])\n+def test_semantic_env_exact_match(monkeypatch, raw):\n+    values = {FIRST: \"invalid\", SECOND: raw, AUTO: \"no\"}\n+    expected = False if raw == \"\" else raw\n+    assert _parse(monkeypatch, values, flag_value=raw) == (\n+        expected, click.ParameterSource.ENVIRONMENT\n+    )\n+\n+\n+@pytest.mark.parametrize(\n+    \"option_kwargs,expected\",\n+    [\n+        ({\"flag_value\": 42, \"type\": None}, 42),\n+        ({\"flag_value\": \"active\", \"type\": None}, \"active\"),\n+    ],\n+)\n+def test_semantic_env_inferred_types(monkeypatch, option_kwargs, expected):\n+    assert _parse(\n+        monkeypatch, {FIRST: \"invalid\", SECOND: \"yes\"}, **option_kwargs\n+    ) == (expected, click.ParameterSource.ENVIRONMENT)\n+\n+\n+def test_ordinary_env_selection_unchanged(monkeypatch):\n+    assert _parse(\n+        monkeypatch, {FIRST: \"invalid\", SECOND: \"yes\", AUTO: \"fallback\"},\n+        is_flag=False, flag_value=None, type=str\n+    ) == (\"invalid\", click.ParameterSource.ENVIRONMENT)\n+\n+\n+def test_boolean_env_selection_unchanged(monkeypatch):\n+    with pytest.raises(click.BadParameter):\n+        _parse(\n+            monkeypatch, {FIRST: \"invalid\", SECOND: \"yes\", AUTO: \"yes\"},\n+            is_flag=True, flag_value=True, type=bool, default=False\n+        )\n+    assert _parse(\n+        monkeypatch, {FIRST: \"no\", SECOND: \"yes\", AUTO: \"yes\"},\n+        is_flag=True, flag_value=True, type=bool, default=False\n+    ) == (False, click.ParameterSource.ENVIRONMENT)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work on the unmodified snapshot, not the original exact-match-removal probe. The hidden patch adds a new test file as required. It exercises public Command.make_context behavior, isolates relevant environment variables, and checks both returned values and ParameterSource. Several ordered-candidate and automatic-fallback cases fail on the current implementation. No particular helper layout or requirement to edit all three resolution methods is imposed.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Make environment-variable fallback for Click's non-boolean flags depend on whether each candidate supplies a usable activation value, rather than stopping at the first non-empty string. Consider explicit envvar names in declaration order, treating a single name as one candidate. Missing or empty values decline the candidate. A raw value exactly equal to flag_value activates the flag, retaining the existing exact-match rule; otherwise, recognized boolean strings supply flag_value for true or False for false, before normal type conversion. An unrecognized string declines that candidate and permits the next name to be considered. An accepted false value must stop selection, even if a later variable would activate the flag.\n\nIf every explicit candidate declines, consider the automatic environment variable when the context enables it and allow_from_autoenv permits it, using the same acceptance rules. If that candidate also declines or is unavailable, retain normal default_map and declared-default fallback. Record ParameterSource.ENVIRONMENT only when an environment candidate is accepted; default-map and declared-default provenance must remain unchanged when all candidates decline. Keep command-line precedence, boolean-flag selection, ordinary value-option selection, and existing type conversion unchanged.\n\nDeliver a unified diff against the production files, without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises targeted inspection and cross-layer verification of raw environment resolution, flag interpretation, and Parameter.consume_value precedence. Selective examination of existing environment and default tests is useful, but the central investigation is the boundary between candidate selection and interpretation rather than enumeration of exact-match parametrizations.",
+  "change_type": "constraint",
+  "description": "Extend environment-variable selection for non-boolean flags with an envvar sequence: an unrecognized activation string should decline that candidate and allow the next named variable to be considered. If all explicitly named candidates decline, try the automatic environment variable when enabled, then normal defaults. A recognized false value must stop selection rather than allow a later true value to win, and an exact flag_value match must retain its current activation behavior. Implement this in src/click/core.py around Parameter.resolve_envvar_value, Option.resolve_envvar_value, and Option.value_from_envvar, with tests in tests/test_options.py covering ordered candidates, automatic-prefix fallback, allow_from_autoenv=False, command-line precedence, and ParameterSource.",
+  "expected_answer_change": "The answer becomes an implementation and acceptance tests for semantic candidate fallback, not the original failing-node-ID set. The repair must distinguish an absent or unrecognized candidate from an explicitly false candidate, preserve exact-match activation, and record ENVIRONMENT only for an accepted environment value. Default-map and declared-default provenance must remain correct when every candidate declines.",
+  "why_substantive": "The original changes how one selected raw string is interpreted. This variation changes which environment variable supplies the value: currently the first non-empty raw string is selected before its activation meaning is known. It requires reconciling candidate selection with semantic interpretation, while preserving ordinary value-option and boolean-flag selection behavior."
+ },
+ "task_id": "pallets-click-r02-02-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values0-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values1-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values2-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values3-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values4-False]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values8-False]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[ bar ]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[0]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[false]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_fallback[values4-option_kwargs4-None-active-3]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_fallback[values5-option_kwargs5-None-active-3]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_inferred_types[option_kwargs0-42]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_inferred_types[option_kwargs1-active]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2017
+   },
+   "patch_files": [
+    "src/click/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values0-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values1-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values2-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values3-active]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values4-False]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_candidates[values8-False]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[ bar ]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[0]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_exact_match[false]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_fallback[values4-option_kwargs4-None-active-3]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_fallback[values5-option_kwargs5-None-active-3]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_inferred_types[option_kwargs0-42]",
+   "tests/test_semantic_env_flags.py::test_semantic_env_inferred_types[option_kwargs1-active]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1991,
+  "stability_runs": 3
+ }
+}

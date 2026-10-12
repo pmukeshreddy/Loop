@@ -1,0 +1,14 @@
+--- a/jmespath/lexer.py
++++ b/jmespath/lexer.py
+@@ -24,6 +24,11 @@
+     }
+ 
+     def tokenize(self, expression):
++        # Each iterator owns its scanning state.  Initialization remains lazy
++        # inside _tokenize, so errors and warnings occur when it is advanced.
++        return Lexer()._tokenize(expression)
++
++    def _tokenize(self, expression):
+         self._initialize_for_expression(expression)
+         while self._current is not None:
+             if self._current in self.SIMPLE_TOKENS:

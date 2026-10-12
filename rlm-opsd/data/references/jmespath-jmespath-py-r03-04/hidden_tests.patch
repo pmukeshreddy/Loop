@@ -1,0 +1,32 @@
+--- /dev/null
++++ b/tests/test_recursive_json_equality.py
+@@ -0,0 +1,29 @@
++import pytest
++import jmespath
++
++
++@pytest.mark.parametrize("left, right, equal", [
++    (0, False, False),
++    (1, True, False),
++    ([0], [False], False),
++    ([{"v": [1]}], [{"v": [True]}], False),
++    ({"x": {"a": 0}}, {"x": {"a": False}}, False),
++    ({"a": 1, "b": [0]}, {"b": [0.0], "a": 1.0}, True),
++    ([{"x": False}], [{"x": False}], True),
++    ([1, 2], [2, 1], False),
++    ({"a": None}, {}, False),
++])
++def test_recursive_equality(left, right, equal):
++    data = {"a": left, "b": right}
++    assert jmespath.search("a == b", data) is equal
++    assert jmespath.compile("a != b").search(data) is (not equal)
++    assert jmespath.search("contains([a], b)", data) is equal
++
++
++def test_filter_and_membership_paths():
++    data = {"items": [{"v": {"n": [0]}}, {"v": {"n": [False]}}]}
++    assert jmespath.search('items[?v == `{"n":[false]}`]', data) == [data["items"][1]]
++    assert jmespath.search('items[?contains([v], `{"n":[false]}`)]', data) == [data["items"][1]]
++    assert jmespath.search("contains('alphabet', 'pha')", None) is True
++    assert jmespath.search("contains(`[false]`, `0`)", None) is False
++    assert jmespath.search("contains(`[1.0]`, `1`)", None) is True

@@ -1,0 +1,144 @@
+{
+ "answer": "--- a/jmespath/parser.py\n+++ b/jmespath/parser.py\n@@ -25,6 +25,8 @@\n   consuming from the token iterator one token at a time.\n \n \"\"\"\n+from collections import OrderedDict\n+\n from jmespath import lexer\n from jmespath.compat import with_repr_method\n from jmespath import ast\n@@ -68,9 +70,8 @@\n     # The maximum binding power for a token that can stop\n     # a projection.\n     _PROJECTION_STOP = 10\n-    # The _MAX_SIZE most recent expressions are cached in\n-    # _CACHE dict.\n-    _CACHE = {}\n+    # Cache up to _MAX_SIZE expressions in least-recently-used order.\n+    _CACHE = OrderedDict()\n     _MAX_SIZE = 512\n \n     def __init__(self, lookahead=2):\n@@ -81,9 +82,16 @@\n \n     def parse(self, expression):\n         try:\n-            return self._CACHE[expression]\n+            cached_result = self._CACHE[expression]\n         except KeyError:\n             pass\n+        else:\n+            try:\n+                self._CACHE.move_to_end(expression)\n+            except KeyError:\n+                # Another thread may have evicted the entry or purged the cache.\n+                pass\n+            return cached_result\n         parsed_result = self._do_parse(expression)\n         if len(self._CACHE) >= self._MAX_SIZE:\n             try:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.003468253655460529,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 11 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was computed and inspected after construction. Its changes combine hit promotion and ordered storage while retaining the existing miss and guarded-eviction flow.",
+   "inspect_locate": "The reference execution performed 11 targeted searches without printing the whole context. Locating the shared parser cache, public entry points, purge implementation, and guarded eviction branch was useful for determining where the change belonged and which behavior had to remain unchanged.",
+   "persistent_state": "The reference retained the files variable across turns while developing the patch. The task also requires tracking shared cache lifetime, object identity, recency, capacity, and failure behavior together, rather than treating each public entry point as an independent cache."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise production-only unified-diff format. The requirements describe the desired policy without prescribing the implementation or solver operations. The investigation is distinct from the previously accepted tasks, and the cache identity, shared scope, and exceptional-path constraints make it more than a trivial lookup."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The resulting diff must satisfy the combined identity and recency invariants and preserve the existing guarded eviction branch, with every hunk checked against the exact source.",
+   "inspect_locate": "The cache's actual lifetime and policy must be established from Parser.parse, purge, existing cache tests, and the public-call path.",
+   "persistent_state": "The implementation must retain the distinction between shared cache state, hit identity, insertion order, failed compilation, and eviction while modifying the cache flow."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser.parse",
+    "why": "Cache hits currently leave insertion order unchanged; misses delete the first dictionary entry at capacity."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser.purge",
+    "why": "Purge must continue clearing the cache shared across parser instances."
+   },
+   {
+    "path": "tests/test_parser.py",
+    "symbol": "tests/test_parser.py::TestParserCaching",
+    "why": "Existing tests constrain compilation equivalence, purge behavior, and exception-free concurrent use."
+   },
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::ParsedResult.search",
+    "why": "Evaluation is separate from compilation caching; changing recency must not change interpreter lifetime or search options."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_parser_lru_cache.py\n@@ -0,0 +1,54 @@\n+import pytest\n+\n+import jmespath\n+from jmespath import exceptions\n+from jmespath.parser import Parser\n+\n+\n+@pytest.fixture(autouse=True)\n+def empty_cache():\n+    Parser.purge()\n+    yield\n+    Parser.purge()\n+\n+\n+def fill_cache():\n+    return [jmespath.compile('lru_field_%s' % i)\n+            for i in range(Parser._MAX_SIZE)]\n+\n+\n+def test_compile_hit_protects_entry_and_evicts_least_recent():\n+    entries = fill_cache()\n+    assert jmespath.compile('lru_field_0') is entries[0]\n+    jmespath.compile('lru_new')\n+    assert jmespath.compile('lru_field_0') is entries[0]\n+    assert jmespath.compile('lru_field_1') is not entries[1]\n+\n+\n+def test_search_hit_and_cross_parser_hits_update_same_recency():\n+    entries = fill_cache()\n+    assert jmespath.search('lru_field_0', {'lru_field_0': 7}) == 7\n+    assert Parser().parse('lru_field_1') is entries[1]\n+    jmespath.compile('lru_new')\n+    assert Parser().parse('lru_field_0') is entries[0]\n+    assert jmespath.compile('lru_field_1') is entries[1]\n+    assert jmespath.compile('lru_field_2') is not entries[2]\n+\n+\n+def test_repeated_hits_do_not_consume_capacity():\n+    entries = fill_cache()\n+    for _ in range(20):\n+        assert jmespath.compile('lru_field_0') is entries[0]\n+    for i in range(1, Parser._MAX_SIZE):\n+        assert jmespath.compile('lru_field_%s' % i) is entries[i]\n+\n+\n+def test_invalid_expression_does_not_evict_and_purge_remains_shared():\n+    entries = fill_cache()\n+    with pytest.raises(exceptions.ParseError):\n+        jmespath.compile('invalid[')\n+    assert jmespath.compile('lru_field_0') is entries[0]\n+    Parser().purge()\n+    fresh = jmespath.compile('lru_field_0')\n+    assert fresh is not entries[0]\n+    assert fresh.parsed == entries[0].parsed\n",
+  "include_failure_log": false,
+  "notes": "Acceptance observes cache identity through public compilation and search calls. The existing thread-safety test must also remain passing; retain the best-effort behavior rather than introducing an uncaught cache-order mutation exception.",
+  "primary_behavior": "combine_verify_finish",
+  "probe_patch": null,
+  "question": "Change the shared expression-compilation cache from insertion-order eviction to least-recently-used eviction. Every successful cache hit, whether reached through `Parser.parse`, `jmespath.compile`, or `jmespath.search`, must make that expression the most recently used entry while returning the same cached `ParsedResult` object. A successful cache miss must insert its result as most recently used, evicting the least recently used entry when the existing capacity is reached. Repeated hits must not consume capacity. Keep the existing shared-cache scope, capacity, purge behavior, and guarded eviction behavior: if eviction encounters one of the currently handled exceptions, return the newly parsed result without inserting it. Failed compilation must not evict an entry. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_parser_lru_cache.py::test_compile_hit_protects_entry_and_evicts_least_recent",
+   "tests/test_parser_lru_cache.py::test_search_hit_and_cross_parser_hits_update_same_recency"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 995
+   },
+   "patch_files": [
+    "jmespath/parser.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_parser_lru_cache.py::test_compile_hit_protects_entry_and_evicts_least_recent",
+   "tests/test_parser_lru_cache.py::test_search_hit_and_cross_parser_hits_update_same_recency"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

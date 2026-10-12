@@ -1,6 +1,142 @@
 # Progress
 
-## Seeded task diversity
+## AgentInstruct-style DeepSWE task generation (replaces synthetic M2 pool)
+
+Date: 2026-10-10. The synthetic long-context generators, fixed query
+wordings, record codecs, BANKING77 corpus, their configuration keys, tests,
+and the generated pool (`data/manifest.jsonl`, `build-report.json`,
+`decontamination.json`) were deleted. There is no fallback. Historical logs
+under `docs/logs` and `docs/checks/task-diversity` are kept as history and
+describe the removed pipeline.
+
+The replacement ([TASKS.md](TASKS.md), [TASK_PIPELINE.md](TASK_PIPELINE.md))
+organizes tasks by the RLM behavior they give practice in, with real
+repository work as the setting. Roles follow AgentInstruct (arXiv:2407.03502),
+each instructed by a versioned `skills/<role>/SKILL.md`: source analysis,
+question generation, variation suggester, variation editor, solver and
+verifier. Every answer is verified by executing the pinned repository. The
+reference solver runs in the student's RLM harness, and its trajectory must
+show the intended behavior. Model access uses `step1.auth`
+(`gpt-6.1-sol`, ChatGPT-plan OAuth).
+
+Sources: 20 permissive Python repositories pinned to release commits. None is
+a DeepSWE-113 upstream, and `prepare` refuses those. They were split before
+generation (size-stratified seeded draw): `dev_behavior` = pyparsing, attrs,
+h11, toolz; `train` = the other 16
+([prepare output](checks/agentinstruct-tasks/01-prepare.json),
+[log](checks/agentinstruct-tasks/01-prepare.log)).
+
+### Inspection-driven fixes
+
+Two pilot batches and the first part of the full run were inspected,
+including questions, reference trajectories and patches. Issues fixed at the
+cause:
+
+| Finding | Fix |
+|---|---|
+| Reference solver wrote all blocks and `FINAL_VAR` in one message, hard-coding an answer before seeing output | One REPL block per turn for reference executions; finish only in a message without unexecuted code |
+| 7 of 10 pilot-1 references rebuilt the repository on disk and ran pytest/`exec` instead of investigating ([scan](checks/agentinstruct-tasks/02-pilot-1-execution-scan.txt)) | Solver skill forbids repository execution; AST detection rejects trajectories that do it (`reference_executed_repository`) |
+| First execution detector was a regex and flagged a log key and a comment | AST-based detection; the affected candidates were reopened and re-evaluated |
+| Ground-truth defect symbol taken from approximate hunk headers (wrong function) | Symbols from diffing the real files |
+| Generator produced "what does this program print" quizzes | Long embedded listings rejected; guidance steers `value` toward real behavior questions |
+| Loop-variable reassignment counted as persistent state | A variable counts only when a later block reads it before writing it |
+| Strong reference read 20K+ characters per turn and never needed sub-calls | Solver follows the manual's small-window reading discipline; an unexhibited primary behavior relabels the task to the exhibited ones instead of discarding it |
+| Semantically duplicate variations across parents | Suggester and reviewer see the repository's existing tasks (`duplicate_of_existing`) |
+| Hidden tests edited unseen files | Hidden tests are new files |
+| Event loop saturated by the sandbox watchdog's process-table scans (~10 ms each, every 20 ms per episode) | `SandboxBackend.poll_interval_s` class attribute (default unchanged); 0.5 s for reference runs |
+| Variation children left spec-less by a restart caused `pipeline_error` | Resumable variations (saved suggestions, per-child edit); regression test |
+| Sequential remote sub-calls killed by the 120 s REPL wall time (7 of 111 solves) | Reference-only timing overrides (wall time 900 s, sub-call timeout 180 s); structural limits unchanged |
+| lark collects tests through `tests/__main__.py`, so impact IDs did not name the defining file | Impact sets must be file-faithful |
+| One accepted defect made a random-replacement test fail nondeterministically | Release re-runs every task's executable ground truth and rejects non-reproducing tasks |
+| Variation questions asked the solver to write regression tests, so verified patches were rejected for editing tests | Guidance forbids test authoring; deterministic `requests_test_authoring` screen |
+| Practice check discarded decomposition after one transient sub-call error, and missed results written into dict items | Requires enough successful sub-calls; container writes carry provenance; `repractice` re-derived accepted labels ([output](checks/agentinstruct-tasks/07-repractice.json)) |
+| `git apply --recount` swallowed the next file header in correct multi-file patches (false `reference_patch_does_not_apply`) | Exact hunk counts first, `--recount` only as fallback; stored solves re-verified without new model calls (11 reopened) |
+| References retyped findings printed by sub-calls, yet `combine_verify_finish` passed because the check only saw a name on the right-hand side | Final value must derive from `context` or sub-call results through code; solver skill forbids retyping; repractice removed the label from 13 tasks ([output](checks/agentinstruct-tasks/12-repractice-evidence-provenance.json)) |
+| Delegation families rare as primary (chunked_subcalls 14, recursive_decomposition 2) | Focused top-up mode (`generate --focus ...`) |
+| `score_answer` (M8 monitoring) did not know the new answer types | Monitoring-only scoring for `test_ids`, `symbols` and `value`; `patch` is unknown offline and its `task_success` is omitted |
+
+### Executed checks
+
+| Check | Result | Evidence |
+|---|---|---|
+| Baselines, 3 runs per repository | 20/20 repositories with stable passing tests | [prepare log](checks/agentinstruct-tasks/01-prepare.log) |
+| Pilot 1 (cachetools, click) | 4 accepted / 7 rejected under the first solver policy; archived after the execution finding | [status](checks/agentinstruct-tasks/02-pilot-1-status.json), [rejections](checks/agentinstruct-tasks/02-pilot-1-rejections.jsonl) |
+| Pilot 2 (click, sqlparse, h11) | 6 accepted / 12 rejected at snapshot | [status](checks/agentinstruct-tasks/03-pilot-2-status.json), [rejections](checks/agentinstruct-tasks/03-pilot-2-rejections.jsonl) |
+| Task test suites (`tests/test_task_generation.py`, `tests/test_task_release.py`, held-out adapters) | Pass, including real-repository materialization, patch verification and impact-set tests under `sandbox-exec` | `make test-m2` |
+| `make test` | **571 passed, 7 failed.** All 7 failures are one test reading the historical M5 HTTP fixture, which hard-codes `/Users/mukeshreddy/Desktop/Refine deepswe/...` from the original machine; unrelated to this change | [log](checks/agentinstruct-tasks/04-make-test.log) |
+| Trial release and re-verification of the first 38 accepted tasks | 37 reproduced; 1 nondeterministic defect, which motivated the release gate | `docs/checks/agentinstruct-tasks/` |
+
+### Generation and release results
+
+Executed 2026-10-10 to 2026-10-12 with `gpt-6.1-sol` through ChatGPT-plan
+OAuth: 4,831 model calls, 38.8M input and 4.3M output tokens
+([final status](checks/agentinstruct-tasks/16-final-generation-status.json),
+[main run log](checks/agentinstruct-tasks/05-generate.log),
+[focused top-up log](checks/agentinstruct-tasks/13-focus-topup.log)). The run
+was resumed several times after the fixes above and after the Mac slept;
+resumption reused stored stage outputs.
+
+| Quantity | Count |
+|---|---|
+| Candidates created (seeds and variations) | 582 |
+| Accepted at generation | 279 (231 train, 48 dev) |
+| Final rejections | 245 (107 seed, 138 variation) |
+| Left unprocessed when generation stopped | 58 |
+| Release re-verification (final build) | 279 checked, 0 failed |
+| Decontamination drops | 0 (DeepSWE repositories excluded up front; no query overlaps) |
+| **Released to `data/`** | **279: 231 train, 48 dev_behavior; 101 are variations** |
+
+Released by family, train/dev: inspect_locate 123/22, direct_solve 54/17,
+combine_verify_finish 20/2, persistent_state 16/4, chunked_subcalls 17/2,
+recursive_decomposition 1/1. Established behaviors anywhere in a task:
+inspect_locate 203, combine_verify_finish 157, direct_solve 72,
+persistent_state 50, chunked_subcalls 25, recursive_decomposition 8. Answer
+types: patch 207, test_ids 42, value 19, symbols 11. Settings: implementation
+158, change_impact 42, scattered_evidence_debugging 37, dependency_tracing 15,
+test_failure_investigation 13, multi_module_fix 7, plus 4 analyst-proposed
+settings (7 tasks). Context size buckets: ≤16K 73, ≤64K 3, ≤256K 46, ≤1M 115,
+≤4M 42. ([build report](../data/build-report.json),
+[build log](checks/agentinstruct-tasks/10-make-tasks-build.log)).
+
+Largest rejection reasons: reference answer incorrect 57, answerable without
+the repository 55, requests test authoring 26, defect breaks no tests 13,
+reviewer duplicate 13, editor declined 11, practice mismatch 9, reviewer
+answer leak 9, impact IDs not file-faithful 8, impact size out of range 7,
+off-focus seeds 6, reviewer behavior mismatch 5, and smaller codes.
+
+A first release built on 2026-10-11 (258 tasks) dropped one task whose
+defect produced nondeterministic failures. The final release was rebuilt
+after the evidence-provenance repractice and the focused top-up.
+
+**Delegation behaviors remain rare as primary families.** A focused top-up
+(`--focus chunked_subcalls recursive_decomposition`) generated 84 seeds aimed
+at those behaviors. Of the 20 accepted when it was stopped, 4 kept a delegation
+family and 16 established only inspect_locate: on decomposition-designed
+tasks, the reference root usually made no sub-calls and read the code itself.
+An experiment re-solving 8 such tasks with `gpt-6-luna` as root (sub-calls
+unchanged) produced 0 sub-calls and 0 correct answers (7 exhausted 20 turns,
+1 wrong) ([results](checks/agentinstruct-tasks/14-weaker-root-experiment.jsonl)),
+so a weaker reference root was not adopted. Labels stay restricted to
+behaviors the reference execution demonstrates. Every family is present in
+`dev_behavior`, which satisfies the teacher-gate preflight grid.
+
+Loader checks on the release: `load_tasks(..., inspection_only=True)`
+returns 231 train and 48 dev rows whose `info` holds only task ID, family,
+domain, tags, query and context. The normal loader refuses train/dev because
+the paper's long-context benchmark snapshots are still missing (coverage
+unchanged from the previous pool; DeepSWE coverage is complete). No repository
+appears in both splits, and the teacher manual is byte-identical to
+`manual_v1`. Representative tasks with questions, verified answers, behavior
+evidence and reviewer notes are in
+[11-examples.md](checks/agentinstruct-tasks/11-examples.md).
+
+**GPU results: not run.** OPSD semantics are unchanged: the loader yields only
+task ID, family, domain, tags, query and context; the teacher manual and
+student prompt are untouched; reference trajectories are evidence only (no
+SFT); and no correctness reward was added.
+
+
+## Seeded task diversity (superseded 2026-10-10; pool and generators removed)
 
 Date: 2026-10-09–10. [Task planning](../rlm_opsd/tasks/build.py) now samples each
 family knob independently from the task seed using fixed values, inclusive
@@ -352,7 +488,7 @@ The user's earlier deferral of GPU-server execution still applies. M0's known
 local trainer-runtime dependency gap is unchanged; successful harness tests do
 not establish a working macOS trainer. M2–M9 were not started. Work stops at M1.
 
-## M2 — task implementation complete; full held-out certification pending
+## M2 — task implementation complete; full held-out certification pending (superseded 2026-10-10 by the AgentInstruct-style pipeline)
 
 Date: 2026-10-09. Scope: M2 / TASKS.md only. The milestone's code and local
 acceptance checks are complete: deterministic generators, independent answer

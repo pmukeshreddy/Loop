@@ -1,0 +1,209 @@
+{
+ "answer": "--- a/glom/core.py\n+++ b/glom/core.py\n@@ -1535,7 +1535,11 @@\n     return cur\n \n \n-def _t_eval(target, _t, scope):\n+def _t_eval(target, _t, scope, _full_t=None, _offset=0):\n+    # Wildcard continuations evaluate against a new target, but arithmetic\n+    # errors still refer to the complete expression and its operation indices.\n+    if _full_t is None:\n+        _full_t = _t\n     t_path = _t.__ops__\n     i = 1\n     fetch_till = len(t_path)\n@@ -1602,9 +1606,13 @@\n             todo.__ops__ = (root,) + t_path[i+2:]\n             for child in nxt:\n                 try:\n-                    cur.append(_t_eval(child, todo, scope))\n-                except PathAccessError:\n-                    pass\n+                    cur.append(_t_eval(child, todo, scope, _full_t,\n+                                       _offset + i // 2 + 1))\n+                except PathAccessError as e:\n+                    # Access failures (including TypeError from a lookup) are\n+                    # skippable; arithmetic failures, also in operands, are not.\n+                    if getattr(e, '_t_arithmetic', False):\n+                        raise\n             break  # we handled the rest in recursive call, break loop\n         elif op == '(':\n             args, kwargs = arg\n@@ -1624,8 +1632,8 @@\n                     cur = cur - arg\n                 elif op == '*':\n                     cur = cur * arg\n-                #elif op == '#':\n-                #    cur = cur // arg  # TODO: python 2 friendly approach?\n+                elif op == '#':\n+                    cur = cur // arg\n                 elif op == '/':\n                     cur = cur / arg\n                 elif op == '%':\n@@ -1643,7 +1651,10 @@\n                 elif op == '_':\n                     cur = -cur\n             except (TypeError, ZeroDivisionError) as e:\n-                pae = PathAccessError(e, Path(_t), i // 2)\n+                pae = PathAccessError(e, Path(_full_t), _offset + i // 2)\n+                # Track the failing operation, not the wrapped exception type:\n+                # TypeError may come from either arithmetic or path access.\n+                pae._t_arithmetic = True\n         if pae:\n             raise pae\n         i += 2\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "new",
+    "old",
+    "patch",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 89793 chars; 10 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "9 turns; variables reused across turns: ['core', 'files', 'new', 'old', 'patch', 's']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference assembled and inspected a computed unified diff covering recursive continuation state, propagation of arithmetic errors, and floor-division execution. The supplied executable verification supports the resulting behavior; the reference execution itself did not run repository tests.",
+   "inspect_locate": "The reference execution used 10 targeted searches without printing the whole context. The change connects wildcard recursion, arithmetic exception classification, and full-expression path/index reporting within the core evaluator."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format and meaningful interacting constraints. It specifies observable behavior without exposing the internal fix or prescribing solver operations. Although floor division overlaps with an accepted task, the main investigation\u2014distinguishing arithmetic failures from skippable access failures across nested wildcard continuations and operand evaluation\u2014is substantively different."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must reconcile exception classification, nested wildcard propagation, complete-path reporting, and floor-division execution without disrupting skippable lookup failures. Its hunks must be assembled and checked against the exact source.",
+   "inspect_locate": "The relevant sections are a small fraction of the large core module: wildcard continuation evaluation, arithmetic exception handling, operand evaluation, and PathAccessError's path/index contract must be connected.",
+   "persistent_state": "The repair must keep track of the relationship between recursive suffix expressions and the original expression's operation indexes, while distinguishing continuation failures from errors originating in independently evaluated operand expressions."
+  },
+  "context": {
+   "files": [
+    "glom/core.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::_t_eval",
+    "why": "Wildcard traversal recursively evaluates suffix expressions and suppresses every PathAccessError, including arithmetic failures. Suffix construction also loses the original path prefix."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::PathAccessError",
+    "why": "Defines the observable exc, path, and part_idx attributes that must remain correct when arithmetic errors cross wildcard recursion."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Path",
+    "why": "Provides expression-path equality and operation indexing, including wildcard and arithmetic steps."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::arg_val",
+    "why": "Evaluates T operands separately against each recursive child target, allowing operand lookup errors and operand arithmetic errors to originate outside the continuation evaluator."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::TType.__floordiv__",
+    "why": "Records the floor-division operation already exposed by T; its evaluator branch is inactive in the supplied snapshot."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_wildcard_arithmetic_errors.py\n@@ -0,0 +1,118 @@\n+import operator\n+\n+import pytest\n+\n+from glom import Call, Fill, Path, PathAccessError, T, glom\n+\n+\n+def assert_arithmetic_error(target, spec, part_idx, exc_type, wrapped=None):\n+    with pytest.raises(PathAccessError) as caught:\n+        glom(target, spec)\n+    error = caught.value\n+    assert error.path == Path(spec)\n+    assert error.part_idx == part_idx\n+    assert isinstance(error.exc, exc_type)\n+    if wrapped is not None:\n+        assert error.exc is wrapped\n+\n+\n+@pytest.mark.parametrize('op', [\n+    operator.add, operator.sub, operator.mul, operator.truediv,\n+    operator.floordiv, operator.mod, operator.pow, operator.and_,\n+    operator.or_, operator.xor,\n+])\n+def test_binary_arithmetic_is_not_a_missing_path(op):\n+    base = T['rows'].__star__()['n']\n+    spec = op(base, T['d']) + 1\n+    target = {'rows': [{'n': 8, 'd': 2}, {'n': object(), 'd': 2}]}\n+    assert_arithmetic_error(target, spec, 3, TypeError)\n+\n+\n+@pytest.mark.parametrize('op', [operator.neg, operator.invert])\n+def test_unary_arithmetic_is_not_a_missing_path(op):\n+    spec = op(T['rows'].__star__()['n']) + 1\n+    target = {'rows': [{'n': 8}, {'n': 'bad'}]}\n+    assert_arithmetic_error(target, spec, 3, TypeError)\n+\n+\n+@pytest.mark.parametrize('op', [\n+    operator.truediv, operator.floordiv, operator.mod,\n+])\n+def test_zero_division_propagates_after_success(op):\n+    spec = op(T['rows'].__star__()['n'], T['d']) + 1\n+    target = {'rows': [{'n': 8, 'd': 2}, {'n': 8, 'd': 0}]}\n+    assert_arithmetic_error(target, spec, 3, ZeroDivisionError)\n+\n+\n+def test_negative_power_of_zero_propagates():\n+    spec = T['rows'].__star__()['n'] ** T['d']\n+    assert_arithmetic_error({'rows': [{'n': 0, 'd': -1}]},\n+                            spec, 3, ZeroDivisionError)\n+\n+\n+@pytest.mark.parametrize('star', ['__star__', '__starstar__'])\n+def test_missing_fields_and_access_type_errors_still_skip(star):\n+    base = getattr(T['rows'], star)()['n']['v']\n+    spec = base / T['d']\n+    target = {'rows': [\n+        {'n': {'v': 8}, 'd': 2}, {'d': 2},\n+        {'n': {'v': 9}}, {'n': None, 'd': 2},\n+    ]}\n+    assert glom(target, spec) == [4.0]\n+\n+\n+@pytest.mark.parametrize('first', ['__star__', '__starstar__'])\n+@pytest.mark.parametrize('second', ['__star__', '__starstar__'])\n+def test_nested_wildcards_keep_the_outer_path(first, second):\n+    base = getattr(T['groups'], first)()['rows']\n+    base = getattr(base, second)()['n']\n+    spec = (base / T['d']) + 1\n+    target = {'groups': [{'rows': [\n+        {'n': 8, 'd': 2}, {'n': 7}, {'d': 2}, {'n': 1, 'd': 0},\n+    ]}]}\n+    assert_arithmetic_error(target, spec, 5, ZeroDivisionError)\n+\n+\n+@pytest.mark.parametrize('wrap', [\n+    lambda spec: spec,\n+    lambda spec: Fill({'values': spec}),\n+    lambda spec: Call(list, args=(spec,)),\n+])\n+def test_wrappers_do_not_turn_arithmetic_errors_into_partial_results(wrap):\n+    spec = T['rows'].__star__()['n'] / T['d']\n+    target = {'rows': [{'n': 4, 'd': 2}, {'n': 1, 'd': 0}]}\n+    with pytest.raises(PathAccessError) as caught:\n+        glom(target, wrap(spec))\n+    assert caught.value.path == Path(spec)\n+    assert caught.value.part_idx == 3\n+    assert isinstance(caught.value.exc, ZeroDivisionError)\n+\n+\n+def test_original_exception_is_retained():\n+    original = TypeError('division failed')\n+\n+    class Bomb:\n+        def __truediv__(self, other):\n+            raise original\n+\n+    spec = T['rows'].__star__()['n'] / 2\n+    assert_arithmetic_error({'rows': [{'n': Bomb()}]}, spec, 3,\n+                            TypeError, original)\n+\n+\n+def test_floor_division_executes_for_valid_branches():\n+    spec = T['rows'].__star__()['n'] // T['d']\n+    target = {'rows': [\n+        {'n': -7, 'd': 2}, {'n': 7.5, 'd': 2}, {'n': 8}, {'d': 2},\n+    ]}\n+    assert glom(target, spec) == [-4, 3.0]\n+\n+\n+def test_operand_arithmetic_error_keeps_its_own_provenance():\n+    operand = T['d'] / 0\n+    spec = T['rows'].__star__()['n'] / operand\n+    with pytest.raises(PathAccessError) as caught:\n+        glom({'rows': [{'n': 8, 'd': 2}]}, spec)\n+    assert caught.value.path == Path(operand)\n+    assert caught.value.part_idx == 1\n+    assert isinstance(caught.value.exc, ZeroDivisionError)\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task verified by a new acceptance-test file: the wildcard failure condition already exists in the supplied source, so no synthetic setup regression is introduced. The starting snapshot does not contain the original accepted floor-division fix; this task explicitly requires floor division to execute, but does not repeat the original representation requirements. A floor-division-only answer cannot satisfy these tests. The focused file selection still exceeds 16,000 characters because core.py is monolithic, so direct_solve is not claimed. Run the new acceptance tests together with the existing suite.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Wildcard T expressions currently return partial results when a branch encounters an arithmetic error. Extend their error handling so missing-path branches remain skippable, but failed arithmetic is reported instead of silently dropping the branch.\n\nFor example, `T['rows'].__star__()['n'] / T['d']` should skip rows missing either `n` or `d`, yet raise PathAccessError if an available denominator is zero or the available operands cannot be divided. Access failures remain skippable even when their underlying exception is TypeError; arithmetic failures must not be classified solely by the underlying exception type.\n\nApply this behavior to both `__star__()` and `__starstar__()`, including nested wildcards, and to all T arithmetic operators: addition, subtraction, multiplication, true division, floor division, modulo, exponentiation, bitwise operations, negation, and inversion. Floor division must execute Python's `//` operation rather than leave the current value unchanged. Preserve successful branch ordering and list nesting.\n\nFor an arithmetic operation in a wildcard continuation, the raised error's `path` must equal `Path` of the complete requested T expression, and `part_idx` must be the zero-based index of the failing operation in that expression, counting wildcard steps. Retain the original exception in `exc`. If arithmetic fails inside a separately evaluated operand expression, propagate that error with the operand expression's own path and operation index; an operand lookup failure should still cause the wildcard branch to be skipped. These rules must also hold when the wildcard expression is used inside Fill or as a Call argument. Leave unrelated evaluation and error-handling behavior unchanged.\n\nDeliver a unified diff against the production files, without modifying tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Emphasizes persistent_state and combine_verify_finish across recursive evaluation: the implementation must retain the outer expression and operation offset while evaluating child targets, and distinguish an operand lookup failure from failure of the arithmetic operation itself. Focused direct inspection of `_t_eval`, PathAccessError, and Path is more useful than broad repository exploration.",
+  "change_type": "failure_condition",
+  "description": "Repair wildcard traversal so arithmetic failures are not silently discarded as missing paths. In glom/core.py, `_t_eval` currently catches every PathAccessError from recursive evaluation under `x` and `X`. For `T['rows'].__star__()['n'] / T['d']`, require missing `n` or `d` fields to remain skippable, but require an executed division by zero or unsupported arithmetic operand to propagate as PathAccessError. Preserve the complete outer expression path and its failing operation index through wildcard recursion, including nested wildcards; retain the underlying exception. Apply the same rule to all existing arithmetic operations, including floor division after the accepted patch. Deliver a unified diff without modifying tests.",
+  "expected_answer_change": "The answer must change wildcard recursion and error provenance or classification in `_t_eval`, potentially with supporting changes to PathAccessError. For rows containing a valid division followed by a zero denominator, the result must become a propagated arithmetic error instead of a partial list. A missing denominator must still be skipped, so merely removing the wildcard exception handler is incorrect.",
+  "why_substantive": "This is not an absent arithmetic execution branch. Arithmetic already fails correctly locally, but wildcard traversal swallows that failure and recursive suffix expressions lose the outer path. The investigation must distinguish access failures from arithmetic failures and follow error provenance across recursive traversal."
+ },
+ "task_id": "mahmoud-glom-r01-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[add]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[and_]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[floordiv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[mod]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[mul]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[or_]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[pow]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[sub]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[truediv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[xor]",
+   "tests/test_wildcard_arithmetic_errors.py::test_floor_division_executes_for_valid_branches",
+   "tests/test_wildcard_arithmetic_errors.py::test_negative_power_of_zero_propagates",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__star__-__star__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__star__-__starstar__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__starstar__-__star__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__starstar__-__starstar__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_operand_arithmetic_error_keeps_its_own_provenance",
+   "tests/test_wildcard_arithmetic_errors.py::test_original_exception_is_retained",
+   "tests/test_wildcard_arithmetic_errors.py::test_unary_arithmetic_is_not_a_missing_path[invert]",
+   "tests/test_wildcard_arithmetic_errors.py::test_unary_arithmetic_is_not_a_missing_path[neg]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>0]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>1]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>2]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[floordiv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[mod]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[truediv]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 26,
+   "full_suite": {
+    "failed": 0,
+    "passed": 200
+   },
+   "patch_files": [
+    "glom/core.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[add]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[and_]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[floordiv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[mod]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[mul]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[or_]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[pow]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[sub]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[truediv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_binary_arithmetic_is_not_a_missing_path[xor]",
+   "tests/test_wildcard_arithmetic_errors.py::test_floor_division_executes_for_valid_branches",
+   "tests/test_wildcard_arithmetic_errors.py::test_negative_power_of_zero_propagates",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__star__-__star__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__star__-__starstar__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__starstar__-__star__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_nested_wildcards_keep_the_outer_path[__starstar__-__starstar__]",
+   "tests/test_wildcard_arithmetic_errors.py::test_operand_arithmetic_error_keeps_its_own_provenance",
+   "tests/test_wildcard_arithmetic_errors.py::test_original_exception_is_retained",
+   "tests/test_wildcard_arithmetic_errors.py::test_unary_arithmetic_is_not_a_missing_path[invert]",
+   "tests/test_wildcard_arithmetic_errors.py::test_unary_arithmetic_is_not_a_missing_path[neg]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>0]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>1]",
+   "tests/test_wildcard_arithmetic_errors.py::test_wrappers_do_not_turn_arithmetic_errors_into_partial_results[<lambda>2]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[floordiv]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[mod]",
+   "tests/test_wildcard_arithmetic_errors.py::test_zero_division_propagates_after_success[truediv]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 200,
+  "stability_runs": 3
+ }
+}

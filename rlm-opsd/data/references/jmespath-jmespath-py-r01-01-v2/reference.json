@@ -1,0 +1,172 @@
+{
+ "answer": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -94,8 +94,13 @@\n         for i in range(len(signature)):\n             allowed_types = signature[i]['types']\n             if allowed_types:\n-                self._type_check_single(actual[i], allowed_types,\n-                                        function_name)\n+                if i == len(signature) - 1 and signature[i].get('variadic'):\n+                    end = len(actual)\n+                else:\n+                    end = i + 1\n+                for j in range(i, end):\n+                    self._type_check_single(actual[j], allowed_types,\n+                                            function_name)\n \n     def _type_check_single(self, current, types, function_name):\n         # Type checking involves checking the top level type,\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0026800141883104086,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "f",
+    "index"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "inspect_locate": "The reference execution used 12 selective code searches without printing the whole context. Locating shared signature validation, rather than changing the merge body, was useful for identifying a fix that also covers registered custom functions and preserves fixed-parameter checks."
+  },
+  "notes": "This is a natural, repository-dependent bug-fix request with a concrete public reproduction and coherent compatibility requirements. It does not disclose the defective internal method or implementation fix. The verified patch applies existing type checking to every argument covered by a final typed variadic parameter. The requested unified-diff format is clear, and the task is substantively distinct from the parent and previously accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "inspect_locate": "The public search and compiled-expression paths must be connected to parser-built function nodes, interpreter dispatch, custom-function injection, and the signature registry. Selective inspection distinguishes the permissive merge body from the shared validation behavior that also governs custom functions."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._token_led_lparen",
+    "why": "Function-call parsing retains all supplied arguments as children of the function-expression node."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.visit_function_expression",
+    "why": "Every argument is evaluated and forwarded to the selected function provider."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter.__init__",
+    "why": "Options.custom_functions selects the custom provider instead of the built-in Functions instance."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::FunctionRegistry._populate_function_table",
+    "why": "Decorated subclass methods receive signatures through the same registration mechanism as built-ins."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._validate_arguments",
+    "why": "Variadic signatures permit additional arguments while retaining a minimum equal to the number of signature entries."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._type_check",
+    "why": "The current loop checks only declared signature positions, leaving later variadic arguments unchecked."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._type_check_single",
+    "why": "Existing top-level, union, and array-subtype validation should also apply to repeated variadic arguments."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_merge",
+    "why": "dict.update accepts key-value pair arrays, making missing validation observable as an incorrectly successful merge."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_not_null",
+    "why": "Its empty types list establishes the unrestricted variadic behavior that must remain supported."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_variadic_signature_validation.py\n@@ -0,0 +1,108 @@\n+import pytest\n+\n+import jmespath\n+from jmespath import exceptions, functions\n+\n+\n+class RecordingFunctions(functions.Functions):\n+    def __init__(self):\n+        self.calls = []\n+\n+    @functions.signature(\n+        {'types': ['string']}, {'types': ['object'], 'variadic': True})\n+    def _func_tagged(self, label, *objects):\n+        self.calls.append('tagged')\n+        return [label, list(objects)]\n+\n+    @functions.signature({'types': ['array-number'], 'variadic': True})\n+    def _func_arrays(self, *arrays):\n+        self.calls.append('arrays')\n+        return len(arrays)\n+\n+    @functions.signature({'types': ['string', 'number'], 'variadic': True})\n+    def _func_choice(self, *values):\n+        self.calls.append('choice')\n+        return list(values)\n+\n+    @functions.signature(\n+        {'types': ['number']}, {'types': [], 'variadic': True})\n+    def _func_any_tail(self, head, *tail):\n+        self.calls.append('any_tail')\n+        return [head] + list(tail)\n+\n+\n+@pytest.mark.parametrize('expression', [\n+    'merge(`{\"a\":1}`, `[[\"b\",2]]`)',\n+    'merge(`{}`, `{\"b\":2}`, `null`)',\n+    'merge(`{}`, `{}`, `{}`, `[]`)',\n+])\n+def test_merge_rejects_every_non_object(expression):\n+    with pytest.raises(exceptions.JMESPathTypeError) as caught:\n+        jmespath.search(expression, {})\n+    assert caught.value.function_name == 'merge'\n+    assert caught.value.expected_types == ['object']\n+\n+\n+@pytest.mark.parametrize('expression, name', [\n+    (\"tagged('ok', `{}`, `[[]]`)\", 'tagged'),\n+    (\"tagged('ok', `{}`, `{}`, `null`)\", 'tagged'),\n+    (\"tagged(`{}`, `{}`)\", 'tagged'),\n+    (\"arrays(`[1]`, `[2]`, `[true]`)\", 'arrays'),\n+    (\"arrays(`[1]`, `[]`, `[2,\\\"bad\\\"]`)\", 'arrays'),\n+    (\"choice('ok', `2`, `false`)\", 'choice'),\n+    (\"any_tail(`true`, `null`)\", 'any_tail'),\n+])\n+def test_custom_validation_precedes_body(expression, name):\n+    custom = RecordingFunctions()\n+    options = jmespath.Options(custom_functions=custom)\n+    with pytest.raises(exceptions.JMESPathTypeError) as caught:\n+        jmespath.compile(expression).search({}, options=options)\n+    assert caught.value.function_name == name\n+    assert custom.calls == []\n+\n+\n+@pytest.mark.parametrize('expression, expected', [\n+    (\"tagged('ok', `{}`, `{\\\"x\\\":1}`)\", ['ok', [{}, {'x': 1}]]),\n+    (\"arrays(`[1,2]`, `[]`, `[3.5]`)\", 3),\n+    (\"choice('ok', `2`, 'last')\", ['ok', 2, 'last']),\n+    (\"any_tail(`1`, `null`, `false`, `[]`, `{}`, 's')\",\n+     [1, None, False, [], {}, 's']),\n+])\n+def test_valid_custom_variadic_arguments(expression, expected):\n+    custom = RecordingFunctions()\n+    options = jmespath.Options(custom_functions=custom)\n+    assert jmespath.search(expression, {}, options=options) == expected\n+    assert len(custom.calls) == 1\n+\n+\n+def test_builtin_valid_and_unrestricted_arguments():\n+    assert jmespath.search(\n+        'merge(`{\"a\":1}`, `{\"b\":2}`, `{\"a\":3}`)', {}) == {'a': 3, 'b': 2}\n+    assert jmespath.search('merge(`{}`)', {}) == {}\n+    assert jmespath.search(\n+        'not_null(`null`, `null`, `false`, `[]`, `{}`, `1`)', {}) is False\n+    assert jmespath.search('not_null(`null`, `null`)', {}) is None\n+\n+\n+@pytest.mark.parametrize('expression, minimum', [\n+    ('merge()', 1),\n+    ('not_null()', 1),\n+    (\"tagged('ok')\", 2),\n+    ('arrays()', 1),\n+    ('any_tail(`1`)', 2),\n+])\n+def test_variadic_minimum_arity_is_unchanged(expression, minimum):\n+    custom = RecordingFunctions()\n+    options = jmespath.Options(custom_functions=custom)\n+    with pytest.raises(exceptions.VariadictArityError) as caught:\n+        jmespath.search(expression, {}, options=options)\n+    assert caught.value.expected_arity == minimum\n+    assert custom.calls == []\n+\n+\n+def test_nonvariadic_validation_is_unchanged():\n+    with pytest.raises(exceptions.ArityError):\n+        jmespath.search('abs(`1`, `2`)', {})\n+    with pytest.raises(exceptions.JMESPathTypeError):\n+        jmespath.search('abs(`true`)', {})\n+    assert jmespath.search('abs(`-2`)', {}) == 2\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task for a validation gap already present in the supplied snapshot, so no injected defect is needed. The snapshot already contains the slice-projection wrapper; do not apply the original slice regression. Hidden tests exercise invalid arguments beyond the declared signature length, rejection before custom-function body side effects, fixed-prefix validation, array subtypes, union types, unrestricted tails, valid merges, and existing arity behavior. The required repair is in shared signature enforcement rather than slice parsing or a merge-specific check.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "The expression merge(`{\"a\":1}`, `[[\"b\",2]]`) currently succeeds, although merge requires every argument to be an object. Make typed variadic signatures enforce their contract for every argument covered by the final variadic parameter, before the function body runs. This must also work for functions registered with @jmespath.functions.signature on a Functions subclass supplied through Options.custom_functions, including signatures with fixed parameters followed by a variadic parameter. Preserve each fixed parameter's declared types, existing array-subtype and union-type checks, minimum-arity errors, and unrestricted variadic parameters whose types list is empty. Valid multi-object merges and not_null must retain their existing behavior. Deliver a unified diff against non-test repository files; leave tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises tracing through parser-built function nodes, interpreter dispatch, registry signatures, and custom-function injection. Selective inspection of those layers is useful to distinguish a permissive Python function body from the shared validator that should enforce the JMESPath contract.",
+  "change_type": "dependency",
+  "description": "With the accepted slice-projection repair already applied, investigate why `merge(`{\"a\":1}`, `[[\"b\",2]]`)` succeeds even though every argument to `merge` must be an object. Repair signature validation generically so a typed variadic parameter validates every remaining argument before the function body runs, including functions supplied through `Options.custom_functions`. Deliver a unified diff against non-test files, preserving existing minimum-arity behavior and unrestricted variadic functions. Relevant symbols are `Functions._validate_arguments`, `Functions._type_check`, `Functions._type_check_single`, `Functions._func_merge`, `Functions._func_not_null`, and `signature` in `jmespath/functions.py`, plus `Options`, `TreeInterpreter.__init__`, and `TreeInterpreter.visit_function_expression` in `jmespath/visitor.py`.",
+  "expected_answer_change": "The answer must account for `_type_check` iterating only over declared signature entries even when `_validate_arguments` permits additional variadic arguments. Every argument covered by the final variadic signature entry must receive its declared type check, while fixed arguments retain their own signatures. The reported expression should raise `JMESPathTypeError`; valid multi-object merges should still work, zero-argument merges should retain their arity error, and `not_null` should retain its unrestricted argument behavior.",
+  "why_substantive": "This changes the dependency responsible for an incorrect collection result from slice AST construction to function dispatch and signature enforcement. Python's `dict.update` accepts an array of key-value pairs, hiding the missing validation of later variadic arguments. The repair must work for registered custom functions rather than special-casing `merge`."
+ },
+ "task_id": "jmespath-jmespath-py-r01-01-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[arrays(`[1]`, `[2]`, `[true]`)-arrays]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[arrays(`[1]`, `[]`, `[2,\"bad\"]`)-arrays]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[choice('ok', `2`, `false`)-choice]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[tagged('ok', `{}`, `[[]]`)-tagged]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[tagged('ok', `{}`, `{}`, `null`)-tagged]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{\"a\":1}`, `[[\"b\",2]]`)]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{}`, `{\"b\":2}`, `null`)]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{}`, `{}`, `{}`, `[]`)]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 8,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1012
+   },
+   "patch_files": [
+    "jmespath/functions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[arrays(`[1]`, `[2]`, `[true]`)-arrays]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[arrays(`[1]`, `[]`, `[2,\"bad\"]`)-arrays]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[choice('ok', `2`, `false`)-choice]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[tagged('ok', `{}`, `[[]]`)-tagged]",
+   "tests/test_variadic_signature_validation.py::test_custom_validation_precedes_body[tagged('ok', `{}`, `{}`, `null`)-tagged]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{\"a\":1}`, `[[\"b\",2]]`)]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{}`, `{\"b\":2}`, `null`)]",
+   "tests/test_variadic_signature_validation.py::test_merge_rejects_every_non_object[merge(`{}`, `{}`, `{}`, `[]`)]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

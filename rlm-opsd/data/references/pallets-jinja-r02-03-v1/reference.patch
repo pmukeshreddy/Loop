@@ -1,0 +1,67 @@
+--- a/src/jinja2/utils.py
++++ b/src/jinja2/utils.py
+@@ -430,17 +430,49 @@
+ 
+ @abc.MutableMapping.register
+ class LRUCache:
+-    """A simple LRU Cache implementation."""
++    """A simple LRU Cache implementation.
++
++    A positive capacity bounds storage, zero disables storage, and -1
++    allows unlimited storage. Capacity must be an integer, not a bool,
++    and must be at least -1.
++    """
+ 
+     # this is fast for small capacities (something below 1000) but doesn't
+     # scale.  But as long as it's only used as storage for templates this
+     # won't do any harm.
+ 
+     def __init__(self, capacity: int) -> None:
++        self._validate_capacity(capacity)
+         self.capacity = capacity
+         self._mapping: t.Dict[t.Any, t.Any] = {}
+         self._queue: te.Deque[t.Any] = deque()
+         self._postinit()
++
++    @staticmethod
++    def _validate_capacity(capacity: int) -> None:
++        if isinstance(capacity, bool) or not isinstance(capacity, int):
++            raise TypeError("capacity must be an integer")
++        if capacity < -1:
++            raise ValueError("capacity must be at least -1")
++
++    def resize(self, capacity: int) -> None:
++        """Change the capacity, discarding the oldest entries as needed.
++
++        Zero clears the cache and disables storage. -1 allows unlimited
++        storage. A positive capacity keeps only the most recently used
++        entries that fit. Invalid capacities leave the cache unchanged.
++        """
++        self._validate_capacity(capacity)
++
++        with self._wlock:
++            self.capacity = capacity
++
++            if capacity == 0:
++                self._mapping.clear()
++                self._queue.clear()
++            elif capacity > 0:
++                while len(self._mapping) > capacity:
++                    del self._mapping[self._popleft()]
+ 
+     def _postinit(self) -> None:
+         # alias all queue methods for faster lookup
+@@ -532,9 +564,12 @@
+         has the highest priority then.
+         """
+         with self._wlock:
++            if self.capacity == 0:
++                return
++
+             if key in self._mapping:
+                 self._remove(key)
+-            elif len(self._mapping) == self.capacity:
++            elif self.capacity > 0 and len(self._mapping) >= self.capacity:
+                 del self._mapping[self._popleft()]
+ 
+             self._append(key)

@@ -1,0 +1,130 @@
+{
+ "answer": "--- a/src/jinja2/optimizer.py\n+++ b/src/jinja2/optimizer.py\n@@ -33,6 +33,10 @@\n     ) -> nodes.Node:\n         node = super().generic_visit(node, *args, **kwargs)\n \n+        # Traverse volatile contexts without attempting constant folding.\n+        if args and isinstance(args[0], nodes.EvalContext) and args[0].volatile:\n+            return node\n+\n         # Do constant folding. Some other nodes besides Expr have\n         # as_const, but folding them causes errors later on.\n         if isinstance(node, nodes.Expr):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 5270 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution worked within a focused 5,270-character context without sub-calls. The change requires understanding recursive traversal, positional context propagation, and transformer replacement semantics so that folding can be suppressed without suppressing traversal."
+  },
+  "notes": "This is a natural, precisely scoped implementation request with a clear unified-diff output format. It specifies observable requirements rather than the patch location or implementation. The verified patch preserves traversal before applying the volatile-context guard, and the supplied tests cover nested expressions, constant leaves, custom replacements, and unchanged default folding. The task is substantively distinct from its parent: it changes optimizer folding behavior rather than visitor dispatch."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused optimizer and visitor modules total less than 16,000 characters. The task requires distinguishing recursive transformation from constant folding, understanding positional argument propagation to descendants, and preserving default folding behavior. These decisions can be made directly from the two small modules."
+  },
+  "context": {
+   "files": [
+    "src/jinja2/optimizer.py",
+    "src/jinja2/visitor.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/optimizer.py",
+    "symbol": "src/jinja2/optimizer.py::Optimizer.generic_visit",
+    "why": "It transforms children before attempting expression folding, but currently has no optimizer-level volatile-context protection."
+   },
+   {
+    "path": "src/jinja2/visitor.py",
+    "symbol": "src/jinja2/visitor.py::NodeTransformer.generic_visit",
+    "why": "Recursive visits forward positional and keyword arguments and apply replacements in both list and scalar fields."
+   },
+   {
+    "path": "src/jinja2/compiler.py",
+    "symbol": "src/jinja2/compiler.py::optimizeconst",
+    "why": "The existing caller-side guard excludes volatile frames, explaining why compiler-mediated calls do not expose the direct-use gap."
+   }
+  ],
+  "expected_answer": "--- a/src/jinja2/optimizer.py\n+++ b/src/jinja2/optimizer.py\n@@ -33,6 +33,9 @@\n     ) -> nodes.Node:\n         node = super().generic_visit(node, *args, **kwargs)\n \n+        if args and isinstance(args[0], nodes.EvalContext) and args[0].volatile:\n+            return node\n+\n         # Do constant folding. Some other nodes besides Expr have\n         # as_const, but folding them causes errors later on.\n         if isinstance(node, nodes.Expr):\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_optimizer_volatile_context.py\n@@ -0,0 +1,78 @@\n+import pytest\n+\n+from jinja2 import Environment\n+from jinja2 import nodes\n+from jinja2.optimizer import Optimizer\n+\n+\n+def make_expression(environment):\n+    expression = nodes.Add(\n+        nodes.Mul(nodes.Const(2), nodes.Const(3)), nodes.Const(4)\n+    )\n+    expression.set_environment(environment)\n+    return expression\n+\n+\n+def test_volatile_preserves_nested_expressions():\n+    environment = Environment()\n+    eval_ctx = nodes.EvalContext(environment)\n+    eval_ctx.volatile = True\n+    expression = make_expression(environment)\n+\n+    result = Optimizer(environment).visit(expression, eval_ctx)\n+\n+    assert result is expression\n+    assert isinstance(result, nodes.Add)\n+    assert isinstance(result.left, nodes.Mul)\n+    assert result.left.left.value == 2\n+    assert result.left.right.value == 3\n+    assert result.right.value == 4\n+\n+\n+@pytest.mark.parametrize(\"mode\", [\"omitted\", \"none\", \"stable\"])\n+def test_folding_without_volatile_context(mode):\n+    environment = Environment()\n+    expression = make_expression(environment)\n+    optimizer = Optimizer(environment)\n+    if mode == \"omitted\":\n+        result = optimizer.visit(expression)\n+    elif mode == \"none\":\n+        result = optimizer.visit(expression, None)\n+    else:\n+        eval_ctx = nodes.EvalContext(environment)\n+        assert eval_ctx.volatile is False\n+        result = optimizer.visit(expression, eval_ctx)\n+\n+    assert isinstance(result, nodes.Const)\n+    assert result.value == 10\n+\n+\n+def test_volatile_traversal_still_applies_custom_replacements(monkeypatch):\n+    environment = Environment()\n+    eval_ctx = nodes.EvalContext(environment)\n+    eval_ctx.volatile = True\n+    seen = []\n+\n+    class ReplacingOptimizer(Optimizer):\n+        def visit_Name(self, node, *args, **kwargs):\n+            seen.append((node.name, args, kwargs))\n+            return nodes.Const(5, environment=environment)\n+\n+    def forbidden_as_const(self, *args, **kwargs):\n+        raise AssertionError(\"constant evaluation attempted in volatile context\")\n+\n+    for cls in (nodes.Add, nodes.Mul, nodes.Const):\n+        monkeypatch.setattr(cls, \"as_const\", forbidden_as_const)\n+\n+    expression = nodes.Add(nodes.Name(\"x\", \"load\"), make_expression(environment))\n+    root = nodes.Output([expression], environment=environment)\n+    root.set_environment(environment)\n+    result = ReplacingOptimizer(environment).visit(root, eval_ctx, marker=\"sentinel\")\n+\n+    assert result is root\n+    assert seen == [(\"x\", (eval_ctx,), {\"marker\": \"sentinel\"})]\n+    assert result.nodes[0] is expression\n+    assert isinstance(expression.left, nodes.Const)\n+    assert expression.left.value == 5\n+    assert isinstance(expression.right, nodes.Add)\n+    assert isinstance(expression.right.left, nodes.Mul)\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against the unchanged snapshot, not a dispatch regression. The new acceptance file checks nested expression preservation, continued folding for omitted/None/nonvolatile contexts, and traversal with custom replacements while rejecting constant-evaluation attempts at multiple depths. The full compiler module is omitted from the focused context because its caller-side guard is already described in the request and is not needed to implement the optimizer contract.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Direct calls to `Optimizer.visit` should respect volatile evaluation contexts, just as compiler-mediated optimization already does through the `optimizeconst` guard. When the first positional argument after the node is a `nodes.EvalContext` with `volatile=True`, the optimizer must traverse the entire subtree without attempting constant folding on any expression, including nested expressions and constant leaves. Traversal must still invoke custom visitor handlers and retain their replacements using the existing `NodeTransformer` semantics. With no evaluation context, an explicit `None`, or a nonvolatile evaluation context, preserve the existing constant-folding behavior. Leave visitor dispatch and compiler behavior unchanged. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Retains focused direct solving, with a small cross-module comparison to distinguish caller-side protection from a reusable component's contract. Nested-expression tests verify recursive context propagation rather than visitor dispatch precedence.",
+  "change_type": "constraint",
+  "description": "Make direct optimizer use respect volatile evaluation contexts, not only calls routed through the compiler. In src/jinja2/optimizer.py, update Optimizer.generic_visit so that, when its first positional argument is an evaluation context with volatile=True, it still traverses children using NodeTransformer.generic_visit but does not attempt constant folding at any level. Preserve folding with no supplied context and with nonvolatile contexts. Deliver a production unified diff and acceptance tests demonstrating that a nested constant expression remains an expression under a volatile context and folds under a nonvolatile context. Examine src/jinja2/compiler.py::optimizeconst as the existing caller-side guard.",
+  "expected_answer_change": "The repair belongs in Optimizer.generic_visit and depends on the order of super().generic_visit, the forwarded positional context, and the nodes.Expr folding branch. The compiler's optimizeconst guard explains why compiler-mediated calls already avoid this case, but is insufficient for direct Optimizer.visit calls.",
+  "why_substantive": "The original changes handler selection in NodeVisitor.get_visitor. This variation leaves dispatch unchanged and moves an optimization safety constraint into the optimizer itself. It requires distinguishing traversal from folding and ensuring that context forwarding protects descendants, rather than implementing MRO lookup."
+ },
+ "task_id": "pallets-jinja-r02-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_optimizer_volatile_context.py::test_volatile_preserves_nested_expressions",
+   "tests/test_optimizer_volatile_context.py::test_volatile_traversal_still_applies_custom_replacements"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 914
+   },
+   "patch_files": [
+    "src/jinja2/optimizer.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_optimizer_volatile_context.py::test_volatile_preserves_nested_expressions",
+   "tests/test_optimizer_volatile_context.py::test_volatile_traversal_still_applies_custom_replacements"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

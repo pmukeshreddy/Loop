@@ -1,0 +1,170 @@
+{
+ "answer": "--- a/src/attr/_make.py\n+++ b/src/attr/_make.py\n@@ -187,10 +187,10 @@\n     if isinstance(on_setattr, (list, tuple)):\n         on_setattr = setters.pipe(*on_setattr)\n \n-    if validator and isinstance(validator, (list, tuple)):\n-        validator = and_(*validator)\n-\n-    if converter and isinstance(converter, (list, tuple)):\n+    if isinstance(validator, (list, tuple)):\n+        validator = and_(*validator) if len(validator) else None\n+\n+    if isinstance(converter, (list, tuple)) and len(converter):\n         converter = pipe(*converter)\n \n     return _CountingAttr(\n@@ -2197,7 +2197,7 @@\n     annotations = {\"return\": None}\n \n     for a in attrs:\n-        if a.validator:\n+        if a.validator is not None:\n             attrs_to_validate.append(a)\n \n         attr_name = a.name\n--- a/src/attr/setters.py\n+++ b/src/attr/setters.py\n@@ -45,7 +45,7 @@\n         return new_value\n \n     v = attrib.validator\n-    if not v:\n+    if v is None:\n         return new_value\n \n     v(instance, attrib, new_value)\n@@ -61,7 +61,7 @@\n     .. versionadded:: 20.1.0\n     \"\"\"\n     c = attrib.converter\n-    if c:\n+    if c is not None:\n         # This can be removed once we drop 3.8 and use attrs.Converter instead.\n         from ._make import Converter\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0005703527840635086,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 26,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "i",
+    "l",
+    "ls",
+    "selected"
+   ],
+   "subcall_errors": 1,
+   "subcall_max_prompt_chars": 38889,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 4,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 4,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 5,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 862624 chars; 26 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "8 turns; variables reused across turns: ['files', 'i', 'l', 'ls', 'selected']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "5 sub-calls (1 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final unified diff combined production-file edits, was constructed programmatically, and was inspected after construction. The supplied verification evidence exercises initialization, assignment, explicit validation, callback ordering, and preservation of the stored value after validation failure.",
+   "inspect_locate": "The execution used 26 targeted context searches without printing the whole repository context. Locating callback-presence handling across declaration normalization, initializer generation, and runtime setters was useful to the coordinated fix.",
+   "persistent_state": "Variables were reused across eight turns to retain source selections and assemble the patch, supporting an inventory of the affected lifecycle paths."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise production-only diff deliverable. It specifies observable callback semantics without naming the defective implementation symbols or prescribing solver operations. The assignment and initialization requirements are related aspects of one callback-presence defect, not an unrelated composite quiz. It is distinct from the existing conversion-frequency and default-assignment-policy tasks. Recursive decomposition was attempted but is appropriately not listed as established."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable combines edits across production modules; each hunk must be checked against exact source and the collected lifecycle requirements.",
+   "inspect_locate": "Callback handling is spread across field declaration normalization, builder policy, initializer generation, explicit validation, and runtime setter hooks.",
+   "persistent_state": "The solver must retain a inventory of callback-presence checks and which lifecycle paths consume them while assembling coordinated edits.",
+   "recursive_decomposition": "Construction, subsequent assignment, explicit validate(), and callback composition are independent execution paths that must each honor the same presence rule."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::attrib",
+    "why": "Currently truth-tests callbacks before deciding whether list/tuple normalization applies."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_attrs_to_init_script",
+    "why": "Currently selects initialization validators using a truthiness check."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::validate",
+    "why": "Provides the explicit-validation path and already distinguishes None from callable objects."
+   },
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::validate",
+    "why": "Currently skips false-valued validator objects during assignment."
+   },
+   {
+    "path": "src/attr/setters.py",
+    "symbol": "src/attr/setters.py::convert",
+    "why": "Currently skips false-valued converter objects during assignment."
+   },
+   {
+    "path": "src/attr/_make.py",
+    "symbol": "src/attr/_make.py::_ClassBuilder.add_setattr",
+    "why": "Runs hooks before storing the new value, preserving atomic rejection on validation failure."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_falsy_callbacks.py\n@@ -0,0 +1,50 @@\n+import pytest\n+\n+import attr\n+\n+\n+@pytest.mark.parametrize(\"slots\", [False, True])\n+@pytest.mark.parametrize(\"strict_bool\", [False, True])\n+def test_falsy_callbacks(slots, strict_bool):\n+    events = []\n+\n+    class Convert:\n+        def __bool__(self):\n+            if strict_bool:\n+                raise AssertionError(\"converter truth-tested\")\n+            return False\n+\n+        def __call__(self, value):\n+            events.append((\"convert\", value))\n+            return int(value)\n+\n+    class Validate:\n+        def __bool__(self):\n+            if strict_bool:\n+                raise AssertionError(\"validator truth-tested\")\n+            return False\n+\n+        def __call__(self, instance, field, value):\n+            events.append((\"validate\", field.name, value))\n+            if value < 0:\n+                raise ValueError(\"negative\")\n+\n+    @attr.define(slots=slots)\n+    class C:\n+        x = attr.field(converter=Convert(), validator=Validate())\n+\n+    c = C(\"2\")\n+    assert c.x == 2\n+    assert events == [(\"convert\", \"2\"), (\"validate\", \"x\", 2)]\n+    events.clear()\n+    c.x = \"3\"\n+    assert c.x == 3\n+    assert events == [(\"convert\", \"3\"), (\"validate\", \"x\", 3)]\n+    events.clear()\n+    attr.validate(c)\n+    assert events == [(\"validate\", \"x\", 3)]\n+    with pytest.raises(ValueError, match=\"negative\"):\n+        c.x = \"-1\"\n+    assert c.x == 3\n+    with pytest.raises(ValueError, match=\"negative\"):\n+        C(\"-1\")\n",
+  "include_failure_log": false,
+  "notes": "The hidden tests exercise both dictionary-backed and slotted classes, false-valued callbacks, truth-testing exceptions, and all three lifecycle entry points. Existing tests cover global disabling and callback-list composition.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Callable converter and validator objects must not be treated as absent because of their truth value. Make attrs accept these callbacks when __bool__ returns False, and do not evaluate their truth value to decide whether to normalize, install, or invoke them; a callback whose __bool__ raises must work too. Apply this consistently to field declarations, generated initialization, the default mutable assignment pipeline, and explicit attr.validate(). Conversion must still precede validation, and a validation error during assignment must leave the stored value unchanged. Preserve global validation disabling and the existing behavior for None and list/tuple callback composition. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-attrs-attrs-r02-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[False-False]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[False-True]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[True-False]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1382
+   },
+   "patch_files": [
+    "src/attr/_make.py",
+    "src/attr/setters.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[False-False]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[False-True]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[True-False]",
+   "tests/test_falsy_callbacks.py::test_falsy_callbacks[True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1378,
+  "stability_runs": 3
+ }
+}

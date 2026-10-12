@@ -1,0 +1,160 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_transaction.py
+@@ -0,0 +1,157 @@
++import sys
++import types
++
++import pytest
++import toolz
++from tlz import _build_tlz as builder
++
++
++def assert_bindings(module, before):
++    assert set(module.__dict__) == set(before)
++    for name, value in before.items():
++        assert module.__dict__[name] is value
++
++
++def target_module():
++    module = types.ModuleType('tlz.transaction')
++    module.__package__ = 'caller.package'
++    module.__file__ = 'caller.py'
++    module.__loader__ = object()
++    module.__spec__ = object()
++    module.keep = object()
++    module.alias = object()
++    module.first = object()
++    return module
++
++
++@pytest.mark.parametrize('error_type', [RuntimeError, KeyboardInterrupt, SystemExit])
++def test_discovery_failure_restores_namespace(monkeypatch, error_type):
++    loader = builder.TlzLoader()
++    module = target_module()
++    before = dict(module.__dict__)
++    error = error_type('discovery failed')
++    external = types.ModuleType('transaction_external')
++
++    def discover(fullname):
++        assert fullname == 'tlz.transaction'
++        module.__dict__.clear()
++        module.__dict__.update({'__name__': fullname, 'introduced': object()})
++        monkeypatch.setitem(sys.modules, external.__name__, external)
++        raise error
++
++    monkeypatch.setattr(loader, '_load_toolz', discover)
++    with pytest.raises(error_type) as caught:
++        loader.exec_module(module)
++    assert caught.value is error
++    assert_bindings(module, before)
++    assert sys.modules[external.__name__] is external
++
++
++@pytest.mark.parametrize('failure_stage', ['child_import', 'hash'])
++def test_late_failure_restores_only_target(monkeypatch, failure_stage):
++    loader = builder.TlzLoader()
++    module = target_module()
++    before = dict(module.__dict__)
++    fast = types.ModuleType('cytoolz.transaction', 'backend docs')
++    slow = types.ModuleType('toolz.transaction', 'slow docs')
++    fast.__package__ = fast.__name__
++    slow.__package__ = slow.__name__
++    fast.__file__ = 'fast.py'
++    slow.__file__ = 'slow.py'
++    fast.added = object()
++    fast.alias = object()
++    slow.alias = toolz.pipe
++    child = types.ModuleType('cytoolz.transaction.first')
++    child.__package__ = fast.__name__
++    fast.first = child
++    second = types.ModuleType('cytoolz.transaction.second')
++    second.__package__ = fast.__name__
++    fast.second = second
++    mirrored = types.ModuleType('tlz.transaction.first')
++    error = KeyboardInterrupt('late population failure')
++    side_effect = object()
++    calls = []
++
++    def fail():
++        assert module.first is mirrored
++        assert module.alias is toolz.pipe
++        assert module.__package__ == 'tlz.transaction'
++        assert module.__doc__ == 'backend docs'
++        assert module.__file__ == 'slow.py'
++        assert module.added is fast.added
++        fast.import_side_effect = side_effect
++        slow.import_side_effect = side_effect
++        raise error
++
++    class BadHash:
++        def __hash__(self):
++            fail()
++
++    if failure_stage == 'hash':
++        slow.second = BadHash()
++
++    def discover(fullname):
++        assert fullname == module.__name__
++        return {'cytoolz': fast, 'toolz': slow}
++
++    def import_child(fullname):
++        calls.append(fullname)
++        if fullname == mirrored.__name__:
++            monkeypatch.setitem(sys.modules, fullname, mirrored)
++            return mirrored
++        assert fullname == 'tlz.transaction.second'
++        fail()
++
++    monkeypatch.setattr(loader, '_load_toolz', discover)
++    monkeypatch.setattr(builder, 'import_module', import_child)
++    with pytest.raises(KeyboardInterrupt) as caught:
++        loader.exec_module(module)
++    assert caught.value is error
++    assert_bindings(module, before)
++    expected_calls = [mirrored.__name__]
++    if failure_stage == 'child_import':
++        expected_calls.append('tlz.transaction.second')
++    assert calls == expected_calls
++    assert sys.modules[mirrored.__name__] is mirrored
++    assert fast.import_side_effect is side_effect
++    assert slow.import_side_effect is side_effect
++
++
++@pytest.mark.parametrize('local_doc', [None, 'caller docs'])
++def test_success_keeps_population_policy(monkeypatch, local_doc):
++    loader = builder.TlzLoader()
++    module = target_module()
++    module.__doc__ = local_doc
++    retained = module.keep
++    fast = types.ModuleType('cytoolz.transaction', 'backend docs')
++    slow = types.ModuleType('toolz.transaction')
++    fast.__package__ = fast.__name__
++    slow.__file__ = 'slow.py'
++    fast.keep = object()
++    fast.added = object()
++    fast.alias = object()
++    slow.alias = toolz.pipe
++    child = types.ModuleType('cytoolz.transaction.first')
++    child.__package__ = fast.__name__
++    fast.first = child
++    mirrored = types.ModuleType('tlz.transaction.first')
++    calls = []
++
++    def import_child(fullname):
++        calls.append(fullname)
++        assert fullname == mirrored.__name__
++        return mirrored
++
++    monkeypatch.setattr(loader, '_load_toolz',
++                        lambda fullname: {'cytoolz': fast, 'toolz': slow})
++    monkeypatch.setattr(builder, 'import_module', import_child)
++    loader.exec_module(module)
++    assert module.keep is retained
++    assert module.added is fast.added
++    assert module.alias is toolz.pipe
++    assert module.first is mirrored
++    assert module.__package__ == 'tlz.transaction'
++    assert module.__doc__ == (local_doc or 'backend docs')
++    assert module.__file__ == 'slow.py'
++    assert module.__name__ == 'tlz.transaction'
++    assert calls == [mirrored.__name__]

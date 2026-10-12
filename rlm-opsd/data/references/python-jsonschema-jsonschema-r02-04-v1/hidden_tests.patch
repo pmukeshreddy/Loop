@@ -1,0 +1,92 @@
+--- /dev/null
++++ b/jsonschema/tests/test_contains_resource_scope.py
+@@ -0,0 +1,89 @@
++import warnings
++
++import pytest
++from referencing import Registry
++from referencing.jsonschema import DRAFT202012
++
++import jsonschema
++
++
++ROOT = "https://example.test/root.json"
++CONTAINS = {"$id": "child/", "$ref": "value.json"}
++RESOURCES = {
++    "https://example.test/value.json": {"type": "integer"},
++    "https://example.test/child/value.json": {"type": "string"},
++}
++
++
++@pytest.mark.parametrize(
++    "instance, bounds, keyword",
++    [
++        (["ok"], {}, None),
++        ([1], {}, "contains"),
++        ([], {}, "contains"),
++        ([1], {"minContains": 0}, None),
++        ([], {"minContains": 0}, None),
++        (["a", 1], {"minContains": 2}, "minContains"),
++        (["a", "b", 1], {"minContains": 2}, None),
++        (["a", "b", 1], {"maxContains": 1}, "maxContains"),
++        (["a", 1, 2], {"maxContains": 1}, None),
++        (["a"], {"minContains": 0, "maxContains": 0}, "maxContains"),
++        ([1], {"minContains": 0, "maxContains": 0}, None),
++    ],
++)
++def test_contains_resource_scope_and_bounds(instance, bounds, keyword):
++    registry = Registry().with_resources(
++        (uri, DRAFT202012.create_resource(contents))
++        for uri, contents in RESOURCES.items()
++    )
++    schema = {"$id": ROOT, "contains": CONTAINS, **bounds}
++    validator = jsonschema.Draft202012Validator(schema, registry=registry)
++    errors = list(validator.iter_errors(instance))
++    assert validator.is_valid(instance) is (keyword is None)
++    if keyword is None:
++        assert errors == []
++    else:
++        assert len(errors) == 1
++        assert errors[0].validator == keyword
++        expected_value = CONTAINS if keyword == "contains" else bounds[keyword]
++        assert errors[0].validator_value == expected_value
++
++
++@pytest.mark.parametrize(
++    "instance, bounds, valid",
++    [
++        (["ok"], {}, True),
++        ([1], {}, False),
++        (["a", "b"], {"minContains": 2}, True),
++        (["a", "b"], {"maxContains": 1}, False),
++        ([1], {"minContains": 0}, True),
++    ],
++)
++def test_contains_preserves_legacy_scope(instance, bounds, valid):
++    schema = {"$id": ROOT, "contains": CONTAINS, **bounds}
++    store = dict(RESOURCES)
++    def no_remote(uri):
++        raise AssertionError(f"Unexpected remote retrieval: {uri}")
++
++    with warnings.catch_warnings():
++        warnings.simplefilter("ignore", DeprecationWarning)
++        resolver = jsonschema.RefResolver.from_schema(
++            schema, store=store, handlers={"https": no_remote},
++        )
++    validator = jsonschema.Draft202012Validator(schema, resolver=resolver)
++    assert validator.is_valid(instance) is valid
++
++
++@pytest.mark.parametrize(
++    "contains, instance, bounds, valid",
++    [
++        (True, [1, "ok"], {"minContains": 2}, True),
++        (True, [1, "ok"], {"maxContains": 1}, False),
++        (False, [1], {}, False),
++        (False, [1], {"minContains": 0}, True),
++        ({"$id": "child/", "$ref": "value.json"}, 42, {}, True),
++    ],
++)
++def test_contains_boolean_and_nonarray_behavior(contains, instance, bounds, valid):
++    schema = {"$id": ROOT, "contains": contains, **bounds}
++    assert jsonschema.Draft202012Validator(schema).is_valid(instance) is valid

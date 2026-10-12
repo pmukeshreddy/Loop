@@ -1,0 +1,222 @@
+{
+ "answer": "--- a/pyparsing/util.py\n+++ b/pyparsing/util.py\n@@ -373,6 +373,9 @@\n                 yield prefix, sorted([s[1:] for s in suffixes], key=len, reverse=True)\n         else:\n             yield namelist[0][0], [namelist[0][1:]]\n+\n+    # Materialize once so validation does not consume single-pass iterables.\n+    word_list = list(word_list)\n \n     if _level == 1:\n         if not word_list:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0004317728108159923,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "hits"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199705 chars; 12 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "4 turns; variables reused across turns: ['files', 'hits']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The solver constructed the unified diff programmatically and inspected it before finishing. Executable verification separately established that the patch satisfies the iterator-equivalence and validation requirements.",
+   "inspect_locate": "The reference execution used four targeted searches to locate the implementation and relevant context without printing the entire repository. Naming the public API establishes the requested behavior but does not prescribe the repair.",
+   "persistent_state": "The solver reused repository-context variables across turns while accounting for validation, recursive calls, and existing option behavior."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with a precise patch format. The required repair involves reasoning about repeated consumption, validation order, and recursive behavior rather than merely locating a symbol. The question does not reveal the materialization fix, prescribe solver operations, or duplicate an accepted task."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch must be assembled and checked against the original file while preserving list-input output across the option combinations and fixing iterator validation.",
+   "inspect_locate": "The public regex generator is used by both HTML-entity matching and the source converter. Its advertised iterable input contract must be located and distinguished from the related one_of implementation.",
+   "persistent_state": "The solver must retain the input-validation branches, recursive-call distinction, and existing option behavior while constructing a repair from the exact source."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "pyparsing/util.py",
+    "symbol": "pyparsing/util.py::make_compressed_re",
+    "why": "Top-level truthiness and membership validation occur before materialization, so membership testing can exhaust a single-pass input."
+   },
+   {
+    "path": "pyparsing/helpers.py",
+    "symbol": "pyparsing/helpers.py::common_html_entity",
+    "why": "This consumer relies on the existing generated-pattern behavior for reusable iterable inputs."
+   },
+   {
+    "path": "pyparsing/tools/cvt_pyparsing_pep8_names.py",
+    "symbol": "pyparsing/tools/cvt_pyparsing_pep8_names.py::pre_pep8_arg_name",
+    "why": "The converter embeds the generated regex directly, making preservation of list-input pattern construction important."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_compressed_re_single_pass.py\n@@ -0,0 +1,34 @@\n+import pytest\n+from pyparsing.util import make_compressed_re\n+\n+\n+@pytest.mark.parametrize(\"words\", [\n+    [\"parse\", \"parser\", \"parsed\", \"parse\", \"part\"],\n+    [\"a\", \"ab\", \"abc\", \"abd\", \"b\"],\n+    [\"[\", \"]\", \"-\", \"^\", \"\\\\\"],\n+    [\"a.b\", \"a+b\", \"a?b\", \"a.b\"],\n+    [\"only\"],\n+])\n+@pytest.mark.parametrize(\"max_level\", [0, 1, 2, 4])\n+@pytest.mark.parametrize(\"non_capturing_groups\", [False, True])\n+def test_single_pass_matches_list(words, max_level, non_capturing_groups):\n+    options = dict(max_level=max_level, non_capturing_groups=non_capturing_groups)\n+    expected = make_compressed_re(words, **options)\n+    assert make_compressed_re((word for word in words), **options) == expected\n+    assert make_compressed_re(iter(words), **options) == expected\n+\n+\n+@pytest.mark.parametrize(\"max_level\", [0, 1, 2])\n+def test_empty_iterator_validation(max_level):\n+    with pytest.raises(ValueError, match=\"no words given to make_compressed_re\"):\n+        make_compressed_re(iter(()), max_level=max_level)\n+\n+\n+@pytest.mark.parametrize(\"words\", [\n+    [\"\"],\n+    [\"abc\", \"\"],\n+    [\"\", \"abc\"],\n+])\n+def test_empty_string_iterator_validation(words):\n+    with pytest.raises(ValueError, match=\"word list cannot contain empty string\"):\n+        make_compressed_re((word for word in words))\n",
+  "include_failure_log": false,
+  "notes": "Hidden tests compare iterator and list behavior rather than imposing a new regex normalization. The existing top-level validation messages and internal recursive empty-input handling are part of the requested contract.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "make_compressed_re advertises Iterable[str] input, but passing a generator or another single-pass iterator does not reliably produce the same pattern as passing the corresponding list. Make single-pass inputs first-class: for a finite sequence of nonempty strings, every supported combination of max_level and non_capturing_groups must return exactly the pattern produced for the equivalent list. An empty iterator must raise the existing no-words ValueError, and an iterator containing an empty string must raise the existing empty-string ValueError. Preserve existing list-input behavior, escaping, duplicate handling, and internal recursive behavior. Return a unified diff against the repository files without changing tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pyparsing-pyparsing-r01-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[0]",
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[1]",
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words4]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 43,
+   "full_suite": {
+    "failed": 0,
+    "passed": 2092
+   },
+   "patch_files": [
+    "pyparsing/util.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[0]",
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[1]",
+   "tests/test_compressed_re_single_pass.py::test_empty_iterator_validation[2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-0-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-1-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-2-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[False-4-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-0-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-1-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-2-words4]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words0]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words1]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words2]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words3]",
+   "tests/test_compressed_re_single_pass.py::test_single_pass_matches_list[True-4-words4]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 2046,
+  "stability_runs": 3
+ }
+}

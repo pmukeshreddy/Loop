@@ -1,0 +1,75 @@
+{
+  "task_id": "hynek-structlog-r02-00",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 2427,
+    "context_lengths": [
+      2427
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context))\nprint(context[0])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context))\nprint(context[0])"
+      ],
+      "stdout_raw_chars": 2445,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 1\n# File: src/structlog/_frames.py\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete details.\n\nfrom __future__ import annotations\n\nimport sys\nimport traceback\n\nfrom collections.abc import Callable\nfrom io import StringIO\nfrom types import FrameType\n\nfrom .contextvars import _ASYNC_CALLING_STACK\nfrom .typing import ExcInfo\n\n\ndef _format_exception(exc_info: ExcInfo) -> str:\n    \"\"\"\n    Prettyprint an `exc_info` tuple.\n\n    Shamelessly stolen from stdlib's logging module.\n    \"\"\"\n    sio = StringIO()\n\n    traceback.print_exception(exc_info[0], exc_info[1], exc_info[2], None, sio)\n    s = sio.getvalue()\n    sio.close()\n    if s[-1:] == \"\\n\":\n        s = s[:-1]\n\n    return s\n\n\ndef _find_first_app_frame_and_name(\n    additional_ignores: list[str] | None = None,\n    *,\n    stacklevel: int | None = None,\n    _getframe: Callable[[], FrameType] = sys._getframe,\n) -> tuple[FrameType, str]:\n    \"\"\"\n    Remove all intra-structlog calls and return the relevant app frame.\n\n    Args:\n        additional_ignores:\n            Additional names with which the first frame must not start.\n\n        stacklevel:\n            After getting out of structlog, skip this many frames.\n\n        _getframe:\n            Callable to find current frame. Only for testing to avoid\n            monkeypatching of sys._getframe.\n\n    Returns:\n        tuple of (frame, name)\n    \"\"\"\n    ignores = (\"structlog\", *tuple(additional_ignores or ()))\n    f = _ASYNC_CALLING_STACK.get(_getframe())\n    name = f.f_globals.get(\"__name__\") or \"?\"\n\n    while name.startswith(ignores):\n        if f.f_back is None:\n            name = \"?\"\n            break\n        f = f.f_back\n        name = f.f_globals.get(\"__name__\") or \"?\"\n\n    if stacklevel is not None:\n        for _ in range(stacklevel):\n            if f.f_back is None:\n                break\n            f = f.f_back\n            name = f.f_globals.get(\"__name__\") or \"?\"\n\n    return f, name\n\n\ndef _format_stack(frame: FrameType) -> str:\n    \"\"\"\n    Pretty-print the stack of *frame* like logging would.\n    \"\"\"\n    sio = StringIO()\n\n    sio.write(\"Stack (most recent call last):\\n\")\n    traceback.print_stack(frame, file=sio)\n    sinfo = sio.getvalue()\n    if sinfo[-1] == \"\\n\":\n        sinfo = sinfo[:-1]\n    sio.close()\n\n    return sinfo\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport json\n# Initial ignore scan stops at C; subsequent stacklevel steps do not filter.\nlabels = [\"C\", \"D\", \"E\", \"F\"]\nnames = [\"application.view\", \"logging\", \"?\", \"cli.main\"]\nlevels = {\"none\": None, \"zero\": 0, \"one\": 1, \"two\": 2, \"nine\": 9}\nanswer = {}\nfor key, level in levels.items():\n    index = min(level or 0, len(labels) - 1)\n    answer[key] = [labels[index], names[index]]\n# Both X and Y are ignored; at terminal Y, the loop replaces its name with '?'.\nanswer[\"exhausted\"] = [\"Y\", \"?\"]\nassert len(answer) == 6 and all(len(v) == 2 for v in answer.values())\nanswer_json = json.dumps(answer)\nprint(answer_json)\n``` close?\n\n```repl\nprint(answer_json)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import json\n# Initial ignore scan stops at C; subsequent stacklevel steps do not filter.\nlabels = [\"C\", \"D\", \"E\", \"F\"]\nnames = [\"application.view\", \"logging\", \"?\", \"cli.main\"]\nlevels = {\"none\": None, \"zero\": 0, \"one\": 1, \"two\": 2, \"nine\": 9}\nanswer = {}\nfor key, level in levels.items():\n    index = min(level or 0, len(labels) - 1)\n    answer[key] = [labels[index], names[index]]\n# Both X and Y are ignored; at terminal Y, the loop replaces its name with '?'.\nanswer[\"exhausted\"] = [\"Y\", \"?\"]\nassert len(answer) == 6 and all(len(v) == 2 for v in answer.values())\nanswer_json = json.dumps(answer)\nprint(answer_json)"
+      ],
+      "stdout_raw_chars": 167,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "{\"none\": [\"C\", \"application.view\"], \"zero\": [\"C\", \"application.view\"], \"one\": [\"D\", \"logging\"], \"two\": [\"E\", \"?\"], \"nine\": [\"F\", \"cli.main\"], \"exhausted\": [\"Y\", \"?\"]}\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(answer_json)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "{\"none\": [\"C\", \"application.view\"], \"zero\": [\"C\", \"application.view\"], \"one\": [\"D\", \"logging\"], \"two\": [\"E\", \"?\"], \"nine\": [\"F\", \"cli.main\"], \"exhausted\": [\"Y\", \"?\"]}",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 32.496531459000835
+  }
+}

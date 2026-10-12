@@ -1,0 +1,72 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -888,7 +888,21 @@
+ 
+             for param in other_cmd.params:
+                 if param.name not in kwargs and param.expose_value:
+-                    default_value = param.get_default(ctx)
++                    if (
++                        isinstance(param, Option)
++                        and param.multiple
++                        and not param.is_flag
++                        and not param.count
++                    ):
++                        default_value = ctx.lookup_default(param.name)
++                        if default_value is not None or ctx._default_map_has(param.name):
++                            default_value = param._normalize_default_map_value(
++                                default_value
++                            )
++                        else:
++                            default_value = param.get_default(ctx)
++                    else:
++                        default_value = param.get_default(ctx)
+                     # We explicitly hide the :attr:`UNSET` value to the user, as we
+                     # choose to make it an implementation detail. And because ``invoke``
+                     # has been designed as part of Click public API, we return ``None``
+@@ -2478,6 +2492,13 @@
+     @abstractmethod
+     def add_to_parser(self, parser: _OptionParser, ctx: Context) -> None: ...
+ 
++    def _normalize_default_map_value(self, value: t.Any) -> t.Any:
++        """Split mapped strings using the same rules as environment values."""
++        if isinstance(value, str) and self.nargs != 1:
++            return self.type.split_envvar_value(value)
++
++        return value
++
+     def consume_value(
+         self, ctx: Context, opts: cabc.Mapping[str, t.Any]
+     ) -> tuple[t.Any, ParameterSource]:
+@@ -2513,10 +2534,7 @@
+                 value = default_map_value
+                 source = ParameterSource.DEFAULT_MAP
+ 
+-                # A string from default_map must be split for multi-value
+-                # parameters, matching value_from_envvar behavior.
+-                if isinstance(value, str) and self.nargs != 1:
+-                    value = self.type.split_envvar_value(value)
++                value = self._normalize_default_map_value(value)
+ 
+         if value is UNSET:
+             default_value = self.get_default(ctx)
+@@ -3586,6 +3604,20 @@
+ 
+         return rv
+ 
++    def _normalize_default_map_value(self, value: t.Any) -> t.Any:
++        if (
++            isinstance(value, str)
++            and self.multiple
++            and not self.is_flag
++            and not self.count
++        ):
++            value = self.type.split_envvar_value(value)
++            if self.nargs != 1:
++                value = batch(value, self.nargs)
++            return value
++
++        return super()._normalize_default_map_value(value)
++
+     def consume_value(
+         self, ctx: Context, opts: cabc.Mapping[str, Parameter]
+     ) -> tuple[t.Any, ParameterSource]:

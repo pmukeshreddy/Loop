@@ -1,0 +1,41 @@
+--- a/jmespath/parser.py
++++ b/jmespath/parser.py
+@@ -25,6 +25,8 @@
+   consuming from the token iterator one token at a time.
+ 
+ """
++from collections import OrderedDict
++
+ from jmespath import lexer
+ from jmespath.compat import with_repr_method
+ from jmespath import ast
+@@ -68,9 +70,8 @@
+     # The maximum binding power for a token that can stop
+     # a projection.
+     _PROJECTION_STOP = 10
+-    # The _MAX_SIZE most recent expressions are cached in
+-    # _CACHE dict.
+-    _CACHE = {}
++    # Cache up to _MAX_SIZE expressions in least-recently-used order.
++    _CACHE = OrderedDict()
+     _MAX_SIZE = 512
+ 
+     def __init__(self, lookahead=2):
+@@ -81,9 +82,16 @@
+ 
+     def parse(self, expression):
+         try:
+-            return self._CACHE[expression]
++            cached_result = self._CACHE[expression]
+         except KeyError:
+             pass
++        else:
++            try:
++                self._CACHE.move_to_end(expression)
++            except KeyError:
++                # Another thread may have evicted the entry or purged the cache.
++                pass
++            return cached_result
+         parsed_result = self._do_parse(expression)
+         if len(self._CACHE) >= self._MAX_SIZE:
+             try:

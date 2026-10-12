@@ -1,0 +1,138 @@
+{
+ "answer": "--- a/src/wtforms/fields/datetime.py\n+++ b/src/wtforms/fields/datetime.py\n@@ -119,12 +119,13 @@\n class WeekField(DateField):\n     \"\"\"\n     Same as :class:`~wtforms.fields.DateField`, except represents a week,\n-    stores a :class:`datetime.date` of the monday of the given week.\n+    stores a :class:`datetime.date` of the Monday of the given week.\n+    The default format uses the ISO week-year and week number.\n     \"\"\"\n \n     widget = widgets.WeekInput()\n \n-    def __init__(self, label=None, validators=None, format=\"%Y-W%W\", **kwargs):\n+    def __init__(self, label=None, validators=None, format=\"%G-W%V\", **kwargs):\n         super().__init__(label, validators, format, **kwargs)\n \n     def process_formdata(self, valuelist):\n@@ -134,11 +135,12 @@\n         time_str = \" \".join(valuelist)\n         for format in self.strptime_format:\n             try:\n-                if \"%w\" not in format:\n-                    # The '%w' week starting day is needed. This defaults it to monday\n-                    # like ISO 8601 indicates.\n+                if \"%w\" not in format and \"%u\" not in format:\n+                    # Week parsing requires a weekday. Default to Monday,\n+                    # using ISO weekdays for ISO week-number formats.\n+                    weekday = \"%u\" if \"%V\" in format else \"%w\"\n                     self.data = datetime.datetime.strptime(\n-                        f\"{time_str}-1\", f\"{format}-%w\"\n+                        f\"{time_str}-1\", f\"{format}-{weekday}\"\n                     ).date()\n                 else:\n                     self.data = datetime.datetime.strptime(time_str, format).date()\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 7501 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution handled the 7,501-character, two-file context without sub-calls. The repair requires connecting default format selection, weekday supplementation during parsing, and inherited rendering while preserving explicit legacy formats."
+  },
+  "notes": "This is a natural, narrowly scoped implementation request with concrete acceptance conditions and a precise production-only unified-diff format. Naming the target public field and specifying desired behavior does not disclose the implementation fix. The verified patch addresses ISO week-year parsing and rendering while retaining the legacy weekday branches. The variation materially changes the parent task from documenting existing behavior to repairing behavior with compatibility constraints, and it does not duplicate an accepted investigation or fix."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The two focused files total less than 8,000 characters. Repairing the behavior requires distinguishing ISO week numbering from calendar-year week numbering, following the configured format through parsing and inherited rendering, and preserving the explicit-weekday branch for legacy formats. These dependencies are small enough to understand directly."
+  },
+  "context": {
+   "files": [
+    "src/wtforms/fields/datetime.py",
+    "src/wtforms/utils.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::WeekField.__init__",
+    "why": "The default configuration currently selects calendar-year, Monday-based week numbering rather than ISO week-year numbering."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::WeekField.process_formdata",
+    "why": "Parsing supplies a Monday weekday for formats without %w and preserves explicitly submitted weekdays for legacy custom formats."
+   },
+   {
+    "path": "src/wtforms/fields/datetime.py",
+    "symbol": "src/wtforms/fields/datetime.py::DateTimeField._value",
+    "why": "Rendering prefers raw input when present and otherwise formats the stored date using the first configured display format."
+   },
+   {
+    "path": "src/wtforms/utils.py",
+    "symbol": "src/wtforms/utils.py::clean_datetime_format_for_strptime",
+    "why": "Parsing formats are derived from display formats by stripping supported zero-padding modifiers; the calendar directives themselves are retained."
+   }
+  ],
+  "expected_answer": "--- a/src/wtforms/fields/datetime.py\n+++ b/src/wtforms/fields/datetime.py\n@@ -128,7 +128,7 @@\n \n     widget = widgets.WeekInput()\n \n-    def __init__(self, label=None, validators=None, format=\"%Y-W%W\", **kwargs):\n+    def __init__(self, label=None, validators=None, format=\"%G-W%V\", **kwargs):\n         super().__init__(label, validators, format, **kwargs)\n \n     def process_formdata(self, valuelist):\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_week_iso_contract.py\n@@ -0,0 +1,55 @@\n+from datetime import date\n+\n+import pytest\n+\n+from wtforms import Form\n+from wtforms.fields import WeekField\n+\n+\n+class FormData(dict):\n+    def getlist(self, name):\n+        return [self[name]]\n+\n+\n+def make_form(submitted=None, **kwargs):\n+    class WeekForm(Form):\n+        week = WeekField(**kwargs)\n+\n+    if submitted is None:\n+        return WeekForm()\n+    return WeekForm(FormData(week=submitted))\n+\n+\n+@pytest.mark.parametrize(\n+    \"submitted,expected\",\n+    [(\"2020-W01\", date(2019, 12, 30)), (\"2020-W53\", date(2020, 12, 28))],\n+)\n+def test_default_iso_week_submission(submitted, expected):\n+    form = make_form(submitted)\n+    assert form.validate()\n+    assert type(form.week.data) is date\n+    assert form.week.data == expected\n+    assert f'value=\"{submitted}\"' in str(form.week())\n+    form.week.raw_data = None\n+    assert f'value=\"{submitted}\"' in str(form.week())\n+    assert form.week.data == expected\n+\n+\n+@pytest.mark.parametrize(\n+    \"format,submitted,expected,rendered\",\n+    [\n+        (\"%Y-W%W\", \"2020-W01\", date(2020, 1, 6), \"2020-W01\"),\n+        (\"%Y-W%W\", \"2020-W53\", date(2021, 1, 4), \"2021-W01\"),\n+        (\"%Y-W%W-%w\", \"2020-W01-0\", date(2020, 1, 12), \"2020-W01-0\"),\n+        (\"%Y-W%W-%w\", \"2020-W00-3\", date(2020, 1, 1), \"2020-W00-3\"),\n+    ],\n+)\n+def test_explicit_legacy_week_formats(format, submitted, expected, rendered):\n+    form = make_form(submitted, format=format)\n+    assert form.validate()\n+    assert type(form.week.data) is date\n+    assert form.week.data == expected\n+    assert f'value=\"{submitted}\"' in str(form.week())\n+    form.week.raw_data = None\n+    assert f'value=\"{rendered}\"' in str(form.week())\n+    assert form.week.data == expected\n",
+  "include_failure_log": false,
+  "notes": "This is an implementation task against the unmodified snapshot, verified by a new acceptance-test file rather than an injected regression. The two default-format cases fail on the current code; the four legacy cases guard compatibility. Python strptime accepts %w as the weekday accompanying %G and %V, so the existing Monday-supplying branch can satisfy ISO parsing without changing legacy weekday handling. The suggestion's request for solver-written regression tests is intentionally replaced with hidden acceptance tests, keeping the deliverable production-only.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Correct `WeekField`'s default handling of HTML week values so that it uses ISO week-year semantics. With no custom format, submitting `2020-W01` must store `datetime.date(2019, 12, 30)`, and submitting `2020-W53` must store `datetime.date(2020, 12, 28)`. Both submissions must validate successfully. Rendering must retain the submitted week text immediately after processing and must still produce that same ISO week text after `raw_data` is cleared without reprocessing.\n\nExplicitly configured legacy formats must keep their existing behavior: `%Y-W%W` uses calendar-year week numbering and supplies Monday when no weekday is submitted, while `%Y-W%W-%w` honors the submitted weekday. Rendering after clearing raw input must continue to use the configured format for these legacy fields.\n\nReturn a unified diff against the production repository files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from direct value prediction to targeted repair and acceptance-test design. The investigation must distinguish Python's ISO and non-ISO week directives and trace how one format configuration affects both parsing and inherited rendering; a focused read remains preferable to repository-wide decomposition.",
+  "change_type": "deliverable",
+  "description": "Repair WeekField's default handling of HTML ISO week submissions in src/wtforms/fields/datetime.py. Require default submissions '2020-W01' and '2020-W53' to store Monday dates 2019-12-30 and 2020-12-28, respectively, and to render the original ISO week text after raw_data is cleared. Preserve explicitly configured legacy formats such as '%Y-W%W' and '%Y-W%W-%w'. Submit a unified diff and regression tests covering both ISO year boundaries and legacy custom-format behavior. Focus on WeekField.__init__, WeekField.process_formdata, inherited DateTimeField._value, and the format preparation performed by src/wtforms/utils.py::clean_datetime_format_for_strptime.",
+  "expected_answer_change": "The repair must use ISO week-year and week-number directives for the default format and provide the weekday required for ISO parsing when the input omits it. Rendering without raw_data must also use the ISO format. Explicit legacy formats must retain their existing parsing semantics, including the branch that honors an explicitly supplied %w weekday. Tests must demonstrate dates crossing the calendar-year boundary rather than only midyear examples.",
+  "why_substantive": "The original task documents existing successful processing without changing it. This variation establishes a different calendar contract and asks for an implementation: ISO week-years can differ from calendar years, and ISO week numbering is not the current %Y/%W convention. Merely changing rendered punctuation or preserving raw input cannot satisfy the boundary cases."
+ },
+ "task_id": "wtforms-wtforms-r01-04-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_week_iso_contract.py::test_default_iso_week_submission[2020-W01-expected0]",
+   "tests/test_week_iso_contract.py::test_default_iso_week_submission[2020-W53-expected1]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 8,
+    "passed": 352
+   },
+   "patch_files": [
+    "src/wtforms/fields/datetime.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_week_iso_contract.py::test_default_iso_week_submission[2020-W01-expected0]",
+   "tests/test_week_iso_contract.py::test_default_iso_week_submission[2020-W53-expected1]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 346,
+  "stability_runs": 3
+ }
+}

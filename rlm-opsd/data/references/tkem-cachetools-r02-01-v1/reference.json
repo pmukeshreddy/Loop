@@ -1,0 +1,171 @@
+{
+ "answer": "--- a/src/cachetools/_cached.py\n+++ b/src/cachetools/_cached.py\n@@ -266,4 +266,8 @@\n     wrapper.cache_lock = lock if lock is not None else cond\n     wrapper.cache_condition = cond\n \n-    return functools.update_wrapper(wrapper, func)\n+    # Copy application attributes without replacing the wrapper's controls.\n+    for name, value in getattr(func, \"__dict__\", {}).items():\n+        wrapper.__dict__.setdefault(name, value)\n+\n+    return functools.update_wrapper(wrapper, func, updated=())\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 6,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 10424 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 10,424-character, two-file context supports direct reasoning about TTL decorator adaptation, branch-specific wrapper controls, and shared metadata assembly. The reference used no sub-calls and produced a focused change in the common wrapper assembly."
+  },
+  "notes": "This is a natural, repository-dependent metadata-collision fix with precise compatibility requirements and a clear production-only unified-diff format. Naming the public attributes defines the required behavior without revealing the faulty internal symbol or prescribing the fix. The synchronization and statistics variants are related coverage requirements, not unrelated padding. The verified patch preserves wrapper-generated controls while copying application attributes and standard metadata. The task is substantively distinct from its weighted-TTL parent and the other accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only func.py and _cached.py, totaling under 16,000 characters. It exposes the TTL decorator adapter, the branch-specific control methods, and the shared function-wrapper assembly. Direct reading suffices to reason about attribute precedence across the wrapper variants."
+  },
+  "context": {
+   "files": [
+    "src/cachetools/func.py",
+    "src/cachetools/_cached.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/func.py",
+    "symbol": "src/cachetools/func.py::_cache",
+    "why": "Constructs condition-synchronized cached wrappers with statistics, then installs cache_parameters after shared wrapper assembly."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_wrapper",
+    "why": "Selects all function-wrapper variants and installs cache metadata before update_wrapper copies the original function's attributes."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_uncached_info",
+    "why": "The cache=None statistics variant supplies its own clearing and statistics closures, which must survive attribute collisions."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition_info",
+    "why": "The TTL adapter uses this variant, whose generated methods manage synchronized cache clearing and statistics."
+   }
+  ],
+  "expected_answer": "--- a/src/cachetools/_cached.py\n+++ b/src/cachetools/_cached.py\n@@ -327,10 +327,16 @@\n         else:\n             wrapper = _unlocked(func, cache, key)\n         wrapper.cache_info = None\n \n+    cache_clear = wrapper.cache_clear\n+    cache_info = wrapper.cache_info\n+    functools.update_wrapper(wrapper, func)\n+\n     wrapper.cache = cache\n     wrapper.cache_key = key\n     wrapper.cache_lock = lock if lock is not None else cond\n     wrapper.cache_condition = cond\n+    wrapper.cache_clear = cache_clear\n+    wrapper.cache_info = cache_info\n \n-    return functools.update_wrapper(wrapper, func)\n+    return wrapper\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_function_metadata_collisions.py\n@@ -0,0 +1,106 @@\n+import warnings\n+from threading import Condition, RLock\n+\n+import pytest\n+\n+from cachetools import cached\n+from cachetools.func import ttl_cache\n+\n+\n+RESERVED = (\n+    \"cache\",\n+    \"cache_key\",\n+    \"cache_lock\",\n+    \"cache_condition\",\n+    \"cache_info\",\n+    \"cache_clear\",\n+)\n+\n+\n+def target():\n+    def function(value: int) -> int:\n+        \"\"\"Application function.\"\"\"\n+        return value * 2\n+\n+    function.application_attribute = object()\n+    for name in RESERVED:\n+        setattr(function, name, object())\n+    function.__wrapped__ = object()\n+    return function\n+\n+\n+def check_copied(wrapper, function):\n+    assert wrapper.application_attribute is function.application_attribute\n+    assert wrapper.__wrapped__ is function\n+    assert wrapper.__name__ == function.__name__\n+    assert wrapper.__doc__ == function.__doc__\n+    assert wrapper.__annotations__ == function.__annotations__\n+\n+\n+@pytest.mark.parametrize(\"info\", [False, True])\n+@pytest.mark.parametrize(\"uncached\", [False, True])\n+@pytest.mark.parametrize(\"sync\", [\"none\", \"lock\", \"condition\", \"both\"])\n+def test_cached_metadata_collisions(info, uncached, sync):\n+    function = target()\n+    cache = None if uncached else {}\n+    lock = RLock() if sync in (\"lock\", \"both\") else None\n+    condition = Condition(lock) if sync == \"both\" else (\n+        Condition() if sync == \"condition\" else None\n+    )\n+\n+    def key(value):\n+        return (\"request\", value)\n+\n+    with warnings.catch_warnings():\n+        warnings.simplefilter(\"ignore\", DeprecationWarning)\n+        wrapper = cached(\n+            cache, key=key, lock=lock, condition=condition, info=info\n+        )(function)\n+\n+    check_copied(wrapper, function)\n+    assert wrapper.cache is cache\n+    assert wrapper.cache_key is key\n+    assert wrapper.cache_lock is (lock if lock is not None else condition)\n+    assert wrapper.cache_condition is condition\n+    assert callable(wrapper.cache_clear)\n+    if info:\n+        assert tuple(wrapper.cache_info()) == (0, 0, 0 if uncached else None, 0)\n+    else:\n+        assert wrapper.cache_info is None\n+    assert wrapper(2) == wrapper(2) == 4\n+    if cache is not None:\n+        assert cache == {key(2): 4}\n+    if info:\n+        expected = (0, 2, 0, 0) if uncached else (1, 1, None, 1)\n+        assert tuple(wrapper.cache_info()) == expected\n+    wrapper.cache_clear()\n+    if cache is not None:\n+        assert cache == {}\n+    if info:\n+        assert tuple(wrapper.cache_info()) == (0, 0, 0 if uncached else None, 0)\n+\n+\n+@pytest.mark.parametrize(\"form\", [\"bounded\", \"unbounded\", \"callable\"])\n+def test_ttl_metadata_collisions(form):\n+    function = target()\n+    function.cache_parameters = object()\n+    now = [0]\n+    maxsize = {\"bounded\": 3, \"unbounded\": None, \"callable\": 128}[form]\n+    if form == \"callable\":\n+        wrapper = ttl_cache(function, timer=lambda: now[0])\n+    else:\n+        wrapper = ttl_cache(maxsize=maxsize, ttl=5, timer=lambda: now[0])(function)\n+    check_copied(wrapper, function)\n+    assert wrapper.cache.maxsize == maxsize\n+    assert callable(wrapper.cache_key)\n+    assert isinstance(wrapper.cache_condition, Condition)\n+    assert wrapper.cache_lock is wrapper.cache_condition\n+    assert wrapper.cache_parameters() == {\"maxsize\": maxsize, \"typed\": False}\n+    assert wrapper(2) == wrapper(2) == 4\n+    assert tuple(wrapper.cache_info()) == (1, 1, maxsize, 1)\n+    now[0] = 1000\n+    assert wrapper(2) == 4\n+    assert tuple(wrapper.cache_info()) == (1, 2, maxsize, 1)\n+    wrapper.cache_clear()\n+    assert len(wrapper.cache) == 0\n+    assert tuple(wrapper.cache_info()) == (0, 0, maxsize, 0)\n",
+  "include_failure_log": false,
+  "notes": "This variation targets an attribute-collision defect already present in the pinned production code, so it uses new hidden acceptance tests rather than injecting an additional setup regression. The tests exercise all synchronization/statistics combinations with mapping caches and cache=None, plus all three TTL construction forms. They check observable metadata, statistics, clearing, expiration, and ordinary attribute copying without importing private helpers. The production repair is independent of the original getsizeof-forwarding task.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "A function decorated with `cachetools.func.ttl_cache` can have its own application attributes, including names that collide with the memoizing wrapper's controls. Make decoration safe when the original function already has attributes named `cache`, `cache_key`, `cache_lock`, `cache_condition`, `cache_info`, and `cache_clear`: the resulting wrapper must expose the decorator-generated values for those six names, not the original function's values. Apply this guarantee to every `cachetools.cached` function-wrapper variant: with and without statistics, with no synchronization, a lock, a condition, or a separate lock and condition, and with `cache=None`. In particular, `cache_info` must remain `None` when statistics are disabled, and the generated statistics and clearing methods must remain functional otherwise. Continue copying unrelated application attributes and standard function metadata, and ensure `__wrapped__` refers to the function being decorated even if that function already has its own `__wrapped__` attribute. Preserve TTL memoization and the existing `cache_parameters()` result in bounded, unbounded, and callable-first forms. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from a direct constructor-forwarding edit to cross-layer diagnosis: follow ttl_cache through _cache, cached, and _wrapper, then compare the metadata installed by the different wrapper branches. Selective reading of the shared assembly point and representative branches is useful; repository-wide investigation is unnecessary.",
+  "change_type": "failure_condition",
+  "description": "Repair wrapper-metadata collisions exposed through cachetools.func.ttl_cache. Before decorating a function, give it ordinary custom attributes plus misleading attributes named cache, cache_key, cache_lock, cache_condition, cache_info, and cache_clear. The resulting memoizing wrapper must retain the decorator-generated versions of those reserved attributes while still copying unrelated custom attributes and preserving __wrapped__. Investigate src/cachetools/func.py::_cache and src/cachetools/_cached.py::_wrapper, and deliver a production-only unified diff that protects metadata across all cached function-wrapper variants, including cache=None.",
+  "expected_answer_change": "The patch should change src/cachetools/_cached.py::_wrapper so that generated cache metadata survives functools.update_wrapper. It must protect the branch-specific cache_info and cache_clear implementations as well as cache, cache_key, cache_lock, and cache_condition, without disabling copying of unrelated function attributes. src/cachetools/func.py::_cache already installs cache_parameters after cached returns, so that field does not suffer the same overwrite in this path.",
+  "why_substantive": "The defect is not missing getsizeof forwarding: functools.update_wrapper currently copies the wrapped function's dictionary after the cache metadata has been installed, allowing user attributes to replace the wrapper's introspection and control methods. The investigation moves from TTL cache construction to shared function-wrapper assembly, and the repair must distinguish reserved metadata from ordinary user attributes."
+ },
+ "task_id": "tkem-cachetools-r02-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-True-True]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[bounded]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[callable]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[unbounded]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 19,
+   "full_suite": {
+    "failed": 0,
+    "passed": 357
+   },
+   "patch_files": [
+    "src/cachetools/_cached.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[both-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[condition-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[lock-True-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-False-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-False-True]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-True-False]",
+   "tests/test_function_metadata_collisions.py::test_cached_metadata_collisions[none-True-True]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[bounded]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[callable]",
+   "tests/test_function_metadata_collisions.py::test_ttl_metadata_collisions[unbounded]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,63 @@
+--- /dev/null
++++ b/tests/test_predicate_array_functions.py
+@@ -0,0 +1,60 @@
++import pytest
++import jmespath
++from jmespath import exceptions
++from jmespath import functions
++
++
++def test_jmespath_truthiness_for_predicates():
++    values = [None, False, 0, "", [], {}, 1, "x", [0], {"x": 0}]
++    assert jmespath.search("filter_by(@, &@)", values) == [0, 1, "x", [0], {"x": 0}]
++    assert jmespath.search("any_by(@, &@)", [0]) is True
++    assert jmespath.search("all_by(@, &@)", [0, 1]) is True
++    assert jmespath.search("any_by(@, &@)", [None, False, "", [], {}]) is False
++    assert jmespath.search("all_by(@, &@)", [0, False]) is False
++
++
++def test_empty_and_null_retention():
++    for expression, expected in [("filter_by(@, &unknown())", []), ("any_by(@, &unknown())", False), ("all_by(@, &unknown())", True)]:
++        assert jmespath.search(expression, []) == expected
++    data = [None, {"a": 1}]
++    result = jmespath.search("filter_by(@, &`true`)", data)
++    assert result == data
++    assert result is not data
++    assert result[1] is data[1]
++
++
++class Recorder(functions.Functions):
++    def __init__(self):
++        self.seen = []
++
++    @functions.signature({"types": []})
++    def _func_probe(self, arg):
++        self.seen.append(arg)
++        return arg
++
++
++@pytest.mark.parametrize("expression, expected, seen", [
++    ("any_by(@, &probe(@))", True, [0]),
++    ("all_by(@, &probe(@))", False, [0, False]),
++    ("filter_by(@, &probe(@))", [0, "x"], [0, False, "x"]),
++])
++def test_short_circuit_and_custom_dispatch(expression, expected, seen):
++    recorder = Recorder()
++    options = jmespath.Options(custom_functions=recorder)
++    assert jmespath.compile(expression).search([0, False, "x"], options=options) == expected
++    assert recorder.seen == seen
++
++
++@pytest.mark.parametrize("name", ["filter_by", "any_by", "all_by"])
++def test_signatures(name):
++    with pytest.raises(exceptions.ArityError):
++        jmespath.search(name + "(@)", [])
++    with pytest.raises(exceptions.JMESPathTypeError):
++        jmespath.search(name + "(@, &@)", {})
++    with pytest.raises(exceptions.JMESPathTypeError):
++        jmespath.search(name + "(@, @)", [])
++
++
++def test_unevaluated_reference_errors_are_skipped():
++    assert jmespath.search("any_by(@, &(@ || unknown()))", [1, False]) is True
++    assert jmespath.search("all_by(@, &(@ && unknown()))", [False, 1]) is False

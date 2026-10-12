@@ -1,0 +1,131 @@
+--- /dev/null
++++ b/tests/test_outgoing_extra_validation.py
+@@ -0,0 +1,130 @@
++import logging
++
++from unittest.mock import patch
++
++import pytest
++
++from structlog.stdlib import (
++    BoundLogger,
++    render_to_log_args_and_kwargs,
++    render_to_log_kwargs,
++)
++
++
++RENDERERS = [render_to_log_kwargs, render_to_log_args_and_kwargs]
++RESERVED_EXTRAS = sorted(
++    (
++        set(logging.LogRecord("n", 0, "p", 0, "m", (), None).__dict__)
++        | {"message", "asctime"}
++    )
++    - {"exc_info", "stack_info", "stacklevel"}
++)
++
++
++@pytest.mark.parametrize("renderer", RENDERERS)
++@pytest.mark.parametrize("key", RESERVED_EXTRAS)
++@pytest.mark.parametrize("value", [None, False, ""])
++def test_rejected_extra_leaves_input_intact(renderer, key, value):
++    ed = {
++        "event": "hello %s",
++        "positional_args": ("world",),
++        "exc_info": False,
++        "stack_info": False,
++        "stacklevel": 2,
++        "custom": [],
++        key: value,
++    }
++    before = list(ed.items())
++
++    with pytest.raises(KeyError) as error:
++        renderer(None, "info", ed)
++
++    assert key in str(error.value)
++    assert before == list(ed.items())
++    for name, original in before:
++        assert ed[name] is original
++
++
++@pytest.mark.parametrize("renderer", RENDERERS)
++@pytest.mark.parametrize("key", ["name", "levelname", "message", "asctime"])
++def test_bound_logger_rejects_before_backend_call(renderer, key):
++    logger = logging.Logger("outgoing", logging.INFO)
++    captured = []
++
++    def capture(_, __, ed):
++        captured.append((ed, list(ed.items())))
++        return ed
++
++    bl = BoundLogger(logger, [capture, renderer], {"custom": "bound"})
++    with patch.object(logger, "info") as backend:
++        with pytest.raises(KeyError) as error:
++            bl.info("hello %s", "world", **{key: "invalid"})
++
++    assert key in str(error.value)
++    backend.assert_not_called()
++    ed, before = captured[0]
++    assert list(ed.items()) == before
++
++
++@pytest.mark.parametrize("renderer", RENDERERS)
++def test_success_retains_consumption_and_extra_identity(renderer):
++    ed = {
++        "event": "hello %s",
++        "positional_args": ("world",),
++        "exc_info": False,
++        "stack_info": True,
++        "stacklevel": 3,
++        "stackLevel": 4,
++        "extra": {"name": "nested is ordinary data"},
++    }
++    if renderer is render_to_log_kwargs:
++        kw = renderer(None, "info", ed)
++        assert kw["msg"] == "hello %s"
++        assert ed["positional_args"] == ("world",)
++    else:
++        args, kw = renderer(None, "info", ed)
++        assert args == ("hello %s", "world")
++        assert "positional_args" not in ed
++    assert kw["extra"] is ed
++    assert kw["exc_info"] is False
++    assert kw["stack_info"] is True
++    assert kw["stacklevel"] == 3
++    assert ed["stackLevel"] == 4
++    assert ed["extra"] == {"name": "nested is ordinary data"}
++    assert not {"event", "exc_info", "stack_info", "stacklevel"} & ed.keys()
++
++
++@pytest.mark.parametrize("renderer", RENDERERS)
++def test_bound_logger_successful_dispatch(renderer):
++    logger = logging.Logger("outgoing", logging.INFO)
++    bl = BoundLogger(logger, [renderer], {"custom": 42})
++    with patch.object(logger, "_log") as backend:
++        bl.info(
++            "hello %s", "world", exc_info=False, stack_info=True, stacklevel=3
++        )
++    extra = {"custom": 42}
++    args = ("world",)
++    if renderer is render_to_log_kwargs:
++        extra["positional_args"] = args
++        args = ()
++    backend.assert_called_once_with(
++        logging.INFO,
++        "hello %s",
++        args,
++        exc_info=False,
++        stack_info=True,
++        stacklevel=3,
++        extra=extra,
++    )
++
++
++@pytest.mark.parametrize("renderer", RENDERERS)
++def test_empty_extra_shape(renderer):
++    ed = {"event": "hello"}
++    if renderer is render_to_log_kwargs:
++        assert renderer(None, "info", ed) == {"msg": "hello", "extra": {}}
++    else:
++        assert renderer(None, "info", ed) == (("hello",), {})
++    assert ed == {}

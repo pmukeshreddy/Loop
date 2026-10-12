@@ -1,0 +1,137 @@
+{
+ "answer": "--- a/h11/_readers.py\n+++ b/h11/_readers.py\n@@ -148,6 +148,8 @@\n class ChunkedReader:\n     def __init__(self) -> None:\n         self._bytes_in_chunk = 0\n+        # Keep the start marker until we can emit the first payload data.\n+        self._chunk_start = False\n         # After reading a chunk, we have to throw away the trailing \\r\\n.\n         # This tracks the bytes that we need to match and throw away.\n         self._bytes_to_discard = b\"\"\n@@ -188,9 +190,7 @@\n             if self._bytes_in_chunk == 0:\n                 self._reading_trailer = True\n                 return self(buf)\n-            chunk_start = True\n-        else:\n-            chunk_start = False\n+            self._chunk_start = True\n         assert self._bytes_in_chunk > 0\n         data = buf.maybe_extract_at_most(self._bytes_in_chunk)\n         if data is None:\n@@ -201,6 +201,8 @@\n             chunk_end = True\n         else:\n             chunk_end = False\n+        chunk_start = self._chunk_start\n+        self._chunk_start = False\n         return Data(data=data, chunk_start=chunk_start, chunk_end=chunk_end)\n \n     def read_eof(self) -> NoReturn:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 4,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "old"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 10145 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 10,145-character focused context and zero sub-calls support direct solving. The repair requires reasoning about state retained between header consumption, repeated NEED_DATA returns, and payload emission; locating the chunk reader alone does not supply the fix."
+  },
+  "notes": "This is a natural, repository-dependent bug report with a precise production-only unified-diff requirement. It specifies observable API behavior without exposing the defective implementation or prescribing the repair. The verified patch preserves the pending start marker until a Data event is emitted, while retaining existing chunk-end and trailer handling. The investigation is distinct from the accepted EOF-dispatch and buffer-extraction tasks and is a substantive variation of its parent."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains the incremental body readers and public API exports and is under 16,000 characters. The repair requires reasoning about parser state across calls that consume a chunk header but emit no event, then checking the first and subsequent payload events. Broad repository exploration or delegation is unnecessary."
+  },
+  "context": {
+   "files": [
+    "h11/_readers.py",
+    "h11/__init__.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::ChunkedReader.__call__",
+    "why": "A complete chunk header updates the remaining byte count before payload extraction. When extraction returns None, the local chunk-start marker is lost before a later call emits Data."
+   },
+   {
+    "path": "h11/_readers.py",
+    "symbol": "h11/_readers.py::ChunkedReader.__init__",
+    "why": "Reader-instance state already persists chunk progress, footer consumption, and trailer processing across receive calls."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": "h11/tests/test_connection.py::test_chunk_boundaries",
+    "why": "Existing public Connection coverage establishes the chunk-start and chunk-end semantics, but always supplies initial payload bytes with each nonempty chunk header."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._extract_next_receive_event",
+    "why": "The intact receive path translates a reader's None result into NEED_DATA without recreating the reader, allowing reader-instance metadata to survive fragmentation."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- a/h11/tests/test_connection.py\n+++ b/h11/tests/test_connection.py\n@@ -266,7 +266,54 @@\n     conn.receive_data(b\"0\\r\\n\\r\\n\")\n     assert conn.next_event() == EndOfMessage()\n \n \n+@pytest.mark.parametrize(\"header_separate\", [False, True])\n+@pytest.mark.parametrize(\"split_payload\", [False, True])\n+def test_chunk_boundaries_fragmented_header(\n+    header_separate: bool, split_payload: bool\n+) -> None:\n+    conn = Connection(our_role=SERVER)\n+    conn.receive_data(\n+        b\"POST / HTTP/1.1\\r\\n\"\n+        b\"Host: example.com\\r\\n\"\n+        b\"Transfer-Encoding: chunked\\r\\n\\r\\n\"\n+    )\n+    assert conn.next_event() == Request(\n+        method=\"POST\",\n+        target=\"/\",\n+        headers=[(\"Host\", \"example.com\"), (\"Transfer-Encoding\", \"chunked\")],\n+    )\n+    assert conn.next_event() is NEED_DATA\n+\n+    for _ in range(2):\n+        if header_separate:\n+            conn.receive_data(b\"5\\r\\n\")\n+            assert conn.next_event() is NEED_DATA\n+            assert conn.next_event() is NEED_DATA\n+        parts = [b\"he\", b\"l\", b\"lo\"] if split_payload else [b\"hello\"]\n+        for index, part in enumerate(parts):\n+            prefix = b\"5\\r\\n\" if index == 0 and not header_separate else b\"\"\n+            conn.receive_data(prefix + part)\n+            assert conn.next_event() == Data(\n+                data=part,\n+                chunk_start=index == 0,\n+                chunk_end=index == len(parts) - 1,\n+            )\n+            assert conn.next_event() is NEED_DATA\n+\n+        conn.receive_data(b\"\\r\")\n+        assert conn.next_event() is NEED_DATA\n+        conn.receive_data(b\"\\n\")\n+        assert conn.next_event() is NEED_DATA\n+\n+    conn.receive_data(b\"0\\r\\nX-Checksum: ok\\r\\n\")\n+    assert conn.next_event() is NEED_DATA\n+    conn.receive_data(b\"\\r\\n\")\n+    assert conn.next_event() == EndOfMessage(headers=[(\"X-Checksum\", \"ok\")])\n+    assert conn.their_state is DONE\n+    assert conn.next_event() is NEED_DATA\n+\n+\n def test_client_talking_to_http10_server() -> None:\n     c = Connection(CLIENT)\n     c.send(Request(method=\"GET\", target=\"/\", headers=[(\"Host\", \"example.com\")]))\n",
+  "include_failure_log": false,
+  "notes": "Use the unmodified repository as the starting state; do not apply the original EOF-dispatch defect. This task repairs a pre-existing missing capability using new hidden regression coverage rather than injecting another defect. The hidden patch adds tests immediately alongside test_chunk_boundaries as requested. Its four parameter combinations compare combined versus separate chunk headers and whole versus split payloads, repeat the chunk to check marker reset, fragment the footer, and verify trailer-bearing EndOfMessage. Both header_separate=True cases fail on the shown source. The required production repair concerns ChunkedReader state, not Connection's EOF dispatcher.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Receiving a chunked POST currently gives inconsistent boundary metadata: after processing the request headers, receiving b\"5\\r\\n\", calling next_event() until NEED_DATA, and then receiving b\"hello\" does not report the same chunk_start flag as receiving b\"5\\r\\nhello\" together. Fix receive-side chunk boundary reporting so the first Data event of every nonempty chunk has chunk_start=True, even when the chunk header arrives separately. If a payload spans several receive_data() calls, only its first Data event should have chunk_start=True and only its last should have chunk_end=True. Repeated next_event() calls while awaiting payload must not affect these markers. Preserve message completion and trailer handling. Return a unified diff against production files; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from scattered EOF diagnosis to persistent-state reasoning within an incremental parser. A focused read of ChunkedReader, followed by public Connection regression tests, is more useful than broad repository exploration. combine_verify_finish now requires checking event metadata under multiple byte-fragmentation schedules.",
+  "change_type": "failure_condition",
+  "description": "Use the intact receive path, without applying the seed task's setup patch. A user reports that chunk_start depends on socket-read boundaries: after receiving a chunked POST's headers, feeding b\"5\\r\\n\" and then b\"hello\" produces different Data flags from feeding b\"5\\r\\nhello\" together. Repair fragmentation-dependent chunk-start reporting in h11/_readers.py::ChunkedReader.__call__, and add regression tests in h11/tests/test_connection.py alongside test_chunk_boundaries. Include a chunk whose payload is split across multiple receive_data calls, and verify that only its first Data event has chunk_start=True.",
+  "expected_answer_change": "The patch must persist whether the next emitted Data event begins a newly parsed chunk, retain that state across calls that emit no Data, and clear it after the first payload event. Verification must compare header-only fragmentation, combined header-and-payload input, and split payloads while preserving chunk_end and EndOfMessage behavior. The changed production symbol is ChunkedReader rather than Connection's EOF dispatcher.",
+  "why_substantive": "This exposes a distinct defect in the shown source: ChunkedReader records the parsed chunk size but keeps chunk_start only in a local variable. If the header arrives without payload, the call returns None and loses the start marker. Restoring reader-specific EOF dispatch cannot repair this behavior."
+ },
+ "task_id": "python-hyper-h11-r01-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "h11/tests/test_connection.py::test_chunk_boundaries_fragmented_header[False-True]",
+   "h11/tests/test_connection.py::test_chunk_boundaries_fragmented_header[True-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 2,
+   "full_suite": {
+    "failed": 0,
+    "passed": 82
+   },
+   "patch_files": [
+    "h11/_readers.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "h11/tests/test_connection.py::test_chunk_boundaries_fragmented_header[False-True]",
+   "h11/tests/test_connection.py::test_chunk_boundaries_fragmented_header[True-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

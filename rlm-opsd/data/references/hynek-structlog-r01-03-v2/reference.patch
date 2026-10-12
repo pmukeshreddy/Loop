@@ -1,0 +1,38 @@
+--- a/src/structlog/stdlib.py
++++ b/src/structlog/stdlib.py
+@@ -945,6 +945,17 @@
+ LOG_KWARG_NAMES = ("exc_info", "stack_info", "stacklevel")
+ 
+ 
++def _validate_extra(event_dict: EventDict, consumed: Collection[str]) -> None:
++    """
++    Reject reserved extra keys before consuming any fields from *event_dict*.
++    """
++    for key in event_dict:
++        if key in consumed:
++            continue
++        if key in _LOG_RECORD_KEYS or key in ("message", "asctime"):
++            raise KeyError(f"Attempt to overwrite {key!r} in LogRecord")
++
++
+ def render_to_log_args_and_kwargs(
+     _: logging.Logger, __: str, event_dict: EventDict
+ ) -> tuple[tuple[Any, ...], dict[str, Any]]:
+@@ -962,6 +973,8 @@
+ 
+     .. versionadded:: 25.1.0
+     """
++    _validate_extra(event_dict, ("event", "positional_args", *LOG_KWARG_NAMES))
++
+     args = (event_dict.pop("event"), *event_dict.pop("positional_args", ()))
+ 
+     kwargs = {
+@@ -996,6 +1009,8 @@
+     .. versionchanged:: 24.2.0
+        ``stackLevel`` corrected to ``stacklevel``.
+     """
++    _validate_extra(event_dict, ("event", *LOG_KWARG_NAMES))
++
+     return {
+         "msg": event_dict.pop("event"),
+         "extra": event_dict,

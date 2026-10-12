@@ -1,0 +1,150 @@
+{
+ "answer": "--- a/jsonschema/_keywords.py\n+++ b/jsonschema/_keywords.py\n@@ -411,17 +411,17 @@\n         validator, instance, schema,\n     )\n     unevaluated_keys = []\n+    unevaluated_errors = []\n     for property in instance:\n         if property not in evaluated_keys:\n-            for _ in validator.descend(\n+            for error in validator.descend(\n                 instance[property],\n                 unevaluatedProperties,\n                 path=property,\n                 schema_path=property,\n             ):\n-                # FIXME: Include context for each unevaluated property\n-                #        indicating why it's invalid under the subschema.\n-                unevaluated_keys.append(property)  # noqa: PERF401\n+                unevaluated_keys.append(property)\n+                unevaluated_errors.append(error)\n \n     if unevaluated_keys:\n         if unevaluatedProperties is False:\n@@ -433,7 +433,10 @@\n                 \"Unevaluated properties are not valid under \"\n                 \"the given schema (%s %s unevaluated and invalid)\"\n             )\n-            yield ValidationError(error % extras_msg(unevaluated_keys))\n+            yield ValidationError(\n+                error % extras_msg(unevaluated_keys),\n+                context=unevaluated_errors,\n+            )\n \n \n def prefixItems(validator, prefixItems, instance, schema):\n--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -424,17 +424,17 @@\n         validator, instance, schema,\n     )\n     unevaluated_keys = []\n+    unevaluated_errors = []\n     for property in instance:\n         if property not in evaluated_keys:\n-            for _ in validator.descend(\n+            for error in validator.descend(\n                 instance[property],\n                 uP,\n                 path=property,\n                 schema_path=property,\n             ):\n-                # FIXME: Include context for each unevaluated property\n-                #        indicating why it's invalid under the subschema.\n-                unevaluated_keys.append(property)  # noqa: PERF401\n+                unevaluated_keys.append(property)\n+                unevaluated_errors.append(error)\n \n     if unevaluated_keys:\n         if uP is False:\n@@ -446,4 +446,7 @@\n                 \"Unevaluated properties are not valid under \"\n                 \"the given schema (%s %s unevaluated and invalid)\"\n             )\n-            yield ValidationError(error % _utils.extras_msg(unevaluated_keys))\n+            yield ValidationError(\n+                error % _utils.extras_msg(unevaluated_keys),\n+                context=unevaluated_errors,\n+            )\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0006534542223644707,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 18,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 18 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "4 turns; variables reused across turns: ['files', 'p']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff coordinates both draft implementations, preserves the existing aggregate-message construction and boolean branch, and passes collected child errors through the exception context mechanism. The constructed final artifact was inspected before submission.",
+   "inspect_locate": "The investigation located separate keyword handlers for the two drafts and examined exception construction to establish how context children receive parent links. This required connecting validation dispatch, error collection, and path behavior.",
+   "persistent_state": "The reference execution reused files and p across turns, providing modest evidence of persistent working state rather than a substantial independent behavior."
+  },
+  "notes": "This is a natural, repository-dependent diagnostic enhancement with precise ordering, path, compatibility, and output requirements. The question specifies the desired public behavior without revealing implementation locations or prescribing solver operations. The verified patch and supplied tests support the requested context and parent-link behavior, and the task is distinct from the previously accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The final patch combines edits to parallel implementations and must preserve existing summary diagnostics while satisfying the same context contract for both drafts.",
+   "inspect_locate": "Draft 2019-09 and Draft 2020-12 route unevaluatedProperties to different handlers, and context-parent behavior is implemented in the exception constructor rather than either handler.",
+   "persistent_state": "The implementation must retain the two dispatch targets, existing coverage behavior, error ordering requirements, and exact source text while assembling coordinated edits."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "The concrete draft tables select separate modern and legacy handlers, and descent builds child instance paths."
+   },
+   {
+    "path": "jsonschema/_keywords.py",
+    "symbol": "jsonschema/_keywords.py::unevaluatedProperties",
+    "why": "The modern handler currently discards the child errors while retaining the names of failing properties."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::unevaluatedProperties_draft2019",
+    "why": "The legacy handler requires the same diagnostic enhancement without changing its distinct coverage calculation."
+   },
+   {
+    "path": "jsonschema/exceptions.py",
+    "symbol": "jsonschema/exceptions.py::_Error.__init__",
+    "why": "Passing context through the existing exception constructor installs parent links used by absolute_path."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_unevaluated_property_context.py\n@@ -0,0 +1,42 @@\n+import pytest\n+\n+from jsonschema import Draft201909Validator, Draft202012Validator\n+\n+\n+@pytest.mark.parametrize(\"Validator\", [Draft201909Validator, Draft202012Validator])\n+@pytest.mark.parametrize(\n+    \"subschema, instance, keywords, paths\",\n+    [\n+        (\n+            {\"type\": \"string\", \"minLength\": 3},\n+            {\"a\": 1, \"b\": \"x\", \"c\": \"good\"},\n+            [\"type\", \"minLength\"],\n+            [[\"a\"], [\"b\"]],\n+        ),\n+        (\n+            {\"allOf\": [{\"type\": \"string\"}, {\"enum\": [\"ok\"]}]},\n+            {\"bad\": 1, \"good\": \"ok\"},\n+            [\"type\", \"enum\"],\n+            [[\"bad\"], [\"bad\"]],\n+        ),\n+    ],\n+)\n+def test_property_context(Validator, subschema, instance, keywords, paths):\n+    schema = {\n+        \"properties\": {\n+            \"payload\": {\"unevaluatedProperties\": subschema},\n+        },\n+    }\n+    errors = list(Validator(schema).iter_errors({\"payload\": instance}))\n+    assert len(errors) == 1\n+    error = errors[0]\n+    assert error.validator == \"unevaluatedProperties\"\n+    assert [child.validator for child in error.context] == keywords\n+    assert [list(child.path) for child in error.context] == paths\n+    assert [list(child.absolute_path) for child in error.context] == [\n+        [\"payload\", *path] for path in paths\n+    ]\n+    assert all(child.parent is error for child in error.context)\n+    assert all(child.instance == instance[path[0]] for child, path in zip(\n+        error.context, paths,\n+    ))\n",
+  "include_failure_log": false,
+  "notes": "The new tests exercise both drafts, a valid uncovered property that must not contribute an error, multiple failing properties, multiple failures for one property, and aggregate errors nested below a property. Existing tests remain responsible for unchanged boolean-schema behavior and summary messages.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Improve diagnostics for object-valued `unevaluatedProperties` schemas in both Draft 2019-09 and Draft 2020-12 validators. When an uncovered property fails its subschema, retain every resulting `ValidationError` in the aggregate unevaluated-properties error's `context`, in instance-property iteration order and then in the order yielded for that property. Retain the child errors' per-property relative paths, and ensure their parent links make absolute instance paths include the aggregate error's location. Keep validity, the existing aggregate message and metadata, and the behavior of boolean-valued `unevaluatedProperties` unchanged. Return a unified diff against non-test repository files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r01-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema0-instance0-keywords0-paths0-Draft201909Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema0-instance0-keywords0-paths0-Draft202012Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema1-instance1-keywords1-paths1-Draft201909Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema1-instance1-keywords1-paths1-Draft202012Validator]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7292
+   },
+   "patch_files": [
+    "jsonschema/_keywords.py",
+    "jsonschema/_legacy_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema0-instance0-keywords0-paths0-Draft201909Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema0-instance0-keywords0-paths0-Draft202012Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema1-instance1-keywords1-paths1-Draft201909Validator]",
+   "jsonschema/tests/test_unevaluated_property_context.py::test_property_context[subschema1-instance1-keywords1-paths1-Draft202012Validator]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

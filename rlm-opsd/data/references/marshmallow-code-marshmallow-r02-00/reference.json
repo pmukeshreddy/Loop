@@ -1,0 +1,162 @@
+{
+ "answer": [
+  "tests/test_decorators.py::test_decorated_processors[True]",
+  "tests/test_decorators.py::test_decorated_processors[False]"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"tests/test_decorators.py::TestPrePostProcessing::test_pre_load_order\",\n  \"tests/test_decorators.py::TestPrePostProcessing::test_post_load_order\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.0013696702705596846,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 23,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "parts",
+    "t",
+    "tree"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 18230,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 3,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "3 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 18230 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 23 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "3 sub-calls (0 failed); results stored at 1 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Three successful sub-calls examined selected context, with a maximum prompt size of 18,230 characters. This supports bounded inspection, although their results did not feed the final answer.",
+   "combine_verify_finish": "The final node-ID collection was computed in code and inspected after construction. Executable verification confirmed the two parametrized cases.",
+   "inspect_locate": "The execution used 23 repository-context searches without printing the whole context. Identifying affected tests required connecting load-hook dispatch with hook bodies and assertions, rather than locating a symbol named in the question.",
+   "recursive_decomposition": "Not established: sub-call results did not reach the final answer. The task metadata appropriately omits this from the established behaviors."
+  },
+  "notes": "The question specifies a concrete, natural change-impact investigation and an exact output format without revealing affected tests or prescribing solver operations. Determining failures depends on repository-specific processor behavior and test assertions. The verified answer matches the affected test's parametrized cases, and the investigation is distinct from the existing accepted tasks."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The decorator suite and load orchestration contain more text than one bounded read; judging failures requires understanding hook bodies and assertions, not merely matching decorator names.",
+   "combine_verify_finish": "The answer is an exact aggregate of pytest node IDs, including parametrized cases, which must be deduplicated and checked against the collected test definitions.",
+   "inspect_locate": "Relevant tests are scattered among hook registration, preprocessing, postprocessing, inheritance, and original-input cases rather than all directly naming the dispatch helper.",
+   "recursive_decomposition": "Impact separates into pre_load and post_load investigations, then collection versus item dispatch and many versus single-object cases. These findings must be reconciled with the shared dispatcher."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_load_processors",
+    "why": "Contains the two grouping calls whose order the proposal changes."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._invoke_processors",
+    "why": "Determines how changed grouping interacts with many, pass_original, and processor return values."
+   },
+   {
+    "path": "src/marshmallow/decorators.py",
+    "symbol": "src/marshmallow/decorators.py::set_hook",
+    "why": "Explains the metadata used to distinguish collection and item hooks."
+   },
+   {
+    "path": "tests/test_decorators.py",
+    "symbol": null,
+    "why": "Exercises envelopes, hook ordering, original input, and collection processing."
+   },
+   {
+    "path": "tests/test_schema.py",
+    "symbol": null,
+    "why": "Contains additional schema-level processing and inherited-hook coverage."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Apply the probe to production code and compute newly failing node IDs against the baseline suite. The stale explanatory comment is deliberately unchanged because the proposed runtime change is only the grouping order.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/src/marshmallow/schema.py\n+++ b/src/marshmallow/schema.py\n@@ -1270,25 +1270,25 @@\n         # This has to invert the order of the dump processors, so run the pass_collection\n         # processors first.\n         data = self._invoke_processors(\n             tag,\n-            pass_collection=True,\n+            pass_collection=False,\n             data=data,\n             many=many,\n             original_data=original_data,\n             partial=partial,\n             unknown=unknown,\n         )\n         return self._invoke_processors(\n             tag,\n-            pass_collection=False,\n+            pass_collection=True,\n             data=data,\n             many=many,\n             original_data=original_data,\n             partial=partial,\n             unknown=unknown,\n         )\n \n     def _invoke_field_validators(self, *, error_store: ErrorStore, data, many: bool):\n         for attr_name, _, validator_kwargs in self._hooks[VALIDATES]:\n             validator = getattr(self, attr_name)\n \n",
+  "question": "Review a proposed change to schema load-hook ordering. For both `pre_load` and `post_load`, item-level hooks would run before hooks declared with `pass_collection=True`; dispatch within each group, keyword arguments, and dump-hook behavior would remain unchanged. Which existing tests would newly fail under that change? Return a JSON list of complete pytest node IDs, with no duplicates.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r02-00",
+ "truth": {
+  "answer": [
+   "tests/test_decorators.py::test_decorated_processors"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "tests/test_decorators.py::test_decorated_processors"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "tests/test_decorators.py::test_decorated_processors"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "tests/test_decorators.py::test_decorated_processors"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

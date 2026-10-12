@@ -1,0 +1,163 @@
+{
+ "answer": "--- a/src/jinja2/utils.py\n+++ b/src/jinja2/utils.py\n@@ -488,6 +488,24 @@\n             self[key] = default\n             return default\n \n+    def resize(self, capacity: int) -> None:\n+        \"\"\"Change the maximum size of the cache.\n+\n+        Evict the least recently used items if the cache is too large.\n+        ``capacity`` must be a positive integer, excluding booleans.\n+        \"\"\"\n+        if isinstance(capacity, bool) or not isinstance(capacity, int):\n+            raise TypeError(\"capacity must be an integer\")\n+\n+        if capacity <= 0:\n+            raise ValueError(\"capacity must be greater than zero\")\n+\n+        with self._wlock:\n+            self.capacity = capacity\n+\n+            while len(self._mapping) > capacity:\n+                del self._mapping[self._popleft()]\n+\n     def clear(self) -> None:\n         \"\"\"Clear the cache.\"\"\"\n         with self._wlock:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0008296018533305404,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 11,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "hits",
+    "pos",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 964318 chars; 11 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files', 'hits', 'pos', 'text']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production-only diff was constructed programmatically and inspected before completion. The supplied verification tests cover shrinking, growing, insertion after resizing, validation atomicity, copy independence, pickle preservation, and same-capacity resizing.",
+   "inspect_locate": "The execution used 11 targeted searches without printing the whole context. Implementing the requested API requires understanding the existing queue direction, eviction helpers, mutation lock, and copy and serialization behavior.",
+   "persistent_state": "Repository text and search results were reused across five turns through the variables files, hits, pos, and text. The established recency invariant informed the resizing implementation and its compatibility with subsequent insertions and cloned caches."
+  },
+  "notes": "This is a natural, precisely scoped API enhancement with clear validation and ordering requirements. Naming the new method specifies the requested interface rather than revealing an existing defect or its fix. The implementation depends on repository-specific cache invariants, and the requirements are cohesive rather than an unrelated checklist. No duplicate investigation appears among the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The production diff must preserve the exact surrounding class text and be checked against both ordering invariants and the specified validation behavior.",
+   "inspect_locate": "The cache's recency convention, mutation locking, copying, and serialization are spread through the utility module rather than concentrated in one method.",
+   "persistent_state": "The investigation reuses an extracted cache implementation and the established oldest-to-newest queue invariant while reconciling resizing with insertion, iteration, copies, and restored instances."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__setitem__",
+    "why": "Insertion uses capacity and evicts from the oldest end of the queue under the mutation lock."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__getitem__",
+    "why": "Successful reads promote keys and establish the recency invariant resizing must preserve."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.copy",
+    "why": "Copies preserve capacity, mapping, and queue but must remain independently resizable."
+   },
+   {
+    "path": "src/jinja2/utils.py",
+    "symbol": "src/jinja2/utils.py::LRUCache.__setstate__",
+    "why": "Deserialization rebuilds mutation helpers for restored cache state."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_lru_resize.py\n@@ -0,0 +1,63 @@\n+import copy\n+import pickle\n+\n+import pytest\n+\n+from jinja2.utils import LRUCache\n+\n+\n+def populated():\n+    cache = LRUCache(4)\n+    for key in \"abcd\":\n+        cache[key] = key.upper()\n+    cache[\"b\"]\n+    return cache\n+\n+\n+def test_shrink_grow_and_new_insertions():\n+    cache = populated()\n+    cache.resize(2)\n+    assert cache.capacity == 2\n+    assert cache.keys() == [\"b\", \"d\"]\n+    assert list(cache.items()) == [(\"b\", \"B\"), (\"d\", \"D\")]\n+    cache[\"e\"] = \"E\"\n+    assert cache.keys() == [\"e\", \"b\"]\n+    cache.resize(5)\n+    for key in \"fgh\":\n+        cache[key] = key.upper()\n+    assert cache.capacity == 5\n+    assert cache.keys() == [\"h\", \"g\", \"f\", \"e\", \"b\"]\n+\n+\n+@pytest.mark.parametrize(\"capacity\", [0, -1])\n+def test_nonpositive_capacity_is_atomic(capacity):\n+    cache = populated()\n+    with pytest.raises(ValueError):\n+        cache.resize(capacity)\n+    assert cache.capacity == 4\n+    assert cache.keys() == [\"b\", \"d\", \"c\", \"a\"]\n+\n+\n+@pytest.mark.parametrize(\"capacity\", [True, False, 1.5, \"2\", None])\n+def test_noninteger_capacity_is_atomic(capacity):\n+    cache = populated()\n+    with pytest.raises(TypeError):\n+        cache.resize(capacity)\n+    assert cache.capacity == 4\n+    assert cache.keys() == [\"b\", \"d\", \"c\", \"a\"]\n+\n+\n+@pytest.mark.parametrize(\"clone\", [copy.copy, lambda c: pickle.loads(pickle.dumps(c))])\n+def test_resized_copy_and_pickle(clone):\n+    cache = populated()\n+    cache.resize(2)\n+    other = clone(cache)\n+    assert other.capacity == 2\n+    assert list(other.items()) == list(cache.items())\n+    other.resize(1)\n+    assert other.keys() == [\"b\"]\n+    assert cache.keys() == [\"b\", \"d\"]\n+    cache.resize(2)\n+    assert cache.keys() == [\"b\", \"d\"]\n+    cache[\"x\"] = \"X\"\n+    assert cache.keys() == [\"x\", \"b\"]\n",
+  "include_failure_log": false,
+  "notes": "No change to Environment's special cache_size values is requested. The new resize method intentionally accepts only positive capacities.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Add `LRUCache.resize(capacity)` so a live template cache can change its maximum size without being replaced. Accept positive integers only, excluding bool: non-integer inputs must raise TypeError, and zero or negative integers must raise ValueError. Validation failures must leave capacity, entries, and recency unchanged. Shrinking must evict the least recently used entries until the cache fits; growing or resizing to the current capacity must preserve all entries and their relative recency. Subsequent insertion must obey the new capacity. Copies and pickle round trips of a resized cache must retain its capacity and ordering, and resizing a copy must not affect the original. Follow the cache's existing locking discipline for mutations. Return a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "pallets-jinja-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[1.5]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[2]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[False]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[None]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[True]",
+   "tests/test_lru_resize.py::test_nonpositive_capacity_is_atomic[-1]",
+   "tests/test_lru_resize.py::test_nonpositive_capacity_is_atomic[0]",
+   "tests/test_lru_resize.py::test_resized_copy_and_pickle[<lambda>]",
+   "tests/test_lru_resize.py::test_resized_copy_and_pickle[copy]",
+   "tests/test_lru_resize.py::test_shrink_grow_and_new_insertions"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 10,
+   "full_suite": {
+    "failed": 0,
+    "passed": 919
+   },
+   "patch_files": [
+    "src/jinja2/utils.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[1.5]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[2]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[False]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[None]",
+   "tests/test_lru_resize.py::test_noninteger_capacity_is_atomic[True]",
+   "tests/test_lru_resize.py::test_nonpositive_capacity_is_atomic[-1]",
+   "tests/test_lru_resize.py::test_nonpositive_capacity_is_atomic[0]",
+   "tests/test_lru_resize.py::test_resized_copy_and_pickle[<lambda>]",
+   "tests/test_lru_resize.py::test_resized_copy_and_pickle[copy]",
+   "tests/test_lru_resize.py::test_shrink_grow_and_new_insertions"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

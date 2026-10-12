@@ -1,0 +1,105 @@
+{
+  "task_id": "andialbrecht-sqlparse-r01-01-v1",
+  "family": "direct_solve",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 11942,
+    "context_lengths": [
+      2524,
+      1640,
+      7778
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context), [len(x) for x in context])\nfor x in context:\n    print(x.splitlines()[0], x[0:180])\nprint(context[1][len(context[1])//2:len(context[1])//2+300])\nprint(context[-1][-450:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context), [len(x) for x in context])\nfor x in context:\n    print(x.splitlines()[0], x[0:180])\nprint(context[1][len(context[1])//2:len(context[1])//2+300])\nprint(context[-1][-450:])"
+      ],
+      "stdout_raw_chars": 1446,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 3 [2524, 1640, 7778]\n# File: sqlparse/__init__.py # File: sqlparse/__init__.py\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# File: sqlparse/engine/filter_stack.py # File: sqlparse/engine/filter_stack.py\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is rel\n# File: sqlparse/engine/statement_splitter.py # File: sqlparse/engine/statement_splitter.py\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and \n        self._grouping = True\n\n    def run(self, sql, encoding=None):\n        try:\n            stream = lexer.tokenize(sql, encoding)\n            # Process token stream\n            for filter_ in self.preprocess:\n                stream = filter_.process(stream)\n\n            stream = StatementSplitte\nmment.Multiline)\n                  and not (ttype is T.Keyword and value.upper() == 'BEGIN')):\n                # Reset _seen_begin if we see a non-whitespace, non-comment\n                # token but not for BEGIN itself (which just set the flag)\n                self._seen_begin = False\n\n        # Yield pending statement (if any)\n        if self.tokens and not all(t.is_whitespace for t in self.tokens):\n            yield sql.Statement(self.tokens)\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfiles = {x.split('\\n',1)[0][8:]: x.split('\\n',1)[1] for x in context}\npath = 'sqlparse/engine/statement_splitter.py'\nold = files[path]\nprint(old[:3900])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "files = {x.split('\\n',1)[0][8:]: x.split('\\n',1)[1] for x in context}\npath = 'sqlparse/engine/statement_splitter.py'\nold = files[path]\nprint(old[:3900])"
+      ],
+      "stdout_raw_chars": 3901,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD License: https://opensource.org/licenses/BSD-3-Clause\n\nfrom sqlparse import sql\nfrom sqlparse import tokens as T\n\n\nclass StatementSplitter:\n    \"\"\"Filter that split stream at individual statements\"\"\"\n\n    def __init__(self):\n        self._reset()\n\n    def _reset(self):\n        \"\"\"Set the filter attributes to its default values\"\"\"\n        self._block_stack = []\n        self._parenthesis_level = 0\n        self._unconfirmed_start = None\n        self._is_create = False\n        self._seen_begin = False\n\n        self.consume_ws = False\n        self.tokens = []\n        self.level = 0\n\n    def _handle_nested_block(self, unified):\n        \"\"\"Check for nested loop or control structures inside a block\"\"\"\n        if unified == 'FOR':\n            self._unconfirmed_start = 'FOR'\n            return 0\n        if unified == 'WHILE':\n            self._unconfirmed_start = 'WHILE'\n            return 0\n        if unified in ('LOOP', 'DO'):\n            if self._unconfirmed_start in ('FOR', 'WHILE'):\n                self._block_stack.append(self._unconfirmed_start)\n                self._unconfirmed_start = None\n                return 1\n            if unified == 'LOOP':\n                self._block_stack.append('LOOP')\n                return 1\n        if unified in ('IF', 'CASE'):\n            self._block_stack.append(unified)\n            return 1\n        return None\n\n    def _handle_closing_keyword(self, unified):\n        \"\"\"Handle closing keywords for blocks\"\"\"\n        if unified == 'END IF':\n            if self._block_stack and self._block_stack[-1] == 'IF':\n                self._block_stack.pop()\n                return -1\n        elif unified == 'END FOR':\n            if self._block_stack and self._block_stack[-1] == 'FOR':\n                self._block_stack.pop()\n                return -1\n        elif unified == 'END WHILE':\n            if self._block_stack and self._block_stack[-1] == 'WHILE':\n                self._block_stack.pop()\n                return -1\n        elif unified == 'END LOOP':\n            if (self._block_stack and\n                    self._block_stack[-1] in ('LOOP', 'FOR', 'WHILE')):\n                self._block_stack.pop()\n                return -1\n        elif unified == 'END CASE':\n            if self._block_stack and self._block_stack[-1] == 'CASE':\n                self._block_stack.pop()\n                return -1\n        elif unified == 'END':\n            if self._block_stack:\n                self._block_stack.pop()\n            return -1\n        return 0\n\n    def _change_splitlevel(self, ttype, value):\n        \"\"\"Get the new split level (increase, decrease or remain equal)\"\"\"\n\n        # Semicolon resets unconfirmed loop starters\n        # and handles standalone BEGIN;\n        if ttype is T.Punctuation and value == ';':\n            self._unconfirmed_start = None\n            if self._seen_begin:\n                self._seen_begin = False\n                if self._block_stack and self._block_stack[-1] == 'BEGIN':\n                    self._block_stack.pop()\n                    return -1\n            return 0\n\n        # parenthesis increase/decrease a level\n        if ttype is T.Punctuation and value == '(':\n            self._parenthesis_level += 1\n            return 1\n        elif ttype is T.Punctuation and value == ')':\n            self._parenthesis_level = max(0, self._parenthesis_level - 1)\n            return -1\n        elif ttype not in T.Keyword:  # if normal token return\n            return 0\n\n        # Everything after here is ttype = T.Keyword\n        unified = value.upper()\n\n        # DDL Create though can contain more words such as \"or replace\"\n        if ttype is T.Keyword.DDL and unified.startswith('CREATE'):\n            self._is_create = True\n            return 0\n\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(old[3900:])\nprint(files['sqlparse/engine/filter_stack.py'])\nprint(files['sqlparse/__init__.py'])\n``` code?\n\n```repl\nprint(old[3900:7200])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(old[3900:])\nprint(files['sqlparse/engine/filter_stack.py'])\nprint(files['sqlparse/__init__.py'])"
+      ],
+      "stdout_raw_chars": 7930,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "        # Handle DECLARE block start (only for CREATE statements)\n        if unified == 'DECLARE' and self._is_create and not self._block_stack:\n            self._block_stack.append('DECLARE')\n            return 1\n\n        # Handle BEGIN block start\n        if unified == 'BEGIN':\n            self._seen_begin = True\n            # Transition DECLARE to BEGIN if present\n            if self._block_stack and self._block_stack[-1] == 'DECLARE':\n                self._block_stack.pop()\n                self._block_stack.append('BEGIN')\n                return 0\n            else:\n                self._block_stack.append('BEGIN')\n                return 1\n\n        # Issue826: If we see a transaction keyword after BEGIN,\n        # it's a transaction statement, not a block.\n        if self._seen_begin and \\\n                (ttype is T.Keyword or ttype is T.Name) and \\\n                unified in ('TRANSACTION', 'WORK', 'TRAN',\n                            'DISTRIBUTED', 'DEFERRED',\n                            'IMMEDIATE', 'EXCLUSIVE'):\n            self._seen_begin = False\n            if self._block_stack and self._block_stack[-1] == 'BEGIN':\n                self._block_stack.pop()\n                return -1\n            return 0\n\n        # Inside a block, check for nested loop or control structures\n        if 'BEGIN' in self._block_stack:\n            res = self._handle_nested_block(unified)\n            if res is not None:\n                return res\n\n        # Handle closing keywords\n        return self._handle_closing_keyword(unified)\n\n    def process(self, stream):\n        \"\"\"Process the stream\"\"\"\n        EOS_TTYPE = T.Whitespace, T.Comment.Single\n\n        # Run over all stream tokens\n        for ttype, value in stream:\n            # Yield token if we finished a statement and there's no whitespaces\n            # It will count newline token as a non whitespace. In this context\n            # whitespace ignores newlines.\n            # why don't multi line comments also count?\n            if self.consume_ws and ttype not in EOS_TTYPE:\n                yield sql.Statement(self.tokens)\n\n                # Reset filter and prepare to process next statement\n                self._reset()\n\n            # Change current split level (increase, decrease or remain equal)\n            self.level += self._change_splitlevel(ttype, value)\n\n            # Append the token to the current statement\n            self.tokens.append(sql.Token(ttype, value))\n\n            # Check if we get the end of a statement\n            # Issue762: Allow GO (or \"GO 2\") as statement splitter.\n            # When implementing a language toggle, it's not only to add\n            # keywords it's also to change some rules, like this splitting\n            # rule.\n            # Issue809: Ignore semicolons inside BEGIN...END blocks, but handle\n            # standalone BEGIN; as a transaction statement\n            if ttype is T.Punctuation and value == ';':\n                self._seen_begin = False\n                # Split on semicolon if not inside a BEGIN...END block\n                if self.level <= 0 and 'BEGIN' not in self._block_stack:\n                    self.consume_ws = True\n            elif ttype is T.Keyword and value.split()[0] == 'GO':\n                self.consume_ws = True\n            elif (ttype not in (T.Whitespace, T.Newline, T.Comment.Single,\n                                T.Comment.Multiline)\n                  and not (ttype is T.Keyword and value.upper() == 'BEGIN')):\n                # Reset _seen_begin if we see a non-whitespace, non-comment\n                # token but not for BEGIN itself (which just set the flag)\n                self._seen_begin = False\n\n        # Yield pending statement (if any)\n        if self.tokens and not all(t.is_whitespace for t in self.tokens):\n            yield sql.Statement(self.tokens)\n\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD License: https://opensource.org/licenses/BSD-3-Clause\n\n\"\"\"filter\"\"\"\n\nfrom sqlparse import lexer\nfrom sqlparse.engine import grouping\nfrom sqlparse.engine.statement_splitter import StatementSplitter\nfrom sqlparse.exceptions import SQLParseError\nfrom sqlparse.filters import StripTrailingSemicolonFilter\n\n\nclass FilterStack:\n    def __init__(self, strip_semicolon=False):\n        self.preprocess = []\n        self.stmtprocess = []\n        self.postprocess = []\n        self._grouping = False\n        if strip_semicolon:\n            self.stmtprocess.append(StripTrailingSemicolonFilter())\n\n    def enable_grouping(self):\n        self._grouping = True\n\n    def run(self, sql, encoding=None):\n        try:\n            stream = lexer.tokenize(sql, encoding)\n            # Process token stream\n            for filter_ in self.preprocess:\n                stream = filter_.process(stream)\n\n            stream = StatementSplitter().process(stream)\n\n            # Output: Stream processed Statements\n            for stmt in stream:\n                if self._grouping:\n                    stmt = grouping.group(stmt)\n\n                for filter_ in self.stmtprocess:\n                    filter_.process(stmt)\n\n                for filter_ in self.postprocess:\n                    stmt = filter_.process(stmt)\n\n                yield stmt\n        except RecursionError as err:\n            raise SQLParseError('Maximum recursion depth exceeded') from err\n\n#\n# Copyright (C) 2009-2020 the sqlparse authors and contributors\n# <see AUTHORS file>\n#\n# This module is part of python-sqlparse and is released under\n# the BSD License: https://opensource.org/licenses/BSD-3-Clause\n\n\"\"\"Parse SQL statements.\"\"\"\n\n# Setup namespace\nfrom collections.abc import Generator\nfrom typing import IO, Any\n\nfrom sqlparse import cli, engine, filters, formatter, sql, tokens\n\n__version__ = \"0.6.0\"\n__all__ = [\"cli\", \"engine\", \"filters\", \"formatter\", \"sql\", \"tokens\"]\n\n\ndef parse(\n    sql: str, encoding: str | None = None\n) -> tuple[sql.Statement, ...]:\n    \"\"\"Parse sql and return a list of statements.\n\n    :param sql: A string containing one or more SQL statements.\n    :param encoding: The encoding of the statement (optional).\n    :returns: A tuple of :class:`~sqlparse.sql.Statement` instances.\n    \"\"\"\n    return tuple(parsestream(sql, encoding))\n\n\ndef parsestream(\n    stream: str | IO[str], encoding: str | None = None\n) -> Generator[sql.Statement, None, None]:\n    \"\"\"Parses sql statements from file-like object.\n\n    :param stream: A file-like object.\n    :param encoding: The encoding of the stream contents (optional).\n    :returns: A generator of :class:`~sqlparse.sql.Statement` instances.\n    \"\"\"\n    stack = engine.FilterStack()\n    stack.enable_grouping()\n    return stack.run(stream, encoding)\n\n\ndef format(sql: str, encoding: str | None = None, **options: Any) -> str:\n    \"\"\"Format *sql* according to *options*.\n\n    Available options are documented in :ref:`formatting`.\n\n    In addition to the formatting options this function accepts the\n    keyword \"encoding\" which determines the encoding of the statement.\n\n    :returns: The formatted SQL statement as string.\n    \"\"\"\n    stack = engine.FilterStack()\n    options = formatter.validate_options(options)\n    stack = formatter.build_filter_stack(stack, options)\n    stack.postprocess.append(filters.SerializerUnicode())\n    return \"\".join(stack.run(sql, encoding))\n\n\ndef split(\n    sql: str, encoding: str | None = None, strip_semicolon: bool = False\n) -> list[str]:\n    \"\"\"Split *sql* into single statements.\n\n    :param sql: A string containing one or more SQL statements.\n    :param encoding: The encoding of the statement (optional).\n    :param strip_semicolon: If True, remove trailing semicolons\n        (default: False).\n    :returns: A list of strings.\n    \"\"\"\n    stack = engine.FilterStack(strip_semicolon=strip_semicolon)\n    return [str(stmt).strip() for stmt in stack.run(sql, encoding)]\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\ntarget = '''    def _handle_closing_keyword(self, unified):\n        \"\"\"Handle closing keywords for blocks\"\"\"\n'''\nreplacement = target + '''        # Normalize whitespace for matching only; keep the token value intact.\n        unified = ' '.join(unified.split())\n'''\nassert old.count(target) == 1\nnew = old.replace(target, replacement, 1)\nast.parse(new)\nassert new != old\nassert files[path] == old\npatch = ''.join(difflib.unified_diff(\n    old.splitlines(keepends=True), new.splitlines(keepends=True),\n    fromfile='a/' + path, tofile='b/' + path))\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\ntarget = '''    def _handle_closing_keyword(self, unified):\n        \"\"\"Handle closing keywords for blocks\"\"\"\n'''\nreplacement = target + '''        # Normalize whitespace for matching only; keep the token value intact.\n        unified = ' '.join(unified.split())\n'''\nassert old.count(target) == 1\nnew = old.replace(target, replacement, 1)\nast.parse(new)\nassert new != old\nassert files[path] == old\npatch = ''.join(difflib.unified_diff(\n    old.splitlines(keepends=True), new.splitlines(keepends=True),\n    fromfile='a/' + path, tofile='b/' + path))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 476,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/sqlparse/engine/statement_splitter.py\n+++ b/sqlparse/engine/statement_splitter.py\n@@ -50,6 +50,8 @@\n \n     def _handle_closing_keyword(self, unified):\n         \"\"\"Handle closing keywords for blocks\"\"\"\n+        # Normalize whitespace for matching only; keep the token value intact.\n+        unified = ' '.join(unified.split())\n         if unified == 'END IF':\n             if self._block_stack and self._block_stack[-1] == 'IF':\n                 self._block_stack.pop()\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/sqlparse/engine/statement_splitter.py\n+++ b/sqlparse/engine/statement_splitter.py\n@@ -50,6 +50,8 @@\n \n     def _handle_closing_keyword(self, unified):\n         \"\"\"Handle closing keywords for blocks\"\"\"\n+        # Normalize whitespace for matching only; keep the token value intact.\n+        unified = ' '.join(unified.split())\n         if unified == 'END IF':\n             if self._block_stack and self._block_stack[-1] == 'IF':\n                 self._block_stack.pop()\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 72.93305937499827
+  }
+}

@@ -1,0 +1,97 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+..s...s...s...s...s...s...s...s...s...s...s...s......................... [ 31%]
+........................................................................ [ 39%]
+..s...........ss.......................................................s [ 46%]
+sssssss..................sss...................................F.F.....F [ 54%]
+.F...................................................................... [ 62%]
+........................................................................ [ 70%]
+.....................................................................F.. [ 78%]
+........................................................................ [ 86%]
+.............................................s.......................... [ 93%]
+..sssssssss.............................................                 [100%]
+=================================== FAILURES ===================================
+________________ TestNativeFilteringLogger.test_log_interp_dict ________________
+tests/test_native.py:165: in test_log_interp_dict
+    bl.log(logging.INFO, "answer is %(answer)d.", {"answer": 42})
+src/structlog/_native.py:205: in log
+    name, _maybe_interpolate(event, args), **kw
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:145: in _maybe_interpolate
+    return event % args
+           ^^^^^^^^^^^^
+E   TypeError: format requires a mapping
+_______________ TestNativeFilteringLogger.test_alog_interp_dict ________________
+tests/test_native.py:181: in test_alog_interp_dict
+    await bl.alog(logging.INFO, "answer is %(answer)d.", {"answer": 42})
+src/structlog/_native.py:218: in alog
+    event = _maybe_interpolate(event, args)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:145: in _maybe_interpolate
+    return event % args
+           ^^^^^^^^^^^^
+E   TypeError: format requires a mapping
+______________ TestNativeFilteringLogger.test_exception_dict_args ______________
+tests/test_native.py:245: in test_exception_dict_args
+    bl.exception(
+src/structlog/_native.py:49: in exception
+    return self.error(event, *args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:166: in meth
+    name, _maybe_interpolate(event, args), **kw
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:145: in _maybe_interpolate
+    return event % args
+           ^^^^^^^^^^^^
+E   TypeError: format requires a mapping
+_____________ TestNativeFilteringLogger.test_aexception_dict_args ______________
+tests/test_native.py:266: in test_aexception_dict_args
+    await bl.aexception(
+src/structlog/_native.py:72: in aexception
+    runner = await asyncio.get_running_loop().run_in_executor(
+~/.local/share/uv/python/cpython-3.12.12-macos-aarch64-none/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:74: in <lambda>
+    lambda: ctx.run(lambda: self.error(event, *args, **kw)),
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:74: in <lambda>
+    lambda: ctx.run(lambda: self.error(event, *args, **kw)),
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:166: in meth
+    name, _maybe_interpolate(event, args), **kw
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/structlog/_native.py:145: in _maybe_interpolate
+    return event % args
+           ^^^^^^^^^^^^
+E   TypeError: format requires a mapping
+______________ TestPositionalArgumentsFormatter.test_formats_dict ______________
+tests/test_stdlib.py:477: in test_formats_dict
+    event_dict = formatter(
+src/structlog/stdlib.py:800: in __call__
+    event_dict["event"] %= args
+E   TypeError: format requires a mapping
+=============================== warnings summary ===============================
+../../../../../../../../venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/processors/test_processors.py::TestCallsiteParameterAdder::test_processor, argvalues type: product
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+../../../../../../../../venv/lib/python3.12/site-packages/_pytest/python.py:124
+  /venv/lib/python3.12/site-packages/_pytest/python.py:124: PytestRemovedIn10Warning: Passing a non-Collection iterable to parametrize is deprecated.
+  Test: tests/processors/test_processors.py::TestCallsiteParameterAdder::test_e2e, argvalues type: product
+  Please convert to a list or tuple.
+  See https://docs.pytest.org/en/stable/deprecations.html#parametrize-iterators
+    metafunc.parametrize(*marker.args, **marker.kwargs, _param_mark=marker)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_native.py::TestNativeFilteringLogger::test_log_interp_dict
+FAILED tests/test_native.py::TestNativeFilteringLogger::test_alog_interp_dict
+FAILED tests/test_native.py::TestNativeFilteringLogger::test_exception_dict_args
+FAILED tests/test_native.py::TestNativeFilteringLogger::test_aexception_dict_args
+FAILED tests/test_stdlib.py::TestPositionalArgumentsFormatter::test_formats_dict
+5 failed, 879 passed, 37 skipped, 2 warnings in 0.82s

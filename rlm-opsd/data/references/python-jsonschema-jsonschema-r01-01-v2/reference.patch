@@ -1,0 +1,33 @@
+--- a/jsonschema/_utils.py
++++ b/jsonschema/_utils.py
+@@ -155,13 +155,15 @@
+ 
+ def uniq(container):
+     """
+-    Check if all of a container's elements are unique.
++    Check if all of a finite iterable's elements are unique.
+ 
+     Tries to rely on the container being recursively sortable, or otherwise
+-    falls back on (slow) brute force.
+-    """
++    falls back on (slow) brute force. Materialize the elements once so
++    the fallback also works with single-pass iterators.
++    """
++    elements = [unbool(i) for i in container]
+     try:
+-        sort = sorted(unbool(i) for i in container)
++        sort = sorted(elements)
+         sliced = itertools.islice(sort, 1, None)
+ 
+         for i, j in zip(sort, sliced):
+@@ -170,9 +172,7 @@
+ 
+     except (NotImplementedError, TypeError):
+         seen = []
+-        for e in container:
+-            e = unbool(e)
+-
++        for e in elements:
+             for i in seen:
+                 if equal(i, e):
+                     return False

@@ -1,0 +1,95 @@
+--- /dev/null
++++ b/tests/test_repeated_flag_environment.py
+@@ -0,0 +1,92 @@
++import click
++import pytest
++
++OPAQUE = object()
++
++
++def parse_flag(monkeypatch, activation, env_value, args=(), default_map=None, **settings):
++    monkeypatch.setenv("CLICK_REPEAT_MODE", env_value)
++    option = click.Option(
++        ["--mode"], flag_value=activation, envvar="CLICK_REPEAT_MODE", **settings
++    )
++    command = click.Command("cli", params=[option], add_help_option=False)
++    with command.make_context("cli", list(args), default_map=default_map) as ctx:
++        return ctx.params["mode"], ctx.get_parameter_source("mode")
++
++
++@pytest.mark.parametrize("activation", ["red blue", 42, OPAQUE])
++@pytest.mark.parametrize("env_value", ["1", " true ", "YES", "on"])
++def test_true_environment_is_one_activation(monkeypatch, activation, env_value):
++    value, source = parse_flag(monkeypatch, activation, env_value, multiple=True)
++    assert value == (activation,)
++    assert source is click.ParameterSource.ENVIRONMENT
++
++
++@pytest.mark.parametrize("activation", ["red blue", "false", "  off  "])
++def test_exact_string_match_is_one_activation(monkeypatch, activation):
++    value, source = parse_flag(monkeypatch, activation, activation, multiple=True)
++    assert value == (activation,)
++    assert source is click.ParameterSource.ENVIRONMENT
++
++
++@pytest.mark.parametrize("activation", ["red blue", 42, OPAQUE])
++@pytest.mark.parametrize("env_value", ["0", " false ", "NO", "off"])
++def test_false_environment_blocks_defaults(monkeypatch, activation, env_value):
++    value, source = parse_flag(
++        monkeypatch, activation, env_value, multiple=True,
++        default=(activation,), default_map={"mode": (activation, activation)}
++    )
++    assert value == ()
++    assert source is click.ParameterSource.ENVIRONMENT
++
++
++@pytest.mark.parametrize("activation", ["red blue", 42, OPAQUE])
++@pytest.mark.parametrize("env_value", ["not-a-bool", "42", ""])
++@pytest.mark.parametrize("fallback", ["unset", "declared", "map"])
++def test_unrecognized_environment_uses_fallback(monkeypatch, activation, env_value, fallback):
++    settings = {"multiple": True}
++    default_map = None
++    expected = ()
++    expected_source = click.ParameterSource.DEFAULT
++    if fallback == "declared":
++        settings["default"] = (activation,)
++        expected = (activation,)
++    elif fallback == "map":
++        settings["default"] = (activation,)
++        default_map = {"mode": (activation, activation)}
++        expected = (activation, activation)
++        expected_source = click.ParameterSource.DEFAULT_MAP
++    value, source = parse_flag(
++        monkeypatch, activation, env_value, default_map=default_map, **settings
++    )
++    assert value == expected
++    assert source is expected_source
++
++
++@pytest.mark.parametrize("activation", ["red blue", 42, OPAQUE])
++@pytest.mark.parametrize("env_value", ["true", "false", "not-a-bool"])
++def test_command_line_repetitions_override_environment(monkeypatch, activation, env_value):
++    value, source = parse_flag(
++        monkeypatch, activation, env_value, args=("--mode", "--mode"), multiple=True
++    )
++    assert value == (activation, activation)
++    assert source is click.ParameterSource.COMMANDLINE
++
++
++@pytest.mark.parametrize("env_value, expected", [("true", OPAQUE), ("false", False)])
++def test_scalar_non_boolean_flags_remain_scalar(monkeypatch, env_value, expected):
++    value, source = parse_flag(monkeypatch, OPAQUE, env_value)
++    assert value is expected
++    assert source is click.ParameterSource.ENVIRONMENT
++
++
++@pytest.mark.parametrize("nargs, expected", [(1, ("a", "b", "c", "d")), (2, (("a", "b"), ("c", "d")))])
++def test_ordinary_repeated_values_still_split(monkeypatch, nargs, expected):
++    monkeypatch.setenv("CLICK_REPEAT_VALUES", "a b c d")
++    option = click.Option(
++        ["--item"], multiple=True, nargs=nargs, envvar="CLICK_REPEAT_VALUES"
++    )
++    command = click.Command("cli", params=[option], add_help_option=False)
++    with command.make_context("cli", []) as ctx:
++        assert ctx.params["item"] == expected
++        assert ctx.get_parameter_source("item") is click.ParameterSource.ENVIRONMENT

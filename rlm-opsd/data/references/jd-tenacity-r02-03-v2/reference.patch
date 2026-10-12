@@ -1,0 +1,31 @@
+--- a/tenacity/asyncio/__init__.py
++++ b/tenacity/asyncio/__init__.py
+@@ -130,7 +130,12 @@
+                         result = await fn(*args, **kwargs)
+                     else:
+                         result = fn(*args, **kwargs)
+-                except BaseException:
++                except BaseException as exc:
++                    # Cancellation must bypass outcome storage and retry handling.
++                    import asyncio
++
++                    if isinstance(exc, asyncio.CancelledError):
++                        raise
+                     retry_state.set_exception(sys.exc_info())  # type: ignore[arg-type]
+                 else:
+                     retry_state.set_result(result)
+--- a/tenacity/__init__.py
++++ b/tenacity/__init__.py
+@@ -252,6 +252,12 @@
+         exc_value: BaseException | None,
+         traceback: "types.TracebackType | None",
+     ) -> bool | None:
++        if exc_value is not None:
++            # Keep asyncio lazy-imported, and leave synchronous attempts unchanged.
++            import asyncio
++
++            if isinstance(exc_value, asyncio.CancelledError):
++                return False
+         return self.__exit__(exc_type, exc_value, traceback)
+ 
+ 

@@ -1,0 +1,88 @@
+--- /dev/null
++++ b/toolz/tests/test_tlz_path_ownership.py
+@@ -0,0 +1,85 @@
++import types
++
++import pytest
++import toolz
++import tlz._build_tlz as builder
++
++
++@pytest.fixture(params=['both', 'cytoolz', 'toolz'])
++def backends(request, monkeypatch):
++    fast = types.ModuleType('cytoolz.audit', 'fast documentation')
++    slow = types.ModuleType('toolz.audit', 'slow documentation')
++    for backend in (fast, slow):
++        backend.__package__ = backend.__name__
++        backend.__file__ = backend.__name__ + '.py'
++        backend.marker = object()
++    fast.pipe = object()
++    slow.pipe = toolz.pipe
++    available = {}
++    if request.param in ('both', 'cytoolz'):
++        available[fast.__name__] = fast
++    if request.param in ('both', 'toolz'):
++        available[slow.__name__] = slow
++
++    def fake_import(name):
++        if name in available:
++            return available[name]
++        raise ImportError(name)
++
++    monkeypatch.setattr(builder, 'import_module', fake_import)
++    selected = fast if fast.__name__ in available else slow
++    introspection = slow if slow.__name__ in available else fast
++    return builder.TlzLoader(), selected, introspection
++
++
++def execute(backends, target):
++    loader, selected, introspection = backends
++    loader.exec_module(target)
++    assert target.__name__ == 'tlz.audit'
++    assert target.__package__ == 'tlz.audit'
++    assert target.marker is selected.marker
++    assert target.__file__ == introspection.__file__
++    expected_pipe = toolz.pipe if introspection.pipe is toolz.pipe else selected.pipe
++    assert target.pipe is expected_pipe
++
++
++@pytest.mark.parametrize('locations', [[], ['first', 'second'], ('first', 'second')])
++def test_missing_target_path_gets_independent_list(backends, locations):
++    _, selected, _ = backends
++    selected.__path__ = locations.copy() if isinstance(locations, list) else locations
++    target = types.ModuleType('tlz.audit')
++    execute(backends, target)
++    assert target.__doc__ == selected.__doc__
++    assert isinstance(target.__path__, list)
++    assert target.__path__ == list(locations)
++    assert target.__path__ is not selected.__path__
++    target.__path__.append('target-only')
++    assert list(selected.__path__) == list(locations)
++    if isinstance(selected.__path__, list):
++        selected.__path__.append('backend-only')
++        assert 'backend-only' not in target.__path__
++
++
++@pytest.mark.parametrize('existing', [[], ['local'], ('local',), None])
++def test_existing_target_path_is_preserved(backends, existing):
++    _, selected, _ = backends
++    selected.__path__ = ['backend']
++    target = types.ModuleType('tlz.audit', 'target documentation')
++    target.__path__ = existing
++    target.marker = object()
++    retained = target.marker
++    loader, _, _ = backends
++    loader.exec_module(target)
++    assert target.__path__ is existing
++    assert target.marker is retained
++    assert target.__doc__ == 'target documentation'
++
++
++def test_no_selected_path_is_not_synthesized(backends):
++    _, selected, introspection = backends
++    if introspection is not selected:
++        introspection.__path__ = ['slow-only']
++    target = types.ModuleType('tlz.audit')
++    execute(backends, target)
++    assert not hasattr(target, '__path__')
++    assert not hasattr(selected, '__path__')

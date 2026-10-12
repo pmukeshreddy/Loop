@@ -1,0 +1,61 @@
+--- /dev/null
++++ b/tests/test_factory_field_context.py
+@@ -0,0 +1,58 @@
++import pickle
++
++import pytest
++
++import attr
++
++
++@pytest.mark.parametrize("slots", [False, True])
++@pytest.mark.parametrize("frozen", [False, True])
++@pytest.mark.parametrize("init", [False, True])
++@pytest.mark.parametrize("takes_self", [False, True])
++@pytest.mark.parametrize("converted", [False, True])
++def test_factory_receives_final_field(slots, frozen, init, takes_self, converted):
++    calls = []
++
++    def factory(*args):
++        field = args[-1]
++        assert field is attr.fields(C).value
++        assert field.metadata["transformed"] is True
++        assert len(args) == (2 if takes_self else 1)
++        if takes_self:
++            assert args[0].seed == 5
++        calls.append(args)
++        return "7"
++
++    def transform(cls, fields):
++        return [a.evolve(metadata={"transformed": True}) for a in fields]
++
++    @attr.s(slots=slots, frozen=frozen, field_transformer=transform)
++    class C:
++        seed = attr.ib(default=5)
++        value = attr.ib(
++            init=init,
++            default=attr.Factory(factory, takes_self=takes_self, takes_field=True),
++            converter=int if converted else None,
++        )
++
++    c = C()
++    assert c.value == (7 if converted else "7")
++    assert len(calls) == 1
++    if init:
++        supplied = C(value="9")
++        assert supplied.value == (9 if converted else "9")
++        assert len(calls) == 1
++
++
++def test_factory_state_and_legacy_repr():
++    old = attr.Factory(list)
++    assert repr(old) == "Factory(factory=<class 'list'>, takes_self=False)"
++    contextual = attr.Factory(list, takes_field=True)
++    assert contextual != old
++    loaded = pickle.loads(pickle.dumps(contextual))
++    assert loaded == contextual
++    assert loaded.takes_field is True
++    legacy = attr.Factory.__new__(attr.Factory)
++    legacy.__setstate__((list, True))
++    assert legacy.takes_self is True
++    assert legacy.takes_field is False

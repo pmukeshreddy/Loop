@@ -1,0 +1,92 @@
+--- /dev/null
++++ b/tests/test_declared_terminal_dependencies.py
+@@ -0,0 +1,89 @@
++import os
++import tempfile
++import unittest
++
++from lark import GrammarError, Lark, Token
++from lark.lexer import Lexer
++
++
++class DeclaredTokenLexer(Lexer):
++    __future_interface__ = 2
++
++    def __init__(self, lexer_conf):
++        pass
++
++    def lex(self, lexer_state, parser_state):
++        yield Token("EXTERNAL_TOKEN", "x")
++
++
++class TestDeclaredTerminalDependencies(unittest.TestCase):
++    def assert_dependency_error(self, grammar, concrete, declared, **options):
++        with self.assertRaises(GrammarError) as caught:
++            Lark(grammar, parser="lalr", **options)
++        message = str(caught.exception)
++        self.assertIn(concrete, message)
++        self.assertIn(declared, message)
++
++    def test_local_direct_dependency(self):
++        self.assert_dependency_error(
++            'start: LOCAL_TOKEN\nLOCAL_TOKEN: EXTERNAL_TOKEN "!"\n%declare EXTERNAL_TOKEN\n',
++            "LOCAL_TOKEN", "EXTERNAL_TOKEN",
++        )
++
++    def test_local_transitive_dependency_in_both_orders(self):
++        definitions = [
++            'ROOT_TOKEN: MIDDLE_TOKEN "!"',
++            'MIDDLE_TOKEN: INNER_TOKEN',
++            'INNER_TOKEN: EXTERNAL_TOKEN',
++        ]
++        for ordered in (definitions, list(reversed(definitions))):
++            with self.subTest(definitions=ordered):
++                grammar = "start: ROOT_TOKEN\n" + "\n".join(ordered) + "\n%declare EXTERNAL_TOKEN\n"
++                self.assert_dependency_error(grammar, "ROOT_TOKEN", "EXTERNAL_TOKEN")
++
++    def test_imported_dependencies_use_effective_names(self):
++        cases = [
++            ('PUBLIC_SOURCE: PRIVATE_DECL\n%declare PRIVATE_DECL\n',
++             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\nstart: PUBLIC_ALIAS\n',
++             "PUBLIC_ALIAS", "bundle__PRIVATE_DECL"),
++            ('PUBLIC_SOURCE: PRIVATE_DECL\n%declare PRIVATE_DECL\n',
++             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\n%import bundle.PRIVATE_DECL -> DECL_ALIAS\nstart: PUBLIC_ALIAS\n',
++             "PUBLIC_ALIAS", "DECL_ALIAS"),
++            ('INNER_SOURCE: PRIVATE_DECL\nMIDDLE_SOURCE: INNER_SOURCE\nPUBLIC_SOURCE: MIDDLE_SOURCE\n%declare PRIVATE_DECL\n',
++             '%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\nstart: PUBLIC_ALIAS\n',
++             "PUBLIC_ALIAS", "bundle__PRIVATE_DECL"),
++        ]
++        with tempfile.TemporaryDirectory() as directory:
++            for source, grammar, concrete, declared in cases:
++                with self.subTest(grammar=grammar, source=source):
++                    with open(os.path.join(directory, "bundle.lark"), "w", encoding="utf8") as stream:
++                        stream.write(source)
++                    self.assert_dependency_error(
++                        grammar, concrete, declared, import_paths=[directory],
++                    )
++
++    def test_standalone_declarations_still_work_with_custom_lexer(self):
++        parser = Lark(
++            "start: EXTERNAL_TOKEN\n%declare EXTERNAL_TOKEN UNUSED_TOKEN\n",
++            parser="lalr", lexer=DeclaredTokenLexer,
++        )
++        result = parser.parse("x")
++        self.assertEqual(result.data, "start")
++        self.assertEqual(result.children, [Token("EXTERNAL_TOKEN", "x")])
++
++    def test_concrete_reference_chain_still_parses(self):
++        parser = Lark(
++            'start: ROOT_TOKEN\nROOT_TOKEN: MIDDLE_TOKEN "!"\nMIDDLE_TOKEN: INNER_TOKEN\nINNER_TOKEN: "x"\n',
++            parser="lalr",
++        )
++        self.assertEqual(parser.parse("x!").children, [Token("ROOT_TOKEN", "x!")])
++
++    def test_imported_concrete_chain_still_parses(self):
++        with tempfile.TemporaryDirectory() as directory:
++            with open(os.path.join(directory, "bundle.lark"), "w", encoding="utf8") as stream:
++                stream.write('PUBLIC_SOURCE: INNER_SOURCE "!"\nINNER_SOURCE: "x"\n')
++            parser = Lark(
++                "%import bundle.PUBLIC_SOURCE -> PUBLIC_ALIAS\nstart: PUBLIC_ALIAS\n",
++                parser="lalr", import_paths=[directory],
++            )
++            self.assertEqual(parser.parse("x!").children, [Token("PUBLIC_ALIAS", "x!")])

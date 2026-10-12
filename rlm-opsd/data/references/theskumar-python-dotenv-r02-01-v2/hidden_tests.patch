@@ -1,0 +1,116 @@
+--- /dev/null
++++ b/tests/test_key_serialization.py
+@@ -0,0 +1,113 @@
++from unittest import mock
++
++import pytest
++from click.testing import CliRunner
++
++import dotenv
++from dotenv.cli import cli
++
++
++KEY_CASES = [
++    ("plain", "plain"),
++    ("APP NAME", "'APP NAME'"),
++    ("#TAG", "'#TAG'"),
++    ("A#B", "'A#B'"),
++    ("A=B", "'A=B'"),
++    (" spaced ", "' spaced '"),
++    ("\t", "'\t'"),
++    ("a\u00a0b", "'a\u00a0b'"),
++    ("back\\ key", "'back\\ key'"),
++    ('"name"', '"name"'),
++    ("export", "export"),
++]
++
++
++def assignment(key_out, value, mode, export):
++    quoted = mode == "always" or (mode == "auto" and not value.isalnum())
++    value_out = "'" + value + "'" if quoted else value
++    prefix = "export " if export else ""
++    return prefix + key_out + "=" + value_out + "\n"
++
++
++@pytest.mark.parametrize("key,key_out", KEY_CASES)
++@pytest.mark.parametrize("mode", ["always", "auto", "never"])
++@pytest.mark.parametrize("export", [False, True])
++@pytest.mark.parametrize("value", ["plain", "two words"])
++def test_key_spelling_and_library_lifecycle(tmp_path, key, key_out, mode, export, value):
++    path = tmp_path / ".env"
++    expected = assignment(key_out, value, mode, export)
++    assert dotenv.set_key(path, key, value, quote_mode=mode, export=export) == (
++        True, key, value
++    )
++    assert path.read_text(encoding="utf-8") == expected
++    assert dotenv.get_key(path, key) == value
++    assert dotenv.dotenv_values(path) == {key: value}
++    path.write_text("KEEP=ok\n" + expected + expected, encoding="utf-8")
++    replacement = assignment(key_out, "next", mode, export)
++    assert dotenv.set_key(path, key, "next", quote_mode=mode, export=export) == (
++        True, key, "next"
++    )
++    assert path.read_text(encoding="utf-8") == "KEEP=ok\n" + replacement * 2
++    assert dotenv.get_key(path, key) == "next"
++    assert dotenv.unset_key(path, key) == (True, key)
++    assert path.read_text(encoding="utf-8") == "KEEP=ok\n"
++    assert dotenv.get_key(path, key) is None
++
++
++def test_key_append_preserves_unrelated_text(tmp_path):
++    path = tmp_path / ".env"
++    path.write_text("# keep\nKEEP=ok", encoding="utf-8")
++    dotenv.set_key(path, "A=B", "x", quote_mode="never")
++    assert path.read_text(encoding="utf-8") == "# keep\nKEEP=ok\n'A=B'=x\n"
++    assert dotenv.get_key(path, "A=B") == "x"
++
++
++@pytest.mark.parametrize("key", ["", "'", "a'b", "a\rb", "a\nb", None, 7])
++@pytest.mark.parametrize("exists", [False, True])
++@pytest.mark.parametrize("mode", ["always", "auto", "never"])
++def test_unsupported_key_rejected_before_rewrite(tmp_path, key, exists, mode):
++    path = tmp_path / ".env"
++    original = b"# keep\r\nA=x\r\n"
++    if exists:
++        path.write_bytes(original)
++    before = set(tmp_path.iterdir())
++    with mock.patch("dotenv.main.rewrite") as rewrite:
++        with pytest.raises(ValueError):
++            dotenv.set_key(path, key, "value", quote_mode=mode, export=True)
++        rewrite.assert_not_called()
++    assert set(tmp_path.iterdir()) == before
++    assert path.exists() == exists
++    if exists:
++        assert path.read_bytes() == original
++
++
++@pytest.mark.parametrize("key,key_out", KEY_CASES[1:5])
++@pytest.mark.parametrize("mode", ["always", "auto", "never"])
++@pytest.mark.parametrize("export", [False, True])
++def test_cli_key_lifecycle(tmp_path, key, key_out, mode, export):
++    path = tmp_path / ".env"
++    runner = CliRunner()
++    options = [
++        "--file", str(path), "--quote", mode,
++        "--export", "true" if export else "false",
++    ]
++    result = runner.invoke(cli, options + ["set", key, "two words"])
++    assert (result.exit_code, result.output) == (0, key + "=two words\n")
++    assert path.read_text(encoding="utf-8") == assignment(
++        key_out, "two words", mode, export
++    )
++    assert dotenv.get_key(path, key) == "two words"
++    result = runner.invoke(cli, options + ["get", key])
++    assert (result.exit_code, result.output) == (0, "two words\n")
++    result = runner.invoke(cli, options + ["set", key, "next"])
++    assert (result.exit_code, result.output) == (0, key + "=next\n")
++    assert path.read_text(encoding="utf-8") == assignment(
++        key_out, "next", mode, export
++    )
++    result = runner.invoke(cli, options + ["get", key])
++    assert (result.exit_code, result.output) == (0, "next\n")
++    result = runner.invoke(cli, options + ["unset", key])
++    assert (result.exit_code, result.output) == (0, "Successfully removed " + key + "\n")
++    assert path.read_text(encoding="utf-8") == ""
++    result = runner.invoke(cli, options + ["get", key])
++    assert (result.exit_code, result.output) == (1, "")

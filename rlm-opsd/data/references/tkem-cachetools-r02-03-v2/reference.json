@@ -1,0 +1,164 @@
+{
+ "answer": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -664,6 +664,14 @@\n             with self.timer as time:\n                 if time < curr.expires and not curr.removed:\n                     yield curr.key\n+\n+    def __setstate__(self, state):\n+        self.__dict__.update(state)\n+        # Rebuild the heap from current items, discarding obsolete records\n+        # without changing their LRU order or expiration times.\n+        self.__order = list(self.__items.values())\n+        heapq.heapify(self.__order)\n+        self.expire(self.timer())\n \n     @property\n     def ttu(self):\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 9,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p",
+    "src"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 9 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['files', 'p', 'src']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production diff combines heap reconstruction with immediate expiration while retaining the existing item ordering and deadlines. The reference constructed and inspected its final diff; its execution summary does not show repository test execution.",
+   "inspect_locate": "The reference execution used nine targeted searches without printing the whole context. The change requires relating TLRU heap records and LRU ordering to base-cache accounting and restored timer behavior.",
+   "persistent_state": "The reference retained and reused source-context variables across turns. The task also requires tracking distinct invariants for obsolete records, expired entries, surviving deadlines, weighted size, and recency, though variable reuse alone is limited evidence of that reasoning."
+  },
+  "notes": "A natural, repository-dependent feature request with precise observable requirements and a clear output format. Naming the target class and desired restoration behavior does not reveal the implementation. The task is substantively different from the accepted TLRU replacement regression: it concerns deserialization cleanup and preservation of restored state rather than replacement bookkeeping."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The deliverable is an exact production diff that combines state restoration, heap rebuilding, and expiration without inadvertently rebuilding recency order or bypassing weighted accounting.",
+   "inspect_locate": "The implementation requires connecting TLRU's heap and recency structures to base-cache size accounting, TTL's restoration hook, and the timer wrapper's serialization behavior. These definitions are separated within the production module, with deterministic timer behavior supplied by the TLRU tests.",
+   "persistent_state": "The solver must keep distinct the obsolete replacement and deletion records, expired current records, surviving deadlines, and surviving LRU order while determining which restoration operations preserve all invariants."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache",
+    "why": "Maintains current records in an LRU-ordered mapping and expiration records in a separate heap, but has no restoration hook."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TTLCache.__setstate__",
+    "why": "Provides the existing lifecycle precedent for restoring instance state, rebuilding expiration tracking, and expiring entries immediately."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::_TimedCache._Timer.__reduce__",
+    "why": "Reconstructs the timer wrapper from its underlying callable rather than retaining a serialized frozen timer context."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::TLRUCache.expire",
+    "why": "Removes elapsed current records through base-cache deletion, maintaining weighted accounting without touching surviving recency."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::Cache.__delitem__",
+    "why": "Subtracts each deleted entry's recorded weight from current size."
+   },
+   {
+    "path": "tests/test_tlru.py",
+    "symbol": "tests/test_tlru.py::Timer",
+    "why": "Supplies a picklable deterministic timer whose underlying time can advance even inside a frozen timer context."
+   }
+  ],
+  "expected_answer": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -725,6 +725,12 @@\n                 if time < curr.expires and not curr.removed:\n                     yield curr.key\n \n+    def __setstate__(self, state):\n+        self.__dict__.update(state)\n+        self.__order = list(self.__items.values())\n+        heapq.heapify(self.__order)\n+        self.expire(self.timer())\n+\n     @property\n     def ttu(self):\n         \"\"\"The local time-to-use function used by the cache.\"\"\"\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_tlru_restore.py\n@@ -0,0 +1,100 @@\n+import pickle\n+import unittest\n+\n+from cachetools import Cache, TLRUCache\n+\n+from .test_tlru import Timer\n+\n+\n+def deadline(_key, value, _time):\n+    return value[0]\n+\n+\n+def weight(value):\n+    return value[1]\n+\n+\n+class TLRURestoreTest(unittest.TestCase):\n+    def roundtrip(self, cache, protocol):\n+        return pickle.loads(pickle.dumps(cache, protocol=protocol))\n+\n+    def test_cleanup_deadlines_weights_and_recency(self):\n+        for protocol in range(2, pickle.HIGHEST_PROTOCOL + 1):\n+            with self.subTest(protocol=protocol):\n+                cache = TLRUCache(20, deadline, timer=Timer(), getsizeof=weight)\n+                cache[\"early\"] = (3, 4)\n+                cache[\"a\"] = (11, 2)\n+                cache[\"b\"] = (7, 3)\n+                cache[\"c\"] = (13, 5)\n+                cache[\"gone\"] = (17, 1)\n+                cache[\"a\"] = (19, 2)\n+                cache[\"a\"] = (15, 2)\n+                del cache[\"gone\"]\n+                cache[\"b\"]\n+                cache[\"a\"]\n+                for _ in range(3):\n+                    cache.timer.tick()\n+                restored = self.roundtrip(cache, protocol)\n+\n+                # Bypass timed accessors so lazy expiration cannot hide failure.\n+                self.assertEqual(Cache.__len__(restored), 3)\n+                self.assertEqual(Cache.currsize.fget(restored), 10)\n+                self.assertFalse(Cache.__contains__(restored, \"early\"))\n+                self.assertFalse(Cache.__contains__(restored, \"gone\"))\n+                heap = restored._TLRUCache__order\n+                self.assertEqual(len(heap), 3)\n+                self.assertTrue(all(not item.removed for item in heap))\n+                self.assertEqual(\n+                    {item.key: item.expires for item in heap},\n+                    {\"a\": 15, \"b\": 7, \"c\": 13},\n+                )\n+                self.assertEqual(Cache.__getitem__(restored, \"a\"), (15, 2))\n+\n+                # Deadline order differs from LRU order: c must be evicted.\n+                restored[\"d\"] = (20, 12)\n+                self.assertFalse(Cache.__contains__(restored, \"c\"))\n+                self.assertTrue(Cache.__contains__(restored, \"b\"))\n+                self.assertTrue(Cache.__contains__(restored, \"a\"))\n+                self.assertEqual(Cache.currsize.fget(restored), 17)\n+                for _ in range(4):\n+                    restored.timer.tick()\n+                self.assertEqual(restored.expire(), [(\"b\", (7, 3))])\n+                self.assertEqual(Cache.currsize.fget(restored), 14)\n+                self.assertEqual(restored.expire(15), [(\"a\", (15, 2))])\n+                self.assertEqual(Cache.currsize.fget(restored), 12)\n+                self.assertEqual(restored.expire(20), [(\"d\", (20, 12))])\n+                self.assertEqual(Cache.__len__(restored), 0)\n+                self.assertEqual(Cache.currsize.fget(restored), 0)\n+\n+    def test_restored_timer_not_serialized_frozen_time(self):\n+        cache = TLRUCache(10, deadline, timer=Timer(), getsizeof=weight)\n+        cache[\"expired\"] = (2, 4)\n+        cache[\"live\"] = (9, 2)\n+        with cache.timer as frozen:\n+            self.assertEqual(frozen, 0)\n+            cache.timer.tick()\n+            cache.timer.tick()\n+            restored = self.roundtrip(cache, pickle.HIGHEST_PROTOCOL)\n+        self.assertEqual(Cache.__len__(restored), 1)\n+        self.assertEqual(Cache.currsize.fget(restored), 2)\n+        self.assertFalse(Cache.__contains__(restored, \"expired\"))\n+        self.assertEqual(restored.timer(), 2)\n+        self.assertEqual(Cache.__getitem__(restored, \"live\"), (9, 2))\n+        self.assertEqual(Cache.__len__(cache), 2)\n+        self.assertEqual(restored.expire(9), [(\"live\", (9, 2))])\n+\n+    def test_empty_and_all_expired(self):\n+        for populated in (False, True):\n+            with self.subTest(populated=populated):\n+                cache = TLRUCache(10, deadline, timer=Timer(), getsizeof=weight)\n+                if populated:\n+                    cache[\"x\"] = (1, 3)\n+                    cache.timer.tick()\n+                restored = self.roundtrip(cache, pickle.HIGHEST_PROTOCOL)\n+                self.assertEqual(Cache.__len__(restored), 0)\n+                self.assertEqual(Cache.currsize.fget(restored), 0)\n+                self.assertEqual(restored._TLRUCache__order, [])\n+                restored[\"new\"] = (10, 2)\n+                self.assertEqual(restored[\"new\"], (10, 2))\n+                self.assertEqual(restored.currsize, 2)\n+                self.assertEqual(restored.popitem(), (\"new\", (10, 2)))\n",
+  "include_failure_log": false,
+  "notes": "Start from the supplied correct replacement implementation; no setup regression is introduced. Acceptance tests are added in a new file rather than modifying tests/test_tlru.py. They exercise pickle protocols 2 through the runtime's highest protocol, bypass timed accessors when checking immediate cleanup, and inspect the expiration heap solely to verify the explicitly requested compaction invariant. Protocols 0 and 1 are outside this task because the existing slotted TLRU item representation does not support them. The main round trip retains tombstones below the ordinary heap-compaction threshold and deliberately gives survivors different deadline and LRU orders.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add pickle-restoration support to `TLRUCache` in `src/cachetools/__init__.py`. Immediately after unpickling, current entries whose deadlines are at or before the restored timer's current time must be physically removed, with weighted size accounting updated; this must not depend on a later call to `len()`, `currsize`, or `expire()`. The expiration heap must contain exactly one record per surviving key, with no obsolete records from replacements or explicit deletions.\n\nPreserve surviving values, their original deadlines, and their relative LRU priority, so subsequent capacity eviction behaves as it would before serialization. Do not recompute deadlines through `ttu`. Restoration must use the restored timer's current reading, including when the cache was pickled inside an active timer context whose frozen reading differs from the underlying timer. Empty and fully expired caches must remain usable after restoration. Leave ordinary replacement, expiration, and eviction behavior unchanged.\n\nReturn a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Moves from repairing a supplied failure to designing and verifying a lifecycle invariant. Comparative inspection of TTLCache.__setstate__, TLRUCache.expire, Cache.__delitem__, and timer serialization is useful, followed by focused round-trip verification. Persistent state tracks which serialized records are obsolete, which current entries have expired, and which survivors must retain their eviction priority.",
+  "change_type": "deliverable",
+  "description": "Add restoration-time cleanup for pickled TLRU caches. On unpickling, discard obsolete heap records and remove current entries whose deadlines have passed at the restored timer's current time, without changing surviving entries' deadlines or LRU priority. Implement the restoration hook in src/cachetools/__init__.py::TLRUCache, using TTLCache.__setstate__ and _TimedCache._Timer.__reduce__ as relevant comparison points. Add round-trip tests in tests/test_tlru.py using Timer, repeated replacements, explicit deletions, weighted values, and capacity eviction after restoration. Start from the shown correct replacement implementation rather than injecting the accepted task's regression.",
+  "expected_answer_change": "The answer becomes an implementation of TLRU restoration behavior plus acceptance tests. It must restore instance state, rebuild a heap containing current active records, and expire elapsed current entries using the restored timer. It must preserve the ordering of TLRUCache.__items rather than reconstructing LRU order from deadline order, and use expiration's base-cache deletion path to maintain weighted size accounting. Tests should check restoration state before len() or currsize can mask missing restoration-time cleanup.",
+  "why_substantive": "This is a new lifecycle requirement, not another replacement repair. TLRUCache currently has no restoration hook, whereas TTLCache explicitly rebuilds its expiration structure and expires entries during restoration. Investigation must establish how serialized timer state, shared _Item references, heap tombstones, current storage, and OrderedDict recency interact."
+ },
+ "task_id": "tkem-cachetools-r02-03-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_cleanup_deadlines_weights_and_recency",
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_empty_and_all_expired",
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_restored_timer_not_serialized_frozen_time"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 0,
+    "passed": 341
+   },
+   "patch_files": [
+    "src/cachetools/__init__.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_cleanup_deadlines_weights_and_recency",
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_empty_and_all_expired",
+   "tests/test_tlru_restore.py::TLRURestoreTest::test_restored_timer_not_serialized_frozen_time"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

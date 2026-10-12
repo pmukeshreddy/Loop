@@ -1,0 +1,139 @@
+{
+ "answer": "--- a/mkdocs/config/defaults.py\n+++ b/mkdocs/config/defaults.py\n@@ -17,6 +17,10 @@\n     }\n \n     def run_validation(self, value: object) -> int:\n+        # Only the standard severity levels are valid numeric inputs, not the\n+        # special value added by _AbsoluteLinksValidation.\n+        if type(value) is int and value in _LogLevel.levels.values():\n+            return value\n         if not isinstance(value, str):\n             raise base.ValidationError(f\"Expected a string, but a {type(value)} was given.\")\n         try:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 5,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "headers",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 8982 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The 8,982-character context contains the severity validators and affected configuration fields. The reference execution used no sub-calls and produced a focused production patch that accepts the specified integer levels while excluding booleans, floats, and the absolute-links sentinel."
+  },
+  "notes": "This is a natural, precisely scoped feature request requiring repository-specific reasoning about validation inheritance, string conversion, and shorthand propagation. It specifies observable behavior without naming the implementation to modify or prescribing solver operations. The unified-diff format is clear. Although it shares configuration machinery with the parent task, numeric-level support is a substantively different change from diagnosing shorthand precedence."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused defaults.py context is under 16,000 characters and contains both severity validators and every affected validation field. The implementation requires distinguishing integer logging levels from other numeric values, preserving string conversion and defaults, and ensuring the absolute-link subclass does not broaden the accepted integer domain. No repository-wide investigation or delegation is needed."
+  },
+  "context": {
+   "files": [
+    "mkdocs/config/defaults.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "mkdocs/config/defaults.py",
+    "symbol": "mkdocs/config/defaults.py::_LogLevel.run_validation",
+    "why": "Currently accepts only strings and converts the three severity tokens to logging levels."
+   },
+   {
+    "path": "mkdocs/config/defaults.py",
+    "symbol": "mkdocs/config/defaults.py::_AbsoluteLinksValidation",
+    "why": "Extends the string mapping with a special value that must not expand the numeric input domain."
+   },
+   {
+    "path": "mkdocs/config/defaults.py",
+    "symbol": "mkdocs/config/defaults.py::MkDocsConfig.Validation",
+    "why": "Declares all affected nav and links fields and their defaults."
+   },
+   {
+    "path": "mkdocs/tests/config/config_options_tests.py",
+    "symbol": "mkdocs/tests/config/config_options_tests.py::NestedSubConfigTest.Schema",
+    "why": "The acceptance tests reuse this existing schema to exercise nested validation and shorthand propagation without unrelated root-config requirements."
+   }
+  ],
+  "expected_answer": "--- a/mkdocs/config/defaults.py\n+++ b/mkdocs/config/defaults.py\n@@ -16,6 +16,8 @@\n         \"ignore\": logging.DEBUG,\n     }\n \n     def run_validation(self, value: object) -> int:\n+        if type(value) is int and value in (logging.DEBUG, logging.INFO, logging.WARNING):\n+            return value\n         if not isinstance(value, str):\n             raise base.ValidationError(f\"Expected a string, but a {type(value)} was given.\")\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/mkdocs/tests/config/test_validation_numeric_levels.py\n@@ -0,0 +1,93 @@\n+import copy\n+import logging\n+import unittest\n+\n+from mkdocs.config.base import ValidationError\n+from mkdocs.tests.config import config_options_tests as existing\n+\n+\n+FIELDS = {\n+    'nav': ('omitted_files', 'not_found', 'absolute_links'),\n+    'links': ('not_found', 'absolute_links', 'unrecognized_links', 'anchors'),\n+}\n+LEVELS = (logging.DEBUG, logging.INFO, logging.WARNING)\n+\n+\n+class NumericValidationSeverityTest(unittest.TestCase):\n+    def validate_input(self, value):\n+        config = existing.NestedSubConfigTest.Schema()\n+        config.load_dict({'validation': copy.deepcopy(value)})\n+        errors, warnings = config.validate()\n+        self.assertEqual(warnings, [])\n+        return config.validation, errors\n+\n+    def accepted(self, value):\n+        config, errors = self.validate_input(value)\n+        self.assertEqual(errors, [])\n+        return config\n+\n+    def rejected(self, value, group, key):\n+        _, errors = self.validate_input(value)\n+        self.assertEqual(len(errors), 1)\n+        name, error = errors[0]\n+        self.assertEqual(name, 'validation')\n+        self.assertIsInstance(error, ValidationError)\n+        self.assertTrue(str(error).startswith(\n+            f\"Sub-option '{group}': Sub-option '{key}':\"\n+        ), str(error))\n+\n+    def test_numeric_nested(self):\n+        for group, keys in FIELDS.items():\n+            for key in keys:\n+                for level in LEVELS:\n+                    with self.subTest(group=group, key=key, level=level):\n+                        config = self.accepted({group: {key: level}})\n+                        self.assertEqual(config[group][key], level)\n+                        self.assertIs(type(config[group][key]), int)\n+\n+    def test_numeric_shorthand(self):\n+        for key in dict.fromkeys(k for keys in FIELDS.values() for k in keys):\n+            for level in LEVELS:\n+                with self.subTest(key=key, level=level):\n+                    config = self.accepted({key: level})\n+                    for group, keys in FIELDS.items():\n+                        if key in keys:\n+                            self.assertEqual(config[group][key], level)\n+\n+    def test_explicit_overrides_shorthand(self):\n+        for shorthand, explicit in ((logging.DEBUG, 'warn'), ('ignore', logging.WARNING)):\n+            config = self.accepted({'not_found': shorthand, 'links': {'not_found': explicit}})\n+            self.assertEqual(config.nav.not_found, logging.DEBUG)\n+            self.assertEqual(config.links.not_found, logging.WARNING)\n+\n+    def test_invalid_values(self):\n+        invalid = (True, False, 0, 1, -1, 2, 15, logging.ERROR, logging.CRITICAL,\n+                   10.0, 20.0, 30.0, '10', 'DEBUG', [], {}, b'warn')\n+        for group, keys in FIELDS.items():\n+            for key in keys:\n+                for value in invalid:\n+                    with self.subTest(group=group, key=key, value=value):\n+                        self.rejected({group: {key: value}}, group, key)\n+                        first_group = next(g for g, ks in FIELDS.items() if key in ks)\n+                        self.rejected({key: value}, first_group, key)\n+\n+    def test_relative_token_is_exclusive(self):\n+        baseline = self.accepted({'absolute_links': 'relative_to_docs'})\n+        for group, keys in FIELDS.items():\n+            config = self.accepted({group: {'absolute_links': 'relative_to_docs'}})\n+            self.assertEqual(config[group].absolute_links, baseline[group].absolute_links)\n+            for key in keys:\n+                if key != 'absolute_links':\n+                    self.rejected({group: {key: 'relative_to_docs'}}, group, key)\n+                    first_group = next(g for g, ks in FIELDS.items() if key in ks)\n+                    self.rejected({key: 'relative_to_docs'}, first_group, key)\n+\n+    def test_existing_strings_and_defaults(self):\n+        config = self.accepted({})\n+        self.assertEqual(config, existing.NestedSubConfigTest().defaults())\n+        for token, level in (('ignore', logging.DEBUG), ('info', logging.INFO),\n+                             ('warn', logging.WARNING)):\n+            config = self.accepted({key: token for keys in FIELDS.values() for key in keys})\n+            for group, keys in FIELDS.items():\n+                for key in keys:\n+                    self.assertEqual(config[group][key], level)\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work against the unmodified snapshot, not the original task's injected precedence defect. The new acceptance file covers all severity fields with nested and shorthand integer inputs, mixed string/integer precedence, invalid integers and booleans, floating-point equivalents, defaults, existing string conversions, and the absolute-link-only token. Existing tests additionally enforce compatibility of invalid-input diagnostic text. The proposed production implementation uses a fixed logging-level whitelist rather than the subclass's extended mapping.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Allow MkDocs validation severity settings to accept the integer values logging.DEBUG, logging.INFO, and logging.WARNING as alternatives to 'ignore', 'info', and 'warn', respectively. This must work for every severity field under validation.nav and validation.links, including settings supplied through the shorthand directly under validation. Accepted integers should remain integer logging levels after validation; reject booleans, floating-point values, and all other integers through the existing ValidationError mechanism, retaining the nested sub-option diagnostics.\n\nKeep existing string inputs, defaults, shorthand propagation, and explicit-over-shorthand precedence unchanged. The string 'relative_to_docs' must remain supported only for absolute_links; its special internal value must not become an additional accepted numeric input. Preserve existing diagnostics for invalid string inputs and other previously rejected non-integer types.\n\nReturn a unified diff against production files only. Do not change tests.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from repository-wide inspect_locate to focused implementation and boundary-case verification. Reading defaults.py together with the nested configuration tests is sufficient to design the change; testing both shorthand and explicit inputs verifies integration without requiring artificial delegation.",
+  "change_type": "constraint",
+  "description": "Extend validation severity inputs to accept the integer logging constants logging.DEBUG, logging.INFO and logging.WARNING in addition to the existing strings, without accepting booleans or arbitrary integers. Preserve 'relative_to_docs' exclusively for absolute_links. Implement this in mkdocs/config/defaults.py::_LogLevel.run_validation and, if needed, _AbsoluteLinksValidation, and add acceptance tests using mkdocs/tests/config/config_options_tests.py::NestedSubConfigTest.Schema. Cover nested settings, shorthand settings, invalid integers, True/False, and the special absolute-link token.",
+  "expected_answer_change": "The deliverable is a severity-validator implementation and new acceptance tests, not identification of PropagatingSubConfig.run_validation. The answer depends on _LogLevel's string-to-level mapping, _AbsoluteLinksValidation's extended mapping, and the schemas of MkDocsConfig.Validation.NavValidation and LinksValidation. Numeric inputs must yield the corresponding logging levels while unsupported values still produce nested ValidationError diagnostics.",
+  "why_substantive": "This changes the accepted input domain rather than shorthand precedence. The investigation must distinguish severity conversion from propagation, account for Python's bool/int relationship, and preserve the subclass-specific token. The seed's setdefault repair does not implement this feature."
+ },
+ "task_id": "mkdocs-mkdocs-r01-01-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_explicit_overrides_shorthand",
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_numeric_nested",
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_numeric_shorthand"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 3,
+   "full_suite": {
+    "failed": 1,
+    "passed": 720
+   },
+   "patch_files": [
+    "mkdocs/config/defaults.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_explicit_overrides_shorthand",
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_numeric_nested",
+   "mkdocs/tests/config/test_validation_numeric_levels.py::NumericValidationSeverityTest::test_numeric_shorthand"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 720,
+  "stability_runs": 3
+ }
+}

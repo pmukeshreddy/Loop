@@ -1,0 +1,246 @@
+{
+ "answer": "--- a/src/cachetools/__init__.py\n+++ b/src/cachetools/__init__.py\n@@ -734,9 +734,17 @@\n )\n \n \n-def cached(cache, key=keys.hashkey, lock=None, condition=None, info=False):\n+def cached(\n+    cache, key=keys.hashkey, lock=None, condition=None, info=False, *, cache_if=None\n+):\n     \"\"\"Decorator to wrap a function with a memoizing callable that saves\n     results in a cache.\n+\n+    If cache_if is not None, it is called with each result computed on a\n+    cache miss before insertion. A false predicate result skips insertion;\n+    predicate exceptions propagate without caching the result. Cache hits\n+    do not call cache_if.\n+    With cache=None, cache_if is not called.\n \n     \"\"\"\n     from ._cached import _wrapper\n@@ -758,16 +766,25 @@\n                 def make_info(hits, misses):\n                     return _CacheInfo(hits, misses, 0, 0)\n \n-            return _wrapper(func, cache, key, lock, condition, info=make_info)\n-        else:\n-            return _wrapper(func, cache, key, lock, condition)\n+            return _wrapper(\n+                func, cache, key, lock, condition, info=make_info, cache_if=cache_if\n+            )\n+        else:\n+            return _wrapper(func, cache, key, lock, condition, cache_if=cache_if)\n \n     return decorator\n \n \n-def cachedmethod(cache, key=keys.methodkey, lock=None, condition=None, info=False):\n+def cachedmethod(\n+    cache, key=keys.methodkey, lock=None, condition=None, info=False, *, cache_if=None\n+):\n     \"\"\"Decorator to wrap a method with a memoizing callable that saves\n     results in a cache.\n+\n+    If cache_if is not None, it is called with each result computed on a\n+    cache miss before insertion. A false predicate result skips insertion;\n+    predicate exceptions propagate without caching the result. Cache hits\n+    do not call cache_if.\n \n     \"\"\"\n     from ._cachedmethod import _wrapper\n@@ -783,8 +800,10 @@\n                 else:\n                     raise TypeError(\"cache(self) must return a mutable mapping\")\n \n-            return _wrapper(method, cache, key, lock, condition, info=make_info)\n-        else:\n-            return _wrapper(method, cache, key, lock, condition)\n+            return _wrapper(\n+                method, cache, key, lock, condition, info=make_info, cache_if=cache_if\n+            )\n+        else:\n+            return _wrapper(method, cache, key, lock, condition, cache_if=cache_if)\n \n     return decorator\n--- a/src/cachetools/__init__.pyi\n+++ b/src/cachetools/__init__.pyi\n@@ -172,6 +172,8 @@\n     lock: AbstractContextManager[Any] | None = None,\n     condition: _AbstractCondition | None = None,\n     info: Literal[False] = ...,\n+    *,\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[[Callable[_P, _R]], _cached_wrapper[_P, _R]]: ...\n @overload\n def cached(\n@@ -181,6 +183,7 @@\n     condition: _AbstractCondition | None = None,\n     *,\n     info: Literal[True],\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[[Callable[_P, _R]], _cached_wrapper_info[_P, _R]]: ...\n @overload\n def cached(\n@@ -189,6 +192,8 @@\n     lock: AbstractContextManager[Any] | None,\n     condition: _AbstractCondition | None,\n     info: Literal[True],\n+    *,\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[[Callable[_P, _R]], _cached_wrapper_info[_P, _R]]: ...\n \n @type_check_only\n@@ -221,6 +226,8 @@\n     lock: Callable[[Any], AbstractContextManager[Any]] | None = None,\n     condition: Callable[[Any], _AbstractCondition] | None = None,\n     info: Literal[False] = ...,\n+    *,\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[[Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper[_P, _R]]: ...\n @overload\n def cachedmethod(\n@@ -230,6 +237,7 @@\n     condition: Callable[[Any], _AbstractCondition] | None = None,\n     *,\n     info: Literal[True],\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[\n     [Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper_info[_P, _R]\n ]: ...\n@@ -240,6 +248,8 @@\n     lock: Callable[[Any], AbstractContextManager[Any]] | None,\n     condition: Callable[[Any], _AbstractCondition] | None,\n     info: Literal[True],\n+    *,\n+    cache_if: Callable[[Any], Any] | None = None,\n ) -> Callable[\n     [Callable[Concatenate[Any, _P], _R]], _cachedmethod_wrapper_info[_P, _R]\n ]: ...\n--- a/src/cachetools/_cached.py\n+++ b/src/cachetools/_cached.py\n@@ -13,7 +13,7 @@\n # info.\n \n \n-def _condition_info(func, cache, key, lock, cond, info):\n+def _condition_info(func, cache, key, lock, cond, info, cache_if=None):\n     hits = misses = 0\n     pending = set()\n \n@@ -31,6 +31,8 @@\n                 misses += 1\n         try:\n             v = func(*args, **kwargs)\n+            if cache_if is not None and not cache_if(v):\n+                return v\n             with lock:\n                 try:\n                     cache[k] = v\n@@ -57,7 +59,7 @@\n     return wrapper\n \n \n-def _locked_info(func, cache, key, lock, info):\n+def _locked_info(func, cache, key, lock, info, cache_if=None):\n     hits = misses = 0\n \n     def wrapper(*args, **kwargs):\n@@ -71,6 +73,8 @@\n             except KeyError:\n                 misses += 1\n         v = func(*args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         with lock:\n             try:\n                 # In case of a race condition, i.e. if another thread\n@@ -95,7 +99,7 @@\n     return wrapper\n \n \n-def _unlocked_info(func, cache, key, info):\n+def _unlocked_info(func, cache, key, info, cache_if=None):\n     hits = misses = 0\n \n     def wrapper(*args, **kwargs):\n@@ -108,6 +112,8 @@\n         except KeyError:\n             misses += 1\n         v = func(*args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         try:\n             cache[k] = v\n         except ValueError:\n@@ -144,7 +150,7 @@\n     return wrapper\n \n \n-def _condition(func, cache, key, lock, cond):\n+def _condition(func, cache, key, lock, cond, cache_if=None):\n     pending = set()\n \n     def wrapper(*args, **kwargs):\n@@ -158,6 +164,8 @@\n                 pending.add(k)\n         try:\n             v = func(*args, **kwargs)\n+            if cache_if is not None and not cache_if(v):\n+                return v\n             with lock:\n                 try:\n                     cache[k] = v\n@@ -177,7 +185,7 @@\n     return wrapper\n \n \n-def _locked(func, cache, key, lock):\n+def _locked(func, cache, key, lock, cache_if=None):\n     def wrapper(*args, **kwargs):\n         k = key(*args, **kwargs)\n         with lock:\n@@ -186,6 +194,8 @@\n             except KeyError:\n                 pass  # key not found\n         v = func(*args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         with lock:\n             try:\n                 # In case of a race condition, i.e. if another thread\n@@ -203,7 +213,7 @@\n     return wrapper\n \n \n-def _unlocked(func, cache, key):\n+def _unlocked(func, cache, key, cache_if=None):\n     def wrapper(*args, **kwargs):\n         k = key(*args, **kwargs)\n         try:\n@@ -211,6 +221,8 @@\n         except KeyError:\n             pass  # key not found\n         v = func(*args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         try:\n             cache[k] = v\n         except ValueError:\n@@ -229,7 +241,7 @@\n     return wrapper\n \n \n-def _wrapper(func, cache, key, lock=None, cond=None, info=None):\n+def _wrapper(func, cache, key, lock=None, cond=None, info=None, cache_if=None):\n     if cache is None:\n         warnings.warn(\n             \"@cachetools.cached(cache=None) is deprecated\",\n@@ -241,24 +253,24 @@\n         if cache is None:\n             wrapper = _uncached_info(func, info)\n         elif cond is not None and lock is not None:\n-            wrapper = _condition_info(func, cache, key, lock, cond, info)\n+            wrapper = _condition_info(func, cache, key, lock, cond, info, cache_if)\n         elif cond is not None:\n-            wrapper = _condition_info(func, cache, key, cond, cond, info)\n+            wrapper = _condition_info(func, cache, key, cond, cond, info, cache_if)\n         elif lock is not None:\n-            wrapper = _locked_info(func, cache, key, lock, info)\n+            wrapper = _locked_info(func, cache, key, lock, info, cache_if)\n         else:\n-            wrapper = _unlocked_info(func, cache, key, info)\n+            wrapper = _unlocked_info(func, cache, key, info, cache_if)\n     else:\n         if cache is None:\n             wrapper = _uncached(func)\n         elif cond is not None and lock is not None:\n-            wrapper = _condition(func, cache, key, lock, cond)\n+            wrapper = _condition(func, cache, key, lock, cond, cache_if)\n         elif cond is not None:\n-            wrapper = _condition(func, cache, key, cond, cond)\n+            wrapper = _condition(func, cache, key, cond, cond, cache_if)\n         elif lock is not None:\n-            wrapper = _locked(func, cache, key, lock)\n+            wrapper = _locked(func, cache, key, lock, cache_if)\n         else:\n-            wrapper = _unlocked(func, cache, key)\n+            wrapper = _unlocked(func, cache, key, cache_if)\n         wrapper.cache_info = None\n \n     wrapper.cache = cache\n--- a/src/cachetools/_cachedmethod.py\n+++ b/src/cachetools/_cachedmethod.py\n@@ -147,7 +147,7 @@\n # info.\n \n \n-def _condition_info(method, cache, key, lock, cond, info):\n+def _condition_info(method, cache, key, lock, cond, info, cache_if=None):\n     class Descriptor(_DescriptorBase):\n         class Wrapper(_WrapperBase):\n             def __init__(self, obj):\n@@ -172,6 +172,8 @@\n                         self.__misses += 1\n                 try:\n                     val = method(self._obj, *args, **kwargs)\n+                    if cache_if is not None and not cache_if(val):\n+                        return val\n                     with lock:\n                         try:\n                             cache[key] = val\n@@ -195,7 +197,7 @@\n     return Descriptor()\n \n \n-def _locked_info(method, cache, key, lock, info):\n+def _locked_info(method, cache, key, lock, info, cache_if=None):\n     class Descriptor(_DescriptorBase):\n         class Wrapper(_WrapperBase):\n             def __init__(self, obj):\n@@ -214,6 +216,8 @@\n                     except KeyError:\n                         self.__misses += 1\n                 val = method(self._obj, *args, **kwargs)\n+                if cache_if is not None and not cache_if(val):\n+                    return val\n                 with lock:\n                     try:\n                         # In case of a race condition, i.e. if another thread\n@@ -235,7 +239,7 @@\n     return Descriptor()\n \n \n-def _unlocked_info(method, cache, key, info):\n+def _unlocked_info(method, cache, key, info, cache_if=None):\n     class Descriptor(_DescriptorBase):\n         class Wrapper(_WrapperBase):\n             def __init__(self, obj):\n@@ -252,6 +256,8 @@\n                 except KeyError:\n                     self.__misses += 1\n                 val = method(self._obj, *args, **kwargs)\n+                if cache_if is not None and not cache_if(val):\n+                    return val\n                 try:\n                     cache[key] = val\n                 except ValueError:\n@@ -268,7 +274,7 @@\n     return Descriptor()\n \n \n-def _condition(method, cache, key, lock, cond):\n+def _condition(method, cache, key, lock, cond, cache_if=None):\n     # backward-compatible weakref dictionary for Python >= 3.13\n     pending = weakref.WeakKeyDictionary()\n \n@@ -283,6 +289,8 @@\n                 pending.add(k)\n         try:\n             v = method(self, *args, **kwargs)\n+            if cache_if is not None and not cache_if(v):\n+                return v\n             with lock(self):\n                 try:\n                     c[k] = v\n@@ -319,7 +327,7 @@\n     return Descriptor(classmethod_wrapper, cache_clear)\n \n \n-def _locked(method, cache, key, lock):\n+def _locked(method, cache, key, lock, cache_if=None):\n     def wrapper(self, *args, **kwargs):\n         c = cache(self)\n         k = key(self, *args, **kwargs)\n@@ -329,6 +337,8 @@\n             except KeyError:\n                 pass  # key not found\n         v = method(self, *args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         with lock(self):\n             try:\n                 # In case of a race condition, i.e. if another thread\n@@ -358,7 +368,7 @@\n     return Descriptor(wrapper, cache_clear)\n \n \n-def _unlocked(method, cache, key):\n+def _unlocked(method, cache, key, cache_if=None):\n     def wrapper(self, *args, **kwargs):\n         c = cache(self)\n         k = key(self, *args, **kwargs)\n@@ -367,6 +377,8 @@\n         except KeyError:\n             pass  # key not found\n         v = method(self, *args, **kwargs)\n+        if cache_if is not None and not cache_if(v):\n+            return v\n         try:\n             c[k] = v\n         except ValueError:\n@@ -392,25 +404,25 @@\n     return Descriptor(wrapper, cache_clear)\n \n \n-def _wrapper(method, cache, key, lock=None, cond=None, info=None):\n+def _wrapper(method, cache, key, lock=None, cond=None, info=None, cache_if=None):\n     if info is not None:\n         if cond is not None and lock is not None:\n-            wrapper = _condition_info(method, cache, key, lock, cond, info)\n+            wrapper = _condition_info(method, cache, key, lock, cond, info, cache_if)\n         elif cond is not None:\n-            wrapper = _condition_info(method, cache, key, cond, cond, info)\n+            wrapper = _condition_info(method, cache, key, cond, cond, info, cache_if)\n         elif lock is not None:\n-            wrapper = _locked_info(method, cache, key, lock, info)\n+            wrapper = _locked_info(method, cache, key, lock, info, cache_if)\n         else:\n-            wrapper = _unlocked_info(method, cache, key, info)\n+            wrapper = _unlocked_info(method, cache, key, info, cache_if)\n     else:\n         if cond is not None and lock is not None:\n-            wrapper = _condition(method, cache, key, lock, cond)\n+            wrapper = _condition(method, cache, key, lock, cond, cache_if)\n         elif cond is not None:\n-            wrapper = _condition(method, cache, key, cond, cond)\n+            wrapper = _condition(method, cache, key, cond, cond, cache_if)\n         elif lock is not None:\n-            wrapper = _locked(method, cache, key, lock)\n+            wrapper = _locked(method, cache, key, lock, cache_if)\n         else:\n-            wrapper = _unlocked(method, cache, key)\n+            wrapper = _unlocked(method, cache, key, cache_if)\n \n     # backward-compatible properties for deprecated @classmethod use\n     wrapper.cache = cache  # type: ignore\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 8,
+   "context_searches": 22,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 4,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "m",
+    "new",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 14772,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 1,
+   "subcall_sites": 1,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 1,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 2,
+   "turns": 9,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "2 sub-calls (0 failed); 1 call sites on selected context, 0 on the whole context; max prompt 14772 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 224009 chars; 22 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "9 turns; variables reused across turns: ['files', 'm', 'new', 'p']; hand-copied literals 4"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Two bounded sub-calls supported review of the wrapper families, whose statistics, synchronization, cleanup, and insertion semantics require distinct consideration.",
+   "combine_verify_finish": "The reference constructed a combined multi-file diff and inspected the final value before finishing, supporting integration of option propagation and behavioral changes.",
+   "inspect_locate": "The reference execution used 22 targeted searches to locate the public decorators and their separate function and method wrapper paths, without printing the entire context.",
+   "persistent_state": "Variables were reused across turns, although the evidence establishes this less strongly than the three primary behaviors."
+  },
+  "notes": "This is a natural, repository-dependent feature request with a precise output format and meaningful cross-module implementation requirements. Its behavioral specification constrains the change without revealing an implementation or prescribing solver operations. It is distinct from the accepted insertion-error task: predicate-controlled caching introduces new API propagation, miss handling, and condition cleanup requirements."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "chunked_subcalls": "Correct implementation requires semantic review of fourteen execution factories across the two helper modules, including statistics, condition cleanup, lock-only race resolution, and the legacy non-info method forwarding paths. These are sufficiently numerous and different to benefit from bounded reviews.",
+   "combine_verify_finish": "The final multi-file diff must combine the independently reviewed paths and verify complete option propagation and exact hunk context.",
+   "inspect_locate": "The public decorators dispatch into separate function and method helper modules; all relevant construction and execution paths must be identified.",
+   "persistent_state": "A coverage matrix of function versus method, synchronization mode, and statistics mode must be retained while threading the new option through public APIs and helper dispatch."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::cached",
+    "why": "Public function-decorator option propagation and statistics callback construction."
+   },
+   {
+    "path": "src/cachetools/__init__.py",
+    "symbol": "src/cachetools/__init__.py::cachedmethod",
+    "why": "Public method-decorator option propagation."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_wrapper",
+    "why": "Dispatches the eight function execution factories."
+   },
+   {
+    "path": "src/cachetools/_cached.py",
+    "symbol": "src/cachetools/_cached.py::_condition_info",
+    "why": "Predicate rejection and exceptions must coexist with pending-key cleanup and miss accounting."
+   },
+   {
+    "path": "src/cachetools/_cachedmethod.py",
+    "symbol": "src/cachetools/_cachedmethod.py::_wrapper",
+    "why": "Dispatches the six method factories, including non-info compatibility wrappers."
+   },
+   {
+    "path": "src/cachetools/_cachedmethod.py",
+    "symbol": "src/cachetools/_cachedmethod.py::_locked_info",
+    "why": "Insertion permitted by the predicate must still use the existing cached-value race-resolution contract."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_cache_if.py\n@@ -0,0 +1,145 @@\n+import threading\n+import warnings\n+\n+import pytest\n+\n+from cachetools import Cache, cached, cachedmethod\n+\n+\n+class ConditionProbe:\n+    def __init__(self):\n+        self.lock = threading.RLock()\n+        self.notifications = 0\n+\n+    def __enter__(self):\n+        return self.lock.__enter__()\n+\n+    def __exit__(self, *args):\n+        return self.lock.__exit__(*args)\n+\n+    def wait_for(self, predicate):\n+        assert predicate(), \"a completed call left its key pending\"\n+        return True\n+\n+    def notify_all(self):\n+        self.notifications += 1\n+\n+\n+def build(kind, mode, info, predicate, storage=None):\n+    storage = {} if storage is None else storage\n+    sync = ConditionProbe()\n+    calls = []\n+    lock = sync if mode == \"locked\" else None\n+    cond = sync if mode == \"condition\" else None\n+    if kind == \"function\":\n+        @cached(storage, lock=lock, condition=cond, info=info, cache_if=predicate)\n+        def wrapper(value):\n+            calls.append(value)\n+            return value\n+    else:\n+        class Receiver:\n+            @cachedmethod(\n+                lambda self: storage,\n+                lock=(lambda self: lock) if lock is not None else None,\n+                condition=(lambda self: cond) if cond is not None else None,\n+                info=info,\n+                cache_if=predicate,\n+            )\n+            def call(self, value):\n+                calls.append(value)\n+                return value\n+        wrapper = Receiver().call\n+    return wrapper, calls, storage, sync\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"method\"])\n+@pytest.mark.parametrize(\"mode\", [\"unlocked\", \"locked\", \"condition\"])\n+@pytest.mark.parametrize(\"info\", [False, True])\n+def test_rejected_results_are_misses(kind, mode, info):\n+    seen = []\n+\n+    def predicate(value):\n+        seen.append(value)\n+        return value % 2 == 0\n+\n+    wrapper, calls, storage, sync = build(kind, mode, info, predicate)\n+    assert [wrapper(x) for x in (1, 1, 2, 2)] == [1, 1, 2, 2]\n+    assert calls == [1, 1, 2]\n+    assert seen == [1, 1, 2]\n+    assert len(storage) == 1\n+    if info:\n+        assert wrapper.cache_info() == (1, 3, None, 1)\n+    if mode == \"condition\":\n+        assert sync.notifications == 3\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"method\"])\n+@pytest.mark.parametrize(\"mode\", [\"unlocked\", \"locked\", \"condition\"])\n+@pytest.mark.parametrize(\"info\", [False, True])\n+def test_predicate_exception_does_not_poison_key(kind, mode, info):\n+    seen = []\n+\n+    def predicate(value):\n+        seen.append(value)\n+        if len(seen) == 1:\n+            raise RuntimeError(\"predicate failed\")\n+        return True\n+\n+    wrapper, calls, storage, sync = build(kind, mode, info, predicate)\n+    with pytest.raises(RuntimeError, match=\"predicate failed\"):\n+        wrapper(42)\n+    assert not storage\n+    assert wrapper(42) == 42\n+    assert wrapper(42) == 42\n+    assert calls == [42, 42]\n+    assert seen == [42, 42]\n+    if info:\n+        assert wrapper.cache_info() == (1, 2, None, 1)\n+    if mode == \"condition\":\n+        assert sync.notifications == 2\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"method\"])\n+@pytest.mark.parametrize(\"mode\", [\"unlocked\", \"locked\", \"condition\"])\n+def test_oversized_values_remain_uncached(kind, mode):\n+    wrapper, calls, storage, _ = build(kind, mode, True, lambda value: True, Cache(0))\n+    assert wrapper(7) == wrapper(7) == 7\n+    assert calls == [7, 7]\n+    assert wrapper.cache_info() == (0, 2, 0, 0)\n+\n+\n+def test_uncached_function_bypasses_predicate():\n+    seen = []\n+    with warnings.catch_warnings():\n+        warnings.simplefilter(\"ignore\", DeprecationWarning)\n+        wrapper = cached(None, info=True, cache_if=lambda value: seen.append(value))(\n+            lambda value: value\n+        )\n+    assert wrapper(3) == wrapper(3) == 3\n+    assert seen == []\n+    assert wrapper.cache_info() == (0, 2, 0, 0)\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"method\"])\n+@pytest.mark.parametrize(\"info\", [False, True])\n+def test_locked_path_still_prefers_cached_result(kind, info):\n+    holder = {}\n+    def predicate(value):\n+        wrapper = holder[\"wrapper\"]\n+        wrapper.cache[wrapper.cache_key(value)] = 99\n+        return True\n+    wrapper, calls, storage, _ = build(kind, \"locked\", info, predicate)\n+    holder[\"wrapper\"] = wrapper\n+    assert wrapper(2) == 99\n+    assert calls == [2]\n+    assert wrapper(2) == 99\n+    if info:\n+        assert wrapper.cache_info() == (1, 1, None, 1)\n+\n+\n+@pytest.mark.parametrize(\"kind\", [\"function\", \"method\"])\n+@pytest.mark.parametrize(\"mode\", [\"unlocked\", \"locked\", \"condition\"])\n+def test_none_predicate_keeps_default(kind, mode):\n+    wrapper, calls, storage, _ = build(kind, mode, True, None)\n+    assert wrapper(8) == wrapper(8) == 8\n+    assert calls == [8]\n",
+  "include_failure_log": false,
+  "notes": "This is implementation work verified by a new acceptance-test file and the existing suite. ConditionProbe makes a leaked pending key fail synchronously instead of hanging the test runner. The acceptance tests exercise public wrappers and do not import private helpers.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "Add an optional keyword-only `cache_if=None` parameter to both `cachetools.cached` and `cachetools.cachedmethod`. When supplied, it is called as `cache_if(value)` exactly once after a successful computation on a cache miss and before attempting to store that result. A truthy result permits the existing insertion behavior; a false result returns the freshly computed value without inserting it. Cache hits must not invoke the predicate. Predicate exceptions must propagate without inserting the computed result, and condition-based wrappers must release the pending key and notify waiters on both rejection and exception. Rejected or predicate-failing computations remain misses in statistics. Preserve lock-only wrappers' preference for a value already cached during computation when the predicate permits insertion, preserve oversized-value handling, and keep `cached(cache=None)` as an uncached bypass that does not invoke the predicate. Support these rules with and without statistics in unlocked, lock-only, and condition modes, without changing existing metadata or behavior when the option is omitted. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "tkem-cachetools-r02-04",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[False-function]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[False-method]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[True-function]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[True-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[condition-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[condition-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[locked-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[locked-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[unlocked-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[unlocked-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[condition-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[condition-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[locked-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[locked-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[unlocked-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[unlocked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-condition-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-condition-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-locked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-locked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-unlocked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-unlocked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-condition-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-condition-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-locked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-locked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-unlocked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-unlocked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-condition-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-condition-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-locked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-locked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-unlocked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-unlocked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-condition-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-condition-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-locked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-locked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-unlocked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-unlocked-method]",
+   "tests/test_cache_if.py::test_uncached_function_bypasses_predicate"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 2,
+  "evidence": {
+   "fail_to_pass_passing": 41,
+   "full_suite": {
+    "failed": 0,
+    "passed": 379
+   },
+   "patch_files": [
+    "src/cachetools/__init__.py",
+    "src/cachetools/__init__.pyi",
+    "src/cachetools/_cached.py",
+    "src/cachetools/_cachedmethod.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[False-function]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[False-method]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[True-function]",
+   "tests/test_cache_if.py::test_locked_path_still_prefers_cached_result[True-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[condition-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[condition-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[locked-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[locked-method]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[unlocked-function]",
+   "tests/test_cache_if.py::test_none_predicate_keeps_default[unlocked-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[condition-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[condition-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[locked-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[locked-method]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[unlocked-function]",
+   "tests/test_cache_if.py::test_oversized_values_remain_uncached[unlocked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-condition-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-condition-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-locked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-locked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-unlocked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[False-unlocked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-condition-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-condition-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-locked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-locked-method]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-unlocked-function]",
+   "tests/test_cache_if.py::test_predicate_exception_does_not_poison_key[True-unlocked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-condition-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-condition-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-locked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-locked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-unlocked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[False-unlocked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-condition-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-condition-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-locked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-locked-method]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-unlocked-function]",
+   "tests/test_cache_if.py::test_rejected_results_are_misses[True-unlocked-method]",
+   "tests/test_cache_if.py::test_uncached_function_bypasses_predicate"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 338,
+  "stability_runs": 3
+ }
+}

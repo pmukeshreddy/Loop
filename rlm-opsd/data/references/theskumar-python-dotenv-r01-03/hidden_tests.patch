@@ -1,0 +1,82 @@
+--- /dev/null
++++ b/tests/test_cli_interpolation_option.py
+@@ -0,0 +1,79 @@
++import json
++
++import pytest
++from click.testing import CliRunner
++
++from dotenv.cli import cli
++
++
++@pytest.mark.parametrize("command", ["list", "get", "run"])
++@pytest.mark.parametrize("mode", [None, "--interpolate", "--no-interpolate"])
++def test_interpolation_option(tmp_path, monkeypatch, command, mode):
++    monkeypatch.setenv("DOTENV_FEATURE_BASE", "process")
++    monkeypatch.delenv("DOTENV_FEATURE_RESULT", raising=False)
++    path = tmp_path / ".env"
++    path.write_text(
++        "DOTENV_FEATURE_BASE=file\n"
++        "DOTENV_FEATURE_RESULT=${DOTENV_FEATURE_BASE}/tail\nBARE\n"
++    )
++    captured = []
++    monkeypatch.setattr(
++        "dotenv.cli.run_command",
++        lambda args, env: captured.append((args, env)),
++    )
++    args = ["--file", str(path), command]
++    if mode is not None:
++        args.append(mode)
++    if command == "list":
++        args.extend(["--format", "json"])
++    elif command == "get":
++        args.append("DOTENV_FEATURE_RESULT")
++    else:
++        args.extend(["tool", "--no-interpolate"])
++    result = CliRunner().invoke(cli, args)
++    assert result.exit_code == 0, result.output
++    expected = (
++        "${DOTENV_FEATURE_BASE}/tail"
++        if mode == "--no-interpolate"
++        else "file/tail"
++    )
++    if command == "list":
++        values = json.loads(result.output)
++        assert values["DOTENV_FEATURE_RESULT"] == expected
++        assert values["BARE"] is None
++    elif command == "get":
++        assert result.output == expected + "\n"
++    else:
++        assert captured[0][0] == ["tool", "--no-interpolate"]
++        assert captured[0][1] == {
++            "DOTENV_FEATURE_BASE": "file",
++            "DOTENV_FEATURE_RESULT": expected,
++        }
++
++
++@pytest.mark.parametrize(
++    "mode,expected",
++    [
++        ("--interpolate", "process/tail"),
++        ("--no-interpolate", "${DOTENV_FEATURE_BASE}/tail"),
++    ],
++)
++def test_run_no_override(tmp_path, monkeypatch, mode, expected):
++    monkeypatch.setenv("DOTENV_FEATURE_BASE", "process")
++    monkeypatch.delenv("DOTENV_FEATURE_RESULT", raising=False)
++    path = tmp_path / ".env"
++    path.write_text(
++        "DOTENV_FEATURE_BASE=file\n"
++        "DOTENV_FEATURE_RESULT=${DOTENV_FEATURE_BASE}/tail\n"
++    )
++    captured = []
++    monkeypatch.setattr(
++        "dotenv.cli.run_command",
++        lambda args, env: captured.append((args, env)),
++    )
++    result = CliRunner().invoke(
++        cli,
++        ["--file", str(path), "run", mode, "--no-override", "tool"],
++    )
++    assert result.exit_code == 0, result.output
++    assert captured == [(["tool"], {"DOTENV_FEATURE_RESULT": expected})]

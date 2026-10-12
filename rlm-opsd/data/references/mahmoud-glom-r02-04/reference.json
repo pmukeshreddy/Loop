@@ -1,0 +1,166 @@
+{
+ "answer": [
+  "glom/test/test_error.py::test_all_public_errors",
+  "glom/test/test_target_types.py::test_iter_str"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\"glom/test/test_basic.py::test_iterate\"]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.002464286330357297,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 13,
+   "final_computed": false,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "core",
+    "files",
+    "p",
+    "tests"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 22381,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 3,
+   "subcall_sites": 3,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 3,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 9,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "9 sub-calls (0 failed); 3 call sites on selected context, 0 on the whole context; max prompt 22381 chars"
+   },
+   "combine_verify_finish": {
+    "established": false,
+    "evidence": "finish FINAL_VAR; final value computed in code: False; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 405797 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "9 sub-calls (0 failed); results stored at 3 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Nine successful sub-calls at three selected-context sites support partitioned review of candidate tests and consumers; none received the entire context.",
+   "combine_verify_finish": "The exact node-ID set was computed in code and inspected before completion, and executable verification confirmed the two-test impact set.",
+   "inspect_locate": "The execution used 13 targeted searches without printing the whole repository context, consistent with locating registration behavior and registry-backed consumers across modules.",
+   "recursive_decomposition": "Not established: the execution summary does not show sub-call results contributing to the final answer. This behavior is appropriately absent from behaviors_established."
+  },
+  "notes": "This is a natural, repository-dependent compatibility investigation with a precisely bounded proposed change and an explicit output format. The question discloses neither affected tests nor their expected failures. Identifying the complete impact set requires distinguishing affected consumers from unaffected registrations and overrides, rather than a single name lookup. It does not duplicate the existing registration-regression repair task."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "Candidate tests involving strings, byte strings, nested list specs, and iterable consumers are scattered across substantial test modules. Determining failures requires semantic review of their targets, modes, expected errors, and consumption behavior, not merely finding textual references to str or bytes.",
+   "combine_verify_finish": "The answer is an exact node-ID set that must exclude unaffected candidates and be deduplicated and sorted across the independently investigated consumers.",
+   "inspect_locate": "The registry change is reached through list interpretation, streaming, reductions, and other registry-backed consumers rather than through direct calls to default registration alone.",
+   "recursive_decomposition": "Impact can be investigated independently for AUTO list iteration, streaming consumers, and reduction/grouping consumers, then combined while accounting for bare registries and explicit overrides."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::TargetRegistry._register_default_types",
+    "why": "The exact proposed change adds two explicit registrations while leaving existing handlers and evaluator code intact."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::_handle_list",
+    "why": "AUTO list interpretation obtains its iteration behavior from the target registry."
+   },
+   {
+    "path": "glom/core.py",
+    "symbol": "glom/core.py::Glommer.__init__",
+    "why": "Constructs a fresh registry and determines whether default registrations are installed."
+   },
+   {
+    "path": "glom/test/test_target_types.py",
+    "symbol": "glom/test/test_target_types.py::test_iter_str",
+    "why": "Establishes the existing default rejection of string iteration and the explicit-override behavior."
+   },
+   {
+    "path": "glom/streaming.py",
+    "symbol": "glom/streaming.py::Iter._iterate",
+    "why": "Lazy iteration is another consumer of the registry contract and must be distinguished from ordinary callable conversion."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the complete existing suite before and after the probe and compute newly failing node IDs. Include parametrization suffixes. Do not supply post-probe failure output to the solver.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": "--- a/glom/core.py\n+++ b/glom/core.py\n@@ -1792,7 +1792,9 @@\n         self.register(dict, keys=dict.keys)\n         self.register(list, get=_get_sequence_item)\n         self.register(tuple, get=_get_sequence_item)\n+        self.register(str, iterate=iter)\n+        self.register(bytes, iterate=iter)\n         self.register(OrderedDict, get=operator.getitem)\n         self.register(OrderedDict, keys=OrderedDict.keys)\n         self.register(_AbstractIterable, iterate=iter)\n         self.register(_ObjStyleKeys, keys=_ObjStyleKeys.get_keys)\n",
+  "question": "We are considering enabling character iteration by default. The proposed change adds explicit default registrations for str and bytes with iterate=iter; their get behavior remains autodiscovered as before. Both the module-level registry and a newly constructed Glommer with default types enabled would receive these registrations. Glommer(register_default_types=False) and user-supplied registration overrides would retain their existing behavior. No evaluator, specifier, or error-handling code would otherwise change.\n\nWhich existing pytest tests would newly fail after exactly this change? Return a JSON list of full pytest node IDs, sorted lexicographically.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "mahmoud-glom-r02-04",
+ "truth": {
+  "answer": [
+   "glom/test/test_error.py::test_all_public_errors",
+   "glom/test/test_target_types.py::test_iter_str"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "glom/test/test_error.py::test_all_public_errors",
+    "glom/test/test_target_types.py::test_iter_str"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "glom/test/test_error.py::test_all_public_errors",
+    "glom/test/test_target_types.py::test_iter_str"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "glom/test/test_error.py::test_all_public_errors",
+   "glom/test/test_target_types.py::test_iter_str"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 200,
+  "stability_runs": 3
+ }
+}

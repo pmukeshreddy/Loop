@@ -1,0 +1,175 @@
+{
+ "answer": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -409,7 +409,9 @@\n         enable_async: bool = missing,\n     ) -> \"te.Self\":\n         \"\"\"Create a new overlay environment that shares all the data with the\n-        current environment except for cache and the overridden attributes.\n+        current environment except for globals, cache, and the overridden\n+        attributes. Globals are shallow-copied: changes to the mapping are\n+        independent, but mutable values are shared.\n         Extensions cannot be removed for an overlayed environment.  An overlayed\n         environment automatically gets all the extensions of the environment it\n         is linked to plus optional extra extensions.\n@@ -431,6 +433,7 @@\n \n         rv = object.__new__(self.__class__)\n         rv.__dict__.update(self.__dict__)\n+        rv.globals = self.globals.copy()\n         rv.overlayed = True\n         rv.linked_to = self\n \n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 12,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "s",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "inspect_locate",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": false,
+    "evidence": "context 61547 chars; 12 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference constructed the implementation diff in code and inspected it before returning the checked final variable. The change isolates the globals mapping while leaving existing registry sharing, extension rebinding, and cache construction intact.",
+   "inspect_locate": "The reference execution made three targeted searches within the implementation context without printing the whole context, consistent with locating overlay construction and checking related globals handling."
+  },
+  "notes": "This is a natural, precisely scoped feature request with a clear unified-diff output format. Although the resulting patch is small, its correctness depends on repository-specific overlay construction and template globals ownership. The preservation requirements constrain the change rather than introduce unrelated checks. The task is substantively distinct from the accepted template-globals precedence repair: it adds isolation between environments instead of fixing precedence within a template."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The implementation diff must isolate environment globals without disrupting shared registries, extension rebinding, cache independence, or templates' live environment fallback. Its exact source context must be checked before delivery.",
+   "inspect_locate": "The environment module is larger than a direct-read context. Relevant evidence is concentrated in overlay construction, cache copying, template loading, and globals-map construction; these distinguish environment ownership from template-local precedence."
+  },
+  "context": {
+   "files": [
+    "src/jinja2/environment.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.overlay",
+    "why": "Copies the parent's instance attributes, currently aliasing its globals dictionary, while separately constructing the cache and rebinding extensions."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::copy_cache",
+    "why": "Defines the existing empty-cache behavior for disabled, unbounded, and bounded caches."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment._load_template",
+    "why": "Loads templates with the owning environment's globals and applies cached-template updates to template-local globals."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.make_globals",
+    "why": "Its template-first ChainMap already provides local overrides and live fallback; that behavior must remain intact."
+   },
+   {
+    "path": "src/jinja2/environment.py",
+    "symbol": "src/jinja2/environment.py::Environment.from_string",
+    "why": "String-created templates also capture the creating environment's globals mapping."
+   }
+  ],
+  "expected_answer": "--- a/src/jinja2/environment.py\n+++ b/src/jinja2/environment.py\n@@ -429,6 +429,7 @@\n \n         rv = object.__new__(self.__class__)\n         rv.__dict__.update(self.__dict__)\n+        rv.globals = self.globals.copy()\n         rv.overlayed = True\n         rv.linked_to = self\n \n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_overlay_globals_isolation.py\n@@ -0,0 +1,131 @@\n+import pytest\n+\n+from jinja2 import DictLoader\n+from jinja2 import Environment\n+from jinja2.ext import Extension\n+\n+\n+def test_overlay_globals_snapshot():\n+    parent = Environment()\n+    shared = {\"items\": []}\n+    parent.globals.update(value=\"initial\", parent_drop=1, overlay_drop=2, shared=shared)\n+    before = dict(parent.globals)\n+    overlay = parent.overlay()\n+    assert overlay.globals == before\n+    assert overlay.globals is not parent.globals\n+\n+    parent.globals[\"value\"] = \"parent\"\n+    parent.globals[\"parent_only\"] = 3\n+    del parent.globals[\"parent_drop\"]\n+    assert overlay.globals[\"value\"] == \"initial\"\n+    assert \"parent_only\" not in overlay.globals\n+    assert overlay.globals[\"parent_drop\"] == 1\n+\n+    overlay.globals[\"value\"] = \"overlay\"\n+    overlay.globals[\"overlay_only\"] = 4\n+    del overlay.globals[\"overlay_drop\"]\n+    assert parent.globals[\"value\"] == \"parent\"\n+    assert \"overlay_only\" not in parent.globals\n+    assert parent.globals[\"overlay_drop\"] == 2\n+\n+    overlay.globals[\"shared\"][\"items\"].append(\"overlay\")\n+    parent.globals[\"shared\"][\"items\"].append(\"parent\")\n+    assert overlay.globals[\"shared\"] is shared\n+    assert shared[\"items\"] == [\"overlay\", \"parent\"]\n+    overlay.globals[\"shared\"] = {\"items\": [\"replacement\"]}\n+    assert parent.globals[\"shared\"] is shared\n+\n+    child = overlay.overlay()\n+    overlay.globals[\"value\"] = \"later\"\n+    assert child.globals[\"value\"] == \"overlay\"\n+    child.globals[\"child_only\"] = True\n+    assert \"child_only\" not in overlay.globals\n+    assert \"child_only\" not in parent.globals\n+\n+\n+def test_overlay_template_globals_ownership():\n+    source = \"{{ value }}|{{ extra|default('-') }}\"\n+    parent = Environment(loader=DictLoader(dict.fromkeys([\"early\", \"local\", \"late\"], source)))\n+    parent.globals[\"value\"] = \"initial\"\n+    early = parent.get_template(\"early\")\n+    local = parent.get_template(\"local\", globals={\"value\": \"parent-local\"})\n+    string = parent.from_string(source)\n+    overlay = parent.overlay()\n+    other_early = overlay.get_template(\"early\")\n+    other_local = overlay.get_template(\"local\", globals={\"value\": \"overlay-local\"})\n+    other_string = overlay.from_string(source)\n+    assert other_early is not early\n+    assert early.render() == other_early.render() == \"initial|-\"\n+\n+    parent.globals.update(value=\"parent\", extra=\"P\")\n+    overlay.globals.update(value=\"overlay\", extra=\"O\")\n+    late = parent.get_template(\"late\")\n+    other_late = overlay.get_template(\"late\")\n+    parent_plain = [early, string, late]\n+    overlay_plain = [other_early, other_string, other_late]\n+    for template in parent_plain:\n+        assert template.render() == \"parent|P\"\n+    for template in overlay_plain:\n+        assert template.render() == \"overlay|O\"\n+    assert local.render() == \"parent-local|P\"\n+    assert other_local.render() == \"overlay-local|O\"\n+\n+    assert parent.get_template(\"local\", globals={\"value\": \"updated-parent\"}) is local\n+    assert overlay.get_template(\"local\", globals={\"value\": \"updated-overlay\"}) is other_local\n+    assert local.render() == \"updated-parent|P\"\n+    assert other_local.render() == \"updated-overlay|O\"\n+    assert parent.globals[\"value\"] == \"parent\"\n+    assert overlay.globals[\"value\"] == \"overlay\"\n+    assert early.render() == \"parent|P\"\n+    assert other_early.render() == \"overlay|O\"\n+    assert other_local.render(value=\"render\", extra=\"R\") == \"render|R\"\n+\n+    parent.globals[\"value\"] = \"parent-new\"\n+    del parent.globals[\"extra\"]\n+    for template in parent_plain:\n+        assert template.render() == \"parent-new|-\"\n+    for template in overlay_plain:\n+        assert template.render() == \"overlay|O\"\n+    overlay.globals[\"value\"] = \"overlay-new\"\n+    del overlay.globals[\"extra\"]\n+    for template in overlay_plain:\n+        assert template.render() == \"overlay-new|-\"\n+    assert local.render() == \"updated-parent|-\"\n+    assert other_local.render() == \"updated-overlay|-\"\n+\n+\n+@pytest.mark.parametrize(\"cache_size\", [-1, 0, 2])\n+@pytest.mark.parametrize(\"override_size\", [None, -1, 0, 3])\n+def test_overlay_preserves_registries_extensions_and_cache(cache_size, override_size):\n+    class Marker(Extension):\n+        pass\n+\n+    parent = Environment(loader=DictLoader({\"t\": \"{{ value }}\"}), cache_size=cache_size, extensions=[Marker])\n+    parent.globals[\"value\"] = \"initial\"\n+    original = parent.get_template(\"t\")\n+    kwargs = {} if override_size is None else {\"cache_size\": override_size}\n+    overlay = parent.overlay(**kwargs)\n+    assert overlay.filters is parent.filters\n+    assert overlay.tests is parent.tests\n+    assert overlay.policies is parent.policies\n+    assert overlay.extensions[Marker.identifier] is not parent.extensions[Marker.identifier]\n+    assert overlay.extensions[Marker.identifier].environment is overlay\n+    assert parent.extensions[Marker.identifier].environment is parent\n+    expected_size = cache_size if override_size is None else override_size\n+    if expected_size == 0:\n+        assert overlay.cache is None\n+    else:\n+        assert overlay.cache is not parent.cache\n+        assert len(overlay.cache) == 0\n+\n+    overlay.globals[\"value\"] = \"overlay\"\n+    loaded = overlay.get_template(\"t\")\n+    assert loaded is not original\n+    assert loaded.environment is overlay\n+    assert original.environment is parent\n+    assert loaded.render() == \"overlay\"\n+    assert original.render() == \"initial\"\n+    if expected_size != 0:\n+        assert overlay.get_template(\"t\") is loaded\n+    if cache_size != 0:\n+        assert parent.get_template(\"t\") is original\n",
+  "include_failure_log": false,
+  "notes": "Implementation task against the pristine snapshot; do not apply the seed's ChainMap regression. The new acceptance file checks shallow snapshot ownership, nested overlays, templates loaded before and after creation, from_string templates, cached local updates, live fallback, render precedence, shared registries, extension rebinding, and cache configurations. The expected implementation changes overlay ownership rather than make_globals precedence. Execution verification remains the pipeline's responsibility.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Add globals isolation to `Environment.overlay()`. Each new overlay must start with a shallow snapshot of the creating environment's globals: subsequent top-level additions, replacements, and deletions in either environment must not affect the other, but mutable values present at creation must remain shared. This must also hold when creating an overlay from another overlay.\n\nPreserve the existing sharing of filters, tests, and policies, extension rebinding, and independent initially empty template caches, including disabled caches and explicit `cache_size` overrides. Templates loaded in the parent before overlay creation must continue using the parent environment's globals. Templates subsequently created or loaded in either environment must use that environment's live globals as their fallback. Template-specific overrides and updates to cached templates must remain local, and render arguments must keep their existing precedence.\n\nReturn a unified diff against the implementation files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Exercises persistent_state and combine_verify_finish through an ownership matrix spanning parent environments, overlays, previously loaded templates, and subsequently loaded templates. Focused inspection of Environment.overlay, copy_cache, Environment._load_template, and Environment.make_globals is more useful than tracing render precedence across the entire repository.",
+  "change_type": "constraint",
+  "description": "Introduce an explicit globals-isolation requirement for Environment.overlay in src/jinja2/environment.py: an overlay must receive a shallow snapshot of the parent's environment globals at creation, rather than sharing the same dictionary. Later top-level globals additions, replacements, and deletions must not cross between parent and overlay, while mutable values already in the snapshot remain shared. Preserve the existing sharing of filters, tests, and policies, extension rebinding, and independent empty template caches. Request a unified diff with acceptance tests covering templates loaded before and after overlay creation, template-local overrides, and live fallback to each template's own environment globals.",
+  "expected_answer_change": "The implementation must change Environment.overlay to give the new environment a shallow copy of self.globals without broadly copying other shared registries. Environment.make_globals should retain its existing template-first ordering. Verification must establish that existing parent templates continue to fall back to parent globals, overlay templates fall back to overlay globals, and explicit template overrides remain local.",
+  "why_substantive": "The seed repairs precedence within a template's ChainMap. This variation changes ownership between environments: Environment.overlay currently copies the parent's __dict__ and therefore aliases its globals dictionary. Reversing ChainMap layers cannot satisfy the new requirement. The investigation must distinguish environment dictionary identity, shallow value sharing, cache independence, and the environment captured by each template."
+ },
+ "task_id": "pallets-jinja-r01-00-v1",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_overlay_globals_isolation.py::test_overlay_globals_snapshot",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_template_globals_ownership"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 14,
+   "full_suite": {
+    "failed": 0,
+    "passed": 923
+   },
+   "patch_files": [
+    "src/jinja2/environment.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_overlay_globals_isolation.py::test_overlay_globals_snapshot",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[-1-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[0-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[3-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None--1]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None-0]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_preserves_registries_extensions_and_cache[None-2]",
+   "tests/test_overlay_globals_isolation.py::test_overlay_template_globals_ownership"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

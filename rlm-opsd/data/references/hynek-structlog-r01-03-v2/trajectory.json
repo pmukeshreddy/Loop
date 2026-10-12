@@ -1,0 +1,189 @@
+{
+  "task_id": "hynek-structlog-r01-03-v2",
+  "family": "inspect_locate",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 706015,
+    "context_lengths": [
+      132,
+      1005,
+      519,
+      54740,
+      7432,
+      11402,
+      8732,
+      4554,
+      4989,
+      7230,
+      6802,
+      2493,
+      4535,
+      10499,
+      2666,
+      3845,
+      1062,
+      4964,
+      4492,
+      6064,
+      8971,
+      23020,
+      2899,
+      6915,
+      4330,
+      1923,
+      4767,
+      7850,
+      1113,
+      2945,
+      7395,
+      14044,
+      2427,
+      1670,
+      1242,
+      2010,
+      9472,
+      10042,
+      965,
+      5664,
+      37212,
+      935,
+      30968,
+      41937,
+      5805,
+      9253,
+      16618,
+      10151,
+      795,
+      8617,
+      252,
+      522,
+      1557,
+      1000,
+      23821,
+      18411,
+      7303,
+      13305,
+      9121,
+      35544,
+      5648,
+      1706,
+      11072,
+      12244,
+      1531,
+      50696,
+      6614,
+      13855,
+      33229,
+      10307,
+      2198,
+      12420,
+      3547
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context), len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:250])\nfiles = {s.split('\\n',1)[0][8:]: s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint([p for p in files if 'stdlib' in p])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context), len(context))\nprint(context[0][:300])\nprint(context[len(context)//2][:250])\nprint(context[-1][:250])\nfiles = {s.split('\\n',1)[0][8:]: s.split('\\n',1)[1] for s in context if s.startswith('# File: ')}\nprint([p for p in files if 'stdlib' in p])"
+      ],
+      "stdout_raw_chars": 705,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 73\n# File: .git_archival.txt\nnode: 8174a86a2f14b5bd295eded733ff5fffc12aa173\nnode-date: 2026-06-06T09:18:48+02:00\ndescribe-name: 26.1.0\n\n# File: src/structlog/_native.py\n# SPDX-License-Identifier: MIT OR Apache-2.0\n# This file is dual licensed under the terms of the Apache License, Version\n# 2.0, and the MIT License.  See the LICENSE file in the root of this\n# repository for complete \n# File: tox.ini\n[tox]\nrequires =\n    tox>=4.51.0\n    tox-uv\nenv_list =\n    pre-commit,\n    3.1{0-5}-{tests,mypy}\n    3.1{0,3}-tests-{colorama,be,rich},\n    typing-{mypy,pyright,ty,pyrefly},\n    docs-{sponsors,build,doctests},\n    coverage-{combine,re\n['src/structlog/stdlib.py', 'tests/test_stdlib.py']\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport re\npath = 'src/structlog/stdlib.py'\nold = files[path]\nfor term in ['_LOG_RECORD_KEYS','LOG_KWARG_NAMES','def render_to_log_kwargs','def render_to_log_args_and_kwargs']:\n    print(term,[(m.start()) for m in re.finditer(re.escape(term),old)])\nfor name in ['def render_to_log_kwargs','def render_to_log_args_and_kwargs']:\n    start=old.index(name)\n    end=old.find('\\ndef ',start+1)\n    print(old[start:end][:3400])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import re\npath = 'src/structlog/stdlib.py'\nold = files[path]\nfor term in ['_LOG_RECORD_KEYS','LOG_KWARG_NAMES','def render_to_log_kwargs','def render_to_log_args_and_kwargs']:\n    print(term,[(m.start()) for m in re.finditer(re.escape(term),old)])\nfor name in ['def render_to_log_kwargs','def render_to_log_args_and_kwargs']:\n    start=old.index(name)\n    end=old.find('\\ndef ',start+1)\n    print(old[start:end][:3400])"
+      ],
+      "stdout_raw_chars": 4555,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "_LOG_RECORD_KEYS [28588, 30361]\nLOG_KWARG_NAMES [30708, 31637, 32691]\ndef render_to_log_kwargs [31778]\ndef render_to_log_args_and_kwargs [30769]\ndef render_to_log_kwargs(\n    _: logging.Logger, __: str, event_dict: EventDict\n) -> EventDict:\n    \"\"\"\n    Render ``event_dict`` into keyword arguments for `logging.Logger` logging\n    methods.\n    See `logging.Logger.debug` method for keyword arguments reference.\n\n    The ``event`` field is translated into ``msg``, keyword arguments are\n    extracted from the *event_dict* and the rest of the *event_dict* is added as\n    ``extra``.\n\n    This allows you to defer formatting to `logging`.\n\n    .. versionadded:: 17.1.0\n    .. versionchanged:: 22.1.0\n       ``exc_info``, ``stack_info``, and ``stacklevel`` are passed as proper\n       kwargs and not put into ``extra``.\n    .. versionchanged:: 24.2.0\n       ``stackLevel`` corrected to ``stacklevel``.\n    \"\"\"\n    return {\n        \"msg\": event_dict.pop(\"event\"),\n        \"extra\": event_dict,\n        **{\n            kw: event_dict.pop(kw)\n            for kw in LOG_KWARG_NAMES\n            if kw in event_dict\n        },\n    }\n\n\nclass ProcessorFormatter(logging.Formatter):\n    r\"\"\"\n    Call *structlog* processors on `logging.LogRecord`\\s.\n\n    This is an implementation of a `logging.Formatter` that can be used to\n    format log entries from both *structlog* and `logging`.\n\n    Its static method `wrap_for_formatter` must be the final processor in\n    *structlog*'s processor chain.\n\n    Please refer to :ref:`processor-formatter` for examples.\n\n    Args:\n        foreign_pre_chain:\n            If not `None`, it is used as a processor chain that is applied to\n            **non**-*structlog* log entries before the event dictionary is\n            passed to *processors*. (default: `None`)\n\n        processors:\n            A chain of *structlog* processors that is used to process **all**\n            log entries. The last one must render to a `str` which then gets\n            passed on to `logging` for output.\n\n            Compared to *structlog*'s regular processor chains, there's a few\n            differences:\n\n            - The event dictionary contains two additional keys:\n\n              #. ``_record``: a `logging.LogRecord` that either was created\n                  using `logging` APIs, **or** is a wrapped *structlog* log\n                  entry created by `wrap_for_formatter`.\n\n              #. ``_from_structlog``: a `bool` that indicates whether or not\n                 ``_record`` was created by a *structlog* logger.\n\n              Since you most likely don't want ``_record`` and\n              ``_from_structlog`` in your log files,  we've added the static\n              method `remove_processors_meta` to ``ProcessorFormatter`` that\n              you can add just before your renderer.\n\n            - Since this is a `logging` *formatter*, raising\n              `structlog.DropEvent` will crash your application.\n\n        keep_exc_info:\n            ``exc_info`` on `logging.LogRecord`\\ s is added to the\n            ``event_dict`` and removed afterwards. Set this to ``True`` to keep\n            it on the `logging.LogRecord`. (default: False)\n\n        keep_stack_info:\n            Same as *keep_exc_info* except for ``stack_info``. (default: False)\n\n        logger:\n            Logger which we want to push through the *structlog* processor\n            chain. This parameter is necessary for some of the processors like\n            `filter_by_level`. (default: None)\n\n        pass_foreign_args:\n            If True, pass a\ndef render_to_log_args_and_kwargs(\n    _: logging.Logger, __: str, event_dict: EventDict\n) -> tuple[tuple[Any, ...], dict[str, Any]]:\n    \"\"\"\n    Render ``event_dict`` into positional and keyword arguments for\n    `logging.Logger` logging methods.\n    See `logging.Logger.debug` method for keyword arguments reference.\n\n    The ``event`` field is passed in the first positional argument, positional\n    arguments from ``positional_args`` field are passed in subsequent positional\n    arguments, keyword arguments are extracted from the *event_dict* and the\n    rest of the *event_dict* is added as ``extra``.\n\n    This allows you to defer formatting to `logging`.\n\n    .. versionadded:: 25.1.0\n    \"\"\"\n    args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))\n\n    kwargs = {\n        kwarg_name: event_dict.pop(kwarg_name)\n        for kwarg_name in LOG_KWARG_NAMES\n        if kwarg_name in event_dict\n    }\n    if event_dict:\n        kwargs[\"extra\"] = event_dict\n\n    return args, kwargs\n\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(old[28400:30800])\nprint(old[old.index('    def _proxy_to_logger'):old.index('    def _proxy_to_logger')+1400])\nprint(files['src/structlog/_base.py'][files['src/structlog/_base.py'].index('    def _proxy_to_logger'):][:2300])\n``` scratch? \n\n\n```repl\nprint(old[28400:30800])\nstart=old.index('    def _proxy_to_logger')\nprint(old[start:start+1000])\nbase=files['src/structlog/_base.py']\nstart=base.index('    def _proxy_to_logger')\nprint(base[start:start+1250])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(old[28400:30800])\nprint(old[old.index('    def _proxy_to_logger'):old.index('    def _proxy_to_logger')+1400])\nprint(files['src/structlog/_base.py'][files['src/structlog/_base.py'].index('    def _proxy_to_logger'):][:2300])"
+      ],
+      "stdout_raw_chars": 5607,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "  \"\"\"\n    record = event_dict.get(\"_record\")\n    if record is None:\n        event_dict[\"logger\"] = logger.name\n    else:\n        event_dict[\"logger\"] = record.name\n    return event_dict\n\n\n_LOG_RECORD_KEYS = logging.LogRecord(\n    \"name\", 0, \"pathname\", 0, \"msg\", (), None\n).__dict__.keys()\n\n\nclass ExtraAdder:\n    \"\"\"\n    Add extra attributes of `logging.LogRecord` objects to the event\n    dictionary.\n\n    This processor can be used for adding data passed in the ``extra``\n    parameter of the `logging` module's log methods to the event dictionary.\n\n    Args:\n        allow:\n            An optional collection of attributes that, if present in\n            `logging.LogRecord` objects, will be copied to event dictionaries.\n\n            If ``allow`` is None all attributes of `logging.LogRecord` objects\n            that do not exist on a standard `logging.LogRecord` object will be\n            copied to event dictionaries.\n\n    .. versionadded:: 21.5.0\n    \"\"\"\n\n    __slots__ = (\"_copier\",)\n\n    def __init__(self, allow: Collection[str] | None = None) -> None:\n        self._copier: Callable[[EventDict, logging.LogRecord], None]\n        if allow is not None:\n            # The contents of allow is copied to a new list so that changes to\n            # the list passed into the constructor does not change the\n            # behaviour of this processor.\n            self._copier = functools.partial(self._copy_allowed, [*allow])\n        else:\n            self._copier = self._copy_all\n\n    def __call__(\n        self, logger: logging.Logger, name: str, event_dict: EventDict\n    ) -> EventDict:\n        record: logging.LogRecord | None = event_dict.get(\"_record\")\n        if record is not None:\n            self._copier(event_dict, record)\n        return event_dict\n\n    @classmethod\n    def _copy_all(\n        cls, event_dict: EventDict, record: logging.LogRecord\n    ) -> None:\n        for key, value in record.__dict__.items():\n            if key not in _LOG_RECORD_KEYS:\n                event_dict[key] = value\n\n    @classmethod\n    def _copy_allowed(\n        cls,\n        allow: Collection[str],\n        event_dict: EventDict,\n        record: logging.LogRecord,\n    ) -> None:\n        for key in allow:\n            if key in record.__dict__:\n                event_dict[key] = record.__dict__[key]\n\n\nLOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\n\n\ndef render_to_log_args_and_kwar\n    def _proxy_to_logger(\n        self,\n        method_name: str,\n        event: str | None = None,\n        *event_args: str,\n        **event_kw: Any,\n    ) -> Any:\n        \"\"\"\n        Propagate a method call to the wrapped logger.\n\n        This is the same as the superclass implementation, except that\n        it also preserves positional arguments in the ``event_dict`` so\n        that the stdlib's support for format strings can be used.\n        \"\"\"\n        if event_args:\n            event_kw[\"positional_args\"] = event_args\n\n        return super()._proxy_to_logger(method_name, event=event, **event_kw)\n\n    # Pass-through attributes and methods to mimic the stdlib's logger\n    # interface.\n\n    @property\n    def name(self) -> str:\n        \"\"\"\n        Returns :attr:`logging.Logger.name`\n        \"\"\"\n        return self._logger.name\n\n    @property\n    def level(self) -> int:\n        \"\"\"\n        Returns :attr:`logging.Logger.level`\n        \"\"\"\n        return self._logger.level\n\n    @property\n    def parent(self) -> Any:\n        \"\"\"\n        Returns :attr:`logging.Logger.parent`\n        \"\"\"\n        return self._logger.parent\n\n    @property\n    def propagate(self) -> bool:\n        \"\"\"\n        Returns :attr:`logging.Logger.propagate`\n        \"\"\"\n        return self._logger.propagate\n\n    @property\n    def handlers(self) -> Any:\n        \"\"\"\n        Returns :attr:`logging.Logger.handlers`\n    def _proxy_to_logger(\n        self, method_name: str, event: str | None = None, **event_kw: Any\n    ) -> Any:\n        \"\"\"\n        Run processor chain on event & call *method_name* on wrapped logger.\n\n        DRY convenience method that runs :func:`_process_event`, takes care of\n        handling :exc:`structlog.DropEvent`, and finally calls *method_name* on\n        :attr:`_logger` with the result.\n\n        Args:\n            method_name:\n                The name of the method that's going to get called.  Technically\n                it should be identical to the method the user called because it\n                also get passed into processors.\n\n            event:\n                The event -- usually the first positional argument to a logger.\n\n            event_kw:\n                Additional event keywords.  For example if someone calls\n                ``log.info(\"foo\", bar=42)``, *event* would to be ``\"foo\"`` and\n                *event_kw* ``{\"bar\": 42}``.\n\n        .. note::\n            Despite underscore available to custom wrapper classes.\n\n            See also `custom-wrappers`.\n        \"\"\"\n        try:\n            args, kw = self._process_event(method_name, event, event_kw)\n            return getattr(self._logger, method_name)(*args, **kw)\n        except DropEvent:\n            return None\n\n\ndef get_context(bound_logger: BindableLogger) -> Context:\n    \"\"\"\n    Return *bound_logger*'s context.\n\n    The type of *bound_logger* and the type returned depend on your\n    configuration.\n\n    Args:\n        bound_logger: The bound logger whose context you want.\n\n    Returns:\n        The *actual* context from *bound_logger*. It is *not* copied first.\n\n    .. versionadded:: 20.2.0\n    \"\"\"\n    # This probably will get more complicated in the future.\n    return bound_logger._context\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nimport difflib, ast\nanchor = 'LOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\\n\\n\\n'\nhelper = '''def _validate_extra(\n    event_dict: EventDict, consumed: Collection[str]\n) -> None:\n    \"\"\"\n    Reject reserved extra keys before consuming any fields from *event_dict*.\n    \"\"\"\n    for key in event_dict:\n        if key in consumed:\n            continue\n        if key in _LOG_RECORD_KEYS or key in (\"message\", \"asctime\"):\n            raise KeyError(f\"Attempt to overwrite {key!r} in LogRecord\")\n\n\n'''\nassert old.count(anchor)==1\nnew = old.replace(anchor, anchor+helper)\nargs_line = '    args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))'\nassert new.count(args_line)==1\nnew = new.replace(args_line, '''    _validate_extra(\n        event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES)\n    )\n\n'''+args_line)\nkw_start = '''    return {\n        \"msg\": event_dict.pop(\"event\"),'''\nassert new.count(kw_start)==1\nnew = new.replace(kw_start, '''    _validate_extra(event_dict, (\"event\", *LOG_KWARG_NAMES))\n\n'''+kw_start)\nast.parse(new)\npatch = ''.join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+path,tofile='b/'+path))\nprint(patch)\nprint('Collection imported:',bool(re.search(r'\\bCollection\\b',old[:3000])))\n``` scratch? \n\n\n```repl\nprint('Original matches context:', old == files[path])\nprint('Changed files:', [path])\nprint('Validation calls:', new.count('_validate_extra('))\nprint('Patch has test changes:', 'b/tests/' in patch)\nprint('Collection import:', old[old.index('from collections'):old.index('from collections')+250])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "import difflib, ast\nanchor = 'LOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\\n\\n\\n'\nhelper = '''def _validate_extra(\n    event_dict: EventDict, consumed: Collection[str]\n) -> None:\n    \"\"\"\n    Reject reserved extra keys before consuming any fields from *event_dict*.\n    \"\"\"\n    for key in event_dict:\n        if key in consumed:\n            continue\n        if key in _LOG_RECORD_KEYS or key in (\"message\", \"asctime\"):\n            raise KeyError(f\"Attempt to overwrite {key!r} in LogRecord\")\n\n\n'''\nassert old.count(anchor)==1\nnew = old.replace(anchor, anchor+helper)\nargs_line = '    args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))'\nassert new.count(args_line)==1\nnew = new.replace(args_line, '''    _validate_extra(\n        event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES)\n    )\n\n'''+args_line)\nkw_start = '''    return {\n        \"msg\": event_dict.pop(\"event\"),'''\nassert new.count(kw_start)==1\nnew = new.replace(kw_start, '''    _validate_extra(event_dict, (\"event\", *LOG_KWARG_NAMES))\n\n'''+kw_start)\nast.parse(new)\npatch = ''.join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+path,tofile='b/'+path))\nprint(patch)\nprint('Collection imported:',bool(re.search(r'\\bCollection\\b',old[:3000])))"
+      ],
+      "stdout_raw_chars": 1241,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -945,6 +945,19 @@\n LOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\n \n \n+def _validate_extra(\n+    event_dict: EventDict, consumed: Collection[str]\n+) -> None:\n+    \"\"\"\n+    Reject reserved extra keys before consuming any fields from *event_dict*.\n+    \"\"\"\n+    for key in event_dict:\n+        if key in consumed:\n+            continue\n+        if key in _LOG_RECORD_KEYS or key in (\"message\", \"asctime\"):\n+            raise KeyError(f\"Attempt to overwrite {key!r} in LogRecord\")\n+\n+\n def render_to_log_args_and_kwargs(\n     _: logging.Logger, __: str, event_dict: EventDict\n ) -> tuple[tuple[Any, ...], dict[str, Any]]:\n@@ -962,6 +975,10 @@\n \n     .. versionadded:: 25.1.0\n     \"\"\"\n+    _validate_extra(\n+        event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES)\n+    )\n+\n     args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))\n \n     kwargs = {\n@@ -996,6 +1013,8 @@\n     .. versionchanged:: 24.2.0\n        ``stackLevel`` corrected to ``stacklevel``.\n     \"\"\"\n+    _validate_extra(event_dict, (\"event\", *LOG_KWARG_NAMES))\n+\n     return {\n         \"msg\": event_dict.pop(\"event\"),\n         \"extra\": event_dict,\n\nCollection imported: True\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nnew = new.replace('def _validate_extra(\\n    event_dict: EventDict, consumed: Collection[str]\\n) -> None:', 'def _validate_extra(event_dict: EventDict, consumed: Collection[str]) -> None:')\nnew = new.replace('    _validate_extra(\\n        event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES)\\n    )', '    _validate_extra(event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES))')\nast.parse(new)\nassert old == files[path] and new != old\nassert new.count('_validate_extra(') == 3\npatch = ''.join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+path,tofile='b/'+path))\nprint(patch)\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "new = new.replace('def _validate_extra(\\n    event_dict: EventDict, consumed: Collection[str]\\n) -> None:', 'def _validate_extra(event_dict: EventDict, consumed: Collection[str]) -> None:')\nnew = new.replace('    _validate_extra(\\n        event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES)\\n    )', '    _validate_extra(event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES))')\nast.parse(new)\nassert old == files[path] and new != old\nassert new.count('_validate_extra(') == 3\npatch = ''.join(difflib.unified_diff(old.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/'+path,tofile='b/'+path))\nprint(patch)"
+      ],
+      "stdout_raw_chars": 1190,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -945,6 +945,17 @@\n LOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\n \n \n+def _validate_extra(event_dict: EventDict, consumed: Collection[str]) -> None:\n+    \"\"\"\n+    Reject reserved extra keys before consuming any fields from *event_dict*.\n+    \"\"\"\n+    for key in event_dict:\n+        if key in consumed:\n+            continue\n+        if key in _LOG_RECORD_KEYS or key in (\"message\", \"asctime\"):\n+            raise KeyError(f\"Attempt to overwrite {key!r} in LogRecord\")\n+\n+\n def render_to_log_args_and_kwargs(\n     _: logging.Logger, __: str, event_dict: EventDict\n ) -> tuple[tuple[Any, ...], dict[str, Any]]:\n@@ -962,6 +973,8 @@\n \n     .. versionadded:: 25.1.0\n     \"\"\"\n+    _validate_extra(event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES))\n+\n     args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))\n \n     kwargs = {\n@@ -996,6 +1009,8 @@\n     .. versionchanged:: 24.2.0\n        ``stackLevel`` corrected to ``stacklevel``.\n     \"\"\"\n+    _validate_extra(event_dict, (\"event\", *LOG_KWARG_NAMES))\n+\n     return {\n         \"msg\": event_dict.pop(\"event\"),\n         \"extra\": event_dict,\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/structlog/stdlib.py\n+++ b/src/structlog/stdlib.py\n@@ -945,6 +945,17 @@\n LOG_KWARG_NAMES = (\"exc_info\", \"stack_info\", \"stacklevel\")\n \n \n+def _validate_extra(event_dict: EventDict, consumed: Collection[str]) -> None:\n+    \"\"\"\n+    Reject reserved extra keys before consuming any fields from *event_dict*.\n+    \"\"\"\n+    for key in event_dict:\n+        if key in consumed:\n+            continue\n+        if key in _LOG_RECORD_KEYS or key in (\"message\", \"asctime\"):\n+            raise KeyError(f\"Attempt to overwrite {key!r} in LogRecord\")\n+\n+\n def render_to_log_args_and_kwargs(\n     _: logging.Logger, __: str, event_dict: EventDict\n ) -> tuple[tuple[Any, ...], dict[str, Any]]:\n@@ -962,6 +973,8 @@\n \n     .. versionadded:: 25.1.0\n     \"\"\"\n+    _validate_extra(event_dict, (\"event\", \"positional_args\", *LOG_KWARG_NAMES))\n+\n     args = (event_dict.pop(\"event\"), *event_dict.pop(\"positional_args\", ()))\n \n     kwargs = {\n@@ -996,6 +1009,8 @@\n     .. versionchanged:: 24.2.0\n        ``stackLevel`` corrected to ``stacklevel``.\n     \"\"\"\n+    _validate_extra(event_dict, (\"event\", *LOG_KWARG_NAMES))\n+\n     return {\n         \"msg\": event_dict.pop(\"event\"),\n         \"extra\": event_dict,\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 193.95597820900002
+  }
+}

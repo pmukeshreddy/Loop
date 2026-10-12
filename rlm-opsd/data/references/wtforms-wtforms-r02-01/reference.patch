@@ -1,0 +1,39 @@
+--- a/src/wtforms/fields/choices.py
++++ b/src/wtforms/fields/choices.py
+@@ -3,6 +3,7 @@
+ from wtforms import widgets
+ from wtforms.fields.core import Field
+ from wtforms.validators import ValidationError
++from wtforms.widgets.core import clean_key
+ 
+ __all__ = (
+     "SelectField",
+@@ -45,7 +46,6 @@
+             widget=self.option_widget,
+             validators=self.validators,
+             name=self.name,
+-            render_kw=self.render_kw,
+             _form=None,
+             _meta=self.meta,
+         )
+@@ -56,7 +56,19 @@
+                 value, label, checked = choice
+                 render_kw = {}
+ 
+-            opt = self._Option(label=label, id=f"{self.id}-{i}", **opts, **render_kw)
++            # Normalize each layer before merging so aliases obey precedence.
++            option_render_kw = {
++                clean_key(k): v for k, v in (self.render_kw or {}).items()
++            }
++            option_render_kw.update(
++                {clean_key(k): v for k, v in (render_kw or {}).items()}
++            )
++            opt = self._Option(
++                label=label,
++                id=f"{self.id}-{i}",
++                render_kw=option_render_kw,
++                **opts,
++            )
+             opt.process(None, value)
+             opt.checked = checked
+             yield opt

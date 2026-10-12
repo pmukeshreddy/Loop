@@ -1,0 +1,49 @@
+--- a/jmespath/functions.py
++++ b/jmespath/functions.py
+@@ -303,9 +303,11 @@
+     @signature({'types': ['expref']}, {'types': ['array']})
+     def _func_map(self, expref, arg):
+         result = []
+         for element in arg:
+-            result.append(expref.visit(expref.expression, element))
++            current = expref.visit(expref.expression, element)
++            if current is not None:
++                result.append(current)
+         return result
+ 
+     @signature({"types": ['array-number', 'array-string']})
+     def _func_max(self, arg):
+@@ -372,7 +374,9 @@
+     @signature({'types': ['array']}, {'types': ['expref']})
+     def _func_sort_by(self, array, expref):
++        array = [element for element in array
++                 if expref.visit(expref.expression, element) is not None]
+         if not array:
+             return array
+         # sort_by allows for the expref to be either a number of
+         # a string, so we have some special logic to handle this.
+         # We evaluate the first array element and verify that it's
+@@ -392,9 +396,11 @@
+     @signature({'types': ['array']}, {'types': ['expref']})
+     def _func_min_by(self, array, expref):
++        array = [element for element in array
++                 if expref.visit(expref.expression, element) is not None]
+         keyfunc = self._create_key_func(expref,
+                                         ['number', 'string'],
+                                         'min_by')
+         if array:
+             return min(array, key=keyfunc)
+         else:
+             return None
+@@ -402,9 +408,11 @@
+     @signature({'types': ['array']}, {'types': ['expref']})
+     def _func_max_by(self, array, expref):
++        array = [element for element in array
++                 if expref.visit(expref.expression, element) is not None]
+         keyfunc = self._create_key_func(expref,
+                                         ['number', 'string'],
+                                         'max_by')
+         if array:
+             return max(array, key=keyfunc)
+         else:
+             return None

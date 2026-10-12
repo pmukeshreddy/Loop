@@ -1,0 +1,188 @@
+{
+ "answer": [
+  "h11/tests/test_connection.py::test_server_talking_to_http10_client",
+  "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+  "h11/tests/test_connection.py::test_automagic_connection_close_handling",
+  "h11/tests/test_connection.py::test_errors",
+  "h11/tests/test_connection.py::test_HEAD_framing_headers"
+ ],
+ "answer_format": "set",
+ "answer_type": "test_ids",
+ "baseline": {
+  "answer": "[\n  \"h11/tests/test_connection.py::test_response_framing\",\n  \"h11/tests/test_connection.py::test_automatic_connection_close\"\n]",
+  "correct": false
+ },
+ "practice": {
+  "coverage_lower_bound": 0.002971786562705623,
+  "facts": {
+   "code_blocks": 7,
+   "context_searches": 22,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "c",
+    "funcs",
+    "index",
+    "name",
+    "p",
+    "parts",
+    "prompt",
+    "results",
+    "t",
+    "tests",
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 24537,
+   "subcall_results_in_final": true,
+   "subcall_results_stored": 2,
+   "subcall_sites": 3,
+   "subcall_sites_in_loop": 1,
+   "subcall_sites_on_context": 3,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 5,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "chunked_subcalls": {
+    "established": true,
+    "evidence": "5 sub-calls (0 failed); 3 call sites on selected context, 0 on the whole context; max prompt 24537 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 323711 chars; 22 code searches over context; 0 whole-context prints"
+   },
+   "recursive_decomposition": {
+    "established": true,
+    "evidence": "5 sub-calls (0 failed); results stored at 2 sites; sub-call results reach the final answer: True"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Five successful sub-calls examined bounded portions of the repository context, with a maximum prompt size of 24,537 characters.",
+   "combine_verify_finish": "Sub-call results were combined into a computed final list and inspected before completion; executable verification independently confirmed the five affected test IDs.",
+   "inspect_locate": "The reference execution used 22 targeted searches without printing the whole context, connecting response cleanup to framing, connection state, and affected tests.",
+   "recursive_decomposition": "The investigation separated response-framing and connection-close cases into sub-investigations whose results contributed to the final answer."
+  },
+  "notes": "The proposal is precise and reads like a natural change-impact request. Identifying the failing tests requires repository-specific reasoning about header normalization, framing, and connection behavior rather than a single lookup. The requested JSON list is clear. Although one accepted repair task concerns HEAD framing, this task investigates the broader impact of removing two categories of response-header rewriting and is not essentially the same investigation."
+ },
+ "spec": {
+  "answer_format": "set",
+  "answer_kind": "test_ids",
+  "behavior_rationale": {
+   "chunked_subcalls": "The affected and unaffected cases span the long connection test module, I/O tests, and their helper semantics. Judging HTTP/1.0, HEAD, ordinary response completion, and error-response cases requires bounded semantic reads of more than one prompt-sized body of evidence.",
+   "combine_verify_finish": "The deliverable is the union of failing test IDs from these investigations, which needs deduplication and validation against actual test definitions.",
+   "inspect_locate": "The response-cleanup entry point must be connected to framing selection, writer installation, and tests using ConnectionPair rather than only tests calling the cleanup code directly.",
+   "recursive_decomposition": "Impact can be investigated independently for HTTP/1.1 streaming responses, HTTP/1.0 and HEAD responses, explicit close handling, and spontaneous/error responses, then combined."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::Connection._clean_up_response_headers_for_sending",
+    "why": "Implements both the framing-header rewrite and automatic Connection header handling being removed."
+   },
+   {
+    "path": "h11/_connection.py",
+    "symbol": "h11/_connection.py::_body_framing",
+    "why": "Determines which body adapter will be installed when the rewritten response lacks framing headers."
+   },
+   {
+    "path": "h11/_writers.py",
+    "symbol": "h11/_writers.py::Http10Writer",
+    "why": "Explains why an unframed response no longer produces a serialized message terminator."
+   },
+   {
+    "path": "h11/tests/test_connection.py",
+    "symbol": null,
+    "why": "Contains independently affected persistence, streaming, HTTP/1.0, HEAD, pipelining, and error-response scenarios."
+   },
+   {
+    "path": "h11/tests/test_io.py",
+    "symbol": null,
+    "why": "Direct writer tests help distinguish header serialization from Connection-level automatic rewriting."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": false,
+  "notes": "Run the existing suite after applying the probe. The deliberately unused need_close local is harmless. Count newly failing pytest items, not individual assertions or loop cases.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": "--- a/h11/_connection.py\n+++ b/h11/_connection.py\n@@ -636,20 +636,6 @@\n                 # Connection: keep-alive support later:\n                 if self._request_method != b\"HEAD\":\n                     need_close = True\n-            else:\n-                headers = set_comma_header(headers, b\"transfer-encoding\", [b\"chunked\"])\n-\n-        if not self._cstate.keep_alive or need_close:\n-            # Make sure Connection: close is set\n-            connection = set(get_comma_header(headers, b\"connection\"))\n-            connection.discard(b\"keep-alive\")\n-            connection.add(b\"close\")\n-            headers = set_comma_header(headers, b\"connection\", sorted(connection))\n \n         return Response(\n             headers=headers,\n             status_code=response.status_code,\n",
+  "question": "We are reviewing a proposal to reduce automatic response-header rewriting in Connection. For an unknown-length response, cleanup would still remove Content-Length and still remove Transfer-Encoding for an older or unknown peer. For an HTTP/1.1 peer, however, it would leave Transfer-Encoding exactly as supplied instead of setting it to chunked. Cleanup would also stop adding or rewriting Connection fields entirely, even when keep-alive has been disabled; any supplied Connection fields would remain untouched. All framing selection, state transitions, and writers would otherwise remain unchanged. Which existing tests would fail under this proposal? Return a JSON list of pytest node IDs.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "combine_verify_finish"
+  ],
+  "setting": "change_impact",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-hyper-h11-r03-00",
+ "truth": {
+  "answer": [
+   "h11/tests/test_connection.py::test_HEAD_framing_headers",
+   "h11/tests/test_connection.py::test_automagic_connection_close_handling",
+   "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+   "h11/tests/test_connection.py::test_errors",
+   "h11/tests/test_connection.py::test_server_talking_to_http10_client"
+  ],
+  "kind": "impact"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "expected": [
+    "h11/tests/test_connection.py::test_HEAD_framing_headers",
+    "h11/tests/test_connection.py::test_automagic_connection_close_handling",
+    "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+    "h11/tests/test_connection.py::test_errors",
+    "h11/tests/test_connection.py::test_server_talking_to_http10_client"
+   ],
+   "precision": 1.0,
+   "predicted": [
+    "h11/tests/test_connection.py::test_HEAD_framing_headers",
+    "h11/tests/test_connection.py::test_automagic_connection_close_handling",
+    "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+    "h11/tests/test_connection.py::test_errors",
+    "h11/tests/test_connection.py::test_server_talking_to_http10_client"
+   ],
+   "recall": 1.0
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [],
+  "impact_tests": [
+   "h11/tests/test_connection.py::test_HEAD_framing_headers",
+   "h11/tests/test_connection.py::test_automagic_connection_close_handling",
+   "h11/tests/test_connection.py::test_automatic_transfer_encoding_in_response",
+   "h11/tests/test_connection.py::test_errors",
+   "h11/tests/test_connection.py::test_server_talking_to_http10_client"
+  ],
+  "method": "impact",
+  "pass_to_pass_count": 78,
+  "stability_runs": 3
+ }
+}

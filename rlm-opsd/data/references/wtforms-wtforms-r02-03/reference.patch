@@ -1,0 +1,35 @@
+--- a/src/wtforms/widgets/core.py
++++ b/src/wtforms/widgets/core.py
+@@ -343,7 +343,8 @@
+     It also must provide a `has_groups()` method which tells whether choices
+     are divided into groups, and if they do, the field must have an
+     `iter_groups()` method that yields tuples of `(label, choices)`, where
+-    `choices` is a iterable of `(value, label, selected)` tuples.
++    `choices` is an iterable of `(value, label, selected)` or
++    `(value, label, selected, render_kw)` tuples.
+     """
+ 
+     validation_attrs = ["required", "disabled"]
+@@ -366,12 +367,20 @@
+                 optgroup_params = html_params(label=group)
+                 html.append(f"<optgroup {optgroup_params}>")
+                 for choice in choices:
+-                    val, label, selected, render_kw = choice
++                    if len(choice) == 3:
++                        val, label, selected = choice
++                        render_kw = {}
++                    else:
++                        val, label, selected, render_kw = choice
+                     html.append(self.render_option(val, label, selected, **render_kw))
+                 html.append("</optgroup>")
+         else:
+             for choice in field.iter_choices():
+-                val, label, selected, render_kw = choice
++                if len(choice) == 3:
++                    val, label, selected = choice
++                    render_kw = {}
++                else:
++                    val, label, selected, render_kw = choice
+                 html.append(self.render_option(val, label, selected, **render_kw))
+         html.append("</select>")
+         return Markup("".join(html))

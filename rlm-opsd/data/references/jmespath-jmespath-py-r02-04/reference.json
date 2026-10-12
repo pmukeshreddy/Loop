@@ -1,0 +1,164 @@
+{
+ "answer": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -348,7 +348,7 @@\n \n     def _create_key_func(self, expref, allowed_types, function_name):\n         def keyfunc(x):\n-            result = expref.visit(expref.expression, expref.expression)\n+            result = expref.visit(expref.expression, x)\n             actual_typename = type(result).__name__\n             jmespath_type = self._convert_to_jmespath_type(actual_typename)\n             # allowed_types is in term of jmespath types, not python types.\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.072459304883414,
+  "facts": {
+   "code_blocks": 3,
+   "context_searches": 10,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "log"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 4,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 272760 chars; 10 code searches over context; 0 whole-context prints"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The reference execution constructed and inspected a production-only unified diff. Executable verification confirms that changing the shared evaluator to visit each input element restores the listed compliance cases without modifying tests or special-casing inputs.",
+   "inspect_locate": "The reference execution used 10 targeted searches across the repository context. The verified repair locates the shared expression-reference key evaluator responsible for failures in sorting and both extrema functions, rather than treating the failing queries independently."
+  },
+  "notes": "This is a natural regression-repair request with a precise deliverable. The question identifies the affected behavior without revealing the defective symbol or fix. Resolving it requires repository-specific reasoning about deferred expression evaluation and its callers. The verified one-line repair addresses the shared cause, and no listed accepted task demonstrably duplicates this investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must explain the shared failures and be assembled as an applicable production diff with exact context, without compensating in individual callers or tests.",
+   "inspect_locate": "Failures in several higher-order functions must be traced through deferred expression creation, interpreter delegation, function-specific validation, and their shared key-evaluation helper."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/parser.py",
+    "symbol": "jmespath/parser.py::Parser._token_nud_expref",
+    "why": "The referenced expression is stored as an AST fragment rather than evaluated immediately."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::_Expression.visit",
+    "why": "Deferred evaluation forwards both the AST and evaluation data to the interpreter."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_sort_by",
+    "why": "Its preliminary first-key validation still uses the correct data, while subsequent shared-key evaluation fails."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._create_key_func",
+    "why": "The setup confuses the expression AST with the current array element."
+   },
+   {
+    "path": "tests/test_compliance.py",
+    "symbol": "tests/test_compliance.py::test_expression",
+    "why": "The execution log connects public expression failures to the shared helper through multiple higher-order callers."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The intended regression is an argument mix-up in deferred evaluation. The patch changes no signatures, registration metadata, or parser behavior.",
+  "primary_behavior": "inspect_locate",
+  "probe_patch": null,
+  "question": "Ordering and extrema queries that use expression-reference keys have regressed in the attached pytest run. Restore the supported behavior of those queries without special-casing expression strings or input objects. Deliver a unified diff against production files only, leaving the tests unchanged.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -412,9 +412,9 @@\n     def _create_key_func(self, expref, allowed_types, function_name):\n         def keyfunc(x):\n-            result = expref.visit(expref.expression, x)\n+            result = expref.visit(expref.expression, expref.expression)\n             actual_typename = type(result).__name__\n             jmespath_type = self._convert_to_jmespath_type(actual_typename)\n             # allowed_types is in term of jmespath types, not python types.\n             if jmespath_type not in allowed_types:\n                 raise exceptions.JMESPathTypeError(\n                     function_name, result, jmespath_type, allowed_types)\n"
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r02-04",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_compliance.py::test_expression[given560-sort_by(people, &age)-expected560-functions.json]",
+   "tests/test_compliance.py::test_expression[given561-sort_by(people, &age_str)-expected561-functions.json]",
+   "tests/test_compliance.py::test_expression[given562-sort_by(people, &to_number(age_str))-expected562-functions.json]",
+   "tests/test_compliance.py::test_expression[given563-sort_by(people, &age)[].name-expected563-functions.json]",
+   "tests/test_compliance.py::test_expression[given564-sort_by(people, &age)[].extra-expected564-functions.json]",
+   "tests/test_compliance.py::test_expression[given566-max_by(people, &age)-expected566-functions.json]",
+   "tests/test_compliance.py::test_expression[given567-max_by(people, &age_str)-expected567-functions.json]",
+   "tests/test_compliance.py::test_expression[given568-max_by(people, &to_number(age_str))-expected568-functions.json]",
+   "tests/test_compliance.py::test_expression[given570-min_by(people, &age)-expected570-functions.json]",
+   "tests/test_compliance.py::test_expression[given571-min_by(people, &age_str)-expected571-functions.json]",
+   "tests/test_compliance.py::test_expression[given572-min_by(people, &to_number(age_str))-expected572-functions.json]",
+   "tests/test_compliance.py::test_expression[given574-sort_by(people, &age)-expected574-functions.json]"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 12,
+   "full_suite": {
+    "failed": 0,
+    "passed": 991
+   },
+   "patch_files": [
+    "jmespath/functions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_compliance.py::test_expression[given560-sort_by(people, &age)-expected560-functions.json]",
+   "tests/test_compliance.py::test_expression[given561-sort_by(people, &age_str)-expected561-functions.json]",
+   "tests/test_compliance.py::test_expression[given562-sort_by(people, &to_number(age_str))-expected562-functions.json]",
+   "tests/test_compliance.py::test_expression[given563-sort_by(people, &age)[].name-expected563-functions.json]",
+   "tests/test_compliance.py::test_expression[given564-sort_by(people, &age)[].extra-expected564-functions.json]",
+   "tests/test_compliance.py::test_expression[given566-max_by(people, &age)-expected566-functions.json]",
+   "tests/test_compliance.py::test_expression[given567-max_by(people, &age_str)-expected567-functions.json]",
+   "tests/test_compliance.py::test_expression[given568-max_by(people, &to_number(age_str))-expected568-functions.json]",
+   "tests/test_compliance.py::test_expression[given570-min_by(people, &age)-expected570-functions.json]",
+   "tests/test_compliance.py::test_expression[given571-min_by(people, &age_str)-expected571-functions.json]",
+   "tests/test_compliance.py::test_expression[given572-min_by(people, &to_number(age_str))-expected572-functions.json]",
+   "tests/test_compliance.py::test_expression[given574-sort_by(people, &age)-expected574-functions.json]"
+  ],
+  "ground_truth_symbols": [
+   "jmespath/functions.py::Functions._create_key_func.keyfunc"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 979,
+  "stability_runs": 3
+ }
+}

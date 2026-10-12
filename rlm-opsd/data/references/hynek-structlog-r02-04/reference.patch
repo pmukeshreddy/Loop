@@ -1,0 +1,72 @@
+--- a/src/structlog/_native.py
++++ b/src/structlog/_native.py
+@@ -110,10 +110,9 @@
+     Args:
+         min_level:
+             The log level as an integer. You can use the constants from
+-            `logging` like ``logging.INFO`` or pass the values directly. See
+-            `this table from the logging docs
+-            <https://docs.python.org/3/library/logging.html#levels>`_ for
+-            possible values.
++            `logging` like ``logging.INFO`` or pass any integer directly,
++            including negative values. Standard log levels are enabled when
++            they are greater than or equal to this value.
+ 
+             If you pass a string, it must be one of: ``critical``, ``error``,
+             ``warning``, ``info``, ``debug``, ``notset`` (upper/lower case
+@@ -129,7 +128,21 @@
+     if isinstance(min_level, str):
+         min_level = NAME_TO_LEVEL[min_level.lower()]
+ 
+-    return LEVEL_TO_FILTERING_LOGGER[min_level]
++    try:
++        return LEVEL_TO_FILTERING_LOGGER[min_level]
++    except KeyError:
++        if not isinstance(min_level, int):
++            raise
++
++    # Serialize creation so concurrent calls also return the same class.
++    with _FILTERING_LOGGER_LOCK:
++        if min_level not in LEVEL_TO_FILTERING_LOGGER:
++            cls = _make_filtering_bound_logger(min_level)
++            # Pickle resolves classes by their module-global name.
++            globals()[cls.__name__] = cls
++            LEVEL_TO_FILTERING_LOGGER[min_level] = cls
++
++        return LEVEL_TO_FILTERING_LOGGER[min_level]
+ 
+ 
+ def _maybe_interpolate(event: str, args: tuple[Any, ...]) -> str:
+@@ -261,14 +274,23 @@
+     meths["is_enabled_for"] = lambda self, level: level >= min_level
+     meths["get_effective_level"] = lambda self: min_level
+ 
++    if min_level == NOTSET:
++        name = "Notset"
++    elif min_level in LEVEL_TO_NAME:
++        name = LEVEL_TO_NAME[min_level].capitalize()
++    elif min_level < 0:
++        name = f"Minus{-min_level}"
++    else:
++        name = str(min_level)
++
+     return type(
+-        f"BoundLoggerFilteringAt{LEVEL_TO_NAME.get(min_level, 'Notset').capitalize()}",
++        f"BoundLoggerFilteringAt{name}",
+         (BoundLoggerBase,),
+         meths,
+     )
+ 
+ 
+-# Pre-create all possible filters to make them pickleable.
++# Pre-create the standard filters to keep their names and identities.
+ BoundLoggerFilteringAtNotset = _make_filtering_bound_logger(NOTSET)
+ BoundLoggerFilteringAtDebug = _make_filtering_bound_logger(DEBUG)
+ BoundLoggerFilteringAtInfo = _make_filtering_bound_logger(INFO)
+@@ -284,3 +306,6 @@
+     DEBUG: BoundLoggerFilteringAtDebug,
+     NOTSET: BoundLoggerFilteringAtNotset,
+ }
++
++# Protect creation and publication of filters for nonstandard levels.
++_FILTERING_LOGGER_LOCK = threading.Lock()

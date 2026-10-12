@@ -1,0 +1,20 @@
+--- a/tlz/_build_tlz.py
++++ b/tlz/_build_tlz.py
+@@ -53,6 +53,8 @@
+         return types.ModuleType(spec.name)
+ 
+     def exec_module(self, module):
++        # Preserve caller-supplied exports, including override and child names.
++        protected = {k for k in module.__dict__ if not k.startswith('__')}
+         toolz_mods = self._load_toolz(module.__name__)
+         fast_mod = toolz_mods.get('cytoolz') or toolz_mods['toolz']
+         slow_mod = toolz_mods.get('toolz') or toolz_mods['cytoolz']
+@@ -71,6 +73,8 @@
+             pass
+ 
+         for k, v in fast_mod.__dict__.items():
++            if k in protected:
++                continue
+             tv = slow_mod.__dict__.get(k)
+             try:
+                 hash(tv)

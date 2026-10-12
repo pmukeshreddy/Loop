@@ -1,0 +1,146 @@
+{
+ "answer": "--- a/src/mistune/list_parser.py\n+++ b/src/mistune/list_parser.py\n@@ -233,8 +233,9 @@\n def _compile_list_break_sc(block: \"BlockParser\", leading_width: int) -> Pattern[str]:\n     pairs = [(name, block.specification[name]) for name in _get_list_break_rules(block)]\n     if leading_width < 3:\n-        _repl = str(leading_width)\n-        pairs = [(n, p.replace(\"3\", _repl, 1)) for n, p in pairs]\n+        # Only adjust indentation, not quantifiers such as fence lengths.\n+        _repl = \" {0,\" + str(leading_width) + \"}\"\n+        pairs = [(n, p.replace(\" {0,3}\", _repl, 1)) for n, p in pairs]\n \n     regex = \"|\".join(r\"(?P<%s>(?<=\\n)%s)\" % pair for pair in pairs)\n     return re.compile(regex, re.M)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0016239886320795753,
+  "facts": {
+   "code_blocks": 6,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "idx",
+    "logs",
+    "s"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 7,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "persistent_state",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 551728 chars; 16 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "7 turns; variables reused across turns: ['idx', 'logs', 's']; hand-copied literals 1"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff was constructed and inspected in code. The verified repair narrows indentation rewriting while preserving directive fence-length quantifiers, addressing both list-break behavior and custom directive grammar.",
+   "inspect_locate": "The execution used 16 targeted searches without printing the whole context. Locating the cause required connecting directive fence registration to list-interruption scanning, rather than merely finding the directive dispatcher.",
+   "persistent_state": "Variables were reused across turns, but the supplied evidence does not establish persistent state as a necessary task behavior. Its omission from behaviors_established is appropriate."
+  },
+  "notes": "This is a natural, repository-dependent regression repair with a clear production-only unified-diff deliverable. The question supplies the symptom and preservation constraint without revealing the defective symbol or fix. The verified patch addresses the underlying regex mutation, and the task is distinct from the existing accepted investigations."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The repair must be assembled from exact source text and checked against both ordinary list-break grammars and custom fenced-directive grammars.",
+   "inspect_locate": "The directive symptom originates in list interruption scanning rather than directive dispatch, requiring evidence from directive registration and list-item collection.",
+   "persistent_state": "Understanding the regression requires retaining the original extension pattern, the list marker width, and the derived interruption pattern while following the scanner into its consumer."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/mistune/list_parser.py",
+    "symbol": "src/mistune/list_parser.py::_compile_list_break_sc",
+    "why": "Builds interruption patterns using the current list marker width."
+   },
+   {
+    "path": "src/mistune/list_parser.py",
+    "symbol": "src/mistune/list_parser.py::_collect_list_item_lines",
+    "why": "Uses the derived scanner to dispatch interrupting blocks into the parent state."
+   },
+   {
+    "path": "src/mistune/directives/_fenced.py",
+    "symbol": "src/mistune/directives/_fenced.py::FencedDirective.__init__",
+    "why": "The custom directive pattern contains a fence-run quantifier but no ordinary indentation prefix."
+   },
+   {
+    "path": "tests/test_directives.py",
+    "symbol": "tests/test_directives.py::TestFencedDirectiveInList",
+    "why": "Tests both short literal marker runs and valid directives interrupting a list."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": null,
+  "include_failure_log": true,
+  "notes": "The intended defect is replacement of the first bare digit 3 rather than the indentation bound. The setup patch removes the now-inapplicable explanatory comment as part of the simulated cleanup.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Custom colon-fenced admonitions have regressed near list boundaries: the attached pytest output shows text being recognized as a directive where the same text outside a list remains literal. Repair the underlying parser regression without changing tests or weakening the directive fence-length requirement. Return a unified diff against the production files.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "scattered_evidence_debugging",
+  "setup_patch": "--- a/src/mistune/list_parser.py\n+++ b/src/mistune/list_parser.py\n@@ -257,11 +257,8 @@\n def _compile_list_break_sc(block: \"BlockParser\", leading_width: int) -> Pattern[str]:\n     pairs = [(name, block.specification[name]) for name in _get_list_break_rules(block)]\n     if leading_width < 3:\n-        # Relax the leading indent bound only. Matching on a bare \"3\" would\n-        # rewrite the first quantifier of any rule that has no indent prefix --\n-        # e.g. a fenced directive's \"{3,}\" marker run.\n-        _repl = \" {0,%d}\" % leading_width\n-        pairs = [(n, p.replace(\" {0,3}\", _repl, 1)) for n, p in pairs]\n+        _repl = str(leading_width)\n+        pairs = [(n, p.replace(\"3\", _repl, 1)) for n, p in pairs]\n \n     regex = \"|\".join(r\"(?P<%s>(?<=\\n)%s)\" % pair for pair in pairs)\n     return re.compile(regex, re.M)\n"
+ },
+ "suggestion": null,
+ "task_id": "lepture-mistune-r02-01",
+ "truth": {
+  "fail_to_pass": [
+   "tests/test_directives.py::TestFencedDirectiveInList::test_marker_run_below_fence_length_is_not_a_directive"
+  ],
+  "hidden_tests": [],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 1,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1155
+   },
+   "patch_files": [
+    "src/mistune/list_parser.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [
+   "tests/test_directives.py::TestFencedDirectiveInList::test_marker_run_below_fence_length_is_not_a_directive"
+  ],
+  "ground_truth_symbols": [
+   "src/mistune/list_parser.py::_compile_list_break_sc"
+  ],
+  "hidden_tests": [],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1154,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,32 @@
+--- a/tenacity/asyncio/__init__.py
++++ b/tenacity/asyncio/__init__.py
+@@ -16,6 +16,7 @@
+ # limitations under the License.
+ 
+ import functools
++import inspect
+ import sys
+ import typing as t
+ 
+@@ -136,7 +137,9 @@
+                     retry_state.set_result(result)
+             elif isinstance(do, DoSleep):
+                 retry_state.prepare_for_next_attempt()
+-                await self.sleep(do)  # type: ignore[misc]
++                sleep_result = self.sleep(do)
++                if inspect.isawaitable(sleep_result):
++                    await sleep_result
+             else:
+                 return do  # type: ignore[no-any-return]
+ 
+@@ -203,7 +206,9 @@
+                 return AttemptManager(retry_state=self._retry_state)
+             if isinstance(do, DoSleep):
+                 self._retry_state.prepare_for_next_attempt()
+-                await self.sleep(do)  # type: ignore[misc]
++                sleep_result = self.sleep(do)
++                if inspect.isawaitable(sleep_result):
++                    await sleep_result
+             else:
+                 raise StopAsyncIteration
+ 

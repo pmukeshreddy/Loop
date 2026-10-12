@@ -1,0 +1,109 @@
+--- /dev/null
++++ b/tests/test_schema_partial_result_preservation.py
+@@ -0,0 +1,106 @@
++import pytest
++
++from marshmallow import Schema, ValidationError, fields, validates
++
++
++@pytest.mark.parametrize(
++    "factory,raw,partial",
++    [
++        (lambda: fields.List(fields.Int()), ["bad"], []),
++        (lambda: fields.Tuple((fields.Int(),)), ["bad"], []),
++        (lambda: fields.Dict(values=fields.Int()), {"a": "bad"}, {}),
++        (lambda: fields.Dict(keys=fields.Int()), {"bad": 1}, {}),
++        (lambda: fields.List(fields.Int()), ["bad", "2"], [2]),
++    ],
++)
++@pytest.mark.parametrize("aliased", [False, True])
++@pytest.mark.parametrize("many", [False, True])
++def test_container_partial_survives_schema(factory, raw, partial, aliased, many):
++    field = factory()
++    with pytest.raises(ValidationError) as direct:
++        field.deserialize(raw)
++    assert direct.value.valid_data == partial
++
++    external = "external_items" if aliased else "items"
++    internal = "stored_items" if aliased else "items"
++    if aliased:
++        field.data_key = external
++        field.attribute = internal
++    schema = Schema.from_dict({"items": field, "ok": fields.Int()})()
++    record = {external: raw, "ok": "7"}
++    payload = [record, {"ok": "8"}] if many else record
++    with pytest.raises(ValidationError) as loaded:
++        schema.load(payload, many=many)
++
++    expected = {internal: partial, "ok": 7}
++    messages = {external: direct.value.messages}
++    assert loaded.value.valid_data == ([expected, {"ok": 8}] if many else expected)
++    assert loaded.value.messages == ({0: messages} if many else messages)
++    assert loaded.value.data == payload
++
++
++@pytest.mark.parametrize("partial", [0, False, "", [], {}, None, [1]])
++@pytest.mark.parametrize("many", [False, True])
++def test_custom_partial_uses_none_as_absence(partial, many):
++    class RejectingField(fields.Field):
++        def _deserialize(self, value, attr, data, **kwargs):
++            raise ValidationError("Rejected.", valid_data=partial)
++
++    field = RejectingField(data_key="external", attribute="stored")
++    with pytest.raises(ValidationError) as direct:
++        field.deserialize("input")
++    assert direct.value.valid_data is partial
++
++    schema = Schema.from_dict({"item": field, "ok": fields.Int()})()
++    record = {"external": "input", "ok": "3"}
++    payload = [record, {"ok": "4"}] if many else record
++    with pytest.raises(ValidationError) as loaded:
++        schema.load(payload, many=many)
++
++    expected = {"ok": 3}
++    if partial is not None:
++        expected["stored"] = partial
++    result = loaded.value.valid_data
++    assert result == ([expected, {"ok": 4}] if many else expected)
++    first = result[0] if many else result
++    if partial is not None:
++        assert type(first["stored"]) is type(partial)
++    else:
++        assert "stored" not in first
++    messages = {"external": ["Rejected."]}
++    assert loaded.value.messages == ({0: messages} if many else messages)
++
++
++@pytest.mark.parametrize("partial", [None, 0, False, "", [], {}, [9]])
++@pytest.mark.parametrize("many", [False, True])
++def test_decorated_rejection_keeps_existing_removal_semantics(partial, many):
++    class RejectedSchema(Schema):
++        item = fields.Int()
++        ok = fields.Int()
++
++        @validates("item")
++        def reject(self, value, **kwargs):
++            raise ValidationError("Rejected.", valid_data=partial)
++
++    record = {"item": "5", "ok": "6"}
++    payload = [record, {"ok": "7"}] if many else record
++    with pytest.raises(ValidationError) as loaded:
++        RejectedSchema().load(payload, many=many)
++
++    expected = {"ok": 6}
++    if partial:
++        expected["item"] = 5
++    assert loaded.value.valid_data == ([expected, {"ok": 7}] if many else expected)
++    messages = {"item": ["Rejected."]}
++    assert loaded.value.messages == ({0: messages} if many else messages)
++
++
++def test_successful_decorated_validator_does_not_remove_value():
++    class AcceptedSchema(Schema):
++        item = fields.Int()
++
++        @validates("item")
++        def accept(self, value, **kwargs):
++            return None
++
++    assert AcceptedSchema().load({"item": "5"}) == {"item": 5}

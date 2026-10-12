@@ -1,0 +1,176 @@
+{
+ "answer": "--- a/jsonschema/_utils.py\n+++ b/jsonschema/_utils.py\n@@ -197,17 +197,27 @@\n \n     ref = schema.get(\"$ref\")\n     if ref is not None:\n-        resolved = validator._resolver.lookup(ref)\n-        evaluated_indexes.extend(\n-            find_evaluated_item_indexes_by_schema(\n-                validator.evolve(\n-                    schema=resolved.contents,\n-                    _resolver=resolved.resolver,\n+        if validator._ref_resolver is not None:\n+            with validator._ref_resolver.resolving(ref) as resolved:\n+                evaluated_indexes.extend(\n+                    find_evaluated_item_indexes_by_schema(\n+                        validator.evolve(schema=resolved),\n+                        instance,\n+                        resolved,\n+                    ),\n+                )\n+        else:\n+            resolved = validator._resolver.lookup(ref)\n+            evaluated_indexes.extend(\n+                find_evaluated_item_indexes_by_schema(\n+                    validator.evolve(\n+                        schema=resolved.contents,\n+                        _resolver=resolved.resolver,\n+                    ),\n+                    instance,\n+                    resolved.contents,\n                 ),\n-                instance,\n-                resolved.contents,\n-            ),\n-        )\n+            )\n \n     dynamicRef = schema.get(\"$dynamicRef\")\n     if dynamicRef is not None:\n@@ -272,17 +282,27 @@\n \n     ref = schema.get(\"$ref\")\n     if ref is not None:\n-        resolved = validator._resolver.lookup(ref)\n-        evaluated_keys.extend(\n-            find_evaluated_property_keys_by_schema(\n-                validator.evolve(\n-                    schema=resolved.contents,\n-                    _resolver=resolved.resolver,\n+        if validator._ref_resolver is not None:\n+            with validator._ref_resolver.resolving(ref) as resolved:\n+                evaluated_keys.extend(\n+                    find_evaluated_property_keys_by_schema(\n+                        validator.evolve(schema=resolved),\n+                        instance,\n+                        resolved,\n+                    ),\n+                )\n+        else:\n+            resolved = validator._resolver.lookup(ref)\n+            evaluated_keys.extend(\n+                find_evaluated_property_keys_by_schema(\n+                    validator.evolve(\n+                        schema=resolved.contents,\n+                        _resolver=resolved.resolver,\n+                    ),\n+                    instance,\n+                    resolved.contents,\n                 ),\n-                instance,\n-                resolved.contents,\n-            ),\n-        )\n+            )\n \n     dynamicRef = schema.get(\"$dynamicRef\")\n     if dynamicRef is not None:\n--- a/jsonschema/_legacy_keywords.py\n+++ b/jsonschema/_legacy_keywords.py\n@@ -252,17 +252,27 @@\n \n     ref = schema.get(\"$ref\")\n     if ref is not None:\n-        resolved = validator._resolver.lookup(ref)\n-        evaluated_indexes.extend(\n-            find_evaluated_item_indexes_by_schema(\n-                validator.evolve(\n-                    schema=resolved.contents,\n-                    _resolver=resolved.resolver,\n+        if validator._ref_resolver is not None:\n+            with validator._ref_resolver.resolving(ref) as resolved:\n+                evaluated_indexes.extend(\n+                    find_evaluated_item_indexes_by_schema(\n+                        validator.evolve(schema=resolved),\n+                        instance,\n+                        resolved,\n+                    ),\n+                )\n+        else:\n+            resolved = validator._resolver.lookup(ref)\n+            evaluated_indexes.extend(\n+                find_evaluated_item_indexes_by_schema(\n+                    validator.evolve(\n+                        schema=resolved.contents,\n+                        _resolver=resolved.resolver,\n+                    ),\n+                    instance,\n+                    resolved.contents,\n                 ),\n-                instance,\n-                resolved.contents,\n-            ),\n-        )\n+            )\n \n     if \"$recursiveRef\" in schema:\n         resolved = lookup_recursive_ref(validator._resolver)\n@@ -339,17 +349,27 @@\n \n     ref = schema.get(\"$ref\")\n     if ref is not None:\n-        resolved = validator._resolver.lookup(ref)\n-        evaluated_keys.extend(\n-            find_evaluated_property_keys_by_schema(\n-                validator.evolve(\n-                    schema=resolved.contents,\n-                    _resolver=resolved.resolver,\n+        if validator._ref_resolver is not None:\n+            with validator._ref_resolver.resolving(ref) as resolved:\n+                evaluated_keys.extend(\n+                    find_evaluated_property_keys_by_schema(\n+                        validator.evolve(schema=resolved),\n+                        instance,\n+                        resolved,\n+                    ),\n+                )\n+        else:\n+            resolved = validator._resolver.lookup(ref)\n+            evaluated_keys.extend(\n+                find_evaluated_property_keys_by_schema(\n+                    validator.evolve(\n+                        schema=resolved.contents,\n+                        _resolver=resolved.resolver,\n+                    ),\n+                    instance,\n+                    resolved.contents,\n                 ),\n-                instance,\n-                resolved.contents,\n-            ),\n-        )\n+            )\n \n     if \"$recursiveRef\" in schema:\n         resolved = lookup_recursive_ref(validator._resolver)\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.00048675671665924863,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 16,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 1,
+   "repository_execution": [],
+   "reused_variables": [
+    "files",
+    "p"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 8,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "chunked_subcalls",
+  "results": {
+   "chunked_subcalls": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); 0 call sites on selected context, 0 on the whole context; max prompt 0 chars"
+   },
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 1199778 chars; 16 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": false,
+    "evidence": "8 turns; variables reused across turns: ['files', 'p']; hand-copied literals 1"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "chunked_subcalls": "Not established: the reference execution made no sub-calls.",
+   "combine_verify_finish": "The patch coordinates legacy resolution across item and property coverage for both drafts while retaining the modern resolver branches. The final diff was computed and inspected before submission.",
+   "inspect_locate": "The execution used 16 code searches without printing the whole repository context. The task requires connecting the public legacy resolver configuration with reference validation and evaluation-coverage helpers in two production modules.",
+   "persistent_state": "Variables were reused across turns, but the supplied evidence does not establish substantive persistent-state reasoning beyond routine file and patch handling.",
+   "recursive_decomposition": "Not established: there were no recursive sub-calls or sub-call results incorporated into the answer."
+  },
+  "notes": "This is a natural, repository-dependent maintenance request with clear behavioral constraints and a precise production-only unified-diff format. Naming the public RefResolver API identifies the compatibility requirement rather than leaking the defective implementation. Resolving nested relative references while preserving draft-specific coverage semantics requires reasoning across configuration, resolution, and coverage code. The task is distinct from the existing registry-scope and unevaluated-properties tasks. The evidence supports the two established behaviors, not all five intended behaviors."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "chunked_subcalls": "A correct repair requires understanding the generated reference-resolution lifecycle, two item-coverage implementations, two property-coverage implementations, and their keyword consumers. These are substantial, separate semantic units rather than interchangeable copies.",
+   "combine_verify_finish": "The final multi-file patch must consistently cover all four helper paths without disturbing the modern registry path or the drafts' different item semantics.",
+   "inspect_locate": "The public resolver argument reaches reference validation and four separate evaluation-coverage helpers through generated validator configuration.",
+   "persistent_state": "The solver must retain the draft/helper matrix, resolver-scope requirements, and exact text of multiple production edits.",
+   "recursive_decomposition": "Item versus property coverage and Draft 2019-09 versus Draft 2020-12 can be analyzed independently before combining the shared resolver requirements."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_evaluated_item_indexes_by_schema",
+    "why": "Modern item coverage currently performs reference lookups through the modern resolver unconditionally."
+   },
+   {
+    "path": "jsonschema/_utils.py",
+    "symbol": "jsonschema/_utils.py::find_evaluated_property_keys_by_schema",
+    "why": "Modern property coverage has the same resolver-selection issue."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_item_indexes_by_schema",
+    "why": "Draft 2019-09 item coverage has separate tuple-items semantics and its own reference traversal."
+   },
+   {
+    "path": "jsonschema/_legacy_keywords.py",
+    "symbol": "jsonschema/_legacy_keywords.py::find_evaluated_property_keys_by_schema",
+    "why": "Draft 2019-09 property coverage also needs to honor legacy resolution."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::create",
+    "why": "Generated ordinary reference validation demonstrates how legacy scope must remain active while recursive work is consumed."
+   },
+   {
+    "path": "jsonschema/validators.py",
+    "symbol": "jsonschema/validators.py::_RefResolver.resolving",
+    "why": "Provides scoped resolution of relative references through the legacy store."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/jsonschema/tests/test_legacy_unevaluated_refs.py\n@@ -0,0 +1,38 @@\n+import pytest\n+from referencing import Registry\n+\n+from jsonschema import Draft201909Validator, Draft202012Validator, validators\n+\n+\n+@pytest.mark.parametrize(\"Validator\", [Draft201909Validator, Draft202012Validator])\n+@pytest.mark.parametrize(\"kind\", [\"properties\", \"items\"])\n+def test_legacy_references_contribute_evaluation_coverage(Validator, kind):\n+    root = \"https://example.test/root\"\n+    outer = \"https://example.test/nested/outer\"\n+    leaf = \"https://example.test/nested/leaf\"\n+    if kind == \"properties\":\n+        coverage = {\"properties\": {\"known\": {\"type\": \"integer\"}}}\n+        schema = {\"$ref\": outer, \"unevaluatedProperties\": False}\n+        valid = {\"known\": 1}\n+        extra = {\"known\": 1, \"extra\": 2}\n+        invalid = {\"known\": \"bad\"}\n+        aggregate = \"unevaluatedProperties\"\n+    else:\n+        keyword = \"items\" if Validator is Draft201909Validator else \"prefixItems\"\n+        coverage = {keyword: [{\"type\": \"integer\"}]}\n+        schema = {\"$ref\": outer, \"unevaluatedItems\": False}\n+        valid = [1]\n+        extra = [1, 2]\n+        invalid = [\"bad\"]\n+        aggregate = \"unevaluatedItems\"\n+    store = {outer: {\"$ref\": \"leaf\"}, leaf: coverage}\n+    with pytest.warns(DeprecationWarning):\n+        resolver = validators.RefResolver(root, schema, store=store)\n+    validator = Validator(schema, resolver=resolver, registry=Registry())\n+    assert list(validator.iter_errors(valid)) == []\n+    errors = list(validator.iter_errors(extra))\n+    assert [error.validator for error in errors] == [aggregate]\n+    errors = list(validator.iter_errors(invalid))\n+    assert any(error.validator == \"type\" for error in errors)\n+    assert not validator.is_valid(extra)\n+    assert validator.is_valid(valid)\n",
+  "include_failure_log": false,
+  "notes": "The empty modern Registry in acceptance tests prevents network retrieval and makes accidental use of the modern resolver fail promptly. The tests exercise both drafts, both coverage families, nested relative references, uncovered values, and repeated validation.",
+  "primary_behavior": "chunked_subcalls",
+  "probe_patch": null,
+  "question": "Make evaluation coverage honor an explicitly supplied legacy `RefResolver` when `$ref` is used with `unevaluatedItems` or `unevaluatedProperties`, for both Draft 2019-09 and Draft 2020-12. Coverage must come from the same referenced schemas used by ordinary validation, including chains containing relative references resolved against the referenced document's scope. A schema found only in the legacy resolver's store must not require retrieval through the modern registry. Preserve existing behavior when no legacy resolver is supplied, and preserve the two drafts' different item-coverage rules. Return a unified diff against production files only; do not change tests.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "chunked_subcalls",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "multi_module_fix",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "python-jsonschema-jsonschema-r02-03",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[items-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[items-Draft202012Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[properties-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[properties-Draft202012Validator]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 4,
+   "full_suite": {
+    "failed": 0,
+    "passed": 7292
+   },
+   "patch_files": [
+    "jsonschema/_utils.py",
+    "jsonschema/_legacy_keywords.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[items-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[items-Draft202012Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[properties-Draft201909Validator]",
+   "jsonschema/tests/test_legacy_unevaluated_refs.py::test_legacy_references_contribute_evaluation_coverage[properties-Draft202012Validator]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 7288,
+  "stability_runs": 3
+ }
+}

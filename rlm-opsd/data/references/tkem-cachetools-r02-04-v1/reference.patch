@@ -1,0 +1,83 @@
+--- a/src/cachetools/func.py
++++ b/src/cachetools/func.py
+@@ -1,18 +1,27 @@
+ """`functools.lru_cache` compatible memoizing function decorators."""
+ 
+-__all__ = ("fifo_cache", "lfu_cache", "lru_cache", "rr_cache", "ttl_cache")
++__all__ = ("fifo_cache", "lfu_cache", "lru_cache", "rr_cache", "tlru_cache", "ttl_cache")
+ 
+ import math
+ import random
+ import time
+ from threading import Condition
+ 
+-from . import FIFOCache, LFUCache, LRUCache, RRCache, TTLCache, cached, keys
++from . import FIFOCache, LFUCache, LRUCache, RRCache, TLRUCache, TTLCache, cached, keys
+ 
+ 
+ class _UnboundTTLCache(TTLCache):
+     def __init__(self, ttl, timer):
+         TTLCache.__init__(self, math.inf, ttl, timer)
++
++    @property
++    def maxsize(self):  # type: ignore
++        return None
++
++
++class _UnboundTLRUCache(TLRUCache):
++    def __init__(self, ttu, timer):
++        TLRUCache.__init__(self, math.inf, ttu, timer)
+ 
+     @property
+     def maxsize(self):  # type: ignore
+@@ -88,6 +97,26 @@
+         return _cache(RRCache(maxsize, choice), maxsize, typed)
+ 
+ 
++def tlru_cache(ttu, maxsize=128, timer=time.monotonic, typed=False):
++    """Decorator to wrap a function with a memoizing callable that saves
++    up to `maxsize` results based on a Time aware Least Recently Used
++    (TLRU) algorithm.
++
++    The required `ttu(key, value, now)` callback receives the generated
++    cache key, the computed result, and the timer value at insertion,
++    and returns an absolute expiration deadline.  Results with deadlines
++    at or before `now` are returned but not cached.  Cache hits do not
++    call `ttu` again.
++
++    If `maxsize` is None, the cache is unbounded but results still expire.
++
++    """
++    if maxsize is None:
++        return _cache(_UnboundTLRUCache(ttu, timer), None, typed)
++    else:
++        return _cache(TLRUCache(maxsize, ttu, timer), maxsize, typed)
++
++
+ def ttl_cache(maxsize=128, ttl=600, timer=time.monotonic, typed=False):
+     """Decorator to wrap a function with a memoizing callable that saves
+     up to `maxsize` results based on a Least Recently Used (LRU)
+--- a/src/cachetools/func.pyi
++++ b/src/cachetools/func.pyi
+@@ -3,7 +3,7 @@
+ 
+ from . import _CacheInfo
+ 
+-__all__: Final = ("fifo_cache", "lfu_cache", "lru_cache", "rr_cache", "ttl_cache")
++__all__: Final = ("fifo_cache", "lfu_cache", "lru_cache", "rr_cache", "tlru_cache", "ttl_cache")
+ 
+ _P = ParamSpec("_P")
+ _T = TypeVar("_T")
+@@ -55,6 +55,12 @@
+     choice: Callable[[Sequence[_T]], _T] = ...,
+     typed: bool = False,
+ ) -> _cachetools_cache_wrapper[_P, _R]: ...
++def tlru_cache(
++    ttu: Callable[[Any, Any, _T], _T],
++    maxsize: int | None = 128,
++    timer: Callable[[], _T] = ...,
++    typed: bool = False,
++) -> Callable[[Callable[_P, _R]], _cachetools_cache_wrapper[_P, _R]]: ...
+ @overload
+ def ttl_cache(
+     maxsize: int | None = 128,

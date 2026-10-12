@@ -1,0 +1,62 @@
+--- /dev/null
++++ b/tests/test_schema_validator_processed_cardinality.py
+@@ -0,0 +1,59 @@
++import pytest
++
++from marshmallow import Schema, ValidationError, fields, pre_load, validates_schema
++
++
++@pytest.mark.parametrize("expand", [False, True])
++@pytest.mark.parametrize("api", ["load", "validate"])
++def test_item_validation_uses_processed_cardinality(expand, api):
++    seen = []
++    collections = []
++
++    class Record(Schema):
++        n = fields.Int()
++
++        @pre_load(pass_collection=True)
++        def reshape(self, data, **kwargs):
++            return data + data[:1] if expand else data[1:]
++
++        @validates_schema(pass_collection=True)
++        def check_collection(self, data, **kwargs):
++            collections.append([item["n"] for item in data])
++
++        @validates_schema
++        def check_item(self, data, **kwargs):
++            seen.append(data["n"])
++            if data["n"] == 2:
++                raise ValidationError("Rejected", field_name="n")
++
++    raw = [{"n": "1"}, {"n": "2"}]
++    expected = [1, 2, 1] if expand else [2]
++    error_index = 1 if expand else 0
++    messages = {error_index: {"n": ["Rejected"]}}
++    schema = Record()
++    if api == "load":
++        with pytest.raises(ValidationError) as exc:
++            schema.load(raw, many=True)
++        assert exc.value.messages == messages
++        assert exc.value.valid_data == [{"n": n} for n in expected]
++        assert exc.value.data is raw
++    else:
++        assert schema.validate(raw, many=True) == messages
++    assert seen == expected
++    assert collections == [expected]
++
++
++def test_original_pairing_still_requires_matching_lengths():
++    class Record(Schema):
++        n = fields.Int()
++
++        @pre_load(pass_collection=True)
++        def filter_records(self, data, **kwargs):
++            return data[1:]
++
++        @validates_schema(pass_original=True)
++        def check_original(self, data, original, **kwargs):
++            pass
++
++    with pytest.raises(ValueError):
++        Record().load([{"n": "1"}, {"n": "2"}], many=True)

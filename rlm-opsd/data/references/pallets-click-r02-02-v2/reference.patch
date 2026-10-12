@@ -1,0 +1,37 @@
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -3561,19 +3561,22 @@
+         # flag, its envvar value still needs to be analyzed to determine if the flag is
+         # activated or not.
+         if self.is_flag and not self.is_bool_flag:
+-            # An exact match against ``flag_value`` (a non-bool flag always has one
+-            # explicitly set) returns it directly. Otherwise the value is analyzed as a
+-            # boolean: a truthy reading activates the flag and the function receives
+-            # ``flag_value``; a falsy reading produces ``False``; an unrecognized
+-            # reading falls through as ``None``. Folding the substitution here means
+-            # :meth:`consume_value` no longer has to repeat it in a source-checked
+-            # branch.
++            # An exact match against ``flag_value`` takes precedence over boolean
++            # interpretation. Otherwise, true activates the flag, false deactivates
++            # it, and an unrecognized value leaves it unset for defaults to apply.
+             if rv == self.flag_value:
+-                return self.flag_value
+-            parsed = types.BoolParamType.str_to_bool(rv)
+-            if parsed is None:
+-                return None
+-            return (self.flag_value,) if parsed else ()
++                value = self.flag_value
++            else:
++                parsed = types.BoolParamType.str_to_bool(rv)
++                if parsed is None:
++                    return None
++                if not parsed:
++                    return () if self.multiple else False
++                value = self.flag_value
++
++            # Repeated flags receive one activation, not a split environment value.
++            # Wrap the value itself so opaque activation objects retain their identity.
++            return (value,) if self.multiple else value
+ 
+         # Split the envvar value if it is allowed to be repeated.
+         value_depth = (self.nargs != 1) + bool(self.multiple)

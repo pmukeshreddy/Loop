@@ -19,6 +19,9 @@ class SandboxLimit(RuntimeError):
 
 class SandboxBackend(SubprocessReplBackend):
     """Pinned JSONL transport with process-group cleanup and parent watchdogs."""
+    # Resource watchdog period. Enumerating descendants is a full process-table
+    # scan on macOS (~10 ms), so many concurrent offline episodes may raise it.
+    poll_interval_s = 0.02
     def __init__(self, config):
         super().__init__(worker_module="rlm_opsd.harness.worker",
                          request_timeout=config.sandbox.wall_time_s)
@@ -83,7 +86,7 @@ class SandboxBackend(SubprocessReplBackend):
                     return
             except psutil.NoSuchProcess:
                 return
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(self.poll_interval_s)
 
     async def _kill_worker(self):
         if self._proc is not None:

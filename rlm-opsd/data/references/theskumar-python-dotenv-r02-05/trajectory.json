@@ -1,0 +1,140 @@
+{
+  "task_id": "theskumar-python-dotenv-r02-05",
+  "family": "combine_verify_finish",
+  "domain": "deepswe",
+  "tags": [],
+  "context_metadata": {
+    "context_type": "list",
+    "context_total_length": 171130,
+    "context_lengths": [
+      130,
+      214,
+      20737,
+      724,
+      1572,
+      303,
+      7980,
+      2822,
+      20742,
+      729,
+      7984,
+      1580,
+      40,
+      649,
+      2154,
+      160,
+      108,
+      196,
+      1261,
+      160,
+      6995,
+      1356,
+      15206,
+      5835,
+      2380,
+      52,
+      305,
+      9826,
+      777,
+      1769,
+      8958,
+      1148,
+      21259,
+      19202,
+      775,
+      916,
+      2898,
+      1228
+    ]
+  },
+  "size_bucket": null,
+  "prompt_variant": "teacher",
+  "manual_version": "manual_v1",
+  "turns": [
+    {
+      "assistant_text": "```repl\nprint(type(context),len(context))\nprint([(i,x.splitlines()[0],len(x)) for i,x in enumerate(context)])\nprint(context[0][:150],context[len(context)//2][:200],context[-1][-300:])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(type(context),len(context))\nprint([(i,x.splitlines()[0],len(x)) for i,x in enumerate(context)])\nprint(context[0][:150],context[len(context)//2][:200],context[-1][-300:])"
+      ],
+      "stdout_raw_chars": 2159,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "<class 'list'> 38\n[(0, '# File: .bumpversion.cfg', 130), (1, '# File: .pre-commit-config.yaml', 214), (2, '# File: CHANGELOG.md', 20737), (3, '# File: CONTRIBUTING.md', 724), (4, '# File: LICENSE', 1572), (5, '# File: MANIFEST.in', 303), (6, '# File: README.md', 7980), (7, '# File: RELEASING.md', 2822), (8, '# File: docs/changelog.md', 20742), (9, '# File: docs/contributing.md', 729), (10, '# File: docs/index.md', 7984), (11, '# File: docs/license.md', 1580), (12, '# File: docs/reference.md', 40), (13, '# File: mkdocs.yml', 649), (14, '# File: pyproject.toml', 2154), (15, '# File: requirements-docs.txt', 160), (16, '# File: requirements.txt', 108), (17, '# File: ruff.toml', 196), (18, '# File: src/dotenv/__init__.py', 1261), (19, '# File: src/dotenv/__main__.py', 160), (20, '# File: src/dotenv/cli.py', 6995), (21, '# File: src/dotenv/ipython.py', 1356), (22, '# File: src/dotenv/main.py', 15206), (23, '# File: src/dotenv/parser.py', 5835), (24, '# File: src/dotenv/variables.py', 2380), (25, '# File: src/dotenv/version.py', 52), (26, '# File: tests/conftest.py', 305), (27, '# File: tests/test_cli.py', 9826), (28, '# File: tests/test_fifo_dotenv.py', 777), (29, '# File: tests/test_ipython.py', 1769), (30, '# File: tests/test_is_interactive.py', 8958), (31, '# File: tests/test_lib.py', 1148), (32, '# File: tests/test_main.py', 21259), (33, '# File: tests/test_parser.py', 19202), (34, '# File: tests/test_utils.py', 775), (35, '# File: tests/test_variables.py', 916), (36, '# File: tests/test_zip_imports.py', 2898), (37, '# File: tox.ini', 1228)]\n# File: .bumpversion.cfg\n[bumpversion]\ncurrent_version = 1.2.4\ncommit = True\ntag = True\n\n[bumpversion:file:src/dotenv/version.py]\n # File: src/dotenv/__main__.py\n\"\"\"Entry point for cli, enables execution with `python -m dotenv`\"\"\"\n\nfrom .cli import cli\n\nif __name__ == \"__main__\":\n    cli()\n mands = ruff format src tests\n\n[testenv:manifest]\ndeps = check-manifest\nskip_install = true\ncommands = check-manifest\n\n[testenv:coverage-clean]\ndeps = coverage\nskip_install = true\ncommands = coverage erase\n\n[testenv:coverage-report]\ndeps = coverage\nskip_install = true\ncommands =\n    coverage report\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nfiles={x.splitlines()[0][8:]:x.split('\\n',1)[1] for x in context if x.startswith('# File: ')}\ncli=files['src/dotenv/cli.py']\nprint(cli[:3900])\n```",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "files={x.splitlines()[0][8:]:x.split('\\n',1)[1] for x in context if x.startswith('# File: ')}\ncli=files['src/dotenv/cli.py']\nprint(cli[:3900])"
+      ],
+      "stdout_raw_chars": 3901,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "import json\nimport os\nimport shlex\nimport sys\nfrom contextlib import contextmanager\nfrom typing import IO, Any, Dict, Iterator, List, Optional\n\nif sys.platform == \"win32\":\n    from subprocess import Popen\n\ntry:\n    import click\nexcept ImportError:\n    sys.stderr.write(\n        \"It seems python-dotenv is not installed with cli option. \\n\"\n        'Run pip install \"python-dotenv[cli]\" to fix this.'\n    )\n    sys.exit(1)\n\nfrom .main import DotEnv, dotenv_values, set_key, unset_key\nfrom .version import __version__\n\n\ndef enumerate_env() -> Optional[str]:\n    \"\"\"\n    Return a path for the ${pwd}/.env file.\n\n    If pwd does not exist, return None.\n    \"\"\"\n    try:\n        cwd = os.getcwd()\n    except FileNotFoundError:\n        return None\n    path = os.path.join(cwd, \".env\")\n    return path\n\n\n@click.group()\n@click.option(\n    \"-f\",\n    \"--file\",\n    default=enumerate_env(),\n    type=click.Path(file_okay=True),\n    help=\"Location of the .env file, defaults to .env file in current working directory.\",\n)\n@click.option(\n    \"-q\",\n    \"--quote\",\n    default=\"always\",\n    type=click.Choice([\"always\", \"never\", \"auto\"]),\n    help=\"Whether to quote or not the variable values. Default mode is always. This does not affect parsing.\",\n)\n@click.option(\n    \"-e\",\n    \"--export\",\n    default=False,\n    type=click.BOOL,\n    help=\"Whether to write the dot file as an executable bash script.\",\n)\n@click.version_option(version=__version__)\n@click.pass_context\ndef cli(ctx: click.Context, file: Any, quote: Any, export: Any) -> None:\n    \"\"\"This script is used to set, get or unset values from a .env file.\"\"\"\n    ctx.obj = {\"QUOTE\": quote, \"EXPORT\": export, \"FILE\": file}\n\n\n@contextmanager\ndef stream_file(path: os.PathLike) -> Iterator[IO[str]]:\n    \"\"\"\n    Open a file and yield the corresponding (decoded) stream.\n\n    Exits with error code 2 if the file cannot be opened.\n    \"\"\"\n\n    try:\n        with open(path) as stream:\n            yield stream\n    except OSError as exc:\n        print(f\"Error opening env file: {exc}\", file=sys.stderr)\n        sys.exit(2)\n\n\n@cli.command(name=\"list\")\n@click.pass_context\n@click.option(\n    \"--format\",\n    \"output_format\",\n    default=\"simple\",\n    type=click.Choice([\"simple\", \"json\", \"shell\", \"export\"]),\n    help=\"The format in which to display the list. Default format is simple, \"\n    \"which displays name=value without quotes.\",\n)\ndef list_values(ctx: click.Context, output_format: str) -> None:\n    \"\"\"Display all the stored key/value.\"\"\"\n    file = ctx.obj[\"FILE\"]\n\n    with stream_file(file) as stream:\n        values = dotenv_values(stream=stream)\n\n    if output_format == \"json\":\n        click.echo(json.dumps(values, indent=2, sort_keys=True))\n    else:\n        prefix = \"export \" if output_format == \"export\" else \"\"\n        for k in sorted(values):\n            v = values[k]\n            if v is not None:\n                if output_format in (\"export\", \"shell\"):\n                    v = shlex.quote(v)\n                click.echo(f\"{prefix}{k}={v}\")\n\n\n@cli.command(name=\"set\")\n@click.pass_context\n@click.argument(\"key\", required=True)\n@click.argument(\"value\", required=True)\ndef set_value(ctx: click.Context, key: Any, value: Any) -> None:\n    \"\"\"\n    Store the given key/value.\n\n    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n    potentially untrusted path.\n    \"\"\"\n\n    file = ctx.obj[\"FILE\"]\n    quote = ctx.obj[\"QUOTE\"]\n    export = ctx.obj[\"EXPORT\"]\n    success, key, value = set_key(file, key, value, quote, export)\n    if success:\n        click.echo(f\"{key}={value}\")\n    else:\n        sys.exit(1)\n\n\n@cli.command()\n@click.pass_context\n@click.argument(\"key\", required=True)\ndef get(ctx: click.Context, key: Any) -> None:\n    \"\"\"Retrieve the value for the given key.\"\"\"\n    file = ctx.obj[\"FILE\"]\n\n    with stream_file(file) as stream:\n        values = dotenv_values(stream=stream)\n\n    # Empty strings are valid v\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nprint(cli[3900:4900])\nmain=files['src/dotenv/main.py']\nimport re\nfor name in ['rewrite','set_key','unset_key']:\n m=re.search(r'^(?:@.*\\n)?def '+name+r'\\(',main,re.M)\n end=main.find('\\ndef ',m.end())\n print(main[m.start():end if end>=0 else len(main)])\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "print(cli[3900:4900])\nmain=files['src/dotenv/main.py']\nimport re\nfor name in ['rewrite','set_key','unset_key']:\n m=re.search(r'^(?:@.*\\n)?def '+name+r'\\(',main,re.M)\n end=main.find('\\ndef ',m.end())\n print(main[m.start():end if end>=0 else len(main)])"
+      ],
+      "stdout_raw_chars": 5842,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "alues; only missing keys / bare keys (None) fail.\n    if key not in values or values[key] is None:\n        sys.exit(1)\n    click.echo(values[key])\n\n\n@cli.command()\n@click.pass_context\n@click.argument(\"key\", required=True)\ndef unset(ctx: click.Context, key: Any) -> None:\n    \"\"\"\n    Removes the given key.\n\n    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n    potentially untrusted path.\n    \"\"\"\n    file = ctx.obj[\"FILE\"]\n    quote = ctx.obj[\"QUOTE\"]\n    success, key = unset_key(file, key, quote)\n    if success:\n        click.echo(f\"Successfully removed {key}\")\n    else:\n        sys.exit(1)\n\n\n@cli.command(\n    context_settings={\n        \"allow_extra_args\": True,\n        \"allow_interspersed_args\": False,\n        \"ignore_unknown_options\": True,\n    }\n)\n@click.pass_context\n@click.option(\n    \"--override/--no-override\",\n    default=True,\n    help=\"Override variables from the environment file with those from the .env file.\",\n)\n@click.argument(\"commandline\", nargs=-\n@contextmanager\ndef rewrite(\n    path: StrPath,\n    encoding: Optional[str],\n    follow_symlinks: bool = False,\n) -> Iterator[Tuple[IO[str], IO[str]]]:\n    if follow_symlinks:\n        path = os.path.realpath(path)\n\n    try:\n        source: IO[str] = open(path, encoding=encoding)\n        try:\n            path_stat = os.lstat(path)\n            original_mode: Optional[int] = (\n                stat.S_IMODE(path_stat.st_mode)\n                if stat.S_ISREG(path_stat.st_mode)\n                else None\n            )\n        except BaseException:\n            source.close()\n            raise\n    except FileNotFoundError:\n        source = io.StringIO(\"\")\n        original_mode = None\n\n    with tempfile.NamedTemporaryFile(\n        mode=\"w\",\n        encoding=encoding,\n        delete=False,\n        prefix=\".tmp_\",\n        dir=os.path.dirname(os.path.abspath(path)),\n    ) as dest:\n        dest_path = pathlib.Path(dest.name)\n        error = None\n\n        try:\n            with source:\n                yield (source, dest)\n        except BaseException as err:\n            error = err\n\n    if error is None:\n        try:\n            if original_mode is not None:\n                os.chmod(dest_path, original_mode)\n\n            os.replace(dest_path, path)\n        except BaseException:\n            dest_path.unlink(missing_ok=True)\n            raise\n    else:\n        dest_path.unlink(missing_ok=True)\n        raise error from None\n\n\ndef set_key(\n    dotenv_path: StrPath,\n    key_to_set: str,\n    value_to_set: str,\n    quote_mode: str = \"always\",\n    export: bool = False,\n    encoding: Optional[str] = \"utf-8\",\n    follow_symlinks: bool = False,\n) -> Tuple[Optional[bool], str, str]:\n    \"\"\"\n    Adds or Updates a key/value to the given .env\n\n    The target .env file is created if it doesn't exist.\n\n    This function doesn't follow symlinks by default, to avoid accidentally\n    modifying a file at a potentially untrusted path. If you don't need this\n    protection and need symlinks to be followed, use `follow_symlinks`.\n    \"\"\"\n    if quote_mode not in (\"always\", \"auto\", \"never\"):\n        raise ValueError(f\"Unknown quote_mode: {quote_mode}\")\n\n    quote = quote_mode == \"always\" or (\n        quote_mode == \"auto\" and not value_to_set.isalnum()\n    )\n\n    if quote:\n        # The single-quoted-value parser decodes `\\\\` and `\\'`, so both have to\n        # be escaped here for the value to survive a write/read round-trip.\n        # Backslashes first, otherwise the backslash added by the quote\n        # escaping would be escaped in turn.\n        escaped = value_to_set.replace(\"\\\\\", \"\\\\\\\\\").replace(\"'\", \"\\\\'\")\n        value_out = f\"'{escaped}'\"\n    else:\n        value_out = value_to_set\n    if export:\n        line_out = f\"export {key_to_set}={value_out}\\n\"\n    else:\n        line_out = f\"{key_to_set}={value_out}\\n\"\n\n    with rewrite(dotenv_path, encoding=encoding, follow_symlinks=follow_symlinks) as (\n        source,\n        dest,\n    ):\n        replaced = False\n        missing_newline = False\n        for mapping in with_warn_for_invalid_lines(parse_stream(source)):\n            if mapping.key == key_to_set:\n                dest.write(line_out)\n                replaced = True\n            else:\n                dest.write(mapping.original.string)\n                missing_newline = not mapping.original.string.endswith(\"\\n\")\n        if not replaced:\n            if missing_newline:\n                dest.write(\"\\n\")\n            dest.write(line_out)\n\n    return True, key_to_set, value_to_set\n\n\ndef unset_key(\n    dotenv_path: StrPath,\n    key_to_unset: str,\n    quote_mode: str = \"always\",\n    encoding: Optional[str] = \"utf-8\",\n    follow_symlinks: bool = False,\n) -> Tuple[Optional[bool], str]:\n    \"\"\"\n    Removes a given key from the given `.env` file.\n\n    If the .env path given doesn't exist, fails.\n    If the given key doesn't exist in the .env, fails.\n\n    This function doesn't follow symlinks by default, to avoid accidentally\n    modifying a file at a potentially untrusted path. If you don't need this\n    protection and need symlinks to be followed, use `follow_symlinks`.\n    \"\"\"\n    if not os.path.exists(dotenv_path):\n        logger.warning(\"Can't delete from %s - it doesn't exist.\", dotenv_path)\n        return None, key_to_unset\n\n    removed = False\n    with rewrite(dotenv_path, encoding=encoding, follow_symlinks=follow_symlinks) as (\n        source,\n        dest,\n    ):\n        for mapping in with_warn_for_invalid_lines(parse_stream(source)):\n            if mapping.key == key_to_unset:\n                removed = True\n            else:\n                dest.write(mapping.original.string)\n\n    if not removed:\n        logger.warning(\n            \"Key %s not removed from %s - key doesn't exist.\", key_to_unset, dotenv_path\n        )\n        return None, key_to_unset\n\n    return removed, key_to_unset\n\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "```repl\nnew=cli\noption='''@click.option(\n    \"--follow-symlinks/--no-follow-symlinks\",\n    default=False,\n    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n)\n'''\nfor signature in [\n'def set_value(ctx: click.Context, key: Any, value: Any) -> None:',\n'def unset(ctx: click.Context, key: Any) -> None:']:\n assert new.count(signature)==1\nnew=new.replace('@click.argument(\"value\", required=True)\\ndef set_value', '@click.argument(\"value\", required=True)\\n'+option+'def set_value')\nnew=new.replace('@click.argument(\"key\", required=True)\\ndef unset', '@click.argument(\"key\", required=True)\\n'+option+'def unset')\nnew=new.replace('def set_value(ctx: click.Context, key: Any, value: Any) -> None:', '''def set_value(\n    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool\n) -> None:''')\nnew=new.replace('def unset(ctx: click.Context, key: Any) -> None:', 'def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:')\nold_help='''    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n    potentially untrusted path.'''\nnew_help='''    By default, this doesn't follow symlinks, to avoid accidentally modifying\n    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n    target instead.'''\nassert new.count(old_help)==2\nnew=new.replace(old_help,new_help)\nnew=new.replace('success, key, value = set_key(file, key, value, quote, export)', '''success, key, value = set_key(\n        file, key, value, quote, export, follow_symlinks=follow_symlinks\n    )''')\nnew=new.replace('success, key = unset_key(file, key, quote)', 'success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)')\nimport ast,difflib\nast.parse(new)\npatch=''.join(difflib.unified_diff(cli.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/dotenv/cli.py',tofile='b/src/dotenv/cli.py'))\nassert cli == files['src/dotenv/cli.py'] and new != cli\nassert new.count('\"--follow-symlinks/--no-follow-symlinks\"')==2\nassert new.count('follow_symlinks=follow_symlinks')==2\nprint(patch)\n``` ",
+      "assistant_token_ids": [],
+      "code_blocks": [
+        "new=cli\noption='''@click.option(\n    \"--follow-symlinks/--no-follow-symlinks\",\n    default=False,\n    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n)\n'''\nfor signature in [\n'def set_value(ctx: click.Context, key: Any, value: Any) -> None:',\n'def unset(ctx: click.Context, key: Any) -> None:']:\n assert new.count(signature)==1\nnew=new.replace('@click.argument(\"value\", required=True)\\ndef set_value', '@click.argument(\"value\", required=True)\\n'+option+'def set_value')\nnew=new.replace('@click.argument(\"key\", required=True)\\ndef unset', '@click.argument(\"key\", required=True)\\n'+option+'def unset')\nnew=new.replace('def set_value(ctx: click.Context, key: Any, value: Any) -> None:', '''def set_value(\n    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool\n) -> None:''')\nnew=new.replace('def unset(ctx: click.Context, key: Any) -> None:', 'def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:')\nold_help='''    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n    potentially untrusted path.'''\nnew_help='''    By default, this doesn't follow symlinks, to avoid accidentally modifying\n    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n    target instead.'''\nassert new.count(old_help)==2\nnew=new.replace(old_help,new_help)\nnew=new.replace('success, key, value = set_key(file, key, value, quote, export)', '''success, key, value = set_key(\n        file, key, value, quote, export, follow_symlinks=follow_symlinks\n    )''')\nnew=new.replace('success, key = unset_key(file, key, quote)', 'success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)')\nimport ast,difflib\nast.parse(new)\npatch=''.join(difflib.unified_diff(cli.splitlines(keepends=True),new.splitlines(keepends=True),fromfile='a/src/dotenv/cli.py',tofile='b/src/dotenv/cli.py'))\nassert cli == files['src/dotenv/cli.py'] and new != cli\nassert new.count('\"--follow-symlinks/--no-follow-symlinks\"')==2\nassert new.count('follow_symlinks=follow_symlinks')==2\nprint(patch)"
+      ],
+      "stdout_raw_chars": 2183,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "--- a/src/dotenv/cli.py\n+++ b/src/dotenv/cli.py\n@@ -113,18 +113,28 @@\n @click.pass_context\n @click.argument(\"key\", required=True)\n @click.argument(\"value\", required=True)\n-def set_value(ctx: click.Context, key: Any, value: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def set_value(\n+    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool\n+) -> None:\n     \"\"\"\n     Store the given key/value.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n \n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n     export = ctx.obj[\"EXPORT\"]\n-    success, key, value = set_key(file, key, value, quote, export)\n+    success, key, value = set_key(\n+        file, key, value, quote, export, follow_symlinks=follow_symlinks\n+    )\n     if success:\n         click.echo(f\"{key}={value}\")\n     else:\n@@ -150,16 +160,22 @@\n @cli.command()\n @click.pass_context\n @click.argument(\"key\", required=True)\n-def unset(ctx: click.Context, key: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:\n     \"\"\"\n     Removes the given key.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n-    success, key = unset_key(file, key, quote)\n+    success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)\n     if success:\n         click.echo(f\"Successfully removed {key}\")\n     else:\n\n",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    },
+    {
+      "assistant_text": "FINAL_VAR(patch)",
+      "assistant_token_ids": [],
+      "code_blocks": [],
+      "stdout_raw_chars": 0,
+      "stderr_raw_chars": 0,
+      "stdout_truncated": "",
+      "error": null,
+      "finish_error": null,
+      "ignored_after_finish": "",
+      "subcalls": []
+    }
+  ],
+  "final": {
+    "type": "FINAL_VAR",
+    "value": "--- a/src/dotenv/cli.py\n+++ b/src/dotenv/cli.py\n@@ -113,18 +113,28 @@\n @click.pass_context\n @click.argument(\"key\", required=True)\n @click.argument(\"value\", required=True)\n-def set_value(ctx: click.Context, key: Any, value: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def set_value(\n+    ctx: click.Context, key: Any, value: Any, follow_symlinks: bool\n+) -> None:\n     \"\"\"\n     Store the given key/value.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n \n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n     export = ctx.obj[\"EXPORT\"]\n-    success, key, value = set_key(file, key, value, quote, export)\n+    success, key, value = set_key(\n+        file, key, value, quote, export, follow_symlinks=follow_symlinks\n+    )\n     if success:\n         click.echo(f\"{key}={value}\")\n     else:\n@@ -150,16 +160,22 @@\n @cli.command()\n @click.pass_context\n @click.argument(\"key\", required=True)\n-def unset(ctx: click.Context, key: Any) -> None:\n+@click.option(\n+    \"--follow-symlinks/--no-follow-symlinks\",\n+    default=False,\n+    help=\"Follow symlinks when modifying the .env file. Disabled by default.\",\n+)\n+def unset(ctx: click.Context, key: Any, follow_symlinks: bool) -> None:\n     \"\"\"\n     Removes the given key.\n \n-    This doesn't follow symlinks, to avoid accidentally modifying a file at a\n-    potentially untrusted path.\n+    By default, this doesn't follow symlinks, to avoid accidentally modifying\n+    a file at a potentially untrusted path. Use --follow-symlinks to modify the\n+    target instead.\n     \"\"\"\n     file = ctx.obj[\"FILE\"]\n     quote = ctx.obj[\"QUOTE\"]\n-    success, key = unset_key(file, key, quote)\n+    success, key = unset_key(file, key, quote, follow_symlinks=follow_symlinks)\n     if success:\n         click.echo(f\"Successfully removed {key}\")\n     else:\n",
+    "error": null
+  },
+  "budget_hits": {
+    "max_turns": false,
+    "max_subcalls": false,
+    "max_subcall_chars": false,
+    "wall_time": false,
+    "memory": false,
+    "cpu_time": false,
+    "max_depth": false
+  },
+  "timings": {
+    "episode_s": 87.14145908299542
+  }
+}

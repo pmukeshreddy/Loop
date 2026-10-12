@@ -1,0 +1,136 @@
+--- /dev/null
++++ b/tests/test_info_context_defaults.py
+@@ -0,0 +1,133 @@
++import pytest
++
++import click
++from click.core import UNSET
++
++
++@pytest.mark.parametrize("kind", [click.Option, click.Argument])
++@pytest.mark.parametrize("mapped, expected", [(None, None), ("007", "007"), (UNSET, 12)])
++def test_info_context_defaults(kind, mapped, expected):
++    decl = ["--value"] if kind is click.Option else ["value"]
++    param = kind(decl, type=int, default=12)
++    command = click.Command("cmd", params=[param], add_help_option=False)
++    default_map = {"value": mapped}
++    ctx = click.Context(command, default_map=default_map)
++    standalone = param.to_info_dict()
++
++    info = command.to_info_dict(ctx)["params"][0]
++    assert info == {**standalone, "default": expected}
++    assert ctx.to_info_dict()["command"]["params"][0] == info
++    assert param.to_info_dict() == standalone
++    assert param.default == 12
++    assert default_map["value"] is mapped
++
++
++@pytest.mark.parametrize("kind", [click.Option, click.Argument])
++@pytest.mark.parametrize("in_map", [False, True])
++def test_info_factories_remain_lazy(kind, in_map):
++    def factory():
++        raise AssertionError("introspection executed a factory")
++
++    decl = ["--value"] if kind is click.Option else ["value"]
++    declared = 12 if in_map else factory
++    param = kind(decl, type=int, default=declared)
++    command = click.Command("cmd", params=[param], add_help_option=False)
++    default_map = {"value": factory} if in_map else {}
++    ctx = click.Context(command, default_map=default_map)
++
++    assert command.to_info_dict(ctx)["params"][0]["default"] is factory
++    assert ctx.to_info_dict()["command"]["params"][0]["default"] is factory
++    assert param.to_info_dict()["default"] is declared
++    assert param.default is declared
++
++
++def test_info_option_lazy_defaults():
++    def activation():
++        raise AssertionError("introspection executed a flag value")
++
++    params = [
++        click.Option(["--enabled"], is_flag=True),
++        click.Option(["--disabled"], is_flag=True),
++        click.Option(["--mode"], flag_value=activation, default=False),
++        click.Option(["--many"], flag_value="x", multiple=True),
++        click.Option(["--count"], count=True),
++        click.Option(["--missing"]),
++        click.Argument(["absent"], required=False),
++    ]
++    command = click.Command("cmd", params=params, add_help_option=False)
++    ctx = click.Context(command, default_map={"disabled": None, "mode": True})
++    before = [param.to_info_dict() for param in params]
++
++    actual = [item["default"] for item in command.to_info_dict(ctx)["params"]]
++    assert actual == [False, None, activation, (), 0, None, None]
++    assert [param.to_info_dict() for param in params] == before
++    assert before[1]["default"] is False
++    assert before[2]["default"] is False
++
++
++def test_info_nested_context_defaults():
++    def factory():
++        raise AssertionError("nested introspection executed a factory")
++
++    def option(default):
++        return click.Option(["--value"], default=default)
++
++    leaf = click.Command(
++        "leaf",
++        params=[
++            option(3),
++            click.Argument(["target"], default="declared"),
++            click.Option(["--dynamic"], default="declared"),
++        ],
++        add_help_option=False,
++    )
++    branch = click.Group(
++        "branch", params=[option(2)], commands=[leaf], add_help_option=False
++    )
++    sibling = click.Command("sibling", params=[option(4)], add_help_option=False)
++    root = click.Group(
++        "root", params=[option(1)], commands=[branch, sibling], add_help_option=False
++    )
++    ctx = click.Context(
++        root,
++        default_map={
++            "value": 10,
++            "branch": {
++                "value": 20,
++                "leaf": {"value": 30, "target": None, "dynamic": factory},
++            },
++        },
++    )
++
++    info = ctx.to_info_dict()["command"]
++    assert info["params"][0]["default"] == 10
++    branch_info = info["commands"]["branch"]
++    assert branch_info["params"][0]["default"] == 20
++    leaf_info = branch_info["commands"]["leaf"]
++    assert [p["default"] for p in leaf_info["params"]] == [30, None, factory]
++    assert info["commands"]["sibling"]["params"][0]["default"] == 4
++    assert root.params[0].to_info_dict()["default"] == 1
++    assert branch.params[0].to_info_dict()["default"] == 2
++    assert leaf.params[0].to_info_dict()["default"] == 3
++    assert leaf.params[1].to_info_dict()["default"] == "declared"
++    assert leaf.params[2].to_info_dict()["default"] == "declared"
++
++
++def test_info_uses_parameter_default_override():
++    class ContextOption(click.Option):
++        def get_default(self, ctx, call=True):
++            assert call is False
++            return ctx.info_name
++
++        def to_info_dict(self):
++            info = super().to_info_dict()
++            info["custom"] = "retained"
++            return info
++
++    param = ContextOption(["--value"], default="declared")
++    command = click.Command("cmd", params=[param], add_help_option=False)
++    ctx = click.Context(command, info_name="documentation")
++    info = command.to_info_dict(ctx)["params"][0]
++    assert info["default"] == "documentation"
++    assert info["custom"] == "retained"
++    assert param.to_info_dict()["default"] == "declared"

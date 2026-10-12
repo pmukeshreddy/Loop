@@ -1,0 +1,20 @@
+--- a/src/wtforms/fields/choices.py
++++ b/src/wtforms/fields/choices.py
+@@ -122,7 +122,7 @@
+             _choices = zip(choices, choices, strict=False)
+ 
+         for value, label, *other_args in _choices:
+-            selected = self.coerce(value) == self.data
++            selected = bool(self.raw_data) and self.coerce(value) == self.data
+             render_kw = other_args[0] if len(other_args) else {}
+             yield (value, label, selected, render_kw)
+ 
+@@ -191,7 +191,7 @@
+             _choices = zip(choices, choices, strict=False)
+ 
+         for value, label, *other_args in _choices:
+-            selected = self.data is not None and self.coerce(value) in self.data
++            selected = bool(self.raw_data) and self.data is not None and self.coerce(value) in self.data
+             render_kw = other_args[0] if len(other_args) else {}
+             yield (value, label, selected, render_kw)
+ 

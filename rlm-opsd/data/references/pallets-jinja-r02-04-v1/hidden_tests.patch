@@ -1,0 +1,140 @@
+--- /dev/null
++++ b/tests/test_parent_selection_rejection.py
+@@ -0,0 +1,136 @@
++import pytest
++
++from jinja2 import DictLoader
++from jinja2 import Environment
++from jinja2 import Template
++from jinja2 import TemplateNotFound
++from jinja2 import TemplatesNotFound
++from jinja2 import UndefinedError
++
++
++class RecordingLoader(DictLoader):
++    def __init__(self):
++        super().__init__({"scope/good": "{{ token }}"})
++        self.lookups = []
++
++    def get_source(self, environment, template):
++        self.lookups.append(template)
++        if template == "scope/undefined":
++            raise UndefinedError("loader cannot resolve this candidate")
++        return super().get_source(environment, template)
++
++
++class RelativeEnvironment(Environment):
++    def __init__(self):
++        super().__init__(loader=RecordingLoader(), cache_size=0)
++        self.joins = []
++        self.errors = {
++            "rejected": TemplateNotFound("internal/rejected"),
++            "rejected2": TemplateNotFound("internal/rejected2"),
++        }
++
++    def join_path(self, template, parent):
++        self.joins.append((template, parent))
++        if template in self.errors:
++            raise self.errors[template]
++        return f"{parent}/{template}"
++
++
++@pytest.fixture(params=["select_template", "get_or_select_template"])
++def selection_api(request):
++    return request.param
++
++
++def test_rejection_falls_back_and_success_stops(selection_api):
++    env = RelativeEnvironment()
++    names = ["rejected", "missing", "good", "unused"]
++    result = getattr(env, selection_api)(names, "scope", {"token": "selected"})
++    assert result.name == "scope/good"
++    assert result.render() == "selected"
++    assert names == ["rejected", "missing", "good", "unused"]
++    assert env.joins == [(n, "scope") for n in names[:3]]
++    assert env.loader.lookups == ["scope/missing", "scope/good"]
++
++
++@pytest.mark.parametrize(
++    ("names", "lookups"),
++    [
++        (["rejected", "rejected2"], []),
++        (["rejected", "missing", "rejected2"], ["scope/missing"]),
++        (["missing", "rejected"], ["scope/missing"]),
++        (["missing", "missing2"], ["scope/missing", "scope/missing2"]),
++    ],
++)
++def test_exhausted_lists_report_original_candidates(selection_api, names, lookups):
++    env = RelativeEnvironment()
++    originals = list(names)
++    with pytest.raises(TemplatesNotFound) as caught:
++        getattr(env, selection_api)(names, "scope")
++    assert caught.value.templates == originals
++    assert caught.value.name == originals[-1]
++    assert str(caught.value) == str(TemplatesNotFound(originals))
++    assert names == originals
++    assert env.joins == [(n, "scope") for n in originals]
++    assert env.loader.lookups == lookups
++
++
++@pytest.mark.parametrize("error_type", [UndefinedError, ValueError, TypeError])
++def test_non_missing_join_errors_abort(selection_api, error_type):
++    env = RelativeEnvironment()
++    error = error_type("joining failed")
++    env.errors["bad"] = error
++    with pytest.raises(error_type) as caught:
++        getattr(env, selection_api)(["rejected", "bad", "good"], "scope")
++    assert caught.value is error
++    assert env.joins == [("rejected", "scope"), ("bad", "scope")]
++    assert env.loader.lookups == []
++
++
++@pytest.mark.parametrize("prefix", [[], ["rejected"]])
++def test_template_passthrough_never_joins(selection_api, prefix):
++    env = RelativeEnvironment()
++    template = Template("passthrough")
++    result = getattr(env, selection_api)(prefix + [template, "good"], "scope")
++    assert result is template
++    assert env.joins == [(n, "scope") for n in prefix]
++    assert env.loader.lookups == []
++
++
++@pytest.mark.parametrize("error_type", [TemplateNotFound, UndefinedError, ValueError])
++def test_get_template_propagates_join_failure(error_type):
++    env = RelativeEnvironment()
++    error = error_type("single lookup rejected")
++    env.errors["bad"] = error
++    with pytest.raises(error_type) as caught:
++        env.get_template("bad", "scope")
++    assert caught.value is error
++    assert env.joins == [("bad", "scope")]
++    assert env.loader.lookups == []
++
++
++def test_loader_undefined_remains_a_candidate_miss(selection_api):
++    env = RelativeEnvironment()
++    names = ["rejected", "undefined", "missing", "good"]
++    result = getattr(env, selection_api)(names, "scope")
++    assert result.name == "scope/good"
++    assert env.joins == [(n, "scope") for n in names]
++    assert env.loader.lookups == ["scope/undefined", "scope/missing", "scope/good"]
++
++
++def test_loader_undefined_exhaustion_uses_original_names(selection_api):
++    env = RelativeEnvironment()
++    names = ["rejected", "undefined", "missing"]
++    with pytest.raises(TemplatesNotFound) as caught:
++        getattr(env, selection_api)(names, "scope")
++    assert caught.value.templates == names
++    assert caught.value.name == "missing"
++    assert str(caught.value) == str(TemplatesNotFound(names))
++    assert env.loader.lookups == ["scope/undefined", "scope/missing"]
++
++
++def test_empty_list_diagnostic_is_unchanged(selection_api):
++    env = RelativeEnvironment()
++    with pytest.raises(TemplatesNotFound) as caught:
++        getattr(env, selection_api)([], "scope")
++    assert str(caught.value) == "Tried to select from an empty list of templates."
++    assert env.joins == []
++    assert env.loader.lookups == []

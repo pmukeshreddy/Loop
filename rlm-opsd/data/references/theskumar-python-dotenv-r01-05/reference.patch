@@ -1,0 +1,69 @@
+--- a/src/dotenv/variables.py
++++ b/src/dotenv/variables.py
+@@ -6,8 +6,9 @@
+     r"""
+     \$\{
+         (?P<name>[^\}:]*)
+-        (?::-
+-            (?P<default>[^\}]*)
++        (?:
++            :- (?P<default>[^\}]*)
++            | :\+ (?P<alternate>[^\{\}]*)
+         )?
+     \}
+     """,
+@@ -46,23 +47,38 @@
+ 
+ 
+ class Variable(Atom):
+-    def __init__(self, name: str, default: Optional[str]) -> None:
++    def __init__(
++        self, name: str, default: Optional[str], *, operator: Optional[str] = None
++    ) -> None:
+         self.name = name
+         self.default = default
++        self.operator = operator if operator is not None else (
++            ":-" if default is not None else None
++        )
+ 
+     def __repr__(self) -> str:
++        if self.operator == ":+":
++            return (
++                f"Variable(name={self.name}, default={self.default}, "
++                f"operator={self.operator})"
++            )
+         return f"Variable(name={self.name}, default={self.default})"
+ 
+     def __eq__(self, other: object) -> bool:
+         if not isinstance(other, self.__class__):
+             return NotImplemented
+-        return (self.name, self.default) == (other.name, other.default)
++        return (self.name, self.operator, self.default) == (
++            other.name, other.operator, other.default
++        )
+ 
+     def __hash__(self) -> int:
+-        return hash((self.__class__, self.name, self.default))
++        return hash((self.__class__, self.name, self.operator, self.default))
+ 
+     def resolve(self, env: Mapping[str, Optional[str]]) -> str:
+         default = self.default if self.default is not None else ""
++        if self.operator == ":+":
++            value = env.get(self.name)
++            return default if value is not None and value != "" else ""
+         result = env.get(self.name, default)
+         return result if result is not None else ""
+ 
+@@ -78,7 +94,11 @@
+         if start > cursor:
+             yield Literal(value=value[cursor:start])
+ 
+-        yield Variable(name=name, default=default)
++        alternate = match["alternate"]
++        if alternate is not None:
++            yield Variable(name=name, default=alternate, operator=":+")
++        else:
++            yield Variable(name=name, default=default)
+         cursor = end
+ 
+     length = len(value)

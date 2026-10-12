@@ -1,0 +1,168 @@
+{
+ "answer": "--- a/src/jinja2/bccache.py\n+++ b/src/jinja2/bccache.py\n@@ -69,8 +69,13 @@\n         if magic != bc_magic:\n             self.reset()\n             return\n+        # A truncated checksum record is a cache miss.\n+        try:\n+            checksum = pickle.load(f)\n+        except (EOFError, pickle.UnpicklingError):\n+            self.reset()\n+            return\n         # the source code of the file changed, we need to reload\n-        checksum = pickle.load(f)\n         if self.checksum != checksum:\n             self.reset()\n             return\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 1.0,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 8,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "text"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "direct_solve"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "direct_solve": {
+    "established": true,
+    "evidence": "context 14091 chars; 0 sub-calls"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "direct_solve": "The reference execution used the focused 14,091-character bytecode-cache context without sub-calls. The solution required reasoning about checksum deserialization exceptions, resetting previously held code, and preserving propagation of genuine I/O failures. This is suitable for direct solving despite the small patch."
+  },
+  "notes": "The request is a natural, repository-dependent robustness fix with precise observable requirements and a clear production-only unified-diff format. Naming the affected public entry points establishes the required behavior without revealing the exception-handling fix. The verified patch narrowly handles truncated checksum deserialization while leaving I/O errors and existing cache-validation paths intact. The task is substantively different from its parent and the accepted tasks."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "direct_solve": "The focused context contains only the bytecode-cache module, under 16,000 characters. The task requires reasoning about deserialization exception boundaries, clearing previously loaded code, and how filesystem cache loading delegates to buckets. Broad repository searches or delegated investigations are unnecessary."
+  },
+  "context": {
+   "files": [
+    "src/jinja2/bccache.py"
+   ],
+   "scope": "files"
+  },
+  "evidence": [
+   {
+    "path": "src/jinja2/bccache.py",
+    "symbol": "src/jinja2/bccache.py::Bucket.load_bytecode",
+    "why": "Checksum unpickling currently occurs outside corruption recovery, unlike invalid-header handling and marshal decoding."
+   },
+   {
+    "path": "src/jinja2/bccache.py",
+    "symbol": "src/jinja2/bccache.py::Bucket.bytecode_from_string",
+    "why": "The bytes entry point delegates to the same stream decoder, so recovery must clear populated buckets here as well."
+   },
+   {
+    "path": "src/jinja2/bccache.py",
+    "symbol": "src/jinja2/bccache.py::FileSystemBytecodeCache.load_bytecode",
+    "why": "An opened filesystem entry is decoded by the bucket; this method does not independently handle checksum truncation."
+   },
+   {
+    "path": "src/jinja2/bccache.py",
+    "symbol": "src/jinja2/bccache.py::BytecodeCache.get_bucket",
+    "why": "A recovered bucket exposes code=None to template loading, allowing the normal compilation and cache-write path."
+   }
+  ],
+  "expected_answer": "--- a/src/jinja2/bccache.py\n+++ b/src/jinja2/bccache.py\n@@ -76,7 +76,11 @@\n             self.reset()\n             return\n         # the source code of the file changed, we need to reload\n-        checksum = pickle.load(f)\n+        try:\n+            checksum = pickle.load(f)\n+        except (EOFError, pickle.UnpicklingError):\n+            self.reset()\n+            return\n         if self.checksum != checksum:\n             self.reset()\n             return\n",
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_bytecode_checksum_recovery.py\n@@ -0,0 +1,98 @@\n+import pickle\n+from io import BytesIO\n+\n+import pytest\n+\n+from jinja2 import DictLoader\n+from jinja2 import Environment\n+from jinja2 import FileSystemBytecodeCache\n+from jinja2.bccache import bc_magic\n+from jinja2.bccache import Bucket\n+\n+\n+CHECKSUM = \"a\" * 40\n+PREFIXES = [0, 1, 2, 3, 7, -1]\n+\n+\n+@pytest.mark.parametrize(\"cut\", PREFIXES)\n+def test_truncated_checksum_from_string_clears_code(cut):\n+    bucket = Bucket(Environment(), \"key\", CHECKSUM)\n+    bucket.code = compile(\"value = 1\", \"cached\", \"exec\")\n+    payload = bc_magic + pickle.dumps(CHECKSUM, 2)[:cut]\n+\n+    bucket.bytecode_from_string(payload)\n+\n+    assert bucket.code is None\n+\n+\n+@pytest.mark.parametrize(\"cut\", PREFIXES)\n+def test_truncated_checksum_from_filesystem_clears_code(tmp_path, cut):\n+    cache = FileSystemBytecodeCache(str(tmp_path), \"%s.cache\")\n+    bucket = Bucket(Environment(), \"key\", CHECKSUM)\n+    bucket.code = compile(\"value = 1\", \"cached\", \"exec\")\n+    path = tmp_path / (cache.pattern % bucket.key)\n+    path.write_bytes(bc_magic + pickle.dumps(CHECKSUM, 2)[:cut])\n+\n+    cache.load_bytecode(bucket)\n+\n+    assert bucket.code is None\n+\n+\n+@pytest.mark.parametrize(\"cut\", PREFIXES)\n+def test_template_loading_replaces_truncated_checksum(tmp_path, monkeypatch, cut):\n+    source = \"Hello {{ name }}!\"\n+    cache = FileSystemBytecodeCache(str(tmp_path), \"%s.cache\")\n+    env = Environment(loader=DictLoader({\"page\": source}), bytecode_cache=cache, cache_size=0)\n+    key = cache.get_cache_key(\"page\", None)\n+    checksum = cache.get_source_checksum(source)\n+    path = tmp_path / (cache.pattern % key)\n+    path.write_bytes(bc_magic + pickle.dumps(checksum, 2)[:cut])\n+    calls = []\n+    original_compile = env.compile\n+\n+    def record_compile(*args, **kwargs):\n+        calls.append(args)\n+        return original_compile(*args, **kwargs)\n+\n+    monkeypatch.setattr(env, \"compile\", record_compile)\n+    assert env.get_template(\"page\").render(name=\"Ada\") == \"Hello Ada!\"\n+    assert env.get_template(\"page\").render(name=\"Grace\") == \"Hello Grace!\"\n+    assert len(calls) == 1\n+\n+\n+@pytest.mark.parametrize(\"stage\", [\"header\", \"checksum\", \"code\"])\n+def test_stream_io_errors_propagate(stage):\n+    error = OSError(\"cache stream read failed\")\n+    data = bc_magic + pickle.dumps(CHECKSUM, 2)\n+    offsets = {\"header\": 0, \"checksum\": len(bc_magic), \"code\": len(data)}\n+    failure_at = offsets[stage]\n+\n+    class BrokenStream(BytesIO):\n+        def read(self, size=-1):\n+            if self.tell() >= failure_at:\n+                raise error\n+            return super().read(size)\n+\n+        def readline(self, size=-1):\n+            if self.tell() >= failure_at:\n+                raise error\n+            return super().readline(size)\n+\n+    bucket = Bucket(Environment(), \"key\", CHECKSUM)\n+    bucket.code = compile(\"value = 1\", \"cached\", \"exec\")\n+    with pytest.raises(OSError) as exc_info:\n+        bucket.load_bytecode(BrokenStream(data))\n+\n+    assert exc_info.value is error\n+\n+\n+def test_valid_bytecode_still_round_trips():\n+    bucket = Bucket(Environment(), \"key\", CHECKSUM)\n+    code = compile(\"value = 42\", \"cached\", \"exec\")\n+    bucket.code = code\n+    data = bucket.bytecode_to_string()\n+    bucket.reset()\n+    bucket.bytecode_from_string(data)\n+    assert isinstance(bucket.code, type(code))\n+    assert bucket.code.co_code == code.co_code\n+    assert bucket.code.co_consts == code.co_consts\n",
+  "include_failure_log": false,
+  "notes": "The checksum recovery gap already exists in the pinned source, so this task uses new hidden acceptance tests rather than injecting an additional regression. The new test file covers multiple protocol-2 checksum truncation boundaries, populated buckets through both entry points, recompilation and reuse of a replacement filesystem entry, and propagation of stream OSError at header, checksum, and marshal-reading boundaries. No original lookup-impact patch is reused.",
+  "primary_behavior": "direct_solve",
+  "probe_patch": null,
+  "question": "Make bytecode-cache loading recover from a truncated checksum record. A record with a valid `bc_magic` header that ends before its checksum pickle is complete must be treated as a cache miss, including clearing any code already held by the receiving `Bucket`. This must work through both `Bucket.bytecode_from_string` and `FileSystemBytecodeCache.load_bytecode`. When `Environment.get_template` encounters such a filesystem cache entry, it must compile the loader's source, render normally, and leave a usable replacement cache entry. Genuine stream I/O errors, including `OSError` during checksum reading, must still propagate. Preserve valid-cache loading and the existing recovery behavior for invalid headers, checksum mismatches, and marshal decoding failures. Return a unified diff against production files only; leave tests unchanged.",
+  "rlm_behaviors": [
+   "direct_solve"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": {
+  "behavior_shift": "Shifts from repository-wide impact enumeration to focused failure-boundary analysis in Bucket.load_bytecode, followed by dependency tracing through FileSystemBytecodeCache.load_bytecode and Environment.get_template. Direct reading and targeted fault-injection tests are more useful than broad recursive test-suite decomposition.",
+  "change_type": "failure_condition",
+  "description": "Repair recovery from truncated bytecode-cache checksum records. In src/jinja2/bccache.py, Bucket.load_bytecode already resets on a bad magic header and selected marshal decoding failures, but pickle.load(f) for the checksum is outside that recovery handling. Require a valid bc_magic followed by an incomplete checksum pickle to be treated as a cache miss, clearing any previously populated Bucket.code. Add tests in tests/test_bytecode_cache.py covering Bucket.bytecode_from_string and FileSystemBytecodeCache.load_bytecode, plus an Environment.get_template integration test that recompiles and renders after encountering such a cache file. Continue propagating genuine stream I/O errors.",
+  "expected_answer_change": "The answer is a narrowly scoped corruption-recovery patch around checksum deserialization and regression tests. Verification must establish that an incomplete checksum resets the bucket, template loading recompiles successfully, and an OSError raised by the input stream is not silently converted into a cache miss.",
+  "why_substantive": "This changes the failure being investigated from missing item-to-attribute fallback to malformed persisted cache data during template loading. It requires tracing bytecode decoding and cache-miss recovery, with different production functions, fixtures, and acceptance tests. None of the listed repository tasks repairs checksum-record truncation."
+ },
+ "task_id": "pallets-jinja-r02-02-v2",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[7]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[7]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[7]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 18,
+   "full_suite": {
+    "failed": 0,
+    "passed": 931
+   },
+   "patch_files": [
+    "src/jinja2/bccache.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_template_loading_replaces_truncated_checksum[7]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_filesystem_clears_code[7]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[-1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[0]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[1]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[2]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[3]",
+   "tests/test_bytecode_checksum_recovery.py::test_truncated_checksum_from_string_clears_code[7]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 909,
+  "stability_runs": 3
+ }
+}

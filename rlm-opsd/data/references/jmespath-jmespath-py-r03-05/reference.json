@@ -1,0 +1,168 @@
+{
+ "answer": "--- a/jmespath/functions.py\n+++ b/jmespath/functions.py\n@@ -245,6 +245,31 @@\n     def _func_join(self, separator, array):\n         return separator.join(array)\n \n+    @signature({'types': ['array']}, {'types': ['expref']})\n+    def _func_filter_by(self, array, expref):\n+        result = []\n+        for element in array:\n+            predicate = expref.visit(expref.expression, element)\n+            if expref.interpreter._is_true(predicate):\n+                result.append(element)\n+        return result\n+\n+    @signature({'types': ['array']}, {'types': ['expref']})\n+    def _func_any_by(self, array, expref):\n+        for element in array:\n+            predicate = expref.visit(expref.expression, element)\n+            if expref.interpreter._is_true(predicate):\n+                return True\n+        return False\n+\n+    @signature({'types': ['array']}, {'types': ['expref']})\n+    def _func_all_by(self, array, expref):\n+        for element in array:\n+            predicate = expref.visit(expref.expression, element)\n+            if not expref.interpreter._is_true(predicate):\n+                return False\n+        return True\n+\n     @signature({'types': ['expref']}, {'types': ['array']})\n     def _func_map(self, expref, arg):\n         result = []\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.003468253655460529,
+  "facts": {
+   "code_blocks": 4,
+   "context_searches": 13,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "f",
+    "files",
+    "fpath",
+    "v"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 5,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": "recursive_decomposition",
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 253730 chars; 13 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "5 turns; variables reused across turns: ['f', 'files', 'fpath', 'v']; hand-copied literals 0"
+   },
+   "recursive_decomposition": {
+    "established": false,
+    "evidence": "0 sub-calls (0 failed); results stored at 0 sites; sub-call results reach the final answer: False"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final production-only diff combines all three built-ins using the existing registration and interpreter mechanisms, while leaving map and projection implementations unchanged. The supplied verification tests cover truthiness, null retention, identity preservation, empty inputs, short-circuiting, custom dispatch, and signature errors.",
+   "inspect_locate": "The implementation requires connecting signature-based registration, expression-reference evaluation, interpreter truth rules, and inherited custom-function dispatch. The reference execution used 13 targeted searches without printing the whole context.",
+   "persistent_state": "Findings about signatures, expression references, and truth semantics were reused across the three related functions, with variables retained across the five execution turns."
+  },
+  "notes": "This is a natural, repository-dependent feature request with precise semantics and a clear unified-diff deliverable. The three functions form one coherent feature rather than unrelated checks. It neither exposes an implementation nor duplicates the existing null-elision or projection-policy tasks. Recursive decomposition was not demonstrated, but it is also absent from the established behaviors."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The combined production diff must cover all three functions without changing existing map or projection semantics.",
+   "inspect_locate": "The implementation must connect decorated function registration, deferred expression references, interpreter options, and the repository's non-Python truth-value rules.",
+   "persistent_state": "The signature, truth-value, null-retention, and evaluation-order findings are reused across all three implementations and their registration integration.",
+   "recursive_decomposition": "The three functions have independent collection, existential, and universal contracts. Their empty-input and stopping behavior must be investigated separately and then reconciled with one consistent predicate-evaluation policy."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::Functions._func_map",
+    "why": "Provides the existing deferred expression-reference evaluation pattern."
+   },
+   {
+    "path": "jmespath/functions.py",
+    "symbol": "jmespath/functions.py::FunctionRegistry._populate_function_table",
+    "why": "New decorated methods must be registered and inherited by custom providers."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::TreeInterpreter._is_false",
+    "why": "Defines predicate truth semantics, which cannot be replaced with Python bool conversion."
+   },
+   {
+    "path": "jmespath/visitor.py",
+    "symbol": "jmespath/visitor.py::_Expression",
+    "why": "Retains the current interpreter so predicate calls preserve custom-function options."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_predicate_array_functions.py\n@@ -0,0 +1,60 @@\n+import pytest\n+import jmespath\n+from jmespath import exceptions\n+from jmespath import functions\n+\n+\n+def test_jmespath_truthiness_for_predicates():\n+    values = [None, False, 0, \"\", [], {}, 1, \"x\", [0], {\"x\": 0}]\n+    assert jmespath.search(\"filter_by(@, &@)\", values) == [0, 1, \"x\", [0], {\"x\": 0}]\n+    assert jmespath.search(\"any_by(@, &@)\", [0]) is True\n+    assert jmespath.search(\"all_by(@, &@)\", [0, 1]) is True\n+    assert jmespath.search(\"any_by(@, &@)\", [None, False, \"\", [], {}]) is False\n+    assert jmespath.search(\"all_by(@, &@)\", [0, False]) is False\n+\n+\n+def test_empty_and_null_retention():\n+    for expression, expected in [(\"filter_by(@, &unknown())\", []), (\"any_by(@, &unknown())\", False), (\"all_by(@, &unknown())\", True)]:\n+        assert jmespath.search(expression, []) == expected\n+    data = [None, {\"a\": 1}]\n+    result = jmespath.search(\"filter_by(@, &`true`)\", data)\n+    assert result == data\n+    assert result is not data\n+    assert result[1] is data[1]\n+\n+\n+class Recorder(functions.Functions):\n+    def __init__(self):\n+        self.seen = []\n+\n+    @functions.signature({\"types\": []})\n+    def _func_probe(self, arg):\n+        self.seen.append(arg)\n+        return arg\n+\n+\n+@pytest.mark.parametrize(\"expression, expected, seen\", [\n+    (\"any_by(@, &probe(@))\", True, [0]),\n+    (\"all_by(@, &probe(@))\", False, [0, False]),\n+    (\"filter_by(@, &probe(@))\", [0, \"x\"], [0, False, \"x\"]),\n+])\n+def test_short_circuit_and_custom_dispatch(expression, expected, seen):\n+    recorder = Recorder()\n+    options = jmespath.Options(custom_functions=recorder)\n+    assert jmespath.compile(expression).search([0, False, \"x\"], options=options) == expected\n+    assert recorder.seen == seen\n+\n+\n+@pytest.mark.parametrize(\"name\", [\"filter_by\", \"any_by\", \"all_by\"])\n+def test_signatures(name):\n+    with pytest.raises(exceptions.ArityError):\n+        jmespath.search(name + \"(@)\", [])\n+    with pytest.raises(exceptions.JMESPathTypeError):\n+        jmespath.search(name + \"(@, &@)\", {})\n+    with pytest.raises(exceptions.JMESPathTypeError):\n+        jmespath.search(name + \"(@, @)\", [])\n+\n+\n+def test_unevaluated_reference_errors_are_skipped():\n+    assert jmespath.search(\"any_by(@, &(@ || unknown()))\", [1, False]) is True\n+    assert jmespath.search(\"all_by(@, &(@ && unknown()))\", [False, 1]) is False\n",
+  "include_failure_log": false,
+  "notes": "The new tests fail on the baseline because the public built-ins are absent. They verify inherited registration, compiled-search integration, null retention, JMESPath truthiness, and short-circuit effects.",
+  "primary_behavior": "recursive_decomposition",
+  "probe_patch": null,
+  "question": "Add three registered built-ins with signatures `filter_by(array, expref)`, `any_by(array, expref)`, and `all_by(array, expref)`. Each predicate expression reference is evaluated against individual array elements using the current interpreter and options, and its result is interpreted with the same JMESPath truth rules as a filter predicate, including numeric zero being true.\n\n`filter_by` must return a new list of the original elements whose predicates are true, in input order; it must not discard a selected null element or copy selected objects. `any_by` must return a boolean and stop at the first true predicate. `all_by` must return a boolean and stop at the first false predicate. On an empty array their results must respectively be `[]`, `false`, and `true`, without evaluating the expression reference. Errors from predicates that are actually evaluated must propagate, while unevaluated predicates must have no effects. Use the existing arity and argument-type exception conventions, and make the functions available with both default and subclassed custom function providers. Deliver a unified diff against production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "recursive_decomposition",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "jmespath-jmespath-py-r03-05",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_predicate_array_functions.py::test_empty_and_null_retention",
+   "tests/test_predicate_array_functions.py::test_jmespath_truthiness_for_predicates",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[all_by(@, &probe(@))-False-seen1]",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[any_by(@, &probe(@))-True-seen0]",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[filter_by(@, &probe(@))-expected2-seen2]",
+   "tests/test_predicate_array_functions.py::test_signatures[all_by]",
+   "tests/test_predicate_array_functions.py::test_signatures[any_by]",
+   "tests/test_predicate_array_functions.py::test_signatures[filter_by]",
+   "tests/test_predicate_array_functions.py::test_unevaluated_reference_errors_are_skipped"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 9,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1000
+   },
+   "patch_files": [
+    "jmespath/functions.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_predicate_array_functions.py::test_empty_and_null_retention",
+   "tests/test_predicate_array_functions.py::test_jmespath_truthiness_for_predicates",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[all_by(@, &probe(@))-False-seen1]",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[any_by(@, &probe(@))-True-seen0]",
+   "tests/test_predicate_array_functions.py::test_short_circuit_and_custom_dispatch[filter_by(@, &probe(@))-expected2-seen2]",
+   "tests/test_predicate_array_functions.py::test_signatures[all_by]",
+   "tests/test_predicate_array_functions.py::test_signatures[any_by]",
+   "tests/test_predicate_array_functions.py::test_signatures[filter_by]",
+   "tests/test_predicate_array_functions.py::test_unevaluated_reference_errors_are_skipped"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 991,
+  "stability_runs": 3
+ }
+}

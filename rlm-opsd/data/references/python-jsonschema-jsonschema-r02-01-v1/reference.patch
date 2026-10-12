@@ -1,0 +1,46 @@
+--- a/jsonschema/validators.py
++++ b/jsonschema/validators.py
+@@ -1262,7 +1262,9 @@
+         values.extendleft(value.values())
+ 
+ 
+-def validate(instance, schema, cls=None, *args, **kwargs):  # noqa: D417
++def validate(
++    instance, schema, cls=None, *args, schema_format_checker=_UNSET, **kwargs,
++):  # noqa: D417
+     """
+     Validate an instance under the given schema.
+ 
+@@ -1295,6 +1297,20 @@
+         cls (jsonschema.protocols.Validator):
+ 
+             The class that will be used to validate the instance.
++
++        format_checker (jsonschema.FormatChecker):
++
++            A format checker for instance validation, passed to the
++            validator constructor. This does not configure schema-format
++            checking.
++
++        schema_format_checker (jsonschema.FormatChecker):
++
++            A keyword-only format checker for schema validation, independent
++            of ``format_checker``. If omitted, the validator class's default
++            schema-format checking is used. If provided, it is passed to
++            ``cls.check_schema`` as ``format_checker``. Passing ``None``
++            disables only schema-format checking, not other schema validation.
+ 
+     If the ``cls`` argument is not provided, two things will happen
+     in accordance with the specification. First, if the schema has a
+@@ -1325,7 +1341,10 @@
+     if cls is None:
+         cls = validator_for(schema)
+ 
+-    cls.check_schema(schema)
++    if schema_format_checker is _UNSET:
++        cls.check_schema(schema)
++    else:
++        cls.check_schema(schema, format_checker=schema_format_checker)
+     validator = cls(schema, *args, **kwargs)
+     error = exceptions.best_match(validator.iter_errors(instance))
+     if error is not None:

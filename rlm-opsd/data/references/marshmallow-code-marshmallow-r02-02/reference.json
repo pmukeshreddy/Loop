@@ -1,0 +1,170 @@
+{
+ "answer": "--- a/src/marshmallow/fields.py\n+++ b/src/marshmallow/fields.py\n@@ -785,7 +785,7 @@\n         errors = {}\n         for idx, each in enumerate(value):\n             try:\n-                result.append(self.inner.deserialize(each, **kwargs))\n+                result.append(self.inner.deserialize(each, attr, data, **kwargs))\n             except ValidationError as error:\n                 if error.valid_data is not None:\n                     result.append(typing.cast(\"_InternalT\", error.valid_data))\n@@ -880,7 +880,7 @@\n \n         for idx, (field, each) in enumerate(zip(self.tuple_fields, value, strict=True)):\n             try:\n-                result.append(field.deserialize(each, **kwargs))\n+                result.append(field.deserialize(each, attr, data, **kwargs))\n             except ValidationError as error:\n                 if error.valid_data is not None:\n                     result.append(error.valid_data)\n@@ -1698,7 +1698,7 @@\n             keys = {}\n             for key in value:\n                 try:\n-                    keys[key] = self.key_field.deserialize(key, **kwargs)\n+                    keys[key] = self.key_field.deserialize(key, attr, data, **kwargs)\n                 except ValidationError as error:\n                     errors[key][\"key\"] = error.messages\n \n@@ -1711,7 +1711,7 @@\n         else:\n             for key, val in value.items():\n                 try:\n-                    deser_val = self.value_field.deserialize(val, **kwargs)\n+                    deser_val = self.value_field.deserialize(val, attr, data, **kwargs)\n                 except ValidationError as error:\n                     errors[key][\"value\"] = error.messages\n                     if error.valid_data is not None and key in keys:\n",
+ "answer_format": "unified_diff",
+ "answer_type": "patch",
+ "baseline": null,
+ "practice": {
+  "coverage_lower_bound": 0.0013696702705596846,
+  "facts": {
+   "code_blocks": 5,
+   "context_searches": 15,
+   "final_computed": true,
+   "final_error": null,
+   "final_variable_checked": true,
+   "finish": "FINAL_VAR",
+   "hand_copied_literals": 0,
+   "repository_execution": [],
+   "reused_variables": [
+    "classes",
+    "files",
+    "lines",
+    "methods",
+    "old",
+    "path",
+    "tree"
+   ],
+   "subcall_errors": 0,
+   "subcall_max_prompt_chars": 0,
+   "subcall_results_in_final": false,
+   "subcall_results_stored": 0,
+   "subcall_sites": 0,
+   "subcall_sites_in_loop": 0,
+   "subcall_sites_on_context": 0,
+   "subcall_sites_whole_context": 0,
+   "subcalls": 0,
+   "turns": 6,
+   "whole_context_prints": 0
+  },
+  "intended": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "relabeled_from": null,
+  "results": {
+   "combine_verify_finish": {
+    "established": true,
+    "evidence": "finish FINAL_VAR; final value computed in code: True; inspected after construction: True"
+   },
+   "inspect_locate": {
+    "established": true,
+    "evidence": "context 803113 chars; 15 code searches over context; 0 whole-context prints"
+   },
+   "persistent_state": {
+    "established": true,
+    "evidence": "6 turns; variables reused across turns: ['classes', 'files', 'lines', 'methods', 'old', 'path', 'tree']; hand-copied literals 0"
+   }
+  }
+ },
+ "review": {
+  "behavior_notes": {
+   "combine_verify_finish": "The final diff combines changes to list elements, tuple elements, dictionary keys, and dictionary values. It was computed and inspected after construction; the reference execution does not establish runtime regression testing.",
+   "inspect_locate": "The reference execution used 15 context searches to locate the container implementations and identify all four child-deserialization sites, including the Mapping implementation underlying Dict.",
+   "persistent_state": "Source-related variables were reused across turns to retain the separate container implementations and assemble a consistent patch without hand-copying literals."
+  },
+  "notes": "This is a natural, repository-dependent implementation request with a precise output format. It specifies the desired argument-propagation contract rather than revealing an exact source edit, and the recursive, schema, and direct-call requirements constrain the same coherent change. The verified patch preserves the surrounding conversion and error-handling logic. The task is distinct from the accepted List binding and schema-isolation investigation."
+ },
+ "spec": {
+  "answer_format": "unified_diff",
+  "answer_kind": "patch",
+  "behavior_rationale": {
+   "combine_verify_finish": "The patch aggregates changes to four independent child-call sites and should be checked to ensure every site forwards both arguments without altering existing keyword forwarding or error behavior.",
+   "inspect_locate": "The request names public containers, but Dict delegates to Mapping and recursive combinations require following each child-deserialization call.",
+   "persistent_state": "The solver must retain the separate List, Tuple, mapping-key, and mapping-value call sites and their exact source while assembling a consistent production patch."
+  },
+  "context": {
+   "files": [],
+   "scope": "repository"
+  },
+  "evidence": [
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::List._deserialize",
+    "why": "Currently invokes each child without the enclosing positional arguments."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Tuple._deserialize",
+    "why": "Has a separate child invocation and preserves tuple-specific validation and error handling."
+   },
+   {
+    "path": "src/marshmallow/fields.py",
+    "symbol": "src/marshmallow/fields.py::Mapping._deserialize",
+    "why": "Implements Dict's independent key and value conversion paths."
+   },
+   {
+    "path": "src/marshmallow/schema.py",
+    "symbol": "src/marshmallow/schema.py::Schema._deserialize",
+    "why": "Supplies the external field key and raw input mapping to the outer field."
+   }
+  ],
+  "expected_answer": null,
+  "hidden_tests_patch": "--- /dev/null\n+++ b/tests/test_container_enclosing_arguments.py\n@@ -0,0 +1,42 @@\n+import pytest\n+\n+from marshmallow import Schema, fields\n+\n+\n+@pytest.mark.parametrize(\"through_schema\", [False, True])\n+@pytest.mark.parametrize(\n+    \"build, payload, expected_values\",\n+    [\n+        (lambda f: fields.List(f), [\"a\", \"b\"], [\"a\", \"b\"]),\n+        (lambda f: fields.Tuple((f,)), [\"a\"], [\"a\"]),\n+        (lambda f: fields.Dict(keys=f), {\"a\": 1}, [\"a\"]),\n+        (lambda f: fields.Dict(values=f), {\"a\": \"b\"}, [\"b\"]),\n+        (lambda f: fields.List(fields.List(f)), [[\"a\"]], [\"a\"]),\n+        (lambda f: fields.Dict(values=fields.Tuple((f,))), {\"a\": [\"b\"]}, [\"b\"]),\n+    ],\n+)\n+def test_container_children_receive_enclosing_arguments(\n+    build, payload, expected_values, through_schema\n+):\n+    seen = []\n+\n+    class Observe(fields.Raw):\n+        def _deserialize(self, value, attr, data, **kwargs):\n+            seen.append((value, attr, data))\n+            return value\n+\n+    field = build(Observe())\n+    field.data_key = \"external\"\n+    record = {\"external\": payload, \"other\": \"untouched\"}\n+    if through_schema:\n+        class Record(Schema):\n+            declared = field\n+            other = fields.Raw()\n+\n+        Record().load(record)\n+    else:\n+        field.deserialize(payload, \"external\", record)\n+\n+    assert [value for value, _, _ in seen] == expected_values\n+    assert all(attr == \"external\" for _, attr, _ in seen)\n+    assert all(data is record for _, _, data in seen)\n",
+  "include_failure_log": false,
+  "notes": "The intended production change forwards attr and data through the existing public child deserialize calls. It does not substitute element indices or dictionary keys for attr and does not introduce child records.",
+  "primary_behavior": "persistent_state",
+  "probe_patch": null,
+  "question": "Custom fields inside containers need access to the same enclosing raw record as ordinary schema fields. Update `List`, `Tuple`, and `Dict` deserialization so every child field receives the container call's `attr` and `data` arguments unchanged. This applies to both dictionary keys and values and must continue through recursive combinations of these containers. A schema field with a `data_key` must therefore expose that external key and the original raw record to its container descendants; direct field calls must preserve whatever arguments the caller supplied, including `None`. Preserve conversion results, keyword forwarding, error coordinates, partial results, and serialization behavior. Deliver a unified diff changing production files only.",
+  "rlm_behaviors": [
+   "inspect_locate",
+   "persistent_state",
+   "combine_verify_finish"
+  ],
+  "setting": "implementation",
+  "setup_patch": null
+ },
+ "suggestion": null,
+ "task_id": "marshmallow-code-marshmallow-r02-02",
+ "truth": {
+  "fail_to_pass": [],
+  "hidden_tests": [
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload0-expected_values0-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload0-expected_values0-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload1-expected_values1-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload1-expected_values1-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload2-expected_values2-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload2-expected_values2-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload3-expected_values3-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload3-expected_values3-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload4-expected_values4-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload4-expected_values4-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload5-expected_values5-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload5-expected_values5-True]"
+  ],
+  "kind": "tests"
+ },
+ "verification": {
+  "attempt": 1,
+  "evidence": {
+   "fail_to_pass_passing": 12,
+   "full_suite": {
+    "failed": 0,
+    "passed": 1200
+   },
+   "patch_files": [
+    "src/marshmallow/fields.py"
+   ],
+   "stability_runs": 3
+  },
+  "fail_to_pass": [],
+  "ground_truth_symbols": [],
+  "hidden_tests": [
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload0-expected_values0-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload0-expected_values0-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload1-expected_values1-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload1-expected_values1-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload2-expected_values2-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload2-expected_values2-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload3-expected_values3-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload3-expected_values3-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload4-expected_values4-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload4-expected_values4-True]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload5-expected_values5-False]",
+   "tests/test_container_enclosing_arguments.py::test_container_children_receive_enclosing_arguments[<lambda>-payload5-expected_values5-True]"
+  ],
+  "impact_tests": [],
+  "method": "tests",
+  "pass_to_pass_count": 1186,
+  "stability_runs": 3
+ }
+}

@@ -1,0 +1,70 @@
+--- a/jsonschema/_keywords.py
++++ b/jsonschema/_keywords.py
+@@ -395,13 +395,27 @@
+     evaluated_item_indexes = find_evaluated_item_indexes_by_schema(
+         validator, instance, schema,
+     )
+-    unevaluated_items = [
+-        item for index, item in enumerate(instance)
+-        if index not in evaluated_item_indexes
+-    ]
++    unevaluated_items = []
++    errors = []
++    for index, item in enumerate(instance):
++        if index in evaluated_item_indexes:
++            continue
++        if unevaluatedItems is False:
++            unevaluated_items.append(item)
++        else:
++            item_errors = list(validator.descend(
++                item, unevaluatedItems, path=index,
++            ))
++            if item_errors:
++                unevaluated_items.append(item)
++                errors.extend(item_errors)
++
+     if unevaluated_items:
+         error = "Unevaluated items are not allowed (%s %s unexpected)"
+-        yield ValidationError(error % extras_msg(unevaluated_items))
++        yield ValidationError(
++            error % extras_msg(unevaluated_items),
++            context=errors,
++        )
+ 
+ 
+ def unevaluatedProperties(validator, unevaluatedProperties, instance, schema):
+--- a/jsonschema/_legacy_keywords.py
++++ b/jsonschema/_legacy_keywords.py
+@@ -323,13 +323,27 @@
+     evaluated_item_indexes = find_evaluated_item_indexes_by_schema(
+         validator, instance, schema,
+     )
+-    unevaluated_items = [
+-        item for index, item in enumerate(instance)
+-        if index not in evaluated_item_indexes
+-    ]
++    unevaluated_items = []
++    errors = []
++    for index, item in enumerate(instance):
++        if index in evaluated_item_indexes:
++            continue
++        if unevaluatedItems is False:
++            unevaluated_items.append(item)
++        else:
++            item_errors = list(validator.descend(
++                item, unevaluatedItems, path=index,
++            ))
++            if item_errors:
++                unevaluated_items.append(item)
++                errors.extend(item_errors)
++
+     if unevaluated_items:
+         error = "Unevaluated items are not allowed (%s %s unexpected)"
+-        yield ValidationError(error % _utils.extras_msg(unevaluated_items))
++        yield ValidationError(
++            error % _utils.extras_msg(unevaluated_items),
++            context=errors,
++        )
+ 
+ 
+ def find_evaluated_property_keys_by_schema(validator, instance, schema):
