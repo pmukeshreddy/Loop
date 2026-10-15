@@ -1,5 +1,11 @@
 # Step 4 — GRPO
 
+Implementation: [`rlm-opsd/docs/GRPO.md`](rlm-opsd/docs/GRPO.md), configured by
+[`rlm-opsd/configs/grpo.toml`](rlm-opsd/configs/grpo.toml). The current repository
+environment uses the user's October 15 +1/−1 reward convention and trains both
+root and completed child branches with the same policy. Tests and GPU execution
+of this implementation have not been run.
+
 Goal: take the 27B from step 2 and train it so the RLM actions happen in an order that makes the verifier return 1.
 
 Start only if step 1 passed and step 2 produced a 27B that already emits valid RLM turns. The tasks are the `train` split from step 3.
@@ -12,16 +18,22 @@ The environment for each rollout is one synthetic instance:
 
 1. Container at `base_commit`.
 2. `RLM.completion(context, root_prompt=instruction)` with this 27B as the backend.
-3. The submitted `answer` is turned into a patch against `base_commit`.
+3. Root submission captures the shared checkout's patch against `base_commit`.
 4. A fresh container runs the instance verifier.
 
 The REPL is the official one. The model writes ```repl``` code. That code is how it reads the repo, calls `llm_query`, and builds the patch. Do not add a second agent loop.
 
-Sub-calls (`llm_query`) during a rollout use the same 27B, or a frozen copy of it. Do not call Codex or a larger API model inside the training loop. A stronger sub-model would make the reward about that model.
+Sub-calls (`llm_query`) run child RLMs with the same policy and their own persistent
+REPL namespaces in the shared checkout. Root and completed child model tokens
+are captured for training. Do not call Codex or a larger API model inside the
+training loop.
 
 ## Reward
 
-Sparse. `1` only when the verifier passes and the trajectory submitted through `answer["ready"]`. `0` if tests fail, the run times out, the context window fills, or the step limit is hit with no submission.
+Sparse. `+1` only when all required verifier tests pass after submission; `-1`
+for a submitted failing or invalid patch. Submission supports `answer["ready"]`
+and the OPSD `FINAL` / `FINAL_VAR` protocol. Unsubmitted, timed-out, truncated,
+and infrastructure-failed trajectories are excluded from the update and baseline.
 
 Mask environment observations (REPL stdout, tool output) out of the policy-gradient loss. Train on the model's own tokens.
 
@@ -36,11 +48,14 @@ Use the Agentica GRPO++ choices that kept their SWE run stable:
 - Higher clip on the positive side, so low-probability useful actions can still be reinforced.
 - No KL penalty back to the step-2 weights.
 - No division by the reward standard deviation.
-- Length normalization by the max context, so longer wrong traces are not punished extra.
+- A constant maximum-context denominator per active native token sequence,
+  averaged globally across root/child branches, rather than actual-token normalization.
 - Leave-one-out advantage.
 - No entropy bonus.
 
-Roll out several completions per instance per step (their run used 8). Keep the group size large enough that a group is not all zeros. If a prompt is all zeros, it contributes no advantage.
+Roll out several completions per instance per step (the supplied config uses 8).
+Uniform-reward groups contribute no advantage. The native zero-advantage filter
+resamples; repeated entirely empty batches stop with an error.
 
 Evaluate on the step-3 `dev` split every few steps, with the same verifier. The Datacurve 113 are a final report only, not a tuning set.
 

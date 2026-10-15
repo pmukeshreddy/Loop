@@ -119,3 +119,19 @@ exit-check:
 
 exit-check-check:
 	"$(PYTHON)" -m rlm_opsd.eval exit-check --config "$(EXIT_CONFIG)" --check
+
+.PHONY: grpo-train grpo-check grpo-smoke grpo-prepare-images
+GRPO_CONFIG ?= configs/grpo.toml
+GRPO_MANIFEST ?= data/grpo/manifest.jsonl
+
+grpo-train:
+	"$(PYTHON)" -m rlm_opsd.grpo train --config "$(GRPO_CONFIG)" --source "$(PRIME_SOURCE)"
+
+grpo-check:
+	"$(PYTHON)" -m rlm_opsd.grpo check --config "$(GRPO_CONFIG)" --source "$(PRIME_SOURCE)"
+
+grpo-smoke:
+	"$(PYTHON)" -m rlm_opsd.grpo train --config "$(GRPO_CONFIG)" --source "$(PRIME_SOURCE)" --max-steps 1
+
+grpo-prepare-images:
+	"$(PYTHON)" -m rlm_opsd.grpo prepare-images --manifest "$(GRPO_MANIFEST)"

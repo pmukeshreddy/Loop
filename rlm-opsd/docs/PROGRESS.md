@@ -1227,3 +1227,18 @@ Dependencies and source contracts are recorded in [VERIFIED_APIS](VERIFIED_APIS.
 Before publishing to `pmukeshreddy/Loop` on `main`, reran `make test` against
 the final tree: **3 dependency/source checks and 639 tests passed**, with 35
 visible upstream warnings. [Pre-push test log](checks/qlora/pre-push-test.log).
+
+## October 15 — repository GRPO implementation
+
+Added `rlm_opsd.grpo`, `configs/grpo.toml`, and `grpo-*` Make targets. The new
+phase initializes the native Prime-RL loop from a merged OPSD checkpoint,
+executes root/child REPLs against one Docker checkout per rollout, grades a
+captured patch in a separate container, and trains original model tokens with
++1/−1 verifier reward and leave-one-out advantages. See [GRPO.md](GRPO.md).
+
+Validation in this session: Python AST parsing, TOML parsing, pinned-source
+inspection, and an independent static code review. No tests were added or run,
+per the user's instruction. Docker, adapter merging, native config imports,
+model inference, GPU training, and solve-rate comparisons were **not run**.
+This records implementation progress, not achievement of the GRPO performance gate.
+

@@ -1,0 +1,129 @@
+# Prime-RL starts a new RL run from the merged OPSD weights, with fresh optimizer
+# state. Paths below are relative to this config file. Supply your actual export
+# and a Harbor task manifest; the public 113 tasks cannot be used here.
+max_steps = 1000
+max_async_level = 1
+output_dir = "../reports/grpo-27b"
+
+[grpo]
+opsd_checkpoint = "../checkpoints/opsd-merged"
+manifest_path = "../data/grpo/manifest.jsonl"
+
+[deployment]
+type = "single_node"
+gpus_per_node = 8
+num_train_gpus = 4
+num_infer_gpus = 4
+
+[weight_broadcast]
+type = "filesystem"
+
+[ckpt]
+interval = 25
+keep_last = 2
+
+[trainer.model]
+impl = "hf"
+seq_len = 32768
+attn = "flash_attention_2"
+dp_replicate = 1
+cp = 1
+ep = 1
+
+[trainer.model.ac]
+mode = "full"
+freq = 1
+
+[trainer.model.lora]
+rank = 16
+alpha = 32.0
+dropout = 0.0
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+modules_to_save = []
+
+[trainer.optim]
+lr = 0.000001
+weight_decay = 0.0
+max_norm = 1.0
+
+[trainer.loss]
+type = "custom"
+import_path = "rlm_opsd.grpo.objective.clipped_policy_loss"
+
+[trainer.loss.kwargs]
+clip_low = 0.2
+clip_high = 0.28
+max_context_tokens = 32768
+
+[orchestrator]
+use_renderer = false
+seq_len = 32768
+batch_size = 32
+rollouts_per_example = 8
+max_inflight_rollouts = 32
+# Source-checked masking/filtering keeps aborted and uniform-reward groups out.
+filters = [{type = "zero_advantage", enforce = true}]
+
+[orchestrator.buffer]
+online_difficulty_filtering = false
+seed = 417
+
+[orchestrator.advantage]
+type = "custom"
+import_path = "rlm_opsd.grpo.objective.leave_one_out"
+
+[orchestrator.train]
+num_workers = 1
+max_retries = 0
+
+[orchestrator.train.sampling]
+temperature = 1.0
+max_completion_tokens = 4096
+
+[[orchestrator.train.env]]
+id = "rlm_opsd.grpo.env"
+name = "repository-grpo"
+
+[orchestrator.train.env.args]
+max_iterations = 30
+child_iterations = 12
+max_subcalls = 24
+max_depth = 2
+subcall_concurrency = 4
+max_subcall_chars = 48000
+exec_timeout = 120
+rollout_timeout = 3600
+child_timeout = 900
+
+[orchestrator.eval]
+interval = 25
+num_examples = -1
+rollouts_per_example = 1
+num_workers = 1
+eval_base_model = true
+cancel_inflight_rollouts_on_eval = true
+
+[orchestrator.eval.sampling]
+temperature = 1.0
+max_completion_tokens = 4096
+
+[[orchestrator.eval.env]]
+id = "rlm_opsd.grpo.env"
+name = "repository-dev"
+
+[orchestrator.eval.env.args]
+max_iterations = 30
+child_iterations = 12
+max_subcalls = 24
+max_depth = 2
+subcall_concurrency = 4
+max_subcall_chars = 48000
+exec_timeout = 120
+rollout_timeout = 3600
+child_timeout = 900
+
+[inference.model]
+max_model_len = 32768
+
+[inference.parallel]
+tp = 4

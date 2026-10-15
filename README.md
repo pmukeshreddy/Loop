@@ -2,7 +2,7 @@
 
 Train a 27B model to solve software-engineering tasks using the official Recursive Language Model (RLM) library.
 
-## Current focus: phase 1
+## Phase 1 harness
 
 First verify the OpenAI connection with a small behavioral comparison:
 
@@ -16,6 +16,11 @@ See [phase 1](01-prove-harness.md) for setup, authentication, checks, and the la
 
 ## Pipeline
 
+The Prime-RL GRPO implementation is available under `rlm-opsd/rlm_opsd/grpo`.
+See [setup and launch instructions](rlm-opsd/docs/GRPO.md) for the OPSD checkpoint
+handoff, Docker task manifests, shared-checkout child rollouts, and verifier rewards.
+Its Docker/GPU execution has not been validated.
+
 | Step | Purpose |
 |---|---|
 | [1 — Prove the harness](01-prove-harness.md) | Verify integration, then compare solve rates on held-out DeepSWE tasks. |
@@ -25,4 +30,6 @@ See [phase 1](01-prove-harness.md) for setup, authentication, checks, and the la
 
 The official RLM REPL and core execution loop remain in use. We add one Responses API client through the library's normal backend interface; we do not implement a second agent loop.
 
-Behavioral checks prove integration correctness, not a solve-rate improvement. Do not start phase 2 until a controlled DeepSWE comparison shows RLM solving more tasks. The public 113 tasks remain evaluation-only.
+Behavioral checks prove integration correctness, not a solve-rate improvement.
+The public 113 tasks remain evaluation-only. The GRPO implementation and its
+unrun validation boundaries are documented in the phase-4 guide above.
