@@ -1,12 +1,39 @@
 # Repository GRPO after OPSD
 
-The implementation is `rlm_opsd.grpo`; the launch configuration is
-[`configs/grpo.toml`](../configs/grpo.toml). It extends the existing pinned
-RLM/verifiers/Prime-RL stack. No additional training framework is required.
+GRPO is a separate phase in `rlm-grpo/`, installed as the `rlm_grpo` Python
+package. The launch configuration is [`configs/grpo.toml`](configs/grpo.toml).
+It owns its dependencies, commands, policy assets, Docker environment and trainer
+integration. Its handoff from OPSD is an exported checkpoint. It does not import
+the OPSD package or apply OPSD's trainer patch.
+
+```text
+rlm-opsd/   behavior distillation → exported checkpoint
+rlm-grpo/   checkpoint + repository tasks → verifier-reward GRPO
+```
+
+## Setup
+
+On the Linux/CUDA training machine, install the phase's independent environment:
+
+```bash
+cd rlm-grpo
+make setup-server
+```
+
+This requires `git`, `uvx`, and an NVIDIA driver. The setup script creates
+`.venv-server/` and a pristine `.deps/prime-rl` checkout at the commit pinned in
+[`pyproject.toml`](pyproject.toml). It uses upstream's frozen runtime lock with
+FlashAttention 2 and [`requirements-rlm.lock`](requirements-rlm.lock) for the
+RLM additions. It does not read or modify `rlm-opsd/`. The setup command has
+not been run in this implementation session.
+
+The CLI is `python -m rlm_grpo` or the installed `rlm-grpo` command. Run the
+Make commands from this directory. A custom `PRIME_SOURCE` must be pristine at
+the pinned commit; a checkout with the OPSD distillation patch is rejected.
 
 ## Inputs
 
-Run on the Linux/CUDA training machine with the existing pinned server
+Run on the Linux/CUDA training machine with this phase's pinned server
 environment and Docker. The Docker daemon must be local to the environment
 workers. Each task image needs `git`, `python3` (3.10 or newer), its repository,
 dependencies, and complete Git history through the specified base commit.
@@ -19,6 +46,7 @@ Set these paths in `[grpo]`; relative paths resolve from the TOML file:
 [grpo]
 opsd_checkpoint = "/checkpoints/opsd-merged"
 manifest_path = "/datasets/synthetic-swe/manifest.jsonl"
+heldout_dir = "/path/to/Loop/data/deep-swe/tasks"
 ```
 
 The checkpoint must be a complete local HF BF16/FP16 export, including tokenizer
@@ -26,14 +54,17 @@ and chat template. The launcher initializes both training and inference from
 this checkpoint and starts a fresh GRPO optimizer. It never substitutes the
 original Qwen base. The operator is responsible for selecting the actual OPSD
 export; the launcher validates its format, not its training history.
-The launcher reuses OPSD's pinned `configs/prompts.yaml` chat template, and
-root/child requests preserve its thinking setting.
+GRPO packages a copy of the same pinned Qwen chat template and RLM policy API
+text in `rlm_grpo/assets/`, with checksums in `rlm_grpo/prompts.py`. Root and child
+requests preserve the checkpoint's established thinking-enabled policy format.
+No OPSD prompt configuration or teacher manual is loaded. The bundled Qwen
+template's license is included as `rlm_grpo/assets/QWEN_LICENSE`.
 
 If OPSD produced Prime-RL's portable adapter export, merge it first:
 
 ```bash
-cd rlm-opsd
-.venv-server/bin/python -m rlm_opsd.grpo merge-checkpoint \
+cd rlm-grpo
+.venv-server/bin/python -m rlm_grpo merge-checkpoint \
   --base /models/pinned-qwen-base \
   --adapter /reports/opsd/weights/step_100 \
   --output /checkpoints/opsd-merged
@@ -147,14 +178,16 @@ with **global active sequence count × maximum context length**. A sequence is
 a native root/child token branch; padding sequences do not count. The scale
 compensates for FSDP gradient averaging. This avoids response-length-dependent
 normalization. The overlay is generated into the run directory from the verified
-Prime-RL pin and leaves `.deps`, installed packages, and OPSD training unchanged.
+Prime-RL pin into this phase's run directory. It does not modify the source
+checkout or installed packages.
 The current path supports data parallelism with `cp=ep=1`.
 
 ```bash
-cd rlm-opsd
+cd rlm-grpo
 # Pull/build once before training; no agents or tests execute here.
 make grpo-prepare-images PYTHON=.venv-server/bin/python \
-  GRPO_MANIFEST=/datasets/synthetic-swe/manifest.jsonl
+  GRPO_MANIFEST=/datasets/synthetic-swe/manifest.jsonl \
+  GRPO_HELDOUT=/path/to/Loop/data/deep-swe/tasks
 
 # Optional configuration/source validation; no Docker or model execution.
 make grpo-check PYTHON=.venv-server/bin/python

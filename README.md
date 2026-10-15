@@ -16,8 +16,9 @@ See [phase 1](01-prove-harness.md) for setup, authentication, checks, and the la
 
 ## Pipeline
 
-The Prime-RL GRPO implementation is available under `rlm-opsd/rlm_opsd/grpo`.
-See [setup and launch instructions](rlm-opsd/docs/GRPO.md) for the OPSD checkpoint
+OPSD and GRPO are separate projects: `rlm-opsd/` trains RLM behavior;
+`rlm-grpo/` trains repository correctness from the exported OPSD checkpoint.
+See [GRPO setup and launch instructions](rlm-grpo/README.md) for the checkpoint
 handoff, Docker task manifests, shared-checkout child rollouts, and verifier rewards.
 Its Docker/GPU execution has not been validated.
 

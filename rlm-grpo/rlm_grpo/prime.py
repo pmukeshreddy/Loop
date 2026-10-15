@@ -11,7 +11,7 @@ import shutil
 import subprocess
 
 PIN = "09e11c7527a242b9f150c7c4c71b1b96da66cb75"
-LOSS_PATH = "rlm_opsd.grpo.objective.clipped_policy_loss"
+LOSS_PATH = "rlm_grpo.objective.clipped_policy_loss"
 
 
 def prepare_source(source, output):
@@ -19,9 +19,12 @@ def prepare_source(source, output):
     head = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
     if head != PIN:
         raise ValueError(f"GRPO requires Prime-RL {PIN}")
-    # Allow the existing, hash-verified OPSD overlay; never layer onto unknown edits.
-    from rlm_opsd.training.prime_patch import apply_patch
-    apply_patch(source, check_only=True)
+    # GRPO owns a pristine checkout; OPSD's distillation patch is not a dependency.
+    dirty = subprocess.check_output(
+        ["git", "-C", str(source), "status", "--porcelain", "--untracked-files=normal"],
+        text=True)
+    if dirty:
+        raise ValueError("GRPO requires a pristine Prime-RL checkout; use rlm-grpo/.deps/prime-rl")
     relative = Path("src/prime_rl/trainer/rl/train.py")
     original = (source / relative).read_text()
     anchor = "        loss_scale = max(loss_scale, 1)\n"
@@ -29,7 +32,7 @@ def prepare_source(source, output):
         raise ValueError("Prime-RL normalization source contract changed")
     insertion = (
         '        if getattr(config.loss, "import_path", None) == "' + LOSS_PATH + '":\n'
-        '            from rlm_opsd.grpo.objective import loss_normalizer\n'
+        '            from rlm_grpo.objective import loss_normalizer\n'
         '            loss_scale = loss_normalizer(\n'
         '                micro_batches, parallel_dims, config.loss.kwargs["max_context_tokens"])\n')
     patched = original.replace(anchor, anchor + insertion)

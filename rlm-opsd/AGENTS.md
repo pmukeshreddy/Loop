@@ -17,7 +17,8 @@ Teach a 27B model native RLM behavior with On-Policy Self-Distillation (OPSD), t
 
 This phase does not optimize answer correctness.
 
-**The GRPO phase (later) rewards correct answers.**
+**The separate GRPO phase in `../rlm-grpo/` rewards correct answers.** It consumes
+an exported OPSD checkpoint and has its own package, dependencies and commands.
 
 Read these files in order before writing code:
 1. `docs/SPEC.md`
@@ -87,7 +88,9 @@ Each milestone ends with passing tests and an entry in `docs/PROGRESS.md` coveri
 
 ## Make targets
 
-`make test`, `make tasks`, `make teacher-gate`, `make opsd`, `make opsd-check`, `make eval-behavior`, `make exit-check`, `make grpo-smoke`.
+`make test`, `make tasks`, `make teacher-gate`, `make opsd`, `make opsd-check`, `make eval-behavior`, `make exit-check`.
+GRPO commands belong to `../rlm-grpo/`, for example
+`make -C ../rlm-grpo grpo-smoke`.
 
 Multi-step OPSD: `make opsd-train`, with CPU-only preflight
 `make opsd-train-check`; see `docs/OPSD_TRAIN.md`. Upstream edits are preserved

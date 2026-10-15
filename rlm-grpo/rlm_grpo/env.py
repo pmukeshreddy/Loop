@@ -12,14 +12,10 @@ import verifiers as vf
 from rlm_train import RLMTrainEnv
 from verifiers.utils.message_utils import normalize_messages
 
-from rlm_opsd.harness.protocol import parse_turn
-from rlm_opsd.prompts import PromptConfig
-from rlm_opsd.prompts.templates import render_named
+from .protocol import parse_turn
+from .prompts import PromptConfig, render_named
 from .runtime import DockerReplBackend, TaskRuntime
 from .tasks import load_pool
-
-PROMPT = Path(__file__).resolve().parents[2] / "student_system.md"
-
 
 @dataclass
 class Episode:
@@ -51,7 +47,7 @@ class RepositoryEnv(RLMTrainEnv):
         self.subcall_concurrency, self.max_subcall_chars = subcall_concurrency, max_subcall_chars
         self.exec_timeout, self.child_timeout = exec_timeout, child_timeout
         self.session, self.depth = session, depth
-        self.prompt_config = PromptConfig.from_yaml()
+        self.prompt_config = PromptConfig()
         if min(max_iterations, child_iterations, max_subcalls, max_depth, subcall_concurrency,
                max_subcall_chars, exec_timeout, rollout_timeout, child_timeout) <= 0:
             raise ValueError("GRPO rollout budgets must be positive")
@@ -91,7 +87,7 @@ class RepositoryEnv(RLMTrainEnv):
             state["rlm_backend"] = backend
             await backend.start()
             await backend.load_context(context)
-            system = PROMPT.read_text()
+            system = self.prompt_config.system_prompt()
             substitutions = dict(context_type="dict", context_total_length=len(json.dumps(context)),
                 chunk_info="", context_prefix=json.dumps(context), subcall_max_chars=self.max_subcall_chars,
                 stdout_max_chars=20_000, max_turns=self._max_iterations)
@@ -271,7 +267,8 @@ class RepositoryEnv(RLMTrainEnv):
             state["rlm_backend"] = None
 
 
-def load_environment(*, manifest_path, split="train", artifact_dir="reports/grpo/trajectories", **kwargs):
+def load_environment(*, manifest_path, heldout_dir, split="train",
+                     artifact_dir="reports/grpo/trajectories", **kwargs):
     if split not in {"train", "dev"}:
         raise ValueError("Only the explicit train/dev pool may be used by the GRPO environment")
     forbidden = {"dataset", "eval_dataset", "system_prompt", "rubric", "session", "depth",
@@ -280,7 +277,7 @@ def load_environment(*, manifest_path, split="train", artifact_dir="reports/grpo
         raise ValueError(f"Cannot override the shared-policy GRPO contract: {sorted(forbidden)}")
     if kwargs.pop("score_rollouts", True) is not True:
         raise ValueError("GRPO requires verifier scoring")
-    tasks = [task for task in load_pool(manifest_path) if task.split == split]
+    tasks = [task for task in load_pool(manifest_path, heldout_dir=heldout_dir) if task.split == split]
     if not tasks:
         raise ValueError(f"GRPO pool has no {split} tasks")
     return RepositoryEnv(tasks={task.task_id: task for task in tasks}, artifact_dir=artifact_dir,

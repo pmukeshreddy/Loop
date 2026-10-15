@@ -8,6 +8,7 @@ output_dir = "../reports/grpo-27b"
 [grpo]
 opsd_checkpoint = "../checkpoints/opsd-merged"
 manifest_path = "../data/grpo/manifest.jsonl"
+heldout_dir = "../../data/deep-swe/tasks"
 
 [deployment]
 type = "single_node"
@@ -48,7 +49,7 @@ max_norm = 1.0
 
 [trainer.loss]
 type = "custom"
-import_path = "rlm_opsd.grpo.objective.clipped_policy_loss"
+import_path = "rlm_grpo.objective.clipped_policy_loss"
 
 [trainer.loss.kwargs]
 clip_low = 0.2
@@ -70,7 +71,7 @@ seed = 417
 
 [orchestrator.advantage]
 type = "custom"
-import_path = "rlm_opsd.grpo.objective.leave_one_out"
+import_path = "rlm_grpo.objective.leave_one_out"
 
 [orchestrator.train]
 num_workers = 1
@@ -81,7 +82,7 @@ temperature = 1.0
 max_completion_tokens = 4096
 
 [[orchestrator.train.env]]
-id = "rlm_opsd.grpo.env"
+id = "rlm_grpo.env"
 name = "repository-grpo"
 
 [orchestrator.train.env.args]
@@ -108,7 +109,7 @@ temperature = 1.0
 max_completion_tokens = 4096
 
 [[orchestrator.eval.env]]
-id = "rlm_opsd.grpo.env"
+id = "rlm_grpo.env"
 name = "repository-dev"
 
 [orchestrator.eval.env.args]

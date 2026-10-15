@@ -5,11 +5,17 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import tomllib
+import unicodedata
 
-from rlm_opsd.tasks.decontam import grams
-from rlm_opsd.tasks.models import normalized
 
-PUBLIC_TASKS = Path(__file__).resolve().parents[3] / "data/deep-swe/tasks"
+def normalized(text):
+    return " ".join(re.findall(r"\w+", unicodedata.normalize("NFKC", text).casefold()))
+
+
+def grams(text, n):
+    words = normalized(text).split()
+    width = min(n, len(words))
+    return {tuple(words[i:i + width]) for i in range(len(words) - width + 1)} if width else set()
 
 
 def repository_key(url: str) -> str:
@@ -71,7 +77,7 @@ class RepoTask:
                     answer="", info=dict(task_id=self.task_id))
 
 
-def load_pool(manifest_path, *, heldout_dir=PUBLIC_TASKS) -> list[RepoTask]:
+def load_pool(manifest_path, *, heldout_dir) -> list[RepoTask]:
     """Load all splits together so train/dev leakage cannot hide in a split filter."""
     manifest = Path(manifest_path).resolve(strict=True)
     reserved = []

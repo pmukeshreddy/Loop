@@ -1,7 +1,9 @@
 # Step 4 — GRPO
 
-Implementation: [`rlm-opsd/docs/GRPO.md`](rlm-opsd/docs/GRPO.md), configured by
-[`rlm-opsd/configs/grpo.toml`](rlm-opsd/configs/grpo.toml). The current repository
+Implementation: [`rlm-grpo/README.md`](rlm-grpo/README.md), configured by
+[`rlm-grpo/configs/grpo.toml`](rlm-grpo/configs/grpo.toml). GRPO is a standalone
+phase with the `rlm_grpo` package and an exported OPSD checkpoint as its input.
+The current repository
 environment uses the user's October 15 +1/−1 reward convention and trains both
 root and completed child branches with the same policy. Tests and GPU execution
 of this implementation have not been run.

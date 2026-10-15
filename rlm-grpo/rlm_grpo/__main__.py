@@ -14,6 +14,7 @@ def main():
         command.add_argument("--max-steps", type=int)
     images = commands.add_parser("prepare-images")
     images.add_argument("--manifest", type=Path, required=True)
+    images.add_argument("--heldout-dir", type=Path, required=True)
     merge = commands.add_parser("merge-checkpoint")
     merge.add_argument("--base", type=Path, required=True)
     merge.add_argument("--adapter", type=Path, required=True)
@@ -30,7 +31,7 @@ def main():
 
         async def prepare():
             seen = set()
-            for task in load_pool(args.manifest):
+            for task in load_pool(args.manifest, heldout_dir=args.heldout_dir):
                 key = task.image or str(task.directory)
                 if key not in seen:
                     image = await prepare_image(task)

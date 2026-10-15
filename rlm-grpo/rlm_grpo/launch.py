@@ -8,23 +8,23 @@ import tomllib
 from .checkpoint import checkpoint_files
 from .prime import LOSS_PATH, prepare_source
 from .tasks import load_pool
+from .prompts import PromptConfig, checked_text
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def resolve_config(path, *, max_steps=None):
     from prime_rl.configs.rl import RLConfig
-    from rlm_opsd.prompts import PromptConfig
-    from rlm_opsd.prompts.templates import checked_text
 
     path = Path(path).resolve(strict=True)
     values = tomllib.loads(path.read_text())
     handoff = values.pop("grpo")
-    if set(handoff) != {"opsd_checkpoint", "manifest_path"}:
-        raise ValueError("[grpo] requires opsd_checkpoint and manifest_path")
+    if set(handoff) != {"opsd_checkpoint", "manifest_path", "heldout_dir"}:
+        raise ValueError("[grpo] requires opsd_checkpoint, manifest_path, and heldout_dir")
     checkpoint, _ = checkpoint_files(path.parent / handoff["opsd_checkpoint"])
     manifest = (path.parent / handoff["manifest_path"]).resolve(strict=True)
-    tasks = load_pool(manifest)
+    heldout = (path.parent / handoff["heldout_dir"]).resolve(strict=True)
+    tasks = load_pool(manifest, heldout_dir=heldout)
     if {task.split for task in tasks} != {"train", "dev"}:
         raise ValueError("Provide both repository-disjoint train and dev tasks")
     if "name" in values.get("model", {}):
@@ -49,7 +49,7 @@ def resolve_config(path, *, max_steps=None):
     loss, advantage = config.trainer.loss, config.orchestrator.advantage
     if getattr(loss, "import_path", None) != LOSS_PATH:
         raise ValueError("Use the repository GRPO clipped loss plugin")
-    if getattr(advantage, "import_path", None) != "rlm_opsd.grpo.objective.leave_one_out":
+    if getattr(advantage, "import_path", None) != "rlm_grpo.objective.leave_one_out":
         raise ValueError("Use the submitted-only leave-one-out advantage plugin")
     limit = config.orchestrator.seq_len
     if limit != config.trainer.model.seq_len or loss.kwargs.get("max_context_tokens") != limit:
@@ -66,21 +66,22 @@ def resolve_config(path, *, max_steps=None):
     config.trainer.output_dir = config.output_dir
     config.orchestrator.output_dir = config.output_dir / "run_default"
     config.orchestrator.use_renderer = False
-    prompt = PromptConfig.from_yaml()
+    prompt = PromptConfig()
     checked_text(prompt.template_path, prompt.template_sha256)
+    prompt.system_prompt()
     for tokenizer in (config.trainer.tokenizer, config.orchestrator.tokenizer):
         tokenizer.name = str(checkpoint)
         tokenizer.chat_template = str(prompt.template_path)
     config.inference.model.chat_template = str(prompt.template_path)
     for split, environments in (("train", config.orchestrator.train.env),
                                 ("dev", config.orchestrator.eval.env)):
-        if len(environments) != 1 or environments[0].id != "rlm_opsd.grpo.env":
+        if len(environments) != 1 or environments[0].id != "rlm_grpo.env":
             raise ValueError("Use one repository environment for train and one for dev")
         env = environments[0]
-        for key in ("manifest_path", "split", "artifact_dir"):
+        for key in ("manifest_path", "heldout_dir", "split", "artifact_dir"):
             if key in env.args:
                 raise ValueError(f"{key} is resolved by the GRPO launcher")
-        env.args.update(manifest_path=str(manifest), split=split,
+        env.args.update(manifest_path=str(manifest), heldout_dir=str(heldout), split=split,
                         artifact_dir=str(config.output_dir / "trajectories" / split))
     # Re-validate exactly what the native launcher and its subprocesses read.
     return RLConfig.model_validate(config.model_dump(mode="json", exclude_none=True))
@@ -107,8 +108,11 @@ def launch(path, source, *, check=False, max_steps=None):
         print(json.dumps(dict(status="configured", config=str(resolved),
                               model_requests_sent=False, docker_runs=False, training="not run")))
         return 0
-    from rlm_opsd.training.backend import require_cuda
-    require_cuda()
+    import torch
+    if sys.platform != "linux" or not torch.cuda.is_available():
+        raise ValueError("GRPO training requires a Linux/CUDA runtime")
+    if not torch.cuda.is_bf16_supported():
+        raise ValueError("GRPO training requires CUDA bfloat16 support")
     os.environ["PATH"] = str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", "")
     os.execv(sys.executable, [sys.executable, "-m", "prime_rl.entrypoints.rl", "@", str(resolved)])
 
