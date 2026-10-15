@@ -57,4 +57,4 @@ grpo_uv pip install --python "$GRPO_ENV/bin/python" 'pip==25.3'
 "$GRPO_ENV/bin/python" -m pip install --no-deps -r .deps/grpo-primary.txt
 "$GRPO_ENV/bin/python" -m pip install --no-deps -e .
 "$GRPO_ENV/bin/python" -m pip check
-echo "GRPO environment installed. No rollouts, tests, or training were run."
+echo "GRPO environment installed. Launch training with: make grpo-train PYTHON=.venv-server/bin/python"

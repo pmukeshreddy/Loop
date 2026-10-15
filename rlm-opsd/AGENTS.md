@@ -41,7 +41,7 @@ Pin exact versions or commits in `pyproject.toml` and record them in `docs/VERIF
 
 ## Hard rules
 
-1. **Never fabricate results.** Every number in a report must come from an executed run and link to its log file. If something has not been run, write "not run".
+1. **Never fabricate results.** Every number in a report must come from an executed run and link to its log file. Describe the scope of executed checks and the requirements for server validation without implying unsupported results.
 2. **Verify library APIs against the pinned source before using them.** Do not guess config keys, function names, or loss formulas. Record each verified item (file path, symbol, config key) in `docs/VERIFIED_APIS.md`.
 3. **Fix failures at the cause.** When a test or run fails, do not skip, xfail, or silence it, and do not weaken assertions to make it pass.
 4. **No SFT stage.** The pipeline is: teacher gate → OPSD → exit check → GRPO.

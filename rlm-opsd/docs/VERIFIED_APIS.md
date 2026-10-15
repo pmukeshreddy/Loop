@@ -1,6 +1,6 @@
 # Verified dependency APIs
 
-Verified on 2026-10-09 UTC against immutable source checkouts and installed files. **M0 setup code and local API checks are prepared; full Linux/CUDA installation is deferred at the user's request. The original full-install completion criterion has not been demonstrated.** See [PROGRESS.md](PROGRESS.md) for commands, failures, and unrun checks.
+Verified on 2026-10-09 UTC against immutable source checkouts and installed files. **The local evidence covers source inspection, dependency resolution and CPU checks. Full runtime installation requires the Linux/CUDA server installer and its acceptance checks.** See [PROGRESS.md](PROGRESS.md) for executed commands, failures and server requirements.
 
 ## Native multi-step OPSD integration
 
@@ -17,7 +17,7 @@ read in source; executable CPU checks are distinguished from GPU execution.
 
 | Source path and symbol | Verified contract and integration |
 |---|---|
-| `src/prime_rl/entrypoints/rl.py::rl_local`, `write_subconfigs`, `main` | Native entrypoint launches inference, orchestrator, and distributed trainer from validated `RLConfig`. The project launcher executes this module and supplies the source overlay through inherited `PYTHONPATH`. CLI/native process startup on GPU: **not run**. |
+| `src/prime_rl/entrypoints/rl.py::rl_local`, `write_subconfigs`, `main` | Native entrypoint launches inference, orchestrator, and distributed trainer from validated `RLConfig`. The project launcher executes this module and supplies the source overlay through inherited `PYTHONPATH`. GPU process startup requires the configured Linux/CUDA runtime. |
 | `packages/prime-rl-configs/src/prime_rl/configs/rl.py::RLConfig` | Native shared `model`, `max_steps`, `max_async_level`, `deployment`, `weight_broadcast`, and `ckpt` settings propagate to subconfigs. Trainer uses the output root; orchestrator uses `run_default`. CPU validation covers the shipped config and final snapshot-path round-trip. The added validator requires both OPSD flags and the unscored project environment. |
 | `packages/prime-rl-configs/src/prime_rl/configs/trainer.py::OpsdConfig`, `TrainerConfig.opsd` (added) | `chunk_size`, `temperature`, `token_gate`, `gate_k` configure the existing full-vocabulary JSD. Requires a single eager dense HF LoRA run, frozen base/head/embeddings, CP/EP disabled; rejects compilation, FP8, VLM, fake data, CPU parameter offload, and router replay. |
 | `packages/prime-rl-configs/src/prime_rl/configs/orchestrator.py::OrchestratorConfig` | Added `opsd` and `opsd_max_seq_len`; disables remote teacher scoring/generation, SFT, reward filtering and online difficulty filtering. Uses native `train.sampling`, `train.env`, `batch_size`, `seq_len`, `use_renderer`. |
@@ -29,7 +29,7 @@ read in source; executable CPU checks are distinguished from GPU execution.
 | `src/prime_rl/trainer/model.py::setup_model`, `apply_ac`, `setup_fsdp` | Added `opsd_config`; custom head installed before LoRA, activation checkpointing, and FSDP. OPSD enables checkpoint RNG preservation. Native FSDP wraps blocks, head/norm, and root; the untied head group uses `reshard_after_forward=False`. `optimization_dtype` and `reduce_dtype` are unchanged. Real one-/two-rank CPU FSDP tests use the same wrapping boundaries. |
 | `src/prime_rl/trainer/models/layers/lm_head.py::inject_prime_lm_head` | Native injection replaces the outer model forward with the backbone/head composition and returns the head dictionary. OPSD replaces the head while retaining the normal `lm_head.weight` state key and calls the outer wrapped model for both passes. |
 | `src/prime_rl/trainer/rl/train.py::train` | OPSD replaces normal loss setup/forward, performs frozen teacher then student JSD/backward for each microbatch, and accounts for FSDP gradient averaging with global token normalization. Native optimizer, scheduler, checkpoint/broadcast, and repeated progress loop are retained. `opsd/jsd/mean` aggregates one token-normalized step value per rank. |
-| `src/prime_rl/trainer/rl/broadcast/filesystem.py`, `src/prime_rl/trainer/weights.py::get_adapter_state_dict`, `src/prime_rl/orchestrator/scheduler.py::_apply_policy_update` | Native filesystem broadcast gathers trainable adapter shards and publishes weights. Scheduler calls `inference_pool.update_weights(weights_path, lora_name=..., step=...)`. Source verified; actual vLLM synchronization: **not run**. |
+| `src/prime_rl/trainer/rl/broadcast/filesystem.py`, `src/prime_rl/trainer/weights.py::get_adapter_state_dict`, `src/prime_rl/orchestrator/scheduler.py::_apply_policy_update` | Native filesystem broadcast gathers trainable adapter shards and publishes weights. Scheduler calls `inference_pool.update_weights(weights_path, lora_name=..., step=...)`. Source verified; vLLM synchronization requires runtime validation on the training server. |
 
 The verifiers pin is unchanged. Its
 `verifiers/utils/save_utils.py::state_to_output` retains rollout `info`;
@@ -49,7 +49,7 @@ No separate dense projection or remote teacher objective was substituted.
 Evidence: [full CPU suite](logs/prime-mode-b/13-full-suite.log),
 [two-rank CPU gradient parity](logs/prime-mode-b/11-two-rank-cpu.log),
 [preflight blocker](logs/prime-mode-b/14-launch-check.log).
-GPU, pretrained Qwen, and vLLM results: **not run**.
+This evidence covers CPU integration; GPU, pretrained Qwen and vLLM acceptance requires server execution.
 
 ## Pins and verification boundaries
 
@@ -74,7 +74,7 @@ Two supporting sources are also fixed to prime-rl's own submodule/lock reference
 
 prime-rl uses a commit archive to avoid automatic fetching of unrelated private/SSH submodules. Its installed archive SHA-256 is `d9e12cd1e597c333bcfbc6f6228a1e4b2efc42704a9fc366b95b84f9de0684c4`. The offline check compares every installed Python file from all five distributions to the corresponding checkout, checks Git heads and installation provenance, and prints exact signatures. [Smoke/provenance evidence](logs/m0/20-prime-source-and-smoke.log), [source paths, symbols, line numbers, and file hashes](logs/m0/23-source-catalog.log).
 
-`requirements-m0-local.lock` resolves only the local inspection subset and its transitive dependencies, using an exclusion cutoff of 2026-05-28. It is **not** a Linux/CUDA runtime lock. The server script uses the pinned upstream `uv.lock` with `--frozen --no-dev --extra flash-attn`, then installs `requirements-m0-server-additions.lock`, resolved for Linux x86_64 against upstream's common dependency versions. The upstream lock export and the additions resolution succeeded locally; installation and CUDA imports have **not run** on a server. Source paths below are relative to each named upstream repository, available locally under `.deps/{rlm,verifiers,prime-rl}`. “Source verified” means read in the pinned source; it does not imply a model/server invocation.
+`requirements-m0-local.lock` resolves only the local inspection subset and its transitive dependencies, using an exclusion cutoff of 2026-05-28. It is **not** a Linux/CUDA runtime lock. The server script uses the pinned upstream `uv.lock` with `--frozen --no-dev --extra flash-attn`, then installs `requirements-m0-server-additions.lock`, resolved for Linux x86_64 against upstream's common dependency versions. The upstream lock export and the additions resolution succeeded locally; installation and CUDA import checks require the target server. Source paths below are relative to each named upstream repository, available locally under `.deps/{rlm,verifiers,prime-rl}`. “Source verified” means read in the pinned source; it does not imply a model/server invocation.
 
 The server target uses the upstream default `trainer.model.attn="flash_attention_2"` (`packages/prime-rl-configs/src/prime_rl/configs/trainer.py:199`). The lock selects torch `2.11.0+cu128`, vLLM `0.21.0+cu129`, and the FlashAttention 2.8.3 wheel built for torch 2.11/CUDA 12.8. These are upstream artifact pins, not a successful A100/H100 compatibility test. See the [server lock export](logs/m0/25-server-lock-export.log) and [Linux additions resolution](logs/m0/26-server-additions-check.log).
 
@@ -83,7 +83,7 @@ The server target uses the upstream default `trainer.model.attn="flash_attention
 | Entry point | Exact source path / location | Verified contract |
 |---|---|---|
 | `from rlm import RLM` | `rlm/__init__.py`; `rlm/core/rlm.py:RLM`, line 41 | Public inference harness; import executed |
-| `RLM.completion(self, prompt: str \| dict[str, Any], root_prompt: str \| None = None) -> RLMChatCompletion` | `rlm/core/rlm.py:326` | `prompt` is REPL context; `root_prompt` is the visible question. This exact annotation omits lists although `QueryMetadata` accepts them. No model completion executed. |
+| `RLM.completion(self, prompt: str \| dict[str, Any], root_prompt: str \| None = None) -> RLMChatCompletion` | `rlm/core/rlm.py:326` | `prompt` is REPL context; `root_prompt` is the visible question. This exact annotation omits lists although `QueryMetadata` accepts them. Verification scope: signature and source inspection. |
 | `RLMChatCompletion` | `rlm/core/types.py:118` | Result fields include `response`, `usage_summary`, `execution_time`, `metadata`, `error` |
 | `QueryMetadata(prompt)` | `rlm/core/types.py:265` | Produces `context_type`, `context_total_length`, `context_lengths`; accepts strings/lists/dicts. No `context_prefix` field. |
 | `find_code_blocks(text: str) -> list[str]` | `rlm/utils/parsing.py:10` | Extracts blocks using regex `r"```repl\s*\n(.*?)\n```"`, DOTALL; strips each block |
@@ -110,7 +110,7 @@ In `training/src/rlm_train/env.py`:
 - `get_prompt_messages(self, state) -> Messages` (line 163) executes extracted REPL blocks, accumulates `rlm_history`, and sets `rlm_final_answer`/`final_env_response` when the backend returns an answer.
 - `has_final_answer` uses `@vf.stop`; `cleanup_rlm` uses `@vf.cleanup`; `teardown_rlm` uses `@vf.teardown` (lines 224, 228, 241).
 - `_format_one` (line 322) caps combined output at the module constant `_MAX_REPL_OUTPUT_CHARS = 20_000`; its notice reports omitted characters, not the project's required raw stdout length. This is not a configurable `stdout_max_chars` argument.
-- `sub_model` changes the model name but uses `state["client"]`. It does not select a separate frozen server. The proxy receives `sub_llm_fn(prompt, state)` and `sub_llm_fn_batched(prompts, state)` overrides. Frozen-server routing remains later work.
+- `sub_model` changes the model name but uses `state["client"]`. It does not select a separate frozen server. The proxy receives `sub_llm_fn(prompt, state)` and `sub_llm_fn_batched(prompts, state)` overrides. The project harness supplies frozen-server routing through these overrides; see [HARNESS.md](HARNESS.md).
 
 ### REPL/backend surface
 
@@ -120,11 +120,11 @@ In `training/src/rlm_train/env.py`:
 
 `training/src/rlm_train/worker.py:137` defines `Worker`. Its execution timeout is `exec_timeout_s`, defaulting from `RLM_TRAIN_EXEC_TIMEOUT_S` or 600 seconds; `_exec_with_timeout` uses `SIGALRM`/`setitimer`. `_setup_namespace` installs `context` (upon load), `llm_query`, `llm_query_batched`, `rlm_query`, `rlm_query_batched`, `SHOW_VARS`, and `answer`. Here `rlm_query` is an alias of the one-shot `llm_query`, not deeper recursion. No CPU or memory resource limits are imposed by this backend.
 
-`training/src/rlm_train/proxy.py` defines `ClientHandle`, `SubLLMProxy`, and `_completion`. The production call is `handle.client.get_response(prompt=messages, model=model, tools=None, sampling_args=..., state={"trajectory": []})`. Only an override bypasses that network call; no sub-LLM service was invoked in M0. `RLMTrainRubric` in `training/src/rlm_train/rubric.py:13` accepts `correctness=None`, `weight=1.0`, `min_iterations=2`, `min_subcall=0`, `min_reward=0.0`, `gate_reward=False`, `**kwargs`; those upstream defaults are not project gate thresholds.
+`training/src/rlm_train/proxy.py` defines `ClientHandle`, `SubLLMProxy`, and `_completion`. The production call is `handle.client.get_response(prompt=messages, model=model, tools=None, sampling_args=..., state={"trajectory": []})`. Only an override bypasses that network call; M0 verification covers source inspection and the local subprocess backend. `RLMTrainRubric` in `training/src/rlm_train/rubric.py:13` accepts `correctness=None`, `weight=1.0`, `min_iterations=2`, `min_subcall=0`, `min_reward=0.0`, `gate_reward=False`, `**kwargs`; those upstream defaults are not project gate thresholds.
 
-### Differences from SPEC that must not be assumed implemented
+### Upstream differences handled by the project wrapper
 
-1. This upstream training adapter finishes via `answer["content"] = ...; answer["ready"] = True`. `_AnswerDict` is in `training/src/rlm_train/worker.py:121`. It does **not** parse assistant `FINAL(...)` or `FINAL_VAR(...)`. The RLM history shows that the answer-dict change preceded the addition of `training/`. M1 must adapt the required protocol; M0 does not change it.
+1. This upstream training adapter finishes via `answer["content"] = ...; answer["ready"] = True`. `_AnswerDict` is in `training/src/rlm_train/worker.py:121`. It does **not** parse assistant `FINAL(...)` or `FINAL_VAR(...)`. The RLM history shows that the answer-dict change preceded the addition of `training/`. The project harness adapts this to the required protocol; the upstream pin retains its original behavior.
 2. `build_rlm_system_prompt` uses `str.format`, incompatible with passing the supplied literal-brace teacher manual directly. It also adds a default behavioral addendum. The prescribed student/teacher prompt construction is not provided by setting `custom_system_prompt` alone.
 3. The metadata prompt emits type/total length, but omits the required chunk-length display and configurable prefix. Project `max_subcalls`, `max_subcall_chars`, sandbox CPU/memory limits, and trajectory JSON schema are not verified upstream configuration keys.
 
@@ -143,11 +143,11 @@ All paths in this section refer to verifiers commit `58b119fa1b24eff85b74a75ccf3
 | `State`, `TrajectoryStep`, `TrajectoryStepTokens` | `verifiers/types.py:429`, `:268`, `:227` | Trajectory tokens include `prompt_ids`, `prompt_mask`, `completion_ids`, `completion_mask`, `completion_logprobs`; messages use verifiers message types |
 | `Environment.set_score_rollouts(False)` | `verifiers/envs/environment.py:1298` | Scoring branches call rubric dummy scoring when disabled, rather than computing reward; see lines 695–698, 725–728 |
 
-`rlm_train` exports a class, **not** a `load_environment` factory. A project environment package/factory is still required before using it as a prime-rl environment ID. The built-in alternative `verifiers/envs/experimental/rlm_env.py` was located but not selected as the project's harness. [Pinned loader](https://github.com/PrimeIntellect-ai/verifiers/blob/58b119fa1b24eff85b74a75ccf3e132523b3c6c3/verifiers/utils/env_utils.py), [environment source evidence](logs/m0/12-environment-source.log).
+`rlm_train` exports a class, **not** a `load_environment` factory. The project supplies its own environment factory for prime-rl environment IDs; see [HARNESS.md](HARNESS.md). The built-in alternative `verifiers/envs/experimental/rlm_env.py` was located but not selected as the project's harness. [Pinned loader](https://github.com/PrimeIntellect-ai/verifiers/blob/58b119fa1b24eff85b74a75ccf3e132523b3c6c3/verifiers/utils/env_utils.py), [environment source evidence](logs/m0/12-environment-source.log).
 
 ## prime-rl entry points and configuration
 
-The following console scripts are declared in pinned `pyproject.toml`; they are source verified. **They are not runtime verified:** executing `rl --help` fails on a missing runtime dependency. [Actual CLI failure](logs/m0/22-cli-check.log).
+The following console scripts are declared in pinned `pyproject.toml`; they are source verified. **Local startup check:** executing `rl --help` fails on a missing runtime dependency. [Actual CLI failure](logs/m0/22-cli-check.log).
 
 | Command | Entry point | File |
 |---|---|---|
@@ -171,7 +171,7 @@ No SFT command was run. Config classes are distributed separately in `prime-rl-c
 | `trainer.loss.kl_tau` | Same class, line 693 | Default `1e-3`; residual rollout/trainer regularization remains when `adv_tau=0` |
 | `trainer.loss.dppo_mask_low`, `.dppo_mask_high` | Same class | Defaults 0.2, 0.2; probability-difference mask thresholds |
 | `trainer.model.lora.rank`, `.alpha`, `.dropout`, `.target_modules`, `.modules_to_save` | `trainer.py:LoRAConfig`, line 111; `ModelConfig` | LoRA schema; rank default 16, alpha 32.0, dropout 0.0; no LoRA run performed |
-| `trainer.optim.lr` | `trainer.py:BaseOptimizerConfig`, line 532 | Default `1e-6`; project starting value `2e-5` would be an explicit later setting |
+| `trainer.optim.lr` | `trainer.py:BaseOptimizerConfig`, line 532 | Default `1e-6`; the project config explicitly sets its starting value to `2e-5` |
 | `orchestrator.rollouts_per_example` | `orchestrator.py:OrchestratorConfig`, line 1050 | Rollouts per example; project one-rollout setting not applied in M0 |
 | `orchestrator.train.sampling.max_completion_tokens` | `orchestrator.py:TrainSamplingConfig`, line 73 | Per-turn output cap; `max_tokens` is a deprecated input alias |
 | `orchestrator.train.sampling.extra_body` | Same class | Arbitrary server request options; no model-specific thinking key verified |
@@ -258,10 +258,9 @@ constraints during server setup; it does not replace the M0 lock.
   `stdout_max_chars`, `enable_recursion`, `max_depth`, and
   `sandbox.{wall_time_s,memory_mb,cpu_time_s}`.
 
-M0's listed protocol deviations are now adapted in project code. No upstream
-source, trainer loss, teacher hook, template builder, task generator, or detector
-was changed. Linux kernel address-space enforcement and real inference remain
-not run; the local subprocess/HTTP tests are not GPU-run evidence.
+M0's listed protocol deviations are adapted in the project harness. The local
+evidence covers subprocess and HTTP tests. Linux kernel address-space
+enforcement and model inference require validation on the target server.
 
 # M2 additions: task generation and reserved-data adapters
 
@@ -330,11 +329,11 @@ complete benchmark was downloaded or evaluated.
 
 | Source and exact revision | Verified source path / fields | Execution boundary |
 |---|---|---|
-| [mit-oasys/oolong-pairs](https://huggingface.co/datasets/mit-oasys/oolong-pairs/tree/d1e1522b86ac0c169bbc890b0471408aaa29e8fa), `d1e1522b86ac0c169bbc890b0471408aaa29e8fa` | `questions.json`: `id,question,answer,type`; `README.md` specifies full `data/oolong-pairs-{context_len}.json` answers paired with matching `trec_coarse` validation context | Public templates actually imported for query checks. Full answer/context exports not imported. Card declares MIT. |
-| [oolongbench/oolong-synth](https://huggingface.co/datasets/oolongbench/oolong-synth/blob/f0d59eaf0febf130664cfceb710436c8e3216b2b/README.md), `f0d59eaf0febf130664cfceb710436c8e3216b2b` | `README.md` dataset schema: `context_len`, `context_window_id`, `context_window_text`, `context_window_text_with_labels`, `dataset`, `question`, `answer`, `answer_type` | Adapter uses unlabelled context and filters `trec_coarse`; full export not imported. Operator must provide the source license with the export. |
-| [Tevatron/browsecomp-plus](https://huggingface.co/datasets/Tevatron/browsecomp-plus/blob/144cff8e35b5eaef7e526346aa60774a9deb941f/README.md), `144cff8e35b5eaef7e526346aa60774a9deb941f` | `README.md`: `query_id`, `query`, `answer`, `gold_docs`, `evidence_docs`, `negative_docs`; document `docid,text,url`; official canary/SHA-256/XOR decryption recipe | Adapter accepts already-decrypted rows plus exactly 1,000 selected documents. No automatic decryption/document selection or full snapshot import was executed. |
-| [zai-org/LongBench-v2](https://huggingface.co/datasets/zai-org/LongBench-v2/blob/2b48e494f2c7a2f0af81aae178e05c7e1dde0fe9/README.md), `2b48e494f2c7a2f0af81aae178e05c7e1dde0fe9` | `README.md`: `domain`, `sub_domain`, `context`, `question`, `choice_A`–`choice_D`, `answer`; original THUDM URL redirects to this namespace | Adapter filters `Code Repository Understanding` / `Code repo QA`; Apache-2.0 in card; full `data.json` not imported. |
-| [NVIDIA/RULER](https://github.com/NVIDIA/RULER/blob/c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a/scripts/data/synthetic/niah.py), `c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a` | `scripts/data/synthetic/niah.py:284`: output `index`, `input`, `outputs`; the index is a needle position, so it is not used as a unique task ID | Single-needle adapter tested on fixtures. A real reserved S-NIAH seed/config/snapshot has not been imported; source inspection does not designate a new held-out set. |
+| [mit-oasys/oolong-pairs](https://huggingface.co/datasets/mit-oasys/oolong-pairs/tree/d1e1522b86ac0c169bbc890b0471408aaa29e8fa), `d1e1522b86ac0c169bbc890b0471408aaa29e8fa` | `questions.json`: `id,question,answer,type`; `README.md` specifies full `data/oolong-pairs-{context_len}.json` answers paired with matching `trec_coarse` validation context | Public templates actually imported for query checks. Full benchmark coverage requires the matching answer/context exports. Card declares MIT. |
+| [oolongbench/oolong-synth](https://huggingface.co/datasets/oolongbench/oolong-synth/blob/f0d59eaf0febf130664cfceb710436c8e3216b2b/README.md), `f0d59eaf0febf130664cfceb710436c8e3216b2b` | `README.md` dataset schema: `context_len`, `context_window_id`, `context_window_text`, `context_window_text_with_labels`, `dataset`, `question`, `answer`, `answer_type` | Adapter uses unlabelled context and filters `trec_coarse`; full coverage requires the reserved export. Operator must provide the source license with the export. |
+| [Tevatron/browsecomp-plus](https://huggingface.co/datasets/Tevatron/browsecomp-plus/blob/144cff8e35b5eaef7e526346aa60774a9deb941f/README.md), `144cff8e35b5eaef7e526346aa60774a9deb941f` | `README.md`: `query_id`, `query`, `answer`, `gold_docs`, `evidence_docs`, `negative_docs`; document `docid,text,url`; official canary/SHA-256/XOR decryption recipe | Adapter accepts already-decrypted rows plus exactly 1,000 selected documents. The operator supplies the decrypted reserved snapshot and document selection. |
+| [zai-org/LongBench-v2](https://huggingface.co/datasets/zai-org/LongBench-v2/blob/2b48e494f2c7a2f0af81aae178e05c7e1dde0fe9/README.md), `2b48e494f2c7a2f0af81aae178e05c7e1dde0fe9` | `README.md`: `domain`, `sub_domain`, `context`, `question`, `choice_A`–`choice_D`, `answer`; original THUDM URL redirects to this namespace | Adapter filters `Code Repository Understanding` / `Code repo QA`; Apache-2.0 in card; full coverage requires the reserved `data.json`. |
+| [NVIDIA/RULER](https://github.com/NVIDIA/RULER/blob/c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a/scripts/data/synthetic/niah.py), `c3f5e3b4f87f97e048793bb510a3a6b19a46bf3a` | `scripts/data/synthetic/niah.py:284`: output `index`, `input`, `outputs`; the index is a needle position, so it is not used as a unique task ID | Single-needle adapter tested on fixtures. Full coverage requires a reserved S-NIAH seed/config/snapshot; source inspection does not designate a new held-out set. |
 
 The production source checksums are pinned in `configs/tasks.yaml`:
 
@@ -367,7 +366,7 @@ fixes are in the [artifact audit](logs/m3/11-artifact-review.log). M0 library pi
 The local lock provides Transformers 5.9.0, tokenizers 0.22.2 and Jinja2 3.1.6.
 The server lock retains Transformers commit
 `c1c34249fa27deefbd4a377dfbf883a39baf5c6d` (package version 5.5.0); its
-`apply_chat_template` source was also inspected. Server execution remains unrun.
+`apply_chat_template` source was also inspected. Runtime parity requires verification on the configured server.
 
 | Verified source / symbol | Contract used |
 |---|---|
@@ -376,7 +375,7 @@ The server lock retains Transformers commit
 | Same class, `.encode(text, add_special_tokens=False)` | Used only for new prefix/check fixture text, never by suffix alignment. |
 | Pinned Qwen `chat_template.jinja` | Text-only system/user messages use `\|trim`; `enable_thinking=False` emits an empty thinking block, otherwise an open block; `add_generation_prompt=True` adds the assistant header. Both variants use this same file and flag. |
 | Pinned verifiers `verifiers/clients/openai_chat_completions_client.py:get_native_response`, lines 243–317 | Passes `extra_body` through sampling arguments to the OpenAI-compatible request; `max_tokens` is renamed to `max_completion_tokens`. M3 supplies `extra_body.chat_template_kwargs.enable_thinking`. |
-| Pinned prime-rl `packages/prime-rl-configs/src/prime_rl/configs/inference.py:chat_template`, line 84 | Accepts template text or a path, passed as vLLM `--chat-template`; deployment must use the pinned file. No inference/trainer config was instantiated or run in M3. |
+| Pinned prime-rl `packages/prime-rl-configs/src/prime_rl/configs/inference.py:chat_template`, line 84 | Accepts template text or a path, passed as vLLM `--chat-template`; deployment must use the pinned file. M3 verification covers the source contract and local tokenizer. |
 
 ## M3 project interfaces
 
@@ -393,7 +392,7 @@ The server lock retains Transformers commit
 - `rlm_opsd/prompts/alignment.py:build_teacher_sequence(student_ids,
   student_prefix=..., teacher_prefix=...)`: validates the recorded prefix and
   integer IDs, copies the suffix and asserts exact suffix equality. No tokenizer
-  dependency; no M6 teacher-request hook or logprob remapping implemented.
+  dependency; training sample construction supplies the causal-position mapping.
 - `rlm_opsd/prompts/__main__.py`: `python -m rlm_opsd.prompts prepare|check`,
   `--config`, `--thinking on|off`. `make prompts-check` exercises both modes.
 - `configs/prompts.yaml`: exact keys are `model_name`, `revision`,
@@ -408,9 +407,9 @@ The server lock retains Transformers commit
   version. User content is query-only; metadata appears in system content.
 
 The [real-tokenizer check](logs/m3/06-real-qwen-tokenizer.log) verified prefix
-construction and exact copied suffix IDs in both modes. The full remote server's
-rendering/token-ID parity has not been executed. See [PROMPTS.md](PROMPTS.md) for
-usage and the remaining deployment boundary.
+construction and exact copied suffix IDs in both modes. Remote-server
+rendering/token-ID parity requires a deployment check. See [PROMPTS.md](PROMPTS.md)
+for usage and server requirements.
 
 # M4 additions: offline behavior analysis and token categories
 
@@ -481,7 +480,7 @@ forward in the trainer. No teacher scoring server or teacher
 scoring API is part of the revised architecture. The earlier upstream remote
 teacher API catalog remains a source reference; it is not the selected path.
 The M5 endpoints generate baseline/teacher-policy turns and frozen `llm_query`
-responses only. No training implementation was added in M5.
+responses only. The training APIs are documented in their own sections below.
 
 ## Generation clients and gate interfaces
 
@@ -540,7 +539,7 @@ Source pin: `09e11c7527a242b9f150c7c4c71b1b96da66cb75`. The
 checkout HEAD, exact file hashes, numbered excerpts, AST assertions and equality
 with installed source bytes. That original M5 audit was source-only. The table
 describes the unmodified baseline; current OPSD additions and CPU execution
-are documented above. GPU execution remains **not run**.
+are documented above. GPU acceptance requires server execution.
 
 | Pinned repository file / symbol | Verified behavior |
 |---|---|
@@ -558,8 +557,8 @@ The baseline source exposes process-global routing/scaling tensors, whose
 cached references must be updated in place. Zero scaling alone still executes
 adapter kernels/dropout and cannot safely remove nonfinite residuals. The
 project's `frozen_teacher` adds a true computational bypass and restores all
-state in `finally`; its current contract and CPU coverage follow. GPU execution
-remains **not run**.
+state in `finally`; its current contract and CPU coverage follow. GPU acceptance
+requires server execution.
 
 # Shared frozen-teacher and smoke APIs
 
@@ -591,7 +590,7 @@ real paired traces, current provenance, explicit thresholds and request evidence
 Historical source evidence: [API inspection](logs/m6/22-source-verification.log).
 Current CPU behavior is covered by `test_training_teacher.py`,
 `test_training_samples.py`, `test_training_runner.py`, and the JSD tests.
-GPU/pretrained results: **not run**.
+These tests cover CPU behavior; pretrained-model acceptance requires the configured GPU server.
 
 # M7: primary full-vocabulary JSD and optional token gate
 
@@ -602,8 +601,9 @@ installed for M7.
 Evidence: [initial source/signature inspection](logs/m7/01-source-api.log),
 [reproducible verification script](logs/m7/verify_source.py),
 [installed-source hashes/configs/numerical fixture](logs/m7/16-source-verification.log),
-[74 M7 tests](logs/m7/15-m7-final.log). **GPU/pretrained small/27B execution and
-peak GPU memory: not run / not measured.**
+[74 M7 tests](logs/m7/15-m7-final.log). **Verification scope: CPU numerical and
+model integration checks. Small/27B pretrained acceptance and peak GPU memory
+require server execution and measurement.**
 
 ## Backbone and projection boundary
 
@@ -868,4 +868,4 @@ for the same loading/configuration contracts:
 The packed floating storage convention follows the
 [bitsandbytes FSDP-QLoRA contract](https://huggingface.co/docs/bitsandbytes/fsdp_qlora).
 Local execution evidence is in [the QLoRA test log](checks/qlora/make-test.log).
-CUDA/NCCL and pretrained-model training remain **not run**.
+The linked evidence covers CPU tests; CUDA/NCCL and pretrained-model acceptance requires server execution.

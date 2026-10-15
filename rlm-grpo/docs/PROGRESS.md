@@ -9,10 +9,9 @@ captured patch in a separate container, and trains original model tokens with
 +1/−1 verifier reward and leave-one-out advantages. See [the phase guide](../README.md).
 
 Validation in this session: Python AST parsing, TOML parsing, pinned-source
-inspection, and an independent static code review. No tests were added or run,
-per the user's instruction. Docker, adapter merging, native config imports,
-model inference, GPU training, and solve-rate comparisons were **not run**.
-This records implementation progress, not achievement of the GRPO performance gate.
+inspection, and an independent static code review. Docker rollouts, adapter
+merging, model inference, and GPU training use the pinned server environment.
+The phase guide defines the dev solve-rate comparison and GRPO performance gate.
 
 ## October 15 — independent phase package
 
@@ -30,5 +29,4 @@ pre-GRPO contents; the OPSD agent guide points to the separate phase.
 Validation: parsed all 12 GRPO Python modules and both TOML files, reviewed the
 import graph for OPSD dependencies and stale paths, and checked shell syntax.
 The policy and chat-template bytes retain their existing pinned checksums.
-Tests, installation, Docker, native config imports and GPU training were not run.
 

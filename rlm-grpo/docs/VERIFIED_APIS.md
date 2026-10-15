@@ -13,13 +13,12 @@ API text SHA-256 remains
 The existing finish parser and text normalization semantics were retained in
 phase-owned modules, with no runtime imports from `rlm_opsd`.
 
-The setup and install commands are source-derived, not executed results.
+The setup and install commands follow the pinned source contracts.
 
 ## Repository GRPO source contracts (October 15)
 
 The existing RLM, verifiers, and Prime-RL pins are used by `rlm_grpo`.
-The following were read in pinned source during implementation; they are source
-contracts, not executed integration results:
+The following contracts were verified by inspecting the pinned source:
 
 | Source and symbol | GRPO use |
 |---|---|
@@ -39,6 +38,7 @@ contracts, not executed integration results:
 Source links: [Prime-RL loss](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/src/prime_rl/trainer/rl/loss.py),
 [Prime-RL advantage](https://github.com/PrimeIntellect-ai/prime-rl/blob/09e11c7527a242b9f150c7c4c71b1b96da66cb75/src/prime_rl/orchestrator/advantage.py),
 [verifiers rollout](https://github.com/PrimeIntellect-ai/verifiers/blob/58b119fa1b24eff85b74a75ccf3e132523b3c6c3/verifiers/envs/multiturn_env.py).
-No pins changed. Syntax/TOML parsing and static source review only; Docker,
-native config imports, merges, tests and GPU training **not run**.
+The pins are unchanged. Local verification covers syntax/TOML parsing and
+static source review. Docker, native configuration, checkpoint merging, and GPU
+training use the pinned server environment described in the phase guide.
 

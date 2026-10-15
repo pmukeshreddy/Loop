@@ -15,8 +15,11 @@
 - [x] 1. Add a small benchmark runner (`step1/benchmark.py`), container worker (`step1/benchmark_worker.py`), and API-only CONNECT proxy (`step1/api_proxy.py`). Extract reusable native Codex command construction in `step1/codex.py`. Keep setup and grading outside the timed solve period. Save manifest, source/version hashes, patches, event/trajectory logs, statuses, rewards, and verifier output. Refresh project OAuth before each attempt.
 - [x] 2. Add focused behavioral tests in `step1/tests/test_benchmark.py`: capture new/committed/uncommitted changes from a real Git fixture; recognize verifier infrastructure errors separately from reward zero; exclude binary files from RLM's context while retaining tracked source; reject proxy destinations other than OpenAI; ensure recursive usage is not silently presented as root-only totals. Run the complete suite and lint.
 - [x] 3. Prepare one common Python/Codex runtime, add it to the existing task images, and run a real Docker plumbing check with an empty patch and the supplied verifier. Verify both agents can reach OpenAI through the restricted network and cannot reach unrelated sites. Have a fresh reviewer check the runner before the sixteen attempts.
-- [ ] 4. Freeze the manifest and run every task once per arm. Alternate which arm goes first. Run unmodified verifiers in fresh, offline task containers. Record setup/grading failures separately; only repair infrastructure with an explicit record, never model patches.
-- [ ] 5. Produce a per-task comparison and aggregate solve counts, timeouts, partial test counts, wall time, and usage. Explain the small sample and resource/time limits. Update `01-prove-harness.md` with the report link.
+
+## Evaluation procedure
+
+1. Freeze the manifest and run every task once per arm. Alternate which arm goes first. Run unmodified verifiers in fresh, offline task containers. Record setup/grading failures separately; only repair infrastructure with an explicit record, never model patches.
+2. Produce a per-task comparison and aggregate solve counts, timeouts, partial test counts, wall time, and usage. Explain the small sample and resource/time limits. Update `01-prove-harness.md` with the report link.
 
 ## Review focus
 

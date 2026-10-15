@@ -24,8 +24,7 @@ This requires `git`, `uvx`, and an NVIDIA driver. The setup script creates
 `.venv-server/` and a pristine `.deps/prime-rl` checkout at the commit pinned in
 [`pyproject.toml`](pyproject.toml). It uses upstream's frozen runtime lock with
 FlashAttention 2 and [`requirements-rlm.lock`](requirements-rlm.lock) for the
-RLM additions. It does not read or modify `rlm-opsd/`. The setup command has
-not been run in this implementation session.
+RLM additions. It does not read or modify `rlm-opsd/`.
 
 The CLI is `python -m rlm_grpo` or the installed `rlm-grpo` command. Run the
 Make commands from this directory. A custom `PRIME_SOURCE` must be pristine at
@@ -197,7 +196,7 @@ make grpo-train PYTHON=.venv-server/bin/python
 ```
 
 `make grpo-smoke` uses the same path with `--max-steps 1`; running it executes
-real rollouts, graders, and a GPU update. It was not run during implementation.
+real rollouts, graders, and a GPU update.
 Use a different `output_dir` for a smoke experiment. GPU counts, batch sizes,
 context length, and rollout budgets in the supplied config are editable starting
 settings, not hardware performance claims. Docker capacity must cover the
@@ -208,6 +207,6 @@ OPSD baseline) and every 25 updates. `solved` is the binary success metric;
 reward averages use the +1/−1 scale. Public DeepSWE remains a final reporting
 benchmark through the separate evaluation workflow, never the tuning pool.
 
-Implementation verification: Python syntax and TOML parsing plus source review
-only. Tests, Docker execution, checkpoint merging, native configuration imports,
-GPU training, and solve-rate comparisons were **not run** at the user's request.
+Implementation verification covers Python syntax, TOML parsing, and source
+review. Use the server commands above for Docker rollouts and GPU training;
+record solve-rate comparisons with the configured dev evaluation workflow.

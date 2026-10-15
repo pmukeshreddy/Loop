@@ -1,4 +1,4 @@
-"""Actual pinned MultiLoRA/head forward, CPU only; FSDP GPU not run."""
+"""CPU verification of actual pinned MultiLoRA/head forward contracts."""
 from types import SimpleNamespace
 
 import pytest

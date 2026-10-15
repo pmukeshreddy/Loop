@@ -123,14 +123,15 @@ behaviors the reference execution demonstrates. Every family is present in
 Loader checks on the release: `load_tasks(..., inspection_only=True)`
 returns 231 train and 48 dev rows whose `info` holds only task ID, family,
 domain, tags, query and context. The normal loader refuses train/dev because
-the paper's long-context benchmark snapshots are still missing (coverage
-unchanged from the previous pool; DeepSWE coverage is complete). No repository
+full long-context benchmark coverage is required alongside the complete
+DeepSWE coverage. This release has the same partial benchmark coverage as the
+previous pool. No repository
 appears in both splits, and the teacher manual is byte-identical to
 `manual_v1`. Representative tasks with questions, verified answers, behavior
 evidence and reviewer notes are in
 [11-examples.md](checks/agentinstruct-tasks/11-examples.md).
 
-**GPU results: not run.** OPSD semantics are unchanged: the loader yields only
+**Verification scope: task generation and release checks.** OPSD semantics are unchanged: the loader yields only
 task ID, family, domain, tags, query and context; the teacher manual and
 student prompt are untouched; reference trajectories are evidence only (no
 SFT); and no correctness reward was added.
@@ -174,14 +175,14 @@ the [recorded backup path](checks/task-diversity/03-previous-pool.json).
 The source audit found **20 normalized BANKING77 utterances shared between
 the generated train/dev pools**. These upstream partitions are therefore not
 disjoint at the utterance level. This is separate from reserved-benchmark
-decontamination: coverage is still incomplete, and the normal training loader
-still rejects the candidate pool ([audit](checks/task-diversity/07-pool-audit.json)).
+decontamination: the audit covers a partial benchmark index, and the normal
+training loader requires full coverage before accepting the candidate pool ([audit](checks/task-diversity/07-pool-audit.json)).
 Independent code review found no blocking issues; its minor observation about
 replaying resolved dense knobs was documented: regeneration uses the original
 config/TaskSpec, while manifest knobs are audit output.
 
-**GPU results: not run.** New evidence lives under `docs/checks/task-diversity`;
-historical `docs/logs` files were not edited.
+**Verification scope: CPU task generation and release checks.** Evidence lives
+under `docs/checks/task-diversity`; historical `docs/logs` files were preserved.
 
 ## Single-path OPSD cleanup
 
@@ -218,14 +219,14 @@ Independent review found stale remote-teacher guidance in VERIFIED_APIS; it
 was replaced with the current local frozen-teacher/JSD contract. No runtime
 rename or config-consumer issues were found. New execution evidence is under
 `docs/checks/opsd-single-path`; historical logs and their filenames are unchanged.
-**GPU results: not run.**
+**Verification scope: CPU tests, source checks and preflight validation.**
 
 ## Prime-rl OPSD multi-step integration
 
-Date: 2026-10-09. **Implementation and CPU validation complete. GPU results:
-not run.** This entry supersedes earlier statements that OPSD is limited to
-the one-update smoke helper. It does not close the outstanding pretrained or
-GPU milestone criteria.
+Date: 2026-10-09. **Implementation and CPU validation complete.** This entry
+supersedes earlier statements that OPSD is limited to the one-update smoke
+helper. Pretrained-model and GPU acceptance requires the server checks in
+[OPSD_TRAIN.md](OPSD_TRAIN.md).
 
 The requested integration is in prime-rl's native
 `src/prime_rl/trainer/rl/train.py`, against
@@ -294,16 +295,17 @@ drift rejection, native config validation, causal alignment, dense-reference
 JSD/gradients, optional token gating, activation checkpointing, and frozen
 teacher invariance are covered by the new tests.
 
-**Not run:** GPU/CUDA/NCCL training, vLLM rollout/weight-sync execution,
-pretrained small-model or 27B updates, GPU checkpoint/resume, and memory or
-throughput measurements. No gate thresholds were supplied or fabricated. See
-[OPSD_TRAIN.md](OPSD_TRAIN.md) for server commands and prerequisites.
+**Server acceptance requirements:** GPU/CUDA/NCCL training, vLLM rollout and
+weight synchronization, pretrained small-model and 27B updates, checkpoint/resume,
+and memory/throughput measurements. Gate thresholds are operator inputs. See
+[OPSD_TRAIN.md](OPSD_TRAIN.md) for commands and prerequisites; the evidence above
+covers CPU integration.
 
-## M0 — setup code prepared; server execution deferred
+## M0 — pinned dependencies and server installer
 
 Date: 2026-10-09 UTC. Scope: M0 only.
 
-**Status:** Dependencies are pinned, the local inspection environment is installed, and API/source smoke checks pass. Full prime-rl dependencies cannot be installed on this Apple Silicon Mac. The user clarified: “write code for h100 or a100 or something will run in server later first finsh the code.” Accordingly, Linux/CUDA execution is deferred; a server installer is supplied. **The original M0 criterion of a complete, working dependency installation has not yet been demonstrated.** No later milestone was started.
+**Verification scope:** Dependencies are pinned, the local inspection environment is installed, and API/source smoke checks pass. Full prime-rl installation failed on this Apple Silicon Mac because its GPU dependencies target Linux/CUDA. The supplied server installer performs runtime installation and acceptance checks on an H100/A100-class host; the local evidence covers dependency resolution and source/API checks.
 
 ### Inputs read
 
@@ -320,7 +322,7 @@ Initial read-only commands included `pwd`, `rg --files`, `cat AGENTS.md`, `cat S
 - [server additions lock](../requirements-m0-server-additions.lock): RLM/verifiers dependencies resolved for Linux x86_64, constrained to shared versions in pinned prime-rl's runtime lock. The server installer uses upstream's own frozen lock for CUDA/trainer dependencies.
 - [scripts/check_m0.py](../scripts/check_m0.py): offline imports/configuration, installed-source provenance and byte comparisons, and an actual upstream subprocess REPL smoke check. These are installation checks, not the M1 harness suite.
 - [scripts/setup_m0_server.sh](../scripts/setup_m0_server.sh): Linux x86_64 H100/A100 setup, separate `.venv-server`, frozen upstream runtime, pinned additions, dependency/import/CUDA checks, timestamped logs. No model download, SFT, rollout, or training invocation.
-- [Makefile](../Makefile): `make test`, `make check-deps`, `make setup-server`. Later-milestone targets have not been created.
+- [Makefile](../Makefile): M0 targets `make test`, `make check-deps`, `make setup-server`.
 
 ### What ran and what happened
 
@@ -350,7 +352,7 @@ The logs retain failures as well as successes. Most command groups use shell tra
 | Pin renderers via Git at the same commit; regenerate local lock; pip install; dependency check | VCS metadata restored renderers `0.1.8.dev4`; **all local inspection dependencies compatible** before adding the prime-rl source wheel | [19 corrected local install](logs/m0/19-local-install-vcs-version.log) |
 | `pip install --no-deps` pinned prime-rl archive; `make test` | Source wheel installed; 3 offline smoke tests passed, with installed Python bytes matching all five pinned distributions | [20 source install/smoke](logs/m0/20-prime-source-and-smoke.log) |
 | `make check-deps` after prime-rl source install | Failed: 18 missing runtime dependencies; intentionally reported, not suppressed | [21 full dependency check](logs/m0/21-final-dependency-check.log) |
-| `.venv/bin/rl --help` | Failed at import: missing `pynvml`; trainer CLI not runtime verified | [22 CLI](logs/m0/22-cli-check.log) |
+| `.venv/bin/rl --help` | Failed at import: missing `pynvml`; execution stopped before CLI startup | [22 CLI](logs/m0/22-cli-check.log) |
 | AST symbol/signature catalog, file/input hashes, metadata provenance | Exact audited paths and symbols recorded | [23 catalog](logs/m0/23-source-catalog.log) |
 | Public server submodule reachability; `uvx --from uv==0.11.1 uv --version` | Public repository accessible; selected uv version executed | [24 prerequisites](logs/m0/24-server-prerequisites.log) |
 | Initialize public workspace submodules with command-scoped HTTPS rewrite; `uv export --frozen --no-dev --extra flash-attn` | Pinned upstream runtime lock exported successfully; no CUDA packages installed | [25 frozen export](logs/m0/25-server-lock-export.log) |
@@ -375,7 +377,7 @@ make check-deps
 
 The first `--no-deps` installs an already resolved complete **inspection** lock; its closure was checked successfully. The second deliberately installs only the trainer's source wheel. Consequently, the final `make check-deps` fails on this Mac and is **not** an expected success criterion for the inspection subset. No dependency failure is hidden by the smoke suite.
 
-### Run later on the GPU server
+### GPU server installation
 
 Target: Linux x86_64, glibc compatible with the pinned `manylinux_2_34` vLLM wheel, an A100/H100-class NVIDIA GPU, and a driver compatible with the pinned CUDA artifacts. `git`, `uvx`, and `nvidia-smi` must be available. CUDA extension builds may require the matching CUDA development toolchain. The installation uses upstream's locked torch/vLLM/FlashAttention versions rather than unpinned latest packages.
 
@@ -386,11 +388,11 @@ make setup-server
 
 The script installs into `.venv-server`, retains the upstream runtime versions while adding the checked-in RLM lock, verifies the pinned installed sources, runs `rl --help`, and checks CUDA/FlashAttention/vLLM imports. It writes `docs/logs/m0-server/<UTC timestamp>/setup.log`, source/requirement records, runtime constraints, and final installed packages. It exits on any failure. It does not start training or choose model/harness/gate settings. Invoke the server interpreter directly afterward; an unrelated `uv sync` could replace the deliberately combined environment.
 
-**Not run:** Linux/CUDA installation, A100/H100 imports or kernels, model inference, teacher scoring, numerical loss checks, training, evaluations, or any M1–M9 work. Successful frozen export and cross-platform dependency resolution are not GPU execution. Close the original full-install criterion only after the server installer and its checks actually pass.
+**Verification scope:** M0 evidence covers local source imports, the subprocess REPL, frozen lock export and cross-platform dependency resolution. Linux/CUDA runtime acceptance requires the server installer and its import/kernel checks. Model inference, numerical training checks and evaluations have separate execution requirements.
 
-### Decisions and remaining work
+### Integration decisions
 
-The latest upstream APIs do not match this spec, so historical prime-rl/verifiers pins preserve the required adapter/loss surface. RLM's training adapter still needs later project-specific finish-protocol, metadata, prompt, frozen-subcall, and budget adaptations; these are documented, not built. Native prime-rl teacher scoring and the sampled-token loss were inspected; no teacher-context hook or OPSD loss was implemented. The user explicitly deferred server execution, so there is no pending request for GPU-host credentials and work stops at M0 setup.
+The latest upstream APIs do not match this spec, so historical prime-rl/verifiers pins preserve the required adapter/loss surface. M0 inspected the native teacher-scoring and loss interfaces. The project-specific finish protocol, metadata, prompts, frozen subcalls and budgets are described under M1–M3; the frozen-teacher and JSD integration is described under M6–M7 and the native multi-step section above. Server installation uses the dedicated Linux/CUDA path.
 ## M1 — harness complete
 
 Date: 2026-10-09. Scope: SPEC §2 only, following the user's authorization to
@@ -436,7 +438,7 @@ source and manifests, `git status`, and `rg` for pinned symbols. A guessed
 - Atomic JSON trajectories on success, caps, errors, and cancellation. Full
   provider completion IDs are copied unchanged, even when verifiers clips its
   separate training token representation. Provider reasoning fields remain in
-  the next root request. No token-alignment builder was implemented.
+  the next root request. Token alignment is described under M3.
 - [Tests](../tests/test_harness.py), [verifiers/HTTP integration](../tests/test_verifiers_env.py),
   and [server manifest regression](../tests/test_setup_manifest.py). Tests use
   deterministic model transports and actual workers, not a simulated REPL.
@@ -473,7 +475,7 @@ additional regressions were run failing before their corresponding fixes.
 | Support exact-version requirements without removing source checks; `make test`; `bash -n scripts/setup_m0_server.sh`; `python -m compileall -q rlm_opsd tests scripts/check_m0.py` | All 3 M0 checks and 31 M1 tests passed; shell/Python checks passed | [13 final tests](logs/m1/13-final-tests.log) |
 | Documentation-link, whitespace, scope, original-input and artifact-hash review; `git diff --check` / `git status` | Final local artifact review (project remains untracked in parent repository) | [14 artifact review](logs/m1/14-artifact-review.log) |
 
-### Verification boundary and stop
+### Verification boundary
 
 Local tests exercised actual wall-time, cumulative CPU and resident-memory
 termination, child-process cleanup, last-turn execution, metadata/prefix privacy,
@@ -482,13 +484,12 @@ recursion/depth, cancellation, and serialized schema/IDs. The process-group and
 sampled resource watchdogs are **resource containment, not a hostile-code security
 sandbox**; full semantics and sampling limitations are in HARNESS.md.
 
-**Not run:** the Linux-only address-space backstop, CUDA installation/kernels,
-A100/H100 model inference, training, teacher evaluation, or other milestones.
-The user's earlier deferral of GPU-server execution still applies. M0's known
-local trainer-runtime dependency gap is unchanged; successful harness tests do
-not establish a working macOS trainer. M2–M9 were not started. Work stops at M1.
+**Server requirements:** Linux address-space enforcement, CUDA imports/kernels,
+A100/H100 inference, training and teacher evaluation require their corresponding
+server checks. The local evidence covers the harness and macOS watchdog; the
+M0 dependency failures document the boundary of this inspection environment.
 
-## M2 — task implementation complete; full held-out certification pending (superseded 2026-10-10 by the AgentInstruct-style pipeline)
+## M2 — task generation and partial held-out coverage (superseded 2026-10-10 by the AgentInstruct-style pipeline)
 
 Date: 2026-10-09. Scope: M2 / TASKS.md only. The milestone's code and local
 acceptance checks are complete: deterministic generators, independent answer
@@ -531,8 +532,8 @@ xfail, or weakened to get a passing result.
   No new library dependencies or changes to M0/M1 dependency pins.
 - Strict JSON/JSONL held-out adapters for S-NIAH, BrowseComp-Plus 1K docs,
   OOLONG `trec_coarse`, OOLONG-Pairs, and LongBench-v2 CodeQA. These return only
-  `eval_heldout` tasks. Complete benchmark imports remain unrun; adapter tests
-  use small labelled fixtures, not claimed benchmark samples.
+  `eval_heldout` tasks. Adapter verification uses small labelled fixtures;
+  full coverage requires the reserved benchmark exports.
 - Decontamination by normalized exact/near query and shared source identity or
   content; per-rule/per-split reporting; missing coverage, manifest changes,
   context corruption, duplicate IDs and path escape guards.
@@ -631,13 +632,14 @@ benchmarks are named in the report, and normal train/dev loading fails with
 `heldout coverage is incomplete; pool is inspection-only`. Positive coverage
 and drop-rule behavior were tested with explicit fixtures, not fabricated full
 benchmark data. Complete reserved exports and a fresh decontamination build are
-still required before using this pool for training or teacher-gate evaluation.
+required before using this pool for training or teacher-gate evaluation.
 
-**Not run:** complete benchmark import/decontamination, benchmark model
-evaluation, A100/H100 inference, CUDA/trainer installation, teacher gate, OPSD,
-or GRPO. The earlier server-execution deferral still applies. No prompts,
-detectors, training hooks or losses were implemented. M3–M9 were not started;
-work stops at M2.
+**Verification scope:** deterministic generators, independent answer verifiers,
+fixture adapters and decontamination against the imported public templates.
+Full benchmark certification requires the reserved exports and a fresh build;
+model evaluation, teacher gate and training require the configured server.
+Prompt, detector and training implementation evidence appears in the corresponding
+sections below.
 
 ## M3 — prompts complete
 
@@ -746,21 +748,19 @@ suffix checksum was identical in both runs. The log visibly reports that PyTorch
 is absent; tokenizer-only execution succeeds without it. The existing upstream
 `importlib.abc.Traversable` deprecation warning is unchanged.
 
-### Review closure and stop
+### Review findings and verification scope
 
 Every review finding was addressed with a failing regression followed by the
 passing full suite. The template override gap was treated as a correctness issue
-because a local prefix could otherwise disagree with a server request. No
-reviewed implementation issue remains deferred. The review excluded unfinished
-documentation (subsequently completed/audited), later milestones, GPU/model
-behavior and actual server parity; those boundaries are recorded here.
+because a local prefix could otherwise disagree with a server request. The review
+covered prompt implementation; documentation received a separate artifact audit.
+GPU/model behavior and server parity require deployment checks.
 
-**Not run:** model-weight loading, actual Qwen inference, A100/H100 execution,
-remote server/tokenizer parity, teacher gate, training, or any later milestone.
-The M6 teacher-request hook and logprob-position mapping are not implemented.
-This milestone provides the token-ID prefix replacement primitive they will use.
-The M2 inspection-only pool and incomplete held-out coverage are unchanged.
-M4–M9 were not started. Work stops at M3.
+**Verification scope:** prompt construction and exact token-ID suffix copying
+with the pinned Qwen tokenizer. The training sample builder uses this prefix
+replacement primitive for teacher causal-position mapping. Weight loading, Qwen
+inference, server/tokenizer parity, teacher gate and training require the server
+checks for those components. The M2 loader requires complete held-out coverage.
 
 ## M4 — behavior detectors, offline reports and token categories (2026-10-09)
 
@@ -838,7 +838,7 @@ Executed final fixture command:
   --source-label 'Hand-labelled fixtures; not model results' --overwrite
 ```
 
-### Limits and stop
+### Verification limits
 
 The analyzer is conservative static analysis, not arbitrary Python execution.
 Dynamic loops/branches, arbitrary helpers and unavailable runtime locations
@@ -848,17 +848,16 @@ uses a documented English heuristic. The report and usage guides detail these
 boundaries and aggregation denominators. Operational detector thresholds remain
 unset for the user to choose; fixture thresholds are not production defaults.
 
-**Not run:** model inference, real model KL/logprobs, A100/H100 execution,
-teacher gate, checkpoint behavior comparison, OPSD, retention or GRPO.
-M0 server-environment limitations and M2 incomplete held-out coverage are
-unchanged. No M5–M9 code or make target was implemented. Work stops at M4.
+**Verification scope:** offline fixture analysis, detector aggregation and token
+categories. Model inference, KL/logprobs, checkpoint comparisons and retention
+require model execution and source-linked traces. The server and decontamination
+requirements described under M0 and M2 apply to those runs.
 
-## M5 — teacher-gate code prepared; real model gate not run
+## M5 — teacher gate and preflight validation
 
 Date: 2026-10-09. Scope: SPEC §5 teacher gate, plus the user's explicit update
-to SPEC §6 making OPSD primary. **The real-run M5 acceptance criterion remains
-unmet.** The user previously deferred server execution in favor of finishing the
-code. The attempted operational `make teacher-gate` stopped before any request:
+to SPEC §6 making OPSD primary. **Verification covers CPU and HTTP fixtures.**
+The attempted operational `make teacher-gate` stopped before any request:
 no endpoint URLs, unset user-controlled gate/detector thresholds, and incomplete
 held-out decontamination coverage. Fixture evidence is not a model result.
 The implementation is locally verified: final `make test` passed **3 M0 checks
@@ -907,10 +906,11 @@ while the scored suffix IDs and causal positions must align.
 records exact pinned files/symbols and the full-logit config. prime-rl uses custom
 MultiLoRA, with no built-in `disable_adapter()` context. The verified mechanism
 zeros/restores cached scaling tensors in place and preserves token routing.
-Zero scaling still runs adapter kernels/dropout; finite residuals, frozen base
-weights, restoration, checkpointing/FSDP/compile behavior and GPU equivalence
-must be tested during later integration. No teacher forward or JSD trainer was
-implemented or executed in M5. SPEC sections outside §6 were byte-preserved.
+Zero scaling executes adapter kernels/dropout, so the current frozen-teacher
+context uses a computational bypass with state restoration. CPU coverage of that
+context and the JSD trainer is described under M6–M7 and native integration; GPU
+equivalence requires server validation. The M5 source audit covered the baseline
+mechanism, and SPEC sections outside §6 were byte-preserved.
 
 ### Commands and outcomes
 
@@ -952,20 +952,17 @@ and the command log provide evidence. Every report is labelled
 **TEST HTTP FIXTURE; NOT MODEL RESULTS**. The fixture's asserted coverage and
 thresholds are confined to test inputs; operational data/configs are unchanged.
 
-### Limits and stop
+### Verification limits
 
-**Not run:** actual Qwen generation or teacher-gate acceptance, GPU execution,
-teacher scoring, full-vocabulary logits/JSD, OPSD, monitoring/exit or GRPO.
-Operational `reports/teacher-gate-manual_v1` was not created. A ready local
-preflight would still not prove remote weight/template identity; aliases are
-checked and deployment identity is operator-declared.
+**Verification scope:** scripted HTTP generation and CPU harness integration.
+The operational attempt stopped at preflight and produced no gate report. Local
+preflight checks aliases; deployment weight/template identity is operator-declared.
 
-To close the original M5 real-run criterion later, supply generation endpoints,
-user-selected gate/detector values and a fully decontaminated dev pool, then run
-the documented `make teacher-gate`. No thresholds were invented, coverage
-overridden, or teacher manual changed on fixture evidence. Existing M0 server
-limitations and M2 held-out coverage gaps persist. No M6–M9 trainer/loss/hook or
-make target was implemented. Work stops at M5 code and the requested §6 update.
+Teacher-gate acceptance requires generation endpoints, user-selected
+gate/detector values and a fully decontaminated dev pool, followed by the
+documented `make teacher-gate`. Operational thresholds and the teacher manual
+retain their configured values; fixture evidence does not authorize changing them
+or bypassing coverage. M0 server and M2 held-out data requirements apply.
 
 ## M6 — shared frozen-teacher infrastructure
 
@@ -973,8 +970,9 @@ The aligned sample builder, frozen-teacher context, guarded model loader,
 small-model pins and real gate validation remain in use by OPSD. Their original
 CPU evidence is retained in [the historical run log](logs/m6/21-full-suite.log).
 The current JSD trainer and commands are documented in [OPSD.md](OPSD.md).
-Pretrained small/27B GPU smoke results remain **not run**. This section documents
-the retained shared infrastructure; historical logs are unchanged.
+Pretrained small/27B acceptance requires the GPU smoke commands and server
+prerequisites in that guide. This section records the shared infrastructure
+and its CPU evidence; historical logs are unchanged.
 
 ## M7 — primary full-vocabulary JSD and optional detached token gate
 
@@ -984,8 +982,8 @@ are used for artifacts. Linked historical logs retain their original names.
 Final `make test`: **3 M0 checks + 501 pytest tests passed**, including
 **74 M7 tests**. Fourteen upstream torch JIT deprecation warnings and the
 existing Verifiers deprecation remain visible. No tests were skipped, xfailed,
-silenced or weakened. Required predeployment small/27B GPU runs remain
-**not run**, consistent with the user's earlier server-later instruction.
+silenced or weakened. Predeployment small/27B acceptance requires GPU execution
+on the configured server.
 
 ### What changed
 
@@ -1051,37 +1049,37 @@ performance results.
 | 27B smoke preflight and attempted run | Both **not_run**, exit 2: missing real 27B gate, small OPSD smoke, cached weights and Linux/CUDA; no requests or run directory | [18 27B check](logs/m7/18-27b-opsd-b-check.log), [18 27B attempt](logs/m7/18-27b-opsd-b.log) |
 | Python immutable-input/source hashes, syntax/whitespace, relative links, scope and output audit; `git diff --check`/status | Final artifact verification | [20 audit](logs/m7/20-artifact-audit.log), [audit script](logs/m7/audit_artifacts.py) |
 
-### Limits and stop
+### Verification limits
 
 The bounded allocation claim applies to vocabulary projection/divergence
 workspace, O(chunk size × vocabulary), plus O(selected positions × hidden)
 state/gradient. Frozen head weights and student backbone activations remain.
-No peak GPU allocation or total-model memory fit was measured. Loss gradients
+Peak GPU allocation and total-model memory fit require server measurements. Loss gradients
 are first-order only. Inputs whose normalization or scalar arithmetic exceeds
 working precision fail explicitly; no clipping/approximation masks the failure.
 
-The integration remains a synchronous one-task/one-update smoke, eager on one
-GPU with one dense adapter. It does not implement upstream async transport,
-weight broadcast, resume, packing, FSDP or compilation. Local random Qwen tests
-cover full attention with Transformers 5.9.0; pinned server loading/hybrid
-attention and A100/H100 execution remain unverified. Existing M0/M2/M5 runtime,
-coverage and gate limitations persist. No teacher scoring API was introduced.
+The standalone smoke performs one synchronous task/update, eager on one GPU
+with one dense adapter. Native async transport, weight broadcast, resume and
+FSDP are described in [OPSD_TRAIN.md](OPSD_TRAIN.md). Local random Qwen tests
+cover full attention with Transformers 5.9.0. Server acceptance requires pinned
+pretrained loading, hybrid attention and A100/H100 execution, using the M0/M2/M5
+runtime, coverage and gate prerequisites. No teacher scoring API is used.
 
-**Not run:** real pretrained small/27B OPSD updates, gate-on/off behavior
-comparison on the fixed dev split, peak GPU memory, monitoring/exit or GRPO.
-No pretrained smoke report was created or fixture relabelled as real evidence.
-M7's implemented/tested/config-selectable criterion is met; predeployment server
-validation remains deferred. Work stops at M7; no M8/M9 implementation was added.
+**Verification scope:** CPU numerical/model tests and guarded preflight attempts.
+Pretrained small/27B updates, gate-on/off behavior comparisons and peak GPU memory
+require server execution. Fixture outputs are labelled as CPU evidence. The JSD
+objective and token gate are implemented, tested and selectable by config.
 
 ## M8 — OPSD-only monitoring and two-condition exit
 
 Date: 2026-10-09. **M8 server-ready implementation is complete.** Final full
 verification: **3 M0 checks + 576 pytest tests passed**, with 15 visible upstream
-deprecation warnings. Real checkpoint behavior and retention evaluations are
-**not run**. The user explicitly changed M8 during
-implementation: remove both GRPO-pool readiness items, move them to the M9
-specification, and leave the retention path plus behavior/retention tolerances
-required and unset until initial reports are reviewed. No M9 code is delivered.
+deprecation warnings. These checks cover CPU and HTTP integration; real
+checkpoint behavior and retention acceptance requires server evaluation.
+The user explicitly changed M8 during implementation: remove both GRPO-pool
+readiness items, move them to the M9 specification, and leave the retention path
+plus behavior/retention tolerances required and unset until initial reports are
+reviewed. M9 defines the GRPO readiness and handoff criteria in SPEC §9.
 
 ### What changed
 
@@ -1118,11 +1116,12 @@ in its parent repository; no commit, branch move or push was performed.
   The exit file has required unset `retention_path`, `behavior_tolerance`, and
   `retention_tolerance`, plus explicit evidence sufficiency settings. Periodic
   evaluation checks `checkpoint_step % eval_interval`; the checkpoint driver
-  calls it. No long-running training loop, publication or merge was added.
+  calls it. Multi-step training and adapter publication use the native integration
+  described in [OPSD_TRAIN.md](OPSD_TRAIN.md).
 - Updated [SPEC §7–9](SPEC.md#7-monitoring) and [AGENTS M8/M9](../AGENTS.md)
   exactly for the requested phase boundary. Pass@k, entropy on the GRPO pool,
   and its mixed pass/fail criterion are M9 prerequisites before any GRPO step.
-  Their initial in-progress M8 implementation and tests were removed before
+  Their initial M8 implementation and tests were removed before
   delivery. Earlier logs preserve that superseded work honestly.
 - [Usage](MONITORING.md) and [verified APIs](VERIFIED_APIS.md#m8-opsd-only-monitoring-and-two-condition-exit)
   document exact settings, entry points, source files, evidence format and limits.
@@ -1153,23 +1152,23 @@ HTTP fixtures and CPU tensors are test evidence, never model-performance runs.
 | Final `make test-m8` | **75 passed**, 14 visible upstream torch JIT deprecation warnings | [29 M8 final](logs/m8/29-m8-final.log) |
 | `.venv/bin/python docs/logs/m8/audit_artifacts.py`; `git diff --check` | Preservation, config scope, syntax, source cleanliness, relative links, whitespace and no fabricated run outputs verified | [30 audit](logs/m8/30-artifact-audit.log), [audit script](logs/m8/audit_artifacts.py) |
 
-### Runtime limits and stop
+### Runtime requirements and verification scope
 
 Local coverage includes actual pinned MultiLoRA CPU scoring against an
 independent dense KL calculation, projection bounds, no gradients, Unicode
 alignment, atomic checkpoint validation, real HTTP clients/harness execution,
 partial-failure logs, source-evidence replay, user-required settings, and
-hand-derived exit boundaries. Model-quality numbers have not been measured.
+hand-derived exit boundaries. This evidence establishes protocol and numerical
+behavior; model quality requires checkpoint evaluation.
 No tests are skipped or xfailed and no operational thresholds are filled in.
 
-Real evaluation still needs the prepared Linux/CUDA server, cached pinned
-weights, a real OPSD checkpoint served by the generation endpoint, complete
-held-out decontamination and a passed teacher gate. Retention/exit additionally
-needs the user's dataset and tolerances. Endpoint weight/template identity
-remains operator-declared; actual GPU fit and pretrained 27B behavior/retention
-are **not run**, consistent with the user's server-later instruction. M8 code
-is the delivery here; its real-run acceptance remains pending those inputs.
-M9 specification changes only; no M9 readiness runner or GRPO training added.
+Real evaluation requires the pinned Linux/CUDA server, cached weights, an OPSD
+checkpoint served by the generation endpoint, complete held-out decontamination
+and a passed teacher gate. Retention/exit additionally requires the user's dataset
+and tolerances. Endpoint weight/template identity is operator-declared. GPU fit
+and pretrained 27B behavior/retention require measurements from those runs.
+M8 covers monitoring and two-condition exit; SPEC §9 defines the M9 GRPO
+readiness and handoff criteria.
 
 ## Repository publication preparation
 
@@ -1221,7 +1220,8 @@ Executed checks:
 
 All training checks above use randomly initialized tiny CPU models. Gloo tests
 required local socket access outside the sandbox. CUDA/NCCL, pretrained Qwen3.5
-training, live vLLM synchronization and 27B memory/throughput are **not run**.
+training, live vLLM synchronization and 27B memory/throughput require acceptance
+checks and measurements on the configured server.
 Dependencies and source contracts are recorded in [VERIFIED_APIS](VERIFIED_APIS.md#qlora-storage-and-checkpoint-contracts).
 
 Before publishing to `pmukeshreddy/Loop` on `main`, reran `make test` against

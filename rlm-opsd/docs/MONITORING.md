@@ -1,9 +1,8 @@
 # M8: OPSD monitoring and exit
 
 M8 evaluates OPSD behavior and retention. GRPO-pool pass@k, entropy and the
-mixed pass/fail readiness criterion belong to M9 and are not implemented here.
-The user changed this scope while M8 was being built; SPEC §7–9 and AGENTS.md
-now reflect it.
+mixed pass/fail readiness requirement are the M9 handoff criteria described
+in SPEC §9.
 
 `make eval-behavior` generates three runs for every fixed `dev_behavior` task:
 base + short prompt (`before`), base + full manual (`teacher`), and checkpoint +
@@ -43,7 +42,8 @@ Use the pinned Linux/CUDA environment from M0 and a passed real teacher gate
 with complete decontamination. The existing M2 coverage gaps and unset gate
 settings remain blockers. The model backend inherits M6/M7 limits: one process,
 one CUDA device, eager unsharded dense MultiLoRA, frozen base/head, no compile,
-no packing/CP/FSDP. A100/H100 runtime and memory fit remain unverified locally.
+no packing/CP/FSDP. A100/H100 runtime and memory fit require validation on the
+target server.
 
 Set `configs/eval.yaml`:
 
@@ -62,8 +62,9 @@ The base and frozen-leaf generation endpoints come from the gate config.
 Checkpoint generation must use a distinct endpoint/model identity from the
 frozen base. The operator is responsible for serving the corresponding model
 and adapter with the pinned chat template. Response aliases are checked;
-remote weight/template bytes are not independently attested. This milestone
-does not implement adapter publication, a merge, or a long-running trainer.
+remote weight/template bytes are not independently attested. Adapter publication
+and the multi-step trainer are described in
+[OPSD_TRAIN.md](OPSD_TRAIN.md).
 
 Invoke `eval-behavior` from the checkpoint driver at each step. A step that is
 not divisible by `eval_interval` returns `not_due` before loading a model or
@@ -120,7 +121,7 @@ This encode operation is solely an offset check: scored sequences and the
 teacher suffix always use the original rollout IDs. Missing/clipped server
 records, noncanonical tokenizations, excessive aligned sequence lengths,
 nonfinite scores or unsupported heads fail explicitly; no text fallback or
-approximate vocabulary is used. Local peak GPU memory has not been measured.
+approximate vocabulary is used. Peak GPU memory requires measurement on the target server.
 
 Exit verifies hashes, checkpoint identity, complete dev task/phase coverage,
 request success, and freshly recomputed detector, correctness and KL summaries
@@ -136,7 +137,7 @@ inconclusive = 4. Both `--check` paths are local and send no model requests.
 `exit-check` itself sends retention generation requests after validation.
 
 Local tests use hand-derived values, actual pinned LoRA CPU tensors and
-scripted HTTP responses through the real harness/client. They are explicitly
-not real model-performance reports. Real checkpoint behavior and retention
-runs are **not run** in this workspace. See [PROGRESS.md](PROGRESS.md) for the
-commands and logs. M9 remains unimplemented.
+scripted HTTP responses through the real harness/client. These checks establish
+CPU and protocol behavior. Checkpoint quality and retention acceptance requires
+model execution with the server inputs above. See [PROGRESS.md](PROGRESS.md) for
+the executed commands and logs.

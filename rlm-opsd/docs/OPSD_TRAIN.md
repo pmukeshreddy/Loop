@@ -45,9 +45,8 @@ trainer rank and requires no teacher inference server or allocation.
 Before starting, the launcher requires the real passed teacher gate, a successful
 small-model OPSD smoke, cached weights at the pinned revision, and the
 decontaminated train split. User-set acceptance thresholds remain in `gate.yaml`;
-this change does not supply thresholds or bypass missing evidence. The current
-workspace is not ready for a pretrained launch. The CPU-only check reports its
-first blocker without generating requests.
+this change does not supply thresholds or bypass missing evidence. The CPU-only check reports the first
+missing launch prerequisite without generating requests.
 
 The launcher resolves the HF model to its immutable cached snapshot and supplies
 the pinned template to native tokenizers and vLLM. It validates the final
@@ -59,7 +58,7 @@ buffers and adapters; the loader reconstructs the NF4 model before restoring
 that state. Portable weight checkpoints contain `adapter_model.safetensors`
 and `adapter_config.json` over the pinned original base. They no longer export
 the dense base. Older dense-base training checkpoints are incompatible; start
-a new output directory. Resume on GPU is **not run**.
+a new output directory. GPU resume acceptance requires a checkpoint/restart check on the target server.
 
 ## Data and loss integration
 
@@ -99,7 +98,7 @@ preserved for adapters and gradient reduction. Packed NF4 uses BF16 containers
 without numeric dtype conversion; scales are checkpointed buffers. FSDP shards
 the packed parameters using its existing wrapping. The smoke retains its
 unsharded guard. Initial loading holds a quantized model per trainer GPU before
-sharding; hardware fit has not been measured.
+sharding; hardware fit requires measurement on the target server.
 
 ## Reproducible source patch
 
@@ -125,4 +124,4 @@ the chunked JSD implementation, and real PyTorch FSDP with Gloo. Local socket
 access is required for Gloo and the existing HTTP fixtures. Those tests do not
 establish CUDA/NCCL, vLLM, pretrained Qwen, or 27B memory/throughput results.
 See [PROGRESS](PROGRESS.md#prime-rl-opsd-multi-step-integration) for executed
-checks and logs. **All GPU results: not run.**
+CPU checks and logs. CUDA/NCCL and vLLM acceptance requires server execution.

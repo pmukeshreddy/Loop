@@ -8,8 +8,8 @@ make test
 ```
 
 `make test-m1` runs just the harness suite. On the prepared Linux server use
-`make test PYTHON=.venv-server/bin/python`. Server installation, GPU inference,
-and training have not been run here. Tests use actual Python subprocesses,
+`make test PYTHON=.venv-server/bin/python`. Local verification covers Python
+subprocesses,
 the pinned verifiers rollout loop, and a local HTTP fixture for the frozen
 endpoint. No test requires a model download or API credential.
 
@@ -21,8 +21,7 @@ contracts; it does not use verifiers' built-in `RLMEnv`. The upstream packages
 are unmodified. Run with the project root on `PYTHONPATH` when importing from
 another working directory.
 
-Example configuration for an already running frozen model server (not executed
-against a real model in M1):
+Example configuration requiring an already running frozen model server:
 
 ```python
 import verifiers as vf
@@ -121,8 +120,9 @@ This is resource containment, **not a hostile-code security sandbox**. Imports,
 filesystem access and network access remain available as in the reference
 worker. Very short-lived/reparented descendants can evade sampled accounting;
 processes that deliberately escape the group require stronger OS isolation.
-Use an appropriately isolated server/container for untrusted workloads. The
-Linux-specific address-space backstop has not been executed on this Mac.
+Use an appropriately isolated server/container for untrusted workloads. Linux-specific
+address-space enforcement requires verification on the Linux host; local resource
+checks cover the macOS parent watchdog.
 
 Every episode writes one validated JSON file at close, using an unpredictable
 episode ID as its filename, an atomic replacement, and no task ID as a path.

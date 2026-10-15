@@ -116,5 +116,5 @@ gate, and exit thresholds.
 
 `make test-m4` runs M4 tests; `make test` also verifies earlier milestones and
 installed dependency provenance. The [fixture report](logs/m4/fixture-report/behavior.md)
-contains hand-authored trajectories only. No model KL, teacher gate, training,
-checkpoint comparison, GPU run, or measured task success is produced by M4.
+contains hand-authored trajectories only. This evidence covers offline detector
+and reporting contracts; model metrics require model-generated trajectories.

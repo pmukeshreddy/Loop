@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- No GPU execution; GPU FSDP/vLLM execution results must say **not run**. CPU FSDP validation is allowed.
+- Local verification covers CPU FSDP. GPU FSDP/vLLM acceptance requires server execution and its logs.
 - Root assistant targets only; no SFT, reward objective, remote teacher scoring, or held-out training data.
 - Preserve token IDs, separate prefix positions, frozen base weights, adapter state/RNG, and checkpoint recomputation.
 - Keep upstream optimization_dtype and reduce_dtype unchanged.
@@ -41,7 +41,7 @@ Files: `training/prime_step.py`, `training/teacher.py`, pinned trainer/model/con
 
 - [x] Write and run failing tests for native wrapped forwards, dense-reference loss/gradients, repeated optimizer updates, activation checkpointing, frozen teacher invariance, empty masks, and configuration rejection.
 - [x] Install JSD head before FSDP; replace normal loss under OPSD; preserve native optimizer/broadcast/checkpoint loop and global normalization.
-- [x] Run CPU tensor/integration tests. FSDP GPU execution: not run.
+- [x] Run CPU tensor/integration tests; record GPU FSDP server acceptance requirements.
 
 ### Task 3: Reproducible patch and training command
 
@@ -60,5 +60,5 @@ token fallback, CPU offload rejection, and step-level JSD metric aggregation)
 were addressed before final testing. `make test`: **604 passed**, including
 real one-/two-rank CPU FSDP and repeated-update dense-reference gradient parity.
 See [execution record and logs](../../PROGRESS.md#prime-rl-opsd-multi-step-integration).
-Preflight correctly stops at the absent teacher gate report. GPU results:
-**not run**. No commit, deployment, or GPU launch was performed.
+Preflight correctly stops at the absent teacher gate report. The evidence covers
+CPU tests and preflight; GPU acceptance requires the configured server.

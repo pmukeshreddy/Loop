@@ -64,7 +64,7 @@ code blocks, using the M4 aggregation contract; a run with no code does not
 silently become a zero syntax-error rate.
 
 The default config includes task-tag and syntax-rate criteria with null
-acceptance settings. These intentionally do not run until filled by the user.
+acceptance settings. Gate execution requires values supplied by the user.
 Add explicit family/bucket/domain criteria to enforce group-specific requirements.
 A failed teacher-policy run is evidence for a versioned manual revision and a
 new gate run; M5 does not rewrite the manual based on fixtures or missing data.
@@ -86,7 +86,8 @@ Exit codes: 0 passed (or locally ready for `--check`), 1 infrastructure/error,
 - `records.jsonl`: M4 analyses and relative trajectory paths, without answers or
   invented task-success labels.
 - `behavior.md`, `behavior.csv`: all detectors, task-tag matching, syntax and
-  subcall statistics by family, bucket and domain. `after` remains not run.
+  subcall statistics by family, bucket and domain. The gate covers `before` and
+  `teacher`; its report labels the absent `after` phase `not run`.
 - `gate.json`, `gate.md`: every configured acceptance check, links and final status.
 
 Budget/protocol failures are measured model behavior; worker transport errors,
@@ -100,6 +101,6 @@ available. No training stage is started by a passing gate.
 
 Tests use hand-authored task pools and a local HTTP fixture server plus the real
 REPL harness. Their synthetic response/report labels explicitly say they are not
-model results. `make test-m5` runs those contracts. The real gate acceptance
-criterion is not satisfied by these tests; see [PROGRESS](PROGRESS.md) for what
-was actually run.
+model results. `make test-m5` runs those contracts. Model-based gate acceptance
+requires generation with the configured endpoints and data; see
+[PROGRESS](PROGRESS.md) for executed checks and server requirements.

@@ -83,4 +83,5 @@ is recorded in [initial red](logs/m4/categories-red.log),
 Installed source paths, signatures, and hashes are in
 [the API log](logs/m4/categories-api.log). A cached Qwen tokenizer was exercised
 on a standalone fixture in [the offset smoke log](logs/m4/categories-tokenizer-smoke.log).
-No model weights, model inference, logprob evaluation, or model KL run was used.
+This evidence covers tokenizer offsets and synthetic divergence inputs;
+model-derived divergence requires a scored model trajectory.

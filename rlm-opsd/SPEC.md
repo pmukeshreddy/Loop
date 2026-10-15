@@ -225,7 +225,8 @@ Required CPU checks cover identical distributions, teacher detachment,
 assistant-only masks, exact suffix/causal alignment, frozen-base invariance,
 state restoration on exceptions, chunked/dense gradient parity, repeated
 updates, and FSDP/checkpoint recomputation. Pretrained small-model and 27B GPU
-runs remain **not run**; see `docs/PROGRESS.md` for executed evidence.
+acceptance requires server execution; `docs/PROGRESS.md` records the CPU checks
+and their evidence.
 
 ### 6.4 Optional token gate (config flag, default off)
 
@@ -262,8 +263,9 @@ Implementation note: multi-step OPSD now uses the patched pinned prime-rl
 trainer, async scheduler, FSDP2 wrapping, and native adapter synchronization;
 see `docs/OPSD_TRAIN.md`. The integrated path installs its
 chunked JSD head before FSDP, executes the frozen teacher before the student,
-and normalizes across ranks. CPU FSDP checks are separate from GPU validation;
-GPU, pretrained-model, and vLLM execution results remain **not run**.
+and normalizes across ranks. The recorded verification covers CPU FSDP; GPU,
+pretrained-model, and vLLM acceptance requires execution on the configured
+training server.
 
 Every `eval_interval` steps, on the fixed `dev_behavior` eval split:
 

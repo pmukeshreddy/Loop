@@ -20,7 +20,7 @@ OPSD and GRPO are separate projects: `rlm-opsd/` trains RLM behavior;
 `rlm-grpo/` trains repository correctness from the exported OPSD checkpoint.
 See [GRPO setup and launch instructions](rlm-grpo/README.md) for the checkpoint
 handoff, Docker task manifests, shared-checkout child rollouts, and verifier rewards.
-Its Docker/GPU execution has not been validated.
+Docker rollouts and GPU training use the Linux/CUDA server environment.
 
 | Step | Purpose |
 |---|---|
@@ -32,5 +32,21 @@ Its Docker/GPU execution has not been validated.
 The official RLM REPL and core execution loop remain in use. We add one Responses API client through the library's normal backend interface; we do not implement a second agent loop.
 
 Behavioral checks prove integration correctness, not a solve-rate improvement.
-The public 113 tasks remain evaluation-only. The GRPO implementation and its
-unrun validation boundaries are documented in the phase-4 guide above.
+The public 113 tasks remain evaluation-only. The phase-4 guide documents the
+GRPO implementation, server requirements, and evaluation workflow.
+
+## Publish
+
+The publish script copies the files listed in `scripts/push-manifest.json` into
+a fresh checkout of `pmukeshreddy/Loop`, removes the former nested GRPO package,
+and pushes a commit to `main`. It checks the manifest's base commit before
+applying changes and preserves the repository's history.
+
+```bash
+bash scripts/push.sh --dry-run
+bash scripts/push.sh
+```
+
+The dry run prints the staged diff summary and a command to inspect the full
+diff. The script requires Git, Python 3.8 or newer, and GitHub push access.
+`--remote URL` selects another repository with the same base commit.

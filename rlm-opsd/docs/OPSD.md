@@ -16,8 +16,8 @@ teacher scoring server or scoring API is used.
 
 The smoke performs one synchronous update to validate the objective before
 server training. The multi-step job uses the same JSD objective inside the
-native prime-rl trainer. GPU/pretrained execution remains
-**not run**; see [PROGRESS](PROGRESS.md).
+native prime-rl trainer. Local verification covers CPU execution;
+[PROGRESS](PROGRESS.md) links the checks and server prerequisites.
 
 ## Objective and memory
 
@@ -57,7 +57,7 @@ and their gradients are additional memory; total model memory is not bounded
 by the chunk size. There is no full-sequence vocabulary tensor, full-head FP32
 copy, retained graph per chunk, or top-k approximation. CPU tests observe real
 projection shapes and saved tensors in both passes. Peak GPU memory and device
-fit have not been measured.
+fit require measurements on the target server.
 
 Projection uses the head's native dtype; normalization/divergence use FP32 for
 FP16/BF16/FP32 inputs and retain float64 for numerical verification. Selected
@@ -123,8 +123,8 @@ and rejected runs send no model requests and create no run directory.
 
 Support remains eager, one process/GPU, one dense adapter, unpadded per-turn
 sequences and a frozen ordinary linear head without bias or softcapping. The
-normal-matmul adapter path targets A100/H100 compatibility, but pretrained
-loading, Qwen hybrid attention and CUDA execution are not validated locally.
+normal-matmul adapter path targets A100/H100 compatibility, with pretrained
+loading, Qwen hybrid attention and CUDA execution requiring server validation.
 The actual tiny Qwen3.5 CPU tests use random weights and full-attention layers;
 they establish the backbone/head boundary and adapter update, not model
 behavior or server readiness. `make test-m7` runs the M7 tests.

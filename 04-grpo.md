@@ -5,8 +5,8 @@ Implementation: [`rlm-grpo/README.md`](rlm-grpo/README.md), configured by
 phase with the `rlm_grpo` package and an exported OPSD checkpoint as its input.
 The current repository
 environment uses the user's October 15 +1/−1 reward convention and trains both
-root and completed child branches with the same policy. Tests and GPU execution
-of this implementation have not been run.
+root and completed child branches with the same policy. Docker rollouts and
+GPU updates use the phase's pinned Linux/CUDA environment.
 
 Goal: take the 27B from step 2 and train it so the RLM actions happen in an order that makes the verifier return 1.
 

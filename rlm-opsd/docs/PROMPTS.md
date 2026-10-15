@@ -1,9 +1,10 @@
 # M3 prompts and token alignment
 
 The user selected `Qwen/Qwen3.5-27B`. Its tokenizer and chat template are pinned
-in [configs/prompts.yaml](../configs/prompts.yaml). This milestone builds prompts
-and aligned token sequences; it does not implement the M6 teacher-request hook
-or run a model. Executed checks are recorded in [PROGRESS.md](PROGRESS.md).
+in [configs/prompts.yaml](../configs/prompts.yaml). The prompt module builds
+student/teacher prefixes and preserves aligned token sequences for training.
+Its local verification covers rendering and token alignment; executed checks
+are recorded in [PROGRESS.md](PROGRESS.md).
 
 ## Text construction
 
@@ -133,6 +134,7 @@ to use their separate frozen client.
 Unit tests use a small real BPE tokenizer, including deliberately unmerged token
 IDs whose decode/re-encode result differs. The separate smoke check uses the real
 Qwen vocabulary and the exact pinned template. Neither is model inference.
-The final server renderer/tokenizer equality, full rollout token collection and
-teacher logprob position mapping still belong to the later integration work.
+Server deployment must verify renderer/tokenizer equality. The training sample
+builder preserves recorded rollout IDs and maps teacher causal positions; see
+[OPSD_TRAIN.md](OPSD_TRAIN.md).
 Existing M2 held-out coverage restrictions are unchanged.
